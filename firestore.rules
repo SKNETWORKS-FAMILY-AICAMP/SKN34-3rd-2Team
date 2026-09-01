@@ -37,6 +37,25 @@ service cloud.firestore {
       return isAdmin() || belongsToCohort(cohortId);
     }
 
+    /// 기수 자리배치 확정 여부
+    function seatingPublished(cohortId) {
+      let metaPath = /databases/$(database)/documents/cohorts/$(cohortId)/seatingMeta/default;
+      return exists(metaPath)
+        && get(metaPath).data.publishedRoomId != null
+        && exists(/databases/$(database)/documents/cohorts/$(cohortId)/seatingAssignments/$(get(metaPath).data.publishedRoomId))
+        && get(/databases/$(database)/documents/cohorts/$(cohortId)/seatingAssignments/$(get(metaPath).data.publishedRoomId)).data.status == 'published';
+    }
+
+    /// 레거시 단일 assignment 문서 (마이그레이션 전)
+    function seatingPublishedLegacy(cohortId) {
+      return exists(/databases/$(database)/documents/cohorts/$(cohortId)/seating/assignment)
+        && get(/databases/$(database)/documents/cohorts/$(cohortId)/seating/assignment).data.status == 'published';
+    }
+
+    function canReadSeatingAsStudent(cohortId) {
+      return belongsToCohort(cohortId) && (seatingPublished(cohortId) || seatingPublishedLegacy(cohortId));
+    }
+
     /// 본인 문서 여부
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
@@ -96,9 +115,31 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
-      // ── 자리 배치 ──
+      // ── 자리 배치 (레거시) ──
       match /seating/{docId} {
-        allow read: if canAccessCohort(cohortId);
+        allow read: if isAdmin() || canReadSeatingAsStudent(cohortId);
+        allow write: if isAdmin();
+      }
+
+      // ── 자리 배치: 강의실 틀 ──
+      match /seatingRooms/{roomId} {
+        allow read: if isAdmin()
+          || (canReadSeatingAsStudent(cohortId)
+            && exists(/databases/$(database)/documents/cohorts/$(cohortId)/seatingMeta/default)
+            && roomId == get(/databases/$(database)/documents/cohorts/$(cohortId)/seatingMeta/default).data.publishedRoomId);
+        allow write: if isAdmin();
+      }
+
+      // ── 자리 배치: 강의실별 학생 배정 ──
+      match /seatingAssignments/{roomId} {
+        allow read: if isAdmin()
+          || (canReadSeatingAsStudent(cohortId) && resource.data.status == 'published');
+        allow write: if isAdmin();
+      }
+
+      // ── 자리 배치: 확정 메타 ──
+      match /seatingMeta/{docId} {
+        allow read: if belongsToCohort(cohortId) || isAdmin();
         allow write: if isAdmin();
       }
 
@@ -259,7 +300,13 @@ service cloud.firestore {
             && request.resource.data.status == resource.data.status);
       }
 
-      // ── 성취도 평가 ──
+      // ── 인프런 강의 패키지 (학습실) ──
+      match /inflearnPackages/{packageId} {
+        allow read: if canAccessCohort(cohortId);
+        allow write: if isAdmin();
+      }
+
+      // ── 성취도 평가 (deprecated) ──
       match /assessments/{assessmentId} {
         allow read: if canAccessCohort(cohortId);
         allow write: if isAdmin();

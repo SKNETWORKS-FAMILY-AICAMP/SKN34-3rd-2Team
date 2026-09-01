@@ -190,8 +190,17 @@ class _PendingSummary extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _SummaryCard(
+          icon: Icons.event_seat,
+          label: '좌석 배치 — 틀 설정 / 확정',
+          count: null,
+          color: const Color(0xFF0D9488),
+          onTap: () => context.go(RoutePaths.adminSeating),
+          fullWidth: true,
+        ),
+        const SizedBox(height: 12),
+        _SummaryCard(
           icon: Icons.menu_book,
-          label: '학습실 — 성취도 평가 관리',
+          label: '학습실 — 인프런 강의 관리',
           count: null,
           color: AppColors.info,
           onTap: () => context.go(RoutePaths.adminStudyRoom),

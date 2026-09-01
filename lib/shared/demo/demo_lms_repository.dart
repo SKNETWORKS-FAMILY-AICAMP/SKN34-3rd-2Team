@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../core/constants/cohort_status.dart';
 import '../models/assessment_model.dart';
+import '../models/inflearn_package_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/notice_model.dart';
@@ -28,6 +29,8 @@ class DemoLmsRepository {
       StreamController<List<SubmissionModel>>.broadcast();
   final _assessmentController =
       StreamController<List<AssessmentModel>>.broadcast();
+  final _inflearnPackageController =
+      StreamController<List<InflearnPackageModel>>.broadcast();
   final _assessmentSubmissionController =
       StreamController<List<AssessmentSubmissionModel>>.broadcast();
 
@@ -39,6 +42,7 @@ class DemoLmsRepository {
   late List<AttendanceModel> _attendances;
   late List<MileageTransactionModel> _mileageTx;
   late List<AssessmentModel> _assessments;
+  late List<InflearnPackageModel> _inflearnPackages;
   late List<AssessmentSubmissionModel> _assessmentSubmissions;
   late List<FormTaskModel> _formTasks;
   final Map<String, List<FormResponseModel>> _formResponses = {};
@@ -75,6 +79,80 @@ class DemoLmsRepository {
         createdAt: DateTime(2026, 4, 20),
       ),
     ];
+    _inflearnPackages = [
+      InflearnPackageModel(
+        id: 'pkg1',
+        title: '프로그래밍과 데이터 기초 예복습',
+        subject: '프로그래밍과 데이터 기초',
+        type: InflearnPackageType.review,
+        summary:
+            '첫번째 교과목 예복습에 필요한 6개 강의입니다. 파이썬 기초를 반복 학습해 주세요.',
+        isPublished: true,
+        sortOrder: 1,
+        publishedAt: DateTime(2026, 7, 4),
+        units: const [
+          InflearnUnitModel(
+            name: 'Python',
+            courses: [
+              InflearnCourseModel(
+                title: '단 60분! 파이썬 핵심 개념 초압축 강의',
+                url: 'https://www.inflearn.com',
+              ),
+              InflearnCourseModel(
+                title: '문과생도, 비전공자도, 누구나 배울 수 있는 파이썬(Python)!',
+                url: 'https://www.inflearn.com',
+              ),
+            ],
+          ),
+          InflearnUnitModel(
+            name: 'Data base',
+            courses: [
+              InflearnCourseModel(
+                title: 'Do it! SQL 입문',
+                url: 'https://www.inflearn.com',
+              ),
+              InflearnCourseModel(
+                title: '초보자를 위한 BigQuery(SQL) 입문',
+                url: 'https://www.inflearn.com',
+              ),
+            ],
+          ),
+          InflearnUnitModel(
+            name: 'Web Crawling',
+            courses: [
+              InflearnCourseModel(
+                title: '[신규 개정판] 이것이 진짜 크롤링이다 - 기본편',
+                url: 'https://www.inflearn.com',
+              ),
+              InflearnCourseModel(
+                title: '[Python 실전] 웹크롤링과 데이터분석',
+                url: 'https://www.inflearn.com',
+              ),
+            ],
+          ),
+        ],
+      ),
+      InflearnPackageModel(
+        id: 'pkg2',
+        title: 'LLM 미리보기',
+        subject: 'LLM',
+        type: InflearnPackageType.bonus,
+        summary: '다가올 LLM 교과목 예습용 강의입니다.',
+        isPublished: true,
+        sortOrder: 3,
+        publishedAt: DateTime(2026, 7, 4),
+        courses: const [
+          InflearnCourseModel(
+            title: '입문자를 위한 LangChain 기초',
+            url: 'https://www.inflearn.com',
+          ),
+          InflearnCourseModel(
+            title: 'TypeScript로 시작하는 LangChain - LLM & RAG 입문',
+            url: 'https://www.inflearn.com',
+          ),
+        ],
+      ),
+    ];
     _assessmentSubmissions = [
       AssessmentSubmissionModel(
         id: 'a1_${DemoAccounts.studentUid}',
@@ -108,6 +186,9 @@ class DemoLmsRepository {
     }
     if (!_assessmentController.isClosed) {
       _assessmentController.add(List.from(_assessments));
+    }
+    if (!_inflearnPackageController.isClosed) {
+      _inflearnPackageController.add(List.from(_inflearnPackages));
     }
     if (!_assessmentSubmissionController.isClosed) {
       _assessmentSubmissionController.add(List.from(_assessmentSubmissions));
@@ -555,6 +636,91 @@ class DemoLmsRepository {
 
   Stream<List<AssignmentModel>> watchAssignments(String cohortId) async* {
     yield [];
+  }
+
+  Stream<List<InflearnPackageModel>> watchInflearnPackages(String cohortId) {
+    return _inflearnPackageController.stream;
+  }
+
+  Stream<List<InflearnPackageModel>> watchPublishedInflearnPackages(
+    String cohortId,
+  ) {
+    return _inflearnPackageController.stream
+        .map((list) => list.where((p) => p.isPublished).toList());
+  }
+
+  Future<String> createInflearnPackage({
+    required String cohortId,
+    required InflearnPackageModel package,
+  }) async {
+    final id = 'pkg${_inflearnPackages.length}';
+    _inflearnPackages.insert(
+      0,
+      InflearnPackageModel(
+        id: id,
+        title: package.title,
+        subject: package.subject,
+        type: package.type,
+        summary: package.summary,
+        units: package.units,
+        courses: package.courses,
+        isPublished: package.isPublished,
+        sortOrder: package.sortOrder,
+        publishedAt: package.publishedAt,
+      ),
+    );
+    _emit();
+    return id;
+  }
+
+  Future<void> updateInflearnPackage({
+    required String cohortId,
+    required String packageId,
+    required Map<String, dynamic> updates,
+  }) async {
+    final i = _inflearnPackages.indexWhere((p) => p.id == packageId);
+    if (i < 0) return;
+    final p = _inflearnPackages[i];
+
+    List<InflearnUnitModel>? units;
+    if (updates['units'] is List) {
+      units = (updates['units'] as List)
+          .map((u) => InflearnUnitModel.fromMap(u as Map<String, dynamic>))
+          .toList();
+    }
+    List<InflearnCourseModel>? courses;
+    if (updates['courses'] is List) {
+      courses = (updates['courses'] as List)
+          .map((c) => InflearnCourseModel.fromMap(c as Map<String, dynamic>))
+          .toList();
+    }
+
+    _inflearnPackages[i] = p.copyWith(
+      title: updates['title'] as String? ?? p.title,
+      subject: updates['subject'] as String? ?? p.subject,
+      type: updates['type'] != null
+          ? InflearnPackageType.fromString(updates['type'] as String)
+          : p.type,
+      summary: updates.containsKey('summary')
+          ? updates['summary'] as String?
+          : p.summary,
+      units: units ?? p.units,
+      courses: courses ?? p.courses,
+      isPublished: updates['isPublished'] as bool? ?? p.isPublished,
+      sortOrder: (updates['sortOrder'] as num?)?.toInt() ?? p.sortOrder,
+      publishedAt: updates['publishedAt'] is DateTime
+          ? updates['publishedAt'] as DateTime
+          : p.publishedAt,
+    );
+    _emit();
+  }
+
+  Future<void> deleteInflearnPackage({
+    required String cohortId,
+    required String packageId,
+  }) async {
+    _inflearnPackages.removeWhere((p) => p.id == packageId);
+    _emit();
   }
 
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {

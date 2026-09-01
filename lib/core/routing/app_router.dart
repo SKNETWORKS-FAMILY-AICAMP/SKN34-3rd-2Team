@@ -4,11 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/admin/presentation/admin_cohort_form_screen.dart';
 import '../../features/admin/presentation/admin_cohorts_screen.dart';
-import '../../features/admin/presentation/admin_assessment_form_screen.dart';
+import '../../features/admin/presentation/admin_inflearn_package_form_screen.dart';
 import '../../features/admin/presentation/admin_form_tasks_screen.dart';
 import '../../features/admin/presentation/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/admin_student_create_screen.dart';
 import '../../features/admin/presentation/admin_student_detail_screen.dart';
+import '../../features/admin/presentation/admin_student_edit_screen.dart';
 import '../../features/admin/presentation/admin_students_screen.dart';
 import '../../features/admin/presentation/admin_study_room_screen.dart';
 import '../../features/admin/shell/admin_shell_screen.dart';
@@ -28,8 +29,9 @@ import '../../features/records/presentation/record_type_select_screen.dart';
 import '../../features/records/presentation/records_screen.dart';
 import '../../features/resume/presentation/resume_edit_screen.dart';
 import '../../features/resume/presentation/resume_screen.dart';
+import '../../features/seating/presentation/admin_seating_screen.dart';
+import '../../features/seating/presentation/seating_screen.dart';
 import '../../features/shell/main_shell_screen.dart';
-import '../../features/study_room/presentation/assessment_detail_screen.dart';
 import '../../features/study_room/presentation/study_room_screen.dart';
 import 'route_paths.dart';
 
@@ -56,6 +58,7 @@ String? _adminRedirectForStudentRoute(String location) {
     RoutePaths.board => RoutePaths.adminBoard,
     RoutePaths.studyRoom => RoutePaths.adminStudyRoom,
     RoutePaths.forms => RoutePaths.adminFormTasks,
+    RoutePaths.seating => RoutePaths.adminSeating,
     RoutePaths.myPage => RoutePaths.adminMyPage,
     RoutePaths.adminStudents => RoutePaths.adminStudents,
     RoutePaths.adminFormTasks => RoutePaths.adminFormTasks,
@@ -160,14 +163,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (_, _) => const NoTransitionPage(
               child: StudyRoomScreen(),
             ),
-            routes: [
-              GoRoute(
-                path: ':assessmentId',
-                builder: (_, state) => AssessmentDetailScreen(
-                  assessmentId: state.pathParameters['assessmentId']!,
-                ),
-              ),
-            ],
           ),
           GoRoute(
             path: RoutePaths.board,
@@ -216,6 +211,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: RoutePaths.seating,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: SeatingScreen(),
+            ),
+          ),
+          GoRoute(
             path: RoutePaths.myPage,
             pageBuilder: (_, _) => const NoTransitionPage(
               child: MyPageScreen(),
@@ -258,12 +259,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'create',
-                builder: (_, _) => const AdminAssessmentFormScreen(),
+                builder: (_, _) => const AdminInflearnPackageFormScreen(),
               ),
               GoRoute(
-                path: ':assessmentId',
-                builder: (_, state) => AdminAssessmentFormScreen(
-                  assessmentId: state.pathParameters['assessmentId'],
+                path: ':packageId',
+                builder: (_, state) => AdminInflearnPackageFormScreen(
+                  packageId: state.pathParameters['packageId'],
                 ),
               ),
             ],
@@ -283,6 +284,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 builder: (_, state) => AdminStudentDetailScreen(
                   studentUid: state.pathParameters['studentUid']!,
                 ),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    builder: (_, state) => AdminStudentEditScreen(
+                      studentUid: state.pathParameters['studentUid']!,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -329,6 +338,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ],
               ),
             ],
+          ),
+          GoRoute(
+            path: RoutePaths.adminSeating,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AdminSeatingScreen(),
+            ),
           ),
           GoRoute(
             path: RoutePaths.adminMyPage,

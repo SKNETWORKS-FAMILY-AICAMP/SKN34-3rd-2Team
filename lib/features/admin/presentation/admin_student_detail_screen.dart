@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/student_intake_model.dart';
+import '../../../shared/providers/lms_providers.dart';
 import '../data/student_admin_service.dart';
 import '../providers/student_admin_providers.dart';
 import 'widgets/admin_page_layout.dart';
@@ -28,6 +29,71 @@ class AdminStudentDetailScreen extends ConsumerStatefulWidget {
 class _AdminStudentDetailScreenState
     extends ConsumerState<AdminStudentDetailScreen> {
   bool _isResetting = false;
+  bool _isChangingStatus = false;
+
+  Future<void> _setActiveStatus(StudentIntakeModel intake, bool active) async {
+    final actionLabel = active ? '복학' : '퇴소';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('학생 $actionLabel 처리'),
+        content: Text(
+          active
+              ? '${intake.displayName} 학생을 복학 처리하시겠습니까?\n'
+                  '로그인이 다시 가능해집니다.'
+              : '${intake.displayName} 학생을 퇴소 처리하시겠습니까?\n'
+                  '로그인이 차단되며 재원 목록에서 숨겨집니다.\n'
+                  '출결·제출 기록은 유지됩니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: active
+                ? null
+                : FilledButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                  ),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isChangingStatus = true);
+    try {
+      await ref.read(studentAdminServiceProvider).setStudentActiveStatus(
+            uid: widget.studentUid,
+            active: active,
+          );
+
+      ref.invalidate(studentIntakeDetailProvider(widget.studentUid));
+      ref.invalidate(cohortStudentIntakesProvider);
+      ref.invalidate(cohortStudentsProvider);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(active ? '복학 처리되었습니다.' : '퇴소 처리되었습니다.'),
+        ),
+      );
+      if (!active) {
+        context.go(RoutePaths.adminStudents);
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? '$actionLabel 처리 실패')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isChangingStatus = false);
+    }
+  }
 
   Future<void> _resetPassword(StudentIntakeModel intake) async {
     final confirmed = await showDialog<bool>(
@@ -124,12 +190,26 @@ class _AdminStudentDetailScreenState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              intake.displayName,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    intake.displayName,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                if (!intake.isActive)
+                                  const Chip(
+                                    label: Text(
+                                      '퇴소',
+                                      style: TextStyle(fontSize: 11),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                              ],
                             ),
                             Text(
                               intake.cohortName,
@@ -140,6 +220,13 @@ class _AdminStudentDetailScreenState
                             ),
                           ],
                         ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push(
+                          RoutePaths.adminStudentEditPath(widget.studentUid),
+                        ),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text('수정'),
                       ),
                     ],
                   ),
@@ -239,6 +326,29 @@ class _AdminStudentDetailScreenState
                         color: AppColors.textSecondary,
                       ),
                       textAlign: TextAlign.center,
+                    ),
+                  const SizedBox(height: 16),
+                  if (_isChangingStatus)
+                    const Center(child: CircularProgressIndicator())
+                  else if (intake.isActive)
+                    OutlinedButton.icon(
+                      onPressed: () => _setActiveStatus(intake, false),
+                      icon: const Icon(Icons.person_off_outlined, size: 18),
+                      label: const Text('퇴소 처리'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        minimumSize: const Size.fromHeight(44),
+                      ),
+                    )
+                  else
+                    FilledButton.icon(
+                      onPressed: () => _setActiveStatus(intake, true),
+                      icon: const Icon(Icons.person_add_alt_1, size: 18),
+                      label: const Text('복학 처리'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(44),
+                      ),
                     ),
                   const SizedBox(height: 24),
                 ],

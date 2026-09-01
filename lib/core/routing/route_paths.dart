@@ -33,8 +33,10 @@ abstract final class RoutePaths {
   static const adminCohortsCreate = '/admin/cohorts/create';
   static const adminFormTasks = '/admin/form-tasks';
   static const adminFormTasksCreate = '/admin/form-tasks/create';
+  static const adminSeating = '/admin/seating';
 
   static String adminStudentDetailPath(String uid) => '/admin/students/$uid';
+  static String adminStudentEditPath(String uid) => '/admin/students/$uid/edit';
   static String adminFormTaskDetailPath(String taskId) =>
       '/admin/form-tasks/$taskId';
   static String adminFormTaskEditPath(String taskId) =>
@@ -56,10 +58,8 @@ abstract final class RoutePaths {
     return '$path?$query';
   }
 
-  static String studyRoomAssessmentPath(String assessmentId) =>
-      '/study-room/$assessmentId';
-  static String adminStudyRoomAssessmentPath(String assessmentId) =>
-      '/admin/study-room/$assessmentId';
+  static String adminStudyRoomPackagePath(String packageId) =>
+      '/admin/study-room/$packageId';
   static const attendance = '/attendance';
   static const seating = '/seating';
 }

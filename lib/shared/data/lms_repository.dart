@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/constants/firestore_paths.dart';
 import '../../core/errors/app_exception.dart';
 import '../models/assessment_model.dart';
+import '../models/inflearn_package_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/notice_model.dart';
@@ -571,7 +572,56 @@ class LmsRepository {
         });
   }
 
-  // ── Assessments (성취도 평가) ──
+  // ── Inflearn Packages (학습실) ──
+
+  Stream<List<InflearnPackageModel>> watchInflearnPackages(String cohortId) {
+    return cohortSub(cohortId, 'inflearnPackages')
+        .orderBy('sortOrder')
+        .snapshots()
+        .map((s) => s.docs.map(InflearnPackageModel.fromFirestore).toList());
+  }
+
+  Stream<List<InflearnPackageModel>> watchPublishedInflearnPackages(
+    String cohortId,
+  ) {
+    return watchInflearnPackages(cohortId).map(
+      (list) => list.where((p) => p.isPublished).toList(),
+    );
+  }
+
+  Future<String> createInflearnPackage({
+    required String cohortId,
+    required InflearnPackageModel package,
+  }) async {
+    final ref = cohortSub(cohortId, 'inflearnPackages').doc();
+    await ref.set(package.toFirestore(isCreate: true));
+    return ref.id;
+  }
+
+  Future<void> updateInflearnPackage({
+    required String cohortId,
+    required String packageId,
+    required Map<String, dynamic> updates,
+  }) async {
+    final normalized = Map<String, dynamic>.from(updates);
+    if (normalized['publishedAt'] is DateTime) {
+      normalized['publishedAt'] =
+          Timestamp.fromDate(normalized['publishedAt'] as DateTime);
+    }
+    await cohortSub(cohortId, 'inflearnPackages').doc(packageId).update({
+      ...normalized,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteInflearnPackage({
+    required String cohortId,
+    required String packageId,
+  }) async {
+    await cohortSub(cohortId, 'inflearnPackages').doc(packageId).delete();
+  }
+
+  // ── Assessments (성취도 평가) — deprecated, 유지 중 ──
 
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {
     return cohortSub(cohortId, 'assessments')

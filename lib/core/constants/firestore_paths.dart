@@ -33,6 +33,8 @@ abstract final class FirestorePaths {
       '${cohort(cohortId)}/assessments';
   static String assessmentSubmissions(String cohortId) =>
       '${cohort(cohortId)}/assessmentSubmissions';
+  static String inflearnPackages(String cohortId) =>
+      '${cohort(cohortId)}/inflearnPackages';
 
   // ── 유저 하위 Subcollection ──
   static String userTodos(String uid) => 'users/$uid/todos';

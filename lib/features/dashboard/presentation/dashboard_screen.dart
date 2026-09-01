@@ -14,8 +14,10 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/qual_exam_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../forms/presentation/form_tasks_screen.dart';
+import '../../seating/providers/seating_providers.dart';
 import 'widgets/attendance_calendar_card.dart';
 import 'widgets/dashboard_profile_card.dart';
+import 'widgets/my_seating_dashboard_card.dart';
 import 'widgets/qual_exam_schedule_section.dart';
 import 'widgets/resume_dashboard_section.dart';
 
@@ -81,6 +83,8 @@ class _DashboardBody extends ConsumerWidget {
         ref.invalidate(mySubmissionsProvider);
         ref.invalidate(formTasksWithStatusProvider);
         ref.invalidate(qualExamSchedulesProvider);
+        ref.invalidate(publishedSeatingLayoutProvider);
+        ref.invalidate(publishedSeatingAssignmentProvider);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -205,6 +209,9 @@ class _DashboardSidebar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AttendanceCalendarCard(user: user, compact: compactCalendar),
+        const SizedBox(height: 16),
+        const _SectionTitle('내 자리 배치', compact: true),
+        const MySeatingDashboardCard(),
         const SizedBox(height: 16),
         const _SectionTitle('TODO', compact: true),
         _TodoSection(

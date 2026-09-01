@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/date_utils.dart';
 import '../models/assessment_model.dart';
+import '../models/inflearn_package_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/form_task_model.dart';
@@ -178,6 +179,22 @@ final assignmentsProvider =
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (cohortId == null) return Stream.value([]);
   return ref.watch(lmsRepositoryProvider).watchAssignments(cohortId);
+});
+
+final inflearnPackagesProvider =
+    StreamProvider.autoDispose<List<InflearnPackageModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchInflearnPackages(cohortId);
+});
+
+final publishedInflearnPackagesProvider =
+    StreamProvider.autoDispose<List<InflearnPackageModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchPublishedInflearnPackages(cohortId);
 });
 
 final assessmentsProvider =

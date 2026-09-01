@@ -7,6 +7,7 @@
   "scripts": {
     "seed": "node seed-via-client.mjs",
     "seed:users": "node seed-test-users.mjs",
+    "seed:students": "node seed-students-bulk.mjs",
     "setup:production": "node setup-production.mjs",
     "clear:sample": "node clear-sample-data.mjs"
   },

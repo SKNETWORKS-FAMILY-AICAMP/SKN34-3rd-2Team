@@ -91,6 +91,28 @@ class StudentAdminService {
     final result = await callable.call<Map<String, dynamic>>({'uid': uid});
     return ResetPasswordResult.fromMap(result.data);
   }
+
+  Future<void> updateStudentWithIntake(
+    String uid,
+    StudentIntakeFormData form,
+  ) async {
+    final callable = _functions.httpsCallable(
+      'updateStudentAccount',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+    );
+    await callable.call<Map<String, dynamic>>(form.toUpdateJson(uid));
+  }
+
+  Future<void> setStudentActiveStatus({
+    required String uid,
+    required bool active,
+  }) async {
+    final callable = _functions.httpsCallable('setStudentActiveStatus');
+    await callable.call<Map<String, dynamic>>({
+      'uid': uid,
+      'active': active,
+    });
+  }
 }
 
 final studentAdminServiceProvider = Provider<StudentAdminService>((ref) {
