@@ -1,0 +1,152 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/routing/route_paths.dart';
+import '../../core/theme/app_colors.dart';
+import '../../shared/models/user_model.dart';
+import '../auth/providers/auth_providers.dart';
+import 'widgets/app_shell_header.dart';
+
+/// 메인 Shell — Drawer(전체 메뉴)
+class MainShellScreen extends ConsumerWidget {
+  const MainShellScreen({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.watch(currentUserProvider);
+    final user = currentUser.value;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const AppShellHeader(),
+        actions: [
+          if (user != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: CircleAvatar(
+                backgroundColor: AppColors.primaryLight,
+                child: Text(
+                  user.displayName.isNotEmpty ? user.displayName[0] : '?',
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      drawer: _AppDrawer(user: user),
+      body: child,
+    );
+  }
+}
+
+class _AppDrawer extends ConsumerWidget {
+  const _AppDrawer({this.user});
+
+  final UserModel? user;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final menuItems = [
+      _DrawerItem(Icons.dashboard, '대시보드', RoutePaths.dashboard),
+      _DrawerItem(Icons.description, '이력서 관리', RoutePaths.resume),
+      _DrawerItem(Icons.menu_book, '학습실', RoutePaths.studyRoom),
+      _DrawerItem(Icons.forum, '게시판', RoutePaths.board),
+      _DrawerItem(Icons.ballot_outlined, '설문 · 제출', RoutePaths.forms),
+      _DrawerItem(Icons.workspace_premium_outlined, '자격 시험 일정', RoutePaths.qualExams),
+      _DrawerItem(Icons.history, '기록실', RoutePaths.records),
+      _DrawerItem(Icons.card_giftcard, '마일리지', RoutePaths.mileage),
+      _DrawerItem(Icons.person, '마이페이지', RoutePaths.myPage),
+    ];
+
+    final displayName = user?.displayName ?? '';
+    final initial = displayName.isNotEmpty ? displayName[0] : '?';
+
+    return Drawer(
+      child: Column(
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(
+                bottom: BorderSide(color: AppColors.border),
+              ),
+            ),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: AppColors.primaryLight,
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            accountName: Text(
+              displayName.isNotEmpty ? '$displayName님' : '게스트',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            accountEmail: Text(
+              user?.cohortName ?? user?.email ?? '',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: menuItems.map((item) {
+                final isSelected =
+                    GoRouterState.of(context).matchedLocation == item.path;
+                return ListTile(
+                  leading: Icon(
+                    item.icon,
+                    color: isSelected ? AppColors.primary : null,
+                  ),
+                  title: Text(
+                    item.label,
+                    style: TextStyle(
+                      color: isSelected ? AppColors.primary : null,
+                      fontWeight: isSelected ? FontWeight.w600 : null,
+                    ),
+                  ),
+                  selected: isSelected,
+                  selectedTileColor: AppColors.primaryLight.withValues(alpha: 0.5),
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.go(item.path);
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: AppColors.error),
+            title: const Text('로그아웃', style: TextStyle(color: AppColors.error)),
+            onTap: () async {
+              Navigator.pop(context);
+              await ref.read(authRepositoryProvider).signOut();
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _DrawerItem {
+  const _DrawerItem(this.icon, this.label, this.path);
+  final IconData icon;
+  final String label;
+  final String path;
+}

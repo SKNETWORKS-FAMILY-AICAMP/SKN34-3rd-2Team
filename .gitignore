@@ -1,0 +1,116 @@
+# ─────────────────────────────────────────────
+# OS / 에디터 임시 파일
+# ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+*.bak
+*.tmp
+
+# ─────────────────────────────────────────────
+# IDE (IntelliJ / Android Studio / VS Code / Cursor)
+# ─────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# Cursor 로컬 캐시 (규칙 파일 .cursor/rules/ 는 필요 시 !.cursor/rules/ 로 예외 추가)
+.cursor/
+
+# ─────────────────────────────────────────────
+# Flutter / Dart
+# ─────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+**/doc/api/
+app.*.symbols
+app.*.map.json
+
+# 플랫폼별 빌드 산출물 (ephemeral)
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/macos/Flutter/ephemeral/
+**/linux/flutter/ephemeral/
+**/windows/flutter/ephemeral/
+
+# ─────────────────────────────────────────────
+# Android
+# ─────────────────────────────────────────────
+/android/.gradle/
+/android/local.properties
+/android/key.properties
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+**/*.keystore
+**/*.jks
+
+# ─────────────────────────────────────────────
+# iOS / macOS (CocoaPods 등)
+# ─────────────────────────────────────────────
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/**/xcuserdata/
+**/macos/Pods/
+**/macos/**/xcuserdata/
+
+# ─────────────────────────────────────────────
+# Firebase / Cloud Functions
+# ─────────────────────────────────────────────
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+ui-debug.log
+pubsub-debug.log
+database-debug.log
+
+functions/node_modules/
+functions/lib/
+
+# ─────────────────────────────────────────────
+# Node.js (scripts 등 하위 패키지)
+# ─────────────────────────────────────────────
+node_modules/
+scripts/node_modules/
+
+# ─────────────────────────────────────────────
+# 환경 변수 / 비밀값
+# ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+functions/.env
+functions/.env.*
+
+# 시드 스크립트 실행 시 생성되는 rules 백업
+firestore.rules.production.bak
+
+# ─────────────────────────────────────────────
+# 기타
+# ─────────────────────────────────────────────
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.class
+*.log
+*.pyc
