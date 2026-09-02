@@ -51,6 +51,24 @@ final publishedSeatingAssignmentProvider =
   return ref.watch(seatingRepositoryProvider).watchPublishedAssignment(cohortId);
 });
 
+/// 대시보드 미리보기 표시 기간 (관리자 확정 후)
+const kSeatingDashboardPreviewDuration = Duration(days: 3);
+
+bool isSeatingDashboardPreviewVisible(SeatingAssignmentModel? assignment) {
+  if (assignment == null || !assignment.isPublished) return false;
+  final publishedAt = assignment.publishedAt;
+  if (publishedAt == null) return false;
+  return DateTime.now().difference(publishedAt) <= kSeatingDashboardPreviewDuration;
+}
+
+/// 대시보드 — 확정 후 3일 이내에만 미니 배치표 표시
+final showSeatingDashboardPreviewProvider =
+    Provider.autoDispose<bool>((ref) {
+  final assignment =
+      ref.watch(publishedSeatingAssignmentProvider).asData?.value;
+  return isSeatingDashboardPreviewVisible(assignment);
+});
+
 /// seatId → UserModel (배정된 학생, 확정된 배치 기준)
 final seatingAssignedStudentsProvider =
     Provider.autoDispose<Map<String, UserModel>>((ref) {

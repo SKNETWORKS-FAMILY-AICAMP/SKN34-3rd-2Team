@@ -15,6 +15,8 @@ abstract final class FirestorePaths {
   static String attendances(String cohortId) =>
       '${cohort(cohortId)}/attendances';
   static String notices(String cohortId) => '${cohort(cohortId)}/notices';
+  static String scheduledNotices(String cohortId) =>
+      '${cohort(cohortId)}/scheduledNotices';
   static String posts(String cohortId) => '${cohort(cohortId)}/posts';
   static String qna(String cohortId) => '${cohort(cohortId)}/qna';
   static String materials(String cohortId) => '${cohort(cohortId)}/materials';
@@ -23,6 +25,16 @@ abstract final class FirestorePaths {
   static String resumes(String cohortId) => '${cohort(cohortId)}/resumes';
   static String mileageTransactions(String cohortId) =>
       '${cohort(cohortId)}/mileageTransactions';
+  static String mileageSettings(String cohortId) =>
+      '${cohort(cohortId)}/mileageSettings';
+  static String mileageSettingsConfig(String cohortId) =>
+      '${mileageSettings(cohortId)}/config';
+  static String mileageProducts(String cohortId) =>
+      '${cohort(cohortId)}/mileageProducts';
+  static String purchaseRequests(String cohortId) =>
+      '${cohort(cohortId)}/purchaseRequests';
+  static String mileageCart(String cohortId) =>
+      '${cohort(cohortId)}/mileageCart';
   static String weeklyTasks(String cohortId) =>
       '${cohort(cohortId)}/weeklyTasks';
   static String userProgress(String cohortId) =>
@@ -35,6 +47,14 @@ abstract final class FirestorePaths {
       '${cohort(cohortId)}/assessmentSubmissions';
   static String inflearnPackages(String cohortId) =>
       '${cohort(cohortId)}/inflearnPackages';
+  static String curriculumMeta(String cohortId) =>
+      '${cohort(cohortId)}/curriculum/meta';
+  static String curriculumWeeks(String cohortId) =>
+      '${cohort(cohortId)}/curriculumWeeks';
+  static String curriculumDays(String cohortId) =>
+      '${cohort(cohortId)}/curriculumDays';
+  static String curriculumProgress(String cohortId) =>
+      '${cohort(cohortId)}/curriculumProgress';
 
   // ── 유저 하위 Subcollection ──
   static String userTodos(String uid) => 'users/$uid/todos';

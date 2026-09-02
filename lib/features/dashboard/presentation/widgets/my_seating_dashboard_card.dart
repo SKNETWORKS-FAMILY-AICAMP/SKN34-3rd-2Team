@@ -8,6 +8,32 @@ import '../../../auth/providers/auth_providers.dart';
 import '../../../seating/presentation/widgets/seat_grid.dart';
 import '../../../seating/providers/seating_providers.dart';
 
+/// 대시보드 — 확정 후 3일간만 표시되는 미니 좌석 배치 섹션
+class MySeatingDashboardSection extends ConsumerWidget {
+  const MySeatingDashboardSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final visible = ref.watch(showSeatingDashboardPreviewProvider);
+    if (!visible) return const SizedBox.shrink();
+
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            '내 자리 배치',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ),
+        MySeatingDashboardCard(),
+        SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
 /// 대시보드 — 미니 좌석 배치표 (탭 시 전체 화면)
 class MySeatingDashboardCard extends ConsumerWidget {
   const MySeatingDashboardCard({super.key});
@@ -63,36 +89,7 @@ class MySeatingDashboardCard extends ConsumerWidget {
             final isReady =
                 layout != null && assignment != null && assignment.isPublished;
 
-            if (!isReady) {
-              return _SeatingCardShell(
-                onTap: () => context.go(RoutePaths.seating),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.event_seat_outlined,
-                      size: 28,
-                      color: AppColors.textHint.withValues(alpha: 0.7),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '좌석 배치 확정 대기 중',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '확정되면 이곳에서 미리볼 수 있습니다',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
+            if (!isReady) return const SizedBox.shrink();
 
             final mySeatId =
                 myUid != null ? assignment.seatIdForUser(myUid) : null;

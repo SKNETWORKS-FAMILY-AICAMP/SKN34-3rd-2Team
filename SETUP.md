@@ -305,6 +305,56 @@ DATA_GO_KR_SERVICE_KEY=발급받은_키
 
 </details>
 
+<details>
+<summary><b>마일리지 CMS</b></summary>
+
+자체 CMS(Firestore + Cloud Functions)로 마일리지 교환·적립·소멸을 처리합니다. 비즈콘 API는 사용하지 않습니다.
+
+### 관리자 메뉴
+
+Drawer → **마일리지 관리**
+
+| 메뉴 | 경로 | 설명 |
+|------|------|------|
+| 상품 관리 | `/admin/mileage/products` | 교환 상품 CRUD, 시드 상품 등록 |
+| 기수 설정 | `/admin/mileage/settings` | 카테고리 한도·기록실 자동 적립 규칙 |
+| 구매 요청 | `/admin/mileage/requests` | 승인/반려/수정요청 (승인 시 즉시 차감) |
+| 지급/차감 | `/admin/mileage/adjust` | 수동 마일리지 조정 |
+
+### Functions 배포 (최초 1회)
+
+```powershell
+cd functions
+npm run build
+cd ..
+firebase deploy --only functions:submitPurchaseRequest,functions:reviewPurchaseRequest,functions:cancelPurchaseRequest,functions:adjustMileage,functions:reviewSubmission,functions:expireMileage,functions:expireMileageNow
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+### E2E 테스트 체크리스트
+
+- [ ] 관리자 **지급/차감**으로 학생에게 마일리지 지급
+- [ ] 기록실 블로그/스터디/자격증 **승인** → 자동 적립 (중복 없음)
+- [ ] 고정가 상품 구매 요청 → 관리자 **승인** → 잔액 차감
+- [ ] 인프런/yes24 커스텀 모달 → 장바구니 → 구매 요청
+- [ ] 카테고리 한도 초과 시 구매 요청 **거부**
+- [ ] 잔액 부족 시 관리자 **승인 거부**
+- [ ] 반려/취소 시 잔액 **변동 없음**
+- [ ] 종강+14일 소멸 배치 (관리자 callable 테스트)
+
+### 소멸 배치 수동 테스트
+
+Firebase Console 또는 앱에서 관리자 로그인 후 `expireMileageNow` 호출:
+
+```javascript
+// Firebase Console > Functions > expireMileageNow 테스트
+{ "mockDate": "2027-01-01" }  // cohort.endDate + 14일 <= mockDate 인 기수 대상
+```
+
+기수 `endDate`를 과거로 설정한 테스트 cohort에서 확인하세요. `users.mileageExpiredAt` 플래그로 중복 소멸을 방지합니다.
+
+</details>
+
 ---
 
 ## 프로젝트 구조 (참고)

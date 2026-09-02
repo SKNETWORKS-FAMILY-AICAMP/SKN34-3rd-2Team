@@ -14,7 +14,7 @@ service firebase.storage {
     function isActiveUser() {
       return isAuthenticated()
         && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && getUserData().isActive == true;
+        && (!('isActive' in getUserData()) || getUserData().isActive == true);
     }
 
     function isAdmin() {
@@ -23,6 +23,16 @@ service firebase.storage {
 
     function belongsToCohort(cohortId) {
       return isActiveUser() && getUserData().cohortId == cohortId;
+    }
+
+    function canAccessCohort(cohortId) {
+      return isAdmin() || belongsToCohort(cohortId);
+    }
+
+    // cohorts/{cohortId}/curriculum/{scopeId}/{fileName}
+    match /cohorts/{cohortId}/curriculum/{allPaths=**} {
+      allow read: if canAccessCohort(cohortId);
+      allow write: if isAdmin();
     }
 
     // cohorts/{cohortId}/materials/{materialId}/{fileName}

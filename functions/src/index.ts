@@ -10,6 +10,16 @@ export {
 } from "./discord";
 export {googleFormWebhook} from "./googleForm";
 export {getQualExamSchedules} from "./qualExamSchd";
+export {parseCurriculumPdf} from "./curriculumPdf";
+export {publishScheduledNotices, publishScheduledNoticesNow} from "./scheduledNotices";
+export {
+  submitPurchaseRequest,
+  reviewPurchaseRequest,
+  cancelPurchaseRequest,
+  expireMileage,
+  expireMileageNow,
+} from "./mileage";
+import {grantMileageForSubmission} from "./mileage";
 
 const EMAIL_DOMAIN = "playdata.co.kr";
 
@@ -592,6 +602,7 @@ export const adjustMileage = onCall(
       userId,
       amount,
       reason,
+      type: "admin_adjust",
       adjustedBy: request.auth.uid,
       createdAt: fieldValue.serverTimestamp(),
     });
@@ -624,17 +635,39 @@ export const reviewSubmission = onCall(
       throw new HttpsError("invalid-argument", "필수 파라미터가 누락되었습니다.");
     }
 
-    await db
+    const submissionRef = db
       .collection("cohorts")
       .doc(cohortId)
       .collection("submissions")
-      .doc(submissionId)
-      .update({
-        status,
-        reviewComment: comment ?? null,
-        reviewedBy: request.auth.uid,
-        reviewedAt: fieldValue.serverTimestamp(),
-      });
+      .doc(submissionId);
+
+    const submissionDoc = await submissionRef.get();
+    if (!submissionDoc.exists) {
+      throw new HttpsError("not-found", "제출물을 찾을 수 없습니다.");
+    }
+
+    const submissionData = submissionDoc.data()!;
+
+    await submissionRef.update({
+      status,
+      reviewComment: comment ?? null,
+      reviewedBy: request.auth.uid,
+      reviewedAt: fieldValue.serverTimestamp(),
+    });
+
+    if (status === "approved" && !submissionData.mileageGranted) {
+      const userId = submissionData.userId as string;
+      const submissionType = submissionData.type as string;
+      const title = (submissionData.title as string) ?? submissionType;
+      await grantMileageForSubmission(
+        cohortId,
+        submissionId,
+        submissionType,
+        userId,
+        title,
+        request.auth.uid,
+      );
+    }
 
     return {message: `제출물이 ${status === "approved" ? "승인" : "반려"}되었습니다.`};
   },

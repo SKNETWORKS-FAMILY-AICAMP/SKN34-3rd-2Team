@@ -138,6 +138,12 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
+      // ── 예약 공지 ──
+      match /scheduledNotices/{scheduledId} {
+        allow read: if isAdmin();
+        allow write: if isAdmin();
+      }
+
       // ── 소통 피드 ──
       match /posts/{postId} {
         allow read: if belongsToCohort(cohortId);
@@ -218,7 +224,33 @@ service cloud.firestore {
       match /mileageTransactions/{txId} {
         allow read: if belongsToCohort(cohortId)
           && (isAdmin() || resource.data.userId == request.auth.uid);
+        allow write: if false;
+      }
+
+      // ── 마일리지 설정 ──
+      match /mileageSettings/{docId} {
+        allow read: if belongsToCohort(cohortId) || isAdmin();
         allow write: if isAdmin();
+      }
+
+      // ── 마일리지 상품 ──
+      match /mileageProducts/{productId} {
+        allow read: if belongsToCohort(cohortId) || isAdmin();
+        allow write: if isAdmin();
+      }
+
+      // ── 구매 요청 ──
+      match /purchaseRequests/{requestId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId)
+            && resource.data.userId == request.auth.uid);
+        allow write: if false;
+      }
+
+      // ── 마일리지 장바구니 ──
+      match /mileageCart/{userId} {
+        allow read, write: if belongsToCohort(cohortId)
+          && request.auth.uid == userId;
       }
 
       // ── 주간 필수 학습 ──
@@ -245,6 +277,34 @@ service cloud.firestore {
           || (belongsToCohort(cohortId)
             && resource.data.userId == request.auth.uid
             && request.resource.data.status == resource.data.status);
+      }
+
+      // ── 커리큘럼 ──
+      match /curriculum/{docId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId)
+            && docId == 'meta'
+            && resource.data.published == true);
+        allow write: if isAdmin();
+      }
+
+      match /curriculumWeeks/{weekId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId) && resource.data.published == true);
+        allow write: if isAdmin();
+      }
+
+      match /curriculumDays/{dayId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId) && resource.data.published == true);
+        allow write: if isAdmin();
+      }
+
+      match /curriculumProgress/{userId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId) && userId == request.auth.uid);
+        allow create, update: if belongsToCohort(cohortId)
+          && userId == request.auth.uid;
       }
 
       // ── Play 미션 ──

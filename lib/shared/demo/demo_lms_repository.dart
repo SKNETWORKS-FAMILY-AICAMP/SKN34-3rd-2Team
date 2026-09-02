@@ -259,7 +259,7 @@ class DemoLmsRepository {
     yield _notices;
   }
 
-  Future<void> createNotice({
+  Future<String> createNotice({
     required String cohortId,
     required NoticeModel notice,
     required String authorId,
@@ -272,10 +272,11 @@ class DemoLmsRepository {
         title: notice.title,
         content: notice.content,
         authorName: authorName,
-        isPinned: notice.isPinned,
+        isFavorite: notice.isFavorite,
         createdAt: DateTime.now(),
       ),
     );
+    return 'n${_notices.length - 1}';
   }
 
   Stream<List<SubmissionModel>> watchMySubmissions(
