@@ -10,6 +10,8 @@ import '../../../shared/models/resume_content.dart';
 import '../../../shared/models/resume_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../ai_coach/presentation/ai_job_coach_panel.dart';
+import '../ai_coach/presentation/resume_mock_menu.dart';
 import '../services/resume_pdf_exporter.dart';
 import 'widgets/resume_edit_feedback_panel.dart';
 import 'widgets/resume_section_nav.dart';
@@ -37,6 +39,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   _ResumeViewMode _viewMode = _ResumeViewMode.edit;
   bool _isSaving = false;
   bool _dirty = false;
+  bool _showAiCoach = false;
 
   String _title = '';
   ResumeContent _content = ResumeContent.empty();
@@ -295,6 +298,22 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
               ),
               leadingWidth: 110,
               actions: [
+                if (!isAdmin && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit)
+                  ResumeMockMenu(
+                    onPick: (title, content) {
+                      setState(() {
+                        _title = title;
+                        _content = content;
+                      });
+                      _markDirty();
+                    },
+                  ),
+                FilledButton.tonalIcon(
+                  onPressed: () => setState(() => _showAiCoach = !_showAiCoach),
+                  icon: const Icon(Icons.auto_awesome, size: 16),
+                  label: const Text('AI 취업 코치'),
+                ),
+                const SizedBox(width: 8),
                 if (!resume.isApproved || isAdmin)
                   _ModeToggle(
                     isEdit: _viewMode == _ResumeViewMode.edit,
@@ -574,18 +593,25 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         ),
                       );
 
-                      final feedbackPanel = ResumeEditFeedbackPanel(
-                        resumeId: widget.resumeId,
-                        isAdmin: isAdmin,
-                        selectedSectionKey: _selectedSection,
-                        isSidebar: wide,
-                      );
+                      final rightPanel = _showAiCoach
+                          ? AiJobCoachPanel(
+                              resumeId: widget.resumeId,
+                              draftContent: _content,
+                              isSidebar: wide,
+                              onClose: () => setState(() => _showAiCoach = false),
+                            )
+                          : ResumeEditFeedbackPanel(
+                              resumeId: widget.resumeId,
+                              isAdmin: isAdmin,
+                              selectedSectionKey: _selectedSection,
+                              isSidebar: wide,
+                            );
 
                       if (!wide) {
                         return Column(
                           children: [
                             Expanded(child: resumeScroll),
-                            feedbackPanel,
+                            rightPanel,
                           ],
                         );
                       }
@@ -602,7 +628,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   left: BorderSide(color: AppColors.border),
                                 ),
                               ),
-                              child: feedbackPanel,
+                              child: rightPanel,
                             ),
                           ),
                         ],

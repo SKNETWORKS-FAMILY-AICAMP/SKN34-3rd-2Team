@@ -1,0 +1,11 @@
+# 이 POC는 설치해서 쓰는 패키지가 아니라 레포 루트에서 `python -m job_matching_bot`으로
+# 실행한다. 이 파일은 실행에 필요한 Python 버전과 의존성 상태를 명시하는 용도다.
+
+[project]
+name = "job-matching-bot"
+version = "0.1.0"
+description = "AI 취업 코치 Phase 1 Vertical Slice POC — 채용공고 정규화, Hard Filter, Ranking, Skill Gap"
+# `int | None`(PEP 604), `list[str]` 등을 런타임에 사용하므로 3.10 이상이 필요하다.
+requires-python = ">=3.10"
+# 표준 라이브러리만 사용한다. 외부 의존성이 생기면 여기에 먼저 적는다.
+dependencies = []

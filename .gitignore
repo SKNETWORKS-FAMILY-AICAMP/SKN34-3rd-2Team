@@ -114,3 +114,9 @@ migrate_working_dir/
 *.class
 *.log
 *.pyc
+# Widget Preview related
+.widget_preview/
+*venv/
+
+# 크롤링 수집 결과 (수십 MB, 재생성 가능)
+crawler_poc/output/

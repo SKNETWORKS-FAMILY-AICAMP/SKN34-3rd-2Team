@@ -9,6 +9,7 @@ export {
 } from "./discord";
 export {googleFormWebhook} from "./googleForm";
 export {getQualExamSchedules} from "./qualExamSchd";
+export {analyzeResumeAndMatch} from "./jobCoach";
 
 const EMAIL_DOMAIN = "playdata.co.kr";
 
