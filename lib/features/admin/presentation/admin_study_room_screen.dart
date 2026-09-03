@@ -5,12 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
-import '../../study_room/presentation/widgets/assessment_card.dart';
+import '../../study_room/presentation/widgets/inflearn_package_card.dart';
 import '../../study_room/presentation/widgets/study_room_layout.dart';
 
-/// 관리자 학습실 — 성취도 평가 목록 + 생성
+/// 관리자 학습실 — 인프런 강의 패키지 관리
 class AdminStudyRoomScreen extends ConsumerStatefulWidget {
   const AdminStudyRoomScreen({super.key});
 
@@ -29,11 +30,54 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
     super.dispose();
   }
 
+  Future<void> _confirmDelete(String packageId, String title) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('패키지 삭제'),
+        content: Text('「$title」 패키지를 삭제할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (cohortId == null) return;
+
+    try {
+      await ref.read(lmsRepositoryProvider).deleteInflearnPackage(
+            cohortId: cohortId,
+            packageId: packageId,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('패키지가 삭제되었습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제 실패: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
     final cohortName = ref.watch(effectiveCohortNameProvider);
-    final assessments = ref.watch(assessmentsProvider);
+    final packages = ref.watch(inflearnPackagesProvider);
 
     return userAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -42,7 +86,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
         if (user == null) return const SizedBox.shrink();
 
         return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(assessmentsProvider),
+          onRefresh: () async => ref.invalidate(inflearnPackagesProvider),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             child: studyRoomContentWrapper(
@@ -56,7 +100,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                         child: StudyRoomPageHeader(
                           user: user,
                           cohortName: cohortName,
-                          subtitle: '성취도 평가를 생성하고 관리하세요.',
+                          subtitle: '인프런 강의 패키지를 등록하고 기수에 공개하세요.',
                           showProfile: false,
                         ),
                       ),
@@ -65,17 +109,18 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                         onPressed: () =>
                             context.push(RoutePaths.adminStudyRoomCreate),
                         icon: const Icon(Icons.add, size: 18),
-                        label: const Text('평가 생성'),
+                        label: const Text('패키지 등록'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
                   StudyRoomSearchBar(
                     controller: _searchController,
+                    hintText: '패키지·교과목 검색',
                     onChanged: (v) => setState(() => _query = v.trim()),
                   ),
                   const SizedBox(height: 20),
-                  assessments.when(
+                  packages.when(
                     loading: () => const Padding(
                       padding: EdgeInsets.all(40),
                       child: Center(child: CircularProgressIndicator()),
@@ -84,9 +129,12 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                     data: (list) {
                       final filtered = list
                           .where(
-                            (a) =>
+                            (p) =>
                                 _query.isEmpty ||
-                                a.title
+                                p.title
+                                    .toLowerCase()
+                                    .contains(_query.toLowerCase()) ||
+                                p.subject
                                     .toLowerCase()
                                     .contains(_query.toLowerCase()),
                           )
@@ -98,7 +146,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                           child: Column(
                             children: [
                               const Text(
-                                '등록된 평가가 없습니다',
+                                '등록된 패키지가 없습니다',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                 ),
@@ -108,41 +156,24 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                                 onPressed: () => context
                                     .push(RoutePaths.adminStudyRoomCreate),
                                 icon: const Icon(Icons.add),
-                                label: const Text('첫 평가 만들기'),
+                                label: const Text('첫 패키지 만들기'),
                               ),
                             ],
                           ),
                         );
                       }
 
-                      return LayoutBuilder(
-                        builder: (context, constraints) {
-                          final crossAxisCount =
-                              constraints.maxWidth >= 720 ? 2 : 1;
-                          return GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: crossAxisCount == 2 ? 0.85 : 1.1,
+                      return Column(
+                        children: [
+                          for (final p in filtered)
+                            InflearnPackageListTile(
+                              package: p,
+                              onTap: () => context.push(
+                                RoutePaths.adminStudyRoomPackagePath(p.id),
+                              ),
+                              onDelete: () => _confirmDelete(p.id, p.title),
                             ),
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final a = filtered[i];
-                              return AssessmentCard(
-                                assessment: a,
-                                completed: false,
-                                showDraft: true,
-                                onTap: () => context.push(
-                                  RoutePaths.adminStudyRoomAssessmentPath(a.id),
-                                ),
-                              );
-                            },
-                          );
-                        },
+                        ],
                       );
                     },
                   ),

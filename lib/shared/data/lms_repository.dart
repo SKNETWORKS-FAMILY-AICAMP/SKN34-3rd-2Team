@@ -6,9 +6,11 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/constants/firestore_paths.dart';
 import '../../core/errors/app_exception.dart';
 import '../models/assessment_model.dart';
+import '../models/inflearn_package_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/notice_model.dart';
+import '../models/scheduled_notice_model.dart';
 import '../models/form_task_model.dart';
 import '../models/post_model.dart';
 import '../models/resume_content.dart';
@@ -106,21 +108,118 @@ class LmsRepository {
 
   Stream<List<NoticeModel>> watchNotices(String cohortId) {
     return cohortSub(cohortId, 'notices')
-        .orderBy('isPinned', descending: true)
+        .orderBy('isFavorite', descending: true)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((s) => s.docs.map(NoticeModel.fromFirestore).toList());
   }
 
-  Future<void> createNotice({
+  Future<String> createNotice({
     required String cohortId,
     required NoticeModel notice,
     required String authorId,
     required String authorName,
   }) async {
-    await cohortSub(cohortId, 'notices').add(
+    final ref = await cohortSub(cohortId, 'notices').add(
       notice.toFirestore(authorId: authorId, authorName: authorName),
     );
+    return ref.id;
+  }
+
+  Future<void> updateNotice({
+    required String cohortId,
+    required NoticeModel notice,
+    required String authorId,
+    required String authorName,
+  }) async {
+    await cohortSub(cohortId, 'notices').doc(notice.id).update(
+          notice.toFirestoreUpdate(
+            authorId: authorId,
+            authorName: authorName,
+          ),
+        );
+  }
+
+  Future<void> toggleNoticeFavorite({
+    required String cohortId,
+    required String noticeId,
+    required bool isFavorite,
+  }) async {
+    await cohortSub(cohortId, 'notices').doc(noticeId).update({
+      'isFavorite': isFavorite,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteNotice(String cohortId, String noticeId) async {
+    await cohortSub(cohortId, 'notices').doc(noticeId).delete();
+  }
+
+  Stream<List<ScheduledNoticeModel>> watchScheduledNotices(String cohortId) {
+    return cohortSub(cohortId, 'scheduledNotices')
+        .orderBy('isActive', descending: true)
+        .orderBy('nextPublishAt', descending: false)
+        .snapshots()
+        .map((s) => s.docs.map(ScheduledNoticeModel.fromFirestore).toList());
+  }
+
+  Future<String> createScheduledNotice({
+    required String cohortId,
+    required ScheduledNoticeModel scheduled,
+    required String authorId,
+    required String authorName,
+  }) async {
+    final nextAt = computeNextPublishAt(
+      repeatType: scheduled.repeatType,
+      publishTime: scheduled.publishTime,
+      publishAt: scheduled.publishAt,
+      weekday: scheduled.weekday,
+    );
+    final ref = await cohortSub(cohortId, 'scheduledNotices').add(
+      scheduled.toFirestore(
+        authorId: authorId,
+        authorName: authorName,
+        nextPublishAt: nextAt,
+        isCreate: true,
+      ),
+    );
+    return ref.id;
+  }
+
+  Future<void> updateScheduledNotice({
+    required String cohortId,
+    required ScheduledNoticeModel scheduled,
+    required String authorId,
+    required String authorName,
+  }) async {
+    final nextAt = computeNextPublishAt(
+      repeatType: scheduled.repeatType,
+      publishTime: scheduled.publishTime,
+      publishAt: scheduled.publishAt,
+      weekday: scheduled.weekday,
+    );
+    await cohortSub(cohortId, 'scheduledNotices').doc(scheduled.id).update(
+          scheduled.toFirestoreUpdate(
+            authorId: authorId,
+            authorName: authorName,
+            nextPublishAt: nextAt,
+          ),
+        );
+  }
+
+  Future<void> toggleScheduledNoticeActive({
+    required String cohortId,
+    required String scheduledId,
+    required bool isActive,
+  }) async {
+    await cohortSub(cohortId, 'scheduledNotices').doc(scheduledId).update({
+      'isActive': isActive,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteScheduledNotice(String cohortId, String scheduledId) async {
+    await cohortSub(cohortId, 'scheduledNotices').doc(scheduledId).delete();
   }
 
   // ── Submissions ──
@@ -161,11 +260,23 @@ class LmsRepository {
     required String status,
     String? reviewComment,
   }) async {
-    await cohortSub(cohortId, 'submissions').doc(submissionId).update({
-      'status': status,
-      if (reviewComment != null) 'reviewComment': reviewComment,
-      'reviewedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      final callable = FirebaseFunctions.instanceFor(
+        region: 'asia-northeast3',
+      ).httpsCallable('reviewSubmission');
+      await callable.call<Map<String, dynamic>>({
+        'cohortId': cohortId,
+        'submissionId': submissionId,
+        'status': status,
+        if (reviewComment != null && reviewComment.isNotEmpty)
+          'comment': reviewComment,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw DataException(
+        e.message ?? '제출물 검토에 실패했습니다.',
+        code: e.code,
+      );
+    }
   }
 
   // ── Weekly Tasks & Progress ──
@@ -571,7 +682,56 @@ class LmsRepository {
         });
   }
 
-  // ── Assessments (성취도 평가) ──
+  // ── Inflearn Packages (학습실) ──
+
+  Stream<List<InflearnPackageModel>> watchInflearnPackages(String cohortId) {
+    return cohortSub(cohortId, 'inflearnPackages')
+        .orderBy('sortOrder')
+        .snapshots()
+        .map((s) => s.docs.map(InflearnPackageModel.fromFirestore).toList());
+  }
+
+  Stream<List<InflearnPackageModel>> watchPublishedInflearnPackages(
+    String cohortId,
+  ) {
+    return watchInflearnPackages(cohortId).map(
+      (list) => list.where((p) => p.isPublished).toList(),
+    );
+  }
+
+  Future<String> createInflearnPackage({
+    required String cohortId,
+    required InflearnPackageModel package,
+  }) async {
+    final ref = cohortSub(cohortId, 'inflearnPackages').doc();
+    await ref.set(package.toFirestore(isCreate: true));
+    return ref.id;
+  }
+
+  Future<void> updateInflearnPackage({
+    required String cohortId,
+    required String packageId,
+    required Map<String, dynamic> updates,
+  }) async {
+    final normalized = Map<String, dynamic>.from(updates);
+    if (normalized['publishedAt'] is DateTime) {
+      normalized['publishedAt'] =
+          Timestamp.fromDate(normalized['publishedAt'] as DateTime);
+    }
+    await cohortSub(cohortId, 'inflearnPackages').doc(packageId).update({
+      ...normalized,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteInflearnPackage({
+    required String cohortId,
+    required String packageId,
+  }) async {
+    await cohortSub(cohortId, 'inflearnPackages').doc(packageId).delete();
+  }
+
+  // ── Assessments (성취도 평가) — deprecated, 유지 중 ──
 
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {
     return cohortSub(cohortId, 'assessments')

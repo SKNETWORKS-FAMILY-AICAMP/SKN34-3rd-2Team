@@ -2,10 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/date_utils.dart';
 import '../models/assessment_model.dart';
+import '../models/inflearn_package_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/form_task_model.dart';
 import '../models/notice_model.dart';
+import '../models/scheduled_notice_model.dart';
 import '../models/post_model.dart';
 import '../models/resume_model.dart';
 import '../models/submission_model.dart';
@@ -17,6 +19,15 @@ import '../providers/cohort_providers.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../providers/firebase_providers.dart';
 import '../data/lms_repository.dart';
+import '../../features/admin/data/scheduled_notice_admin_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
+final scheduledNoticeAdminServiceProvider =
+    Provider<ScheduledNoticeAdminService>((ref) {
+  return ScheduledNoticeAdminService(
+    FirebaseFunctions.instanceFor(region: 'asia-northeast3'),
+  );
+});
 
 final lmsRepositoryProvider = Provider<dynamic>((ref) {
   final uid = ref.watch(sessionUidProvider).value;
@@ -43,6 +54,14 @@ final noticesStreamProvider =
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (cohortId == null) return Stream.value([]);
   return ref.watch(lmsRepositoryProvider).watchNotices(cohortId);
+});
+
+final scheduledNoticesProvider =
+    StreamProvider.autoDispose<List<ScheduledNoticeModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  final isAdmin = ref.watch(isAdminProvider);
+  if (cohortId == null || !isAdmin) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchScheduledNotices(cohortId);
 });
 
 final mySubmissionsProvider =
@@ -142,16 +161,6 @@ final attendanceStatusMapProvider = StreamProvider.autoDispose
   });
 });
 
-final mileageTransactionsProvider =
-    StreamProvider.autoDispose<List<MileageTransactionModel>>((ref) {
-  final user = ref.watch(currentUserSyncProvider);
-  final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (user == null || cohortId == null) return Stream.value([]);
-  return ref
-      .watch(lmsRepositoryProvider)
-      .watchMyMileageTransactions(cohortId, user.uid);
-});
-
 final todayScheduleProvider = StreamProvider.autoDispose<ScheduleModel?>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (cohortId == null) return Stream.value(null);
@@ -178,6 +187,22 @@ final assignmentsProvider =
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (cohortId == null) return Stream.value([]);
   return ref.watch(lmsRepositoryProvider).watchAssignments(cohortId);
+});
+
+final inflearnPackagesProvider =
+    StreamProvider.autoDispose<List<InflearnPackageModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchInflearnPackages(cohortId);
+});
+
+final publishedInflearnPackagesProvider =
+    StreamProvider.autoDispose<List<InflearnPackageModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchPublishedInflearnPackages(cohortId);
 });
 
 final assessmentsProvider =

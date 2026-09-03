@@ -6,6 +6,7 @@ import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../hub/presentation/widgets/notice_list_widgets.dart';
 import '../../../shared/models/notice_model.dart';
 import '../../../shared/models/submission_model.dart';
 import '../../../shared/models/todo_model.dart';
@@ -13,9 +14,12 @@ import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/qual_exam_providers.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../curriculum/presentation/widgets/curriculum_dashboard_section.dart';
 import '../../forms/presentation/form_tasks_screen.dart';
+import '../../seating/providers/seating_providers.dart';
 import 'widgets/attendance_calendar_card.dart';
-import 'widgets/dashboard_profile_card.dart';
+import 'widgets/dashboard_profile_header.dart';
+import 'widgets/my_seating_dashboard_card.dart';
 import 'widgets/qual_exam_schedule_section.dart';
 import 'widgets/resume_dashboard_section.dart';
 
@@ -81,6 +85,8 @@ class _DashboardBody extends ConsumerWidget {
         ref.invalidate(mySubmissionsProvider);
         ref.invalidate(formTasksWithStatusProvider);
         ref.invalidate(qualExamSchedulesProvider);
+        ref.invalidate(publishedSeatingLayoutProvider);
+        ref.invalidate(publishedSeatingAssignmentProvider);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -151,18 +157,25 @@ class _DashboardMainColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DashboardProfileCard(user: user),
+        DashboardProfileHeader(user: user),
         const SizedBox(height: 16),
-        const _SectionTitle('공지'),
+        _NoticeSectionHeader(
+          onViewAll: () => context.go(RoutePaths.board),
+        ),
         notices.when(
           loading: () => const _ShimmerCard(),
           error: (e, _) => Text('오류: $e'),
-          data: (list) => _NoticesPreview(notices: list.take(5).toList()),
+          data: (list) => _NoticesPreview(
+            notices: list.take(10).toList(),
+            hasMore: list.length > 10,
+          ),
         ),
         const SizedBox(height: 16),
         const ResumeDashboardSection(),
         const SizedBox(height: 16),
         const FormTasksDashboardSection(),
+        const SizedBox(height: 16),
+        const CurriculumDashboardSection(),
         const SizedBox(height: 16),
         const QualExamScheduleSection(),
         const SizedBox(height: 16),
@@ -206,6 +219,7 @@ class _DashboardSidebar extends StatelessWidget {
       children: [
         AttendanceCalendarCard(user: user, compact: compactCalendar),
         const SizedBox(height: 16),
+        const MySeatingDashboardSection(),
         const _SectionTitle('TODO', compact: true),
         _TodoSection(
           todos: todos,
@@ -227,101 +241,94 @@ class _DashboardSidebar extends StatelessWidget {
   }
 }
 
-class _NoticesPreview extends StatelessWidget {
-  const _NoticesPreview({required this.notices});
-  final List<NoticeModel> notices;
+class _NoticeSectionHeader extends StatelessWidget {
+  const _NoticeSectionHeader({required this.onViewAll});
+
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context) {
-    if (notices.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: Text('공지사항이 없습니다')),
-        ),
-      );
-    }
-    return Card(
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
         children: [
-          for (var i = 0; i < notices.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
-            ListTile(
-              onTap: () => context.go(RoutePaths.board),
-              leading: Icon(
-                notices[i].isPinned ? Icons.push_pin : Icons.campaign_outlined,
-                color: notices[i].isFromDiscord
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
-                size: 20,
-              ),
-              title: Text(
-                notices[i].title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    notices[i].content,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      _ChannelChip(label: notices[i].displayLabel),
-                      const SizedBox(width: 6),
-                      Text(
-                        _timeAgo(notices[i].createdAt),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textHint,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              isThreeLine: true,
+          const Text(
+            '공지',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: onViewAll,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-          ],
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('전체 보기', style: TextStyle(fontSize: 13)),
+                Icon(Icons.chevron_right_rounded, size: 18),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
-
-  String _timeAgo(DateTime? dt) {
-    if (dt == null) return '';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}일 전';
-    if (diff.inHours > 0) return '${diff.inHours}시간 전';
-    return '방금';
-  }
 }
 
-class _ChannelChip extends StatelessWidget {
-  const _ChannelChip({required this.label});
-  final String label;
+class _NoticesPreview extends StatelessWidget {
+  const _NoticesPreview({
+    required this.notices,
+    this.hasMore = false,
+  });
+
+  final List<NoticeModel> notices;
+  final bool hasMore;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: AppColors.primary,
+    if (notices.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
         ),
-      ),
+        child: const Center(
+          child: Text(
+            '공지사항이 없습니다',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        StudentNoticeRowList(
+          notices: notices,
+          maxVisibleRows: 5,
+          onTap: (notice) => NoticeDetailSheet.show(context, notice),
+        ),
+        if (hasMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '이전 공지는 전체 보기에서 확인하세요.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textHint.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

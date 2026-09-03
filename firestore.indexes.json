@@ -20,8 +20,24 @@
       "collectionGroup": "notices",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "isPinned", "order": "DESCENDING" },
+        { "fieldPath": "isFavorite", "order": "DESCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledNotices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "DESCENDING" },
+        { "fieldPath": "nextPublishAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledNotices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "nextPublishAt", "order": "ASCENDING" }
       ]
     },
     {
@@ -54,6 +70,30 @@
       "fields": [
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "purchaseRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "purchaseRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mileageProducts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "sortOrder", "order": "ASCENDING" }
       ]
     },
     {

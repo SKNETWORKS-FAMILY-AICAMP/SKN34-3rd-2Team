@@ -1,7 +1,8 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {randomBytes} from "crypto";
+import * as logger from "firebase-functions/logger";
 
-import {admin, auth, db} from "./firebase";
+import {admin, auth, db, ensureInitialized, fieldValue} from "./firebase";
 
 export {
   syncDiscordNotices,
@@ -9,6 +10,16 @@ export {
 } from "./discord";
 export {googleFormWebhook} from "./googleForm";
 export {getQualExamSchedules} from "./qualExamSchd";
+export {parseCurriculumPdf} from "./curriculumPdf";
+export {publishScheduledNotices, publishScheduledNoticesNow} from "./scheduledNotices";
+export {
+  submitPurchaseRequest,
+  reviewPurchaseRequest,
+  cancelPurchaseRequest,
+  expireMileage,
+  expireMileageNow,
+} from "./mileage";
+import {grantMileageForSubmission} from "./mileage";
 export {analyzeResumeAndMatch} from "./jobCoach";
 
 const EMAIL_DOMAIN = "playdata.co.kr";
@@ -185,8 +196,8 @@ export const createStudentAccount = onCall(
       skills: [],
       socialLinks: {},
       mileageBalance: 0,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: fieldValue.serverTimestamp(),
+      updatedAt: fieldValue.serverTimestamp(),
       createdBy: request.auth.uid,
     });
 
@@ -200,6 +211,7 @@ export const createStudentAccount = onCall(
       seatNumber: data.seatNumber ?? null,
       initialPassword: password,
       passwordChanged: false,
+      isActive: true,
       intake: {
         educationMajor: intake.educationMajor ?? "",
         currentStatus: intake.currentStatus ?? "",
@@ -216,13 +228,13 @@ export const createStudentAccount = onCall(
         selfLearningStyle: intake.selfLearningStyle ?? "",
         slumpOvercomeExperience: intake.slumpOvercomeExperience ?? "",
       },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: fieldValue.serverTimestamp(),
       createdBy: request.auth.uid,
     });
 
     const cohortRef = db.collection("cohorts").doc(cohortId);
     batch.update(cohortRef, {
-      studentCount: admin.firestore.FieldValue.increment(1),
+      studentCount: fieldValue.increment(1),
     });
 
     try {
@@ -278,7 +290,7 @@ export const updatePersonalEmail = onCall(
     const batch = db.batch();
     batch.update(db.collection("users").doc(uid), {
       personalEmail: normalized,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: fieldValue.serverTimestamp(),
     });
 
     const intakeRef = db.collection("studentIntakes").doc(uid);
@@ -322,7 +334,7 @@ export const resetStudentPassword = onCall(
 
     await db.collection("users").doc(uid).update({
       mustChangePassword: true,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: fieldValue.serverTimestamp(),
     });
 
     await db.collection("studentIntakes").doc(uid).update({
@@ -335,6 +347,167 @@ export const resetStudentPassword = onCall(
       passwordChanged: false,
       message: "비밀번호가 재발급되었습니다.",
     };
+  },
+);
+
+interface UpdateStudentRequest extends CreateStudentRequest {
+  uid: string;
+}
+
+/**
+ * 관리자 전용 — 학생 상담 정보 수정
+ */
+export const updateStudentAccount = onCall(
+  {region: "asia-northeast3"},
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "인증이 필요합니다.");
+    }
+    await assertAdmin(request.auth.uid);
+
+    const data = request.data as UpdateStudentRequest;
+    const {uid, displayName, cohortId, cohortName} = data;
+    const intake = data.intake ?? {};
+    const personalEmail = normalizeEmail(data.personalEmail ?? "");
+
+    if (!uid || !displayName?.trim() || !cohortId || !cohortName) {
+      throw new HttpsError(
+        "invalid-argument",
+        "uid, displayName, cohortId, cohortName은 필수입니다.",
+      );
+    }
+
+    if (!personalEmail || !isValidEmail(personalEmail)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "올바른 개인 이메일(personalEmail)을 입력해주세요.",
+      );
+    }
+
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists || userDoc.data()?.role !== "student") {
+      throw new HttpsError("not-found", "학생을 찾을 수 없습니다.");
+    }
+
+    const intakeDoc = await db.collection("studentIntakes").doc(uid).get();
+    if (!intakeDoc.exists) {
+      throw new HttpsError("not-found", "학생 상담 정보를 찾을 수 없습니다.");
+    }
+
+    await assertPersonalEmailAvailableForUser(personalEmail, uid);
+
+    await auth.updateUser(uid, {displayName: displayName.trim()});
+
+    const batch = db.batch();
+    const userRef = db.collection("users").doc(uid);
+    batch.update(userRef, {
+      displayName: displayName.trim(),
+      personalEmail,
+      seatNumber: data.seatNumber ?? null,
+      updatedAt: fieldValue.serverTimestamp(),
+    });
+
+    const intakeRef = db.collection("studentIntakes").doc(uid);
+    batch.update(intakeRef, {
+      displayName: displayName.trim(),
+      personalEmail,
+      seatNumber: data.seatNumber ?? null,
+      intake: {
+        educationMajor: intake.educationMajor ?? "",
+        currentStatus: intake.currentStatus ?? "",
+        weeklyStudyHours: intake.weeklyStudyHours ?? "",
+        programmingLevel: intake.programmingLevel ?? "",
+        collaborationTools: intake.collaborationTools ?? "",
+        aiLlmExperience: intake.aiLlmExperience ?? "",
+        motivation: intake.motivation ?? "",
+        desiredRole: intake.desiredRole ?? "",
+        postCompletionGoal: intake.postCompletionGoal ?? "",
+        awards: intake.awards ?? "",
+        projectLinks: intake.projectLinks ?? "",
+        teamRole: intake.teamRole ?? "",
+        selfLearningStyle: intake.selfLearningStyle ?? "",
+        slumpOvercomeExperience: intake.slumpOvercomeExperience ?? "",
+      },
+    });
+
+    await batch.commit();
+
+    return {
+      uid,
+      message: "학생 정보가 수정되었습니다.",
+    };
+  },
+);
+
+/**
+ * 관리자 전용 — 학생 퇴소(비활성화) / 복학(재활성화)
+ */
+export const setStudentActiveStatus = onCall(
+  {region: "asia-northeast3"},
+  async (request) => {
+    try {
+      ensureInitialized();
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "인증이 필요합니다.");
+      }
+      await assertAdmin(request.auth.uid);
+
+      const {uid, active} = request.data as {uid?: string; active?: boolean};
+      if (!uid || typeof active !== "boolean") {
+        throw new HttpsError(
+          "invalid-argument",
+          "uid와 active(boolean)는 필수입니다.",
+        );
+      }
+
+      const userDoc = await db.collection("users").doc(uid).get();
+      if (!userDoc.exists || userDoc.data()?.role !== "student") {
+        throw new HttpsError("not-found", "학생을 찾을 수 없습니다.");
+      }
+
+      const userData = userDoc.data()!;
+      const currentlyActive = userData.isActive !== false;
+      if (currentlyActive === active) {
+        throw new HttpsError(
+          "failed-precondition",
+          active ? "이미 재원 중인 학생입니다." : "이미 퇴소 처리된 학생입니다.",
+        );
+      }
+
+      const cohortId = userData.cohortId as string;
+      if (!cohortId) {
+        throw new HttpsError("failed-precondition", "학생의 기수 정보가 없습니다.");
+      }
+
+      const batch = db.batch();
+      batch.update(db.collection("users").doc(uid), {
+        isActive: active,
+        updatedAt: fieldValue.serverTimestamp(),
+      });
+
+      const intakeRef = db.collection("studentIntakes").doc(uid);
+      const intakeDoc = await intakeRef.get();
+      if (intakeDoc.exists) {
+        batch.update(intakeRef, {isActive: active});
+      }
+
+      batch.update(db.collection("cohorts").doc(cohortId), {
+        studentCount: fieldValue.increment(active ? 1 : -1),
+      });
+
+      await batch.commit();
+
+      return {
+        uid,
+        active,
+        message: active ? "학생이 복학 처리되었습니다." : "학생이 퇴소 처리되었습니다.",
+      };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error("setStudentActiveStatus failed", error);
+      throw new HttpsError("internal", msg);
+    }
   },
 );
 
@@ -382,8 +555,8 @@ export const createAdminAccount = onCall(
       skills: [],
       socialLinks: {},
       mileageBalance: 0,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: fieldValue.serverTimestamp(),
+      updatedAt: fieldValue.serverTimestamp(),
     });
 
     return {uid: userRecord.uid, message: "관리자 계정이 생성되었습니다."};
@@ -416,8 +589,8 @@ export const adjustMileage = onCall(
 
     const userRef = db.collection("users").doc(userId);
     batch.update(userRef, {
-      mileageBalance: admin.firestore.FieldValue.increment(amount),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      mileageBalance: fieldValue.increment(amount),
+      updatedAt: fieldValue.serverTimestamp(),
     });
 
     const txRef = db
@@ -430,8 +603,9 @@ export const adjustMileage = onCall(
       userId,
       amount,
       reason,
+      type: "admin_adjust",
       adjustedBy: request.auth.uid,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: fieldValue.serverTimestamp(),
     });
 
     await batch.commit();
@@ -462,17 +636,39 @@ export const reviewSubmission = onCall(
       throw new HttpsError("invalid-argument", "필수 파라미터가 누락되었습니다.");
     }
 
-    await db
+    const submissionRef = db
       .collection("cohorts")
       .doc(cohortId)
       .collection("submissions")
-      .doc(submissionId)
-      .update({
-        status,
-        reviewComment: comment ?? null,
-        reviewedBy: request.auth.uid,
-        reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      .doc(submissionId);
+
+    const submissionDoc = await submissionRef.get();
+    if (!submissionDoc.exists) {
+      throw new HttpsError("not-found", "제출물을 찾을 수 없습니다.");
+    }
+
+    const submissionData = submissionDoc.data()!;
+
+    await submissionRef.update({
+      status,
+      reviewComment: comment ?? null,
+      reviewedBy: request.auth.uid,
+      reviewedAt: fieldValue.serverTimestamp(),
+    });
+
+    if (status === "approved" && !submissionData.mileageGranted) {
+      const userId = submissionData.userId as string;
+      const submissionType = submissionData.type as string;
+      const title = (submissionData.title as string) ?? submissionType;
+      await grantMileageForSubmission(
+        cohortId,
+        submissionId,
+        submissionType,
+        userId,
+        title,
+        request.auth.uid,
+      );
+    }
 
     return {message: `제출물이 ${status === "approved" ? "승인" : "반려"}되었습니다.`};
   },

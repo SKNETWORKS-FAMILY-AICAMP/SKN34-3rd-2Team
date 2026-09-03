@@ -1,0 +1,422 @@
+import 'package:flutter/material.dart';
+
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_utils.dart';
+import '../../../../shared/models/user_model.dart';
+import '../../theme/mileage_theme.dart';
+
+export 'mileage_credit_card.dart';
+
+class MileagePageHeader extends StatelessWidget {
+  const MileagePageHeader({
+    super.key,
+    required this.user,
+    this.cohortName,
+    this.subtitle = '적립 내역을 확인하고 상품을 교환하세요.',
+  });
+
+  final UserModel user;
+  final String? cohortName;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = user.displayName.isNotEmpty
+        ? user.displayName.characters.first
+        : '?';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        MileageLayout.pagePaddingH,
+        8,
+        MileageLayout.pagePaddingH,
+        0,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '마일리지',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: MileageColors.chipBg,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: MileageColors.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                user.displayName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+              if (cohortName != null && cohortName!.isNotEmpty)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: Text(
+                    cohortName!,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                    ),
+                    textAlign: TextAlign.right,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 컴팩트 2탭 세그먼트
+class MileageSegmentTabs extends StatelessWidget {
+  const MileageSegmentTabs({
+    super.key,
+    required this.tabs,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  final List<String> tabs;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: MileageLayout.pagePaddingH),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: MileageLayout.maxContentWidth),
+          child: SegmentedButton<int>(
+            segments: [
+              for (var i = 0; i < tabs.length; i++)
+                ButtonSegment(value: i, label: Text(tabs[i])),
+            ],
+            selected: {selectedIndex},
+            onSelectionChanged: (s) => onSelected(s.first),
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: WidgetStateProperty.all(
+                const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              padding: WidgetStateProperty.all(
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class MileageTagChip extends StatelessWidget {
+  const MileageTagChip({
+    super.key,
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class MileageFilterChipRow extends StatelessWidget {
+  const MileageFilterChipRow({
+    super.key,
+    required this.options,
+    required this.selected,
+    required this.onSelected,
+    this.label,
+  });
+
+  final String? label;
+  final List<(String value, String label)> options;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (label != null) ...[
+          Text(
+            label!,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: options.map((opt) {
+            final isSelected = selected == opt.$1;
+            return FilterChip(
+              label: Text(opt.$2),
+              selected: isSelected,
+              onSelected: (_) => onSelected(opt.$1),
+              selectedColor: MileageColors.chipBg,
+              checkmarkColor: MileageColors.primary,
+              labelStyle: TextStyle(
+                color:
+                    isSelected ? MileageColors.primary : AppColors.textPrimary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 12,
+              ),
+              side: BorderSide(
+                color: isSelected ? MileageColors.primary : AppColors.border,
+              ),
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+/// 날짜 필터 — 2줄 레이아웃
+class MileageDateFilterBar extends StatelessWidget {
+  const MileageDateFilterBar({
+    super.key,
+    required this.startDate,
+    required this.endDate,
+    required this.onPickStart,
+    required this.onPickEnd,
+    required this.onPresetMonth,
+    required this.onPresetAll,
+    required this.presetMonthSelected,
+    required this.presetAllSelected,
+  });
+
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+  final VoidCallback onPresetMonth;
+  final VoidCallback onPresetAll;
+  final bool presetMonthSelected;
+  final bool presetAllSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: MileageLayout.pagePaddingH),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: MileageLayout.maxContentWidth),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _DateField(
+                      label: '시작일',
+                      date: startDate,
+                      onTap: onPickStart,
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('~', style: TextStyle(fontSize: 13)),
+                  ),
+                  Expanded(
+                    child: _DateField(
+                      label: '종료일',
+                      date: endDate,
+                      onTap: onPickEnd,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                alignment: WrapAlignment.end,
+                children: [
+                  _SmallPresetChip(
+                    label: '1개월',
+                    selected: presetMonthSelected,
+                    onTap: onPresetMonth,
+                  ),
+                  _SmallPresetChip(
+                    label: '전체',
+                    selected: presetAllSelected,
+                    onTap: onPresetAll,
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                    onPressed: () {},
+                    child: const Text('조회'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.date,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? date;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 12),
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          suffixIcon: const Icon(Icons.calendar_today, size: 16),
+          isDense: true,
+        ),
+        child: Text(
+          date != null ? AppDateUtils.toDateKey(date!) : '-',
+          style: const TextStyle(fontSize: 12),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallPresetChip extends StatelessWidget {
+  const _SmallPresetChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.primary : AppColors.surfaceVariant,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: selected ? Colors.white : AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 마일리지 페이지 공통 스크롤 래퍼
+class MileagePageScroll extends StatelessWidget {
+  const MileagePageScroll({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 32),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: MileageLayout.maxContentWidth + 40),
+          child: child,
+        ),
+      ),
+    );
+  }
+}

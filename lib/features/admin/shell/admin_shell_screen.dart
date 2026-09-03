@@ -45,11 +45,14 @@ class _AdminDrawer extends ConsumerWidget {
       _DrawerItem(Icons.dashboard, '관리자 대시보드', RoutePaths.admin),
       _DrawerItem(Icons.calendar_month, '기수 관리', RoutePaths.adminCohorts),
       _DrawerItem(Icons.groups, '학생 관리', RoutePaths.adminStudents),
+      _DrawerItem(Icons.event_seat, '좌석 배치', RoutePaths.adminSeating),
+      _DrawerItem(Icons.school_outlined, '커리큘럼 관리', RoutePaths.adminCurriculum),
       _DrawerItem(Icons.ballot_outlined, '설문 · 제출', RoutePaths.adminFormTasks),
       _DrawerItem(Icons.history, '기록실 관리', RoutePaths.adminRecords),
       _DrawerItem(Icons.description, '이력서 관리', RoutePaths.adminResumes),
       _DrawerItem(Icons.forum, '게시판 관리', RoutePaths.adminBoard),
       _DrawerItem(Icons.menu_book, '학습실 관리', RoutePaths.adminStudyRoom),
+      _DrawerItem(Icons.card_giftcard, '마일리지 관리', RoutePaths.adminMileage),
       _DrawerItem(Icons.person, '마이페이지', RoutePaths.adminMyPage),
     ];
 

@@ -66,6 +66,9 @@ class MileageTransactionModel {
     required this.userId,
     required this.amount,
     required this.reason,
+    this.type,
+    this.relatedId,
+    this.adjustedBy,
     this.createdAt,
   });
 
@@ -73,6 +76,9 @@ class MileageTransactionModel {
   final String userId;
   final int amount;
   final String reason;
+  final String? type;
+  final String? relatedId;
+  final String? adjustedBy;
   final DateTime? createdAt;
 
   factory MileageTransactionModel.fromFirestore(
@@ -84,6 +90,9 @@ class MileageTransactionModel {
       userId: data['userId'] as String? ?? '',
       amount: data['amount'] as int? ?? 0,
       reason: data['reason'] as String? ?? '',
+      type: data['type'] as String?,
+      relatedId: data['relatedId'] as String?,
+      adjustedBy: data['adjustedBy'] as String?,
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
     );
   }
