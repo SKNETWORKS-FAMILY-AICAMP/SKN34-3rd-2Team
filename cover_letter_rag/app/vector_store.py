@@ -15,8 +15,21 @@ class RetrievedJob:
     job_id: str
     company: str
     title: str
+    industry_code: str | None
+    industry_name: str | None
+    job_mid_code: str | None
+    job_mid_name: str | None
+    job_code: str | None
+    job_name: str | None
+    location_code: str | None
     location: str | None
+    employment_type_code: str | None
     employment_type: str | None
+    career: str | None
+    education: str | None
+    job_sectors: tuple[str, ...]
+    tech_tags: tuple[str, ...]
+    detail_quality: str | None
     source: str
     chunks: tuple[str, ...]
 
@@ -66,13 +79,40 @@ class JobRepository:
                     job_id=job_id,
                     company=str(metadata.get("company", "")),
                     title=str(metadata.get("title", "")),
+                    industry_code=_optional_text(metadata.get("industry_code")),
+                    industry_name=_optional_text(metadata.get("industry_name")),
+                    job_mid_code=_optional_text(metadata.get("job_mid_code")),
+                    job_mid_name=_optional_text(metadata.get("job_mid_name")),
+                    job_code=_optional_text(metadata.get("job_code")),
+                    job_name=_optional_text(metadata.get("job_name")),
+                    location_code=_optional_text(metadata.get("location_code")),
                     location=_optional_text(metadata.get("location")),
+                    employment_type_code=_optional_text(
+                        metadata.get("employment_type_code")
+                    ),
                     employment_type=_optional_text(metadata.get("employment_type")),
+                    career=_optional_text(metadata.get("career")),
+                    education=_optional_text(metadata.get("education")),
+                    job_sectors=_split_metadata_list(metadata.get("job_sectors")),
+                    tech_tags=_split_metadata_list(metadata.get("tech_tags")),
+                    detail_quality=_optional_text(metadata.get("detail_quality")),
                     source=str(metadata.get("source", "static_job_posting")),
                     chunks=tuple(document.page_content for document in chunks),
                 )
             )
         return jobs
+
+    def get(self, job_id: str) -> RetrievedJob | None:
+        result = self._store.get(
+            where={"job_id": job_id},
+            include=["documents", "metadatas"],
+        )
+        documents = result.get("documents") or []
+        metadatas = result.get("metadatas") or []
+        if not documents or not metadatas:
+            return None
+        metadata = metadatas[0]
+        return _retrieved_job(job_id, metadata, tuple(str(item) for item in documents))
 
 
 def to_search_results(jobs: list[RetrievedJob]) -> list[JobSearchResult]:
@@ -82,8 +122,21 @@ def to_search_results(jobs: list[RetrievedJob]) -> list[JobSearchResult]:
             job_id=job.job_id,
             company=job.company,
             title=job.title,
+            industry_code=job.industry_code,
+            industry_name=job.industry_name,
+            job_mid_code=job.job_mid_code,
+            job_mid_name=job.job_mid_name,
+            job_code=job.job_code,
+            job_name=job.job_name,
+            location_code=job.location_code,
             location=job.location,
+            employment_type_code=job.employment_type_code,
             employment_type=job.employment_type,
+            career=job.career,
+            education=job.education,
+            job_sectors=list(job.job_sectors),
+            tech_tags=list(job.tech_tags),
+            detail_quality=job.detail_quality,
             summary=job.summary,
             source=job.source,
         )
@@ -97,3 +150,38 @@ def _optional_text(value: object) -> str | None:
     text = str(value).strip()
     return text or None
 
+
+def _split_metadata_list(value: object) -> tuple[str, ...]:
+    text = _optional_text(value)
+    if not text:
+        return ()
+    return tuple(item.strip() for item in text.split(",") if item.strip())
+
+
+def _retrieved_job(
+    job_id: str,
+    metadata: dict[str, object],
+    chunks: tuple[str, ...],
+) -> RetrievedJob:
+    return RetrievedJob(
+        job_id=job_id,
+        company=str(metadata.get("company", "")),
+        title=str(metadata.get("title", "")),
+        industry_code=_optional_text(metadata.get("industry_code")),
+        industry_name=_optional_text(metadata.get("industry_name")),
+        job_mid_code=_optional_text(metadata.get("job_mid_code")),
+        job_mid_name=_optional_text(metadata.get("job_mid_name")),
+        job_code=_optional_text(metadata.get("job_code")),
+        job_name=_optional_text(metadata.get("job_name")),
+        location_code=_optional_text(metadata.get("location_code")),
+        location=_optional_text(metadata.get("location")),
+        employment_type_code=_optional_text(metadata.get("employment_type_code")),
+        employment_type=_optional_text(metadata.get("employment_type")),
+        career=_optional_text(metadata.get("career")),
+        education=_optional_text(metadata.get("education")),
+        job_sectors=_split_metadata_list(metadata.get("job_sectors")),
+        tech_tags=_split_metadata_list(metadata.get("tech_tags")),
+        detail_quality=_optional_text(metadata.get("detail_quality")),
+        source=str(metadata.get("source", "static_job_posting")),
+        chunks=chunks,
+    )

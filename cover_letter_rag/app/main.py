@@ -7,10 +7,16 @@ from openai import OpenAIError
 from app.config import Settings, get_settings
 from app.models import (
     HealthResponse,
+    JobComparisonRequest,
+    JobComparisonResponse,
+    JobRecommendationRequest,
+    JobRecommendationResponse,
     JobSearchRequest,
     JobSearchResponse,
     ReviewRequest,
     ReviewResponse,
+    ResumeProfileRequest,
+    ResumeProfileResponse,
 )
 from app.service import CoverLetterService
 from app.vector_store import JobRepository
@@ -48,6 +54,41 @@ def search_jobs(
 ) -> JobSearchResponse:
     try:
         return service.search_jobs(request.resume_text, request.top_k)
+    except (OpenAIError, LangChainException, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
+
+
+@app.post("/api/v1/profiles/analyze", response_model=ResumeProfileResponse)
+def analyze_resume_profile(
+    request: ResumeProfileRequest,
+    service: CoverLetterService = Depends(get_service),
+) -> ResumeProfileResponse:
+    try:
+        return service.analyze_profile(request)
+    except (OpenAIError, LangChainException, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
+
+
+@app.post("/api/v1/jobs/recommend", response_model=JobRecommendationResponse)
+def recommend_jobs(
+    request: JobRecommendationRequest,
+    service: CoverLetterService = Depends(get_service),
+) -> JobRecommendationResponse:
+    try:
+        return service.recommend_jobs(request)
+    except (OpenAIError, LangChainException, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
+
+
+@app.post("/api/v1/jobs/compare", response_model=JobComparisonResponse)
+def compare_selected_job(
+    request: JobComparisonRequest,
+    service: CoverLetterService = Depends(get_service),
+) -> JobComparisonResponse:
+    try:
+        return service.compare_job(request)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Selected job was not found") from exc
     except (OpenAIError, LangChainException, ValueError) as exc:
         raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
 

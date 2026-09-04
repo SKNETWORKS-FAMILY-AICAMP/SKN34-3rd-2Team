@@ -1,24 +1,41 @@
 {
-  "job_id": "sample-edu-ai-002",
-  "company": "에듀브릿지",
-  "title": "교육 AI 서비스 엔지니어",
-  "location": "경기 판교",
-  "employment_type": "정규직",
-  "summary": "학습자 문서를 활용한 생성형 AI 기능과 검색 시스템을 개발합니다.",
-  "responsibilities": [
-    "LLM 기반 학습 지원 기능 개발",
-    "문서 수집, 청킹, 임베딩, 검색 파이프라인 구축",
-    "검색 및 생성 결과의 품질 평가"
-  ],
-  "requirements": [
-    {"type": "필수", "text": "Python 서비스 개발 경험"},
-    {"type": "필수", "text": "LLM 또는 RAG 프로젝트 경험"},
-    {"type": "필수", "text": "벡터 검색의 기본 원리 이해"}
-  ],
-  "preferred": [
-    "LangChain 사용 경험",
-    "Chroma, Pinecone 등 VectorDB 사용 경험",
-    "생성 결과 평가 데이터셋 구축 경험"
-  ]
+  "jobs": {
+    "count": 1,
+    "start": 0,
+    "total": "1",
+    "job": [
+      {
+        "url": "https://example.invalid/saramin/jobs/90000002",
+        "active": 1,
+        "company": {
+          "detail": {
+            "href": "https://example.invalid/saramin/companies/edubridge",
+            "name": "에듀브릿지"
+          }
+        },
+        "position": {
+          "title": "교육 AI 서비스 엔지니어",
+          "industry": {"code": "305", "name": "포털·인터넷·컨텐츠"},
+          "location": {"code": "102190", "name": "경기 > 성남시 분당구"},
+          "job-type": {"code": "1", "name": "정규직"},
+          "job-mid-code": {"code": "2", "name": "IT개발·데이터"},
+          "job-code": {"code": "108,109,131,181,272", "name": "딥러닝,머신러닝,챗봇,AI(인공지능),Python"},
+          "experience-level": {"code": 1, "min": 0, "max": 0, "name": "신입"},
+          "required-education-level": {"code": "8", "name": "대학교졸업(4년)이상"}
+        },
+        "keyword": "Python,LLM,RAG,LangChain,Chroma,VectorDB",
+        "salary": {"code": "0", "name": "회사내규에 따름"},
+        "id": "90000002",
+        "posting-timestamp": "1788217200",
+        "posting-date": "2026-09-01T09:00:00+0900",
+        "modification-timestamp": "1788217200",
+        "opening-timestamp": "1788217200",
+        "expiration-timestamp": "1798661999",
+        "expiration-date": "2026-12-31T23:59:59+0900",
+        "close-type": {"code": "1", "name": "접수마감일"},
+        "read-cnt": "0",
+        "apply-cnt": "0"
+      }
+    ]
+  }
 }
-

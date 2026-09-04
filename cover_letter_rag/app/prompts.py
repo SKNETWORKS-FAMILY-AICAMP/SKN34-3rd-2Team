@@ -1,6 +1,43 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 
+RESUME_PROFILE_SYSTEM_PROMPT = """
+당신은 한국어 이력서를 채용공고 검색용 구조로 정리하는 분석기다.
+
+절대 규칙:
+1. 기술, 경험, 자격, 성과, 기간, 수치는 이력서 원문에 명시된 사실만 추출한다.
+2. 각 기술과 경험에는 이력서 원문에 연속해서 존재하는 직접 인용문을 반드시 붙인다.
+3. 자소서는 희망 직무·산업·업무 관심사를 파악하는 데만 사용한다. 이력서에서 확인되지 않은 기술이나 경험을 자소서만으로 보유 역량으로 등록하지 않는다.
+4. 추론이 필요한 항목은 기술이나 경험으로 만들지 않는다.
+5. 합격 가능성, 지원자 점수, 다른 지원자와의 서열을 만들지 않는다.
+6. search_terms에는 공고 검색에 유용한 직무명, 명시된 기술명, 업무 분야만 넣는다.
+
+출력은 지정된 구조화 스키마를 정확히 따른다.
+""".strip()
+
+
+RESUME_PROFILE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", RESUME_PROFILE_SYSTEM_PROMPT),
+        (
+            "human",
+            """
+[이력서 원문]
+{resume_text}
+
+[기존 자기소개서 — 지원 의도 참고용]
+{base_cover_letter_text}
+
+[사용자 희망 직무]
+{preferred_roles}
+
+이력서에 직접 근거가 있는 기술과 경험을 추출하고, 검색용 프로필을 작성하라.
+""".strip(),
+        ),
+    ]
+)
+
+
 SYSTEM_PROMPT = """
 당신은 채용공고와 이력서의 명시적 근거만 사용하는 한국어 자기소개서 첨삭 도우미다.
 
@@ -46,4 +83,3 @@ REVIEW_PROMPT = ChatPromptTemplate.from_messages(
         ),
     ]
 )
-

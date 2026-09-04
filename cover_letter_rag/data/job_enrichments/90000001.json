@@ -1,0 +1,19 @@
+{
+  "job_id": "90000001",
+  "summary": "학습관리시스템의 API와 데이터 처리 기능을 개발하고 안정적으로 운영합니다.",
+  "responsibilities": [
+    "교육 과정, 과제, 수강생 데이터를 다루는 REST API 개발",
+    "서비스 모니터링과 장애 원인 분석",
+    "프론트엔드 및 기획자와 API 계약 협업"
+  ],
+  "requirements": [
+    {"type": "필수", "text": "Python 기반 백엔드 개발 경험"},
+    {"type": "필수", "text": "REST API 설계와 구현 경험"},
+    {"type": "필수", "text": "관계형 데이터베이스 사용 경험"}
+  ],
+  "preferred": [
+    "FastAPI 또는 Django 사용 경험",
+    "Firebase Authentication 또는 Firestore 연동 경험",
+    "테스트 자동화 경험"
+  ]
+}

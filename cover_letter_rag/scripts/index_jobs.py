@@ -2,38 +2,86 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Literal
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import BASE_DIR, get_settings
+from app.saramin import SaraminJob, SaraminJobSearchResponse
 
 
-def load_job_documents(data_directory: Path) -> list[Document]:
+class JobRequirement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["필수", "우대", "업무", "기타"] = "기타"
+    text: str = Field(min_length=1)
+
+
+class JobEnrichment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    summary: str = Field(min_length=1)
+    responsibilities: list[str] = Field(min_length=1)
+    requirements: list[JobRequirement] = Field(min_length=1)
+    preferred: list[str] = Field(default_factory=list)
+
+
+def load_job_documents(
+    data_directory: Path,
+    enrichment_directory: Path | None = None,
+) -> list[Document]:
     documents: list[Document] = []
+    enrichments = _load_enrichments(
+        enrichment_directory or data_directory.parent / "job_enrichments"
+    )
     for path in sorted(data_directory.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
-        _validate_job(payload, path)
-        content = _render_job(payload)
-        documents.append(
-            Document(
-                page_content=content,
-                metadata={
-                    "job_id": payload["job_id"],
-                    "company": payload["company"],
-                    "title": payload["title"],
-                    "location": payload.get("location", ""),
-                    "employment_type": payload.get("employment_type", ""),
-                    "source": str(path.relative_to(BASE_DIR)).replace("\\", "/"),
-                },
+        try:
+            response = SaraminJobSearchResponse.model_validate(payload)
+        except ValidationError as error:
+            raise ValueError(f"{path.name} is not a valid Saramin response: {error}") from error
+
+        if response.jobs.count != len(response.jobs.job):
+            raise ValueError(
+                f"{path.name} jobs.count does not match the number of jobs.job items"
             )
-        )
+
+        for job in response.jobs.job:
+            enrichment = enrichments.get(job.id)
+            if enrichment is None:
+                raise ValueError(
+                    f"{path.name} job id {job.id} has no matching enrichment JSON"
+                )
+            documents.append(
+                Document(
+                    page_content=_render_job(job, enrichment),
+                    metadata={
+                        "job_id": job.id,
+                        "company": job.company.detail.name,
+                        "title": job.position.title,
+                        "industry_code": str(job.position.industry.code),
+                        "industry_name": job.position.industry.name,
+                        "job_mid_code": str(job.position.job_mid_code.code),
+                        "job_mid_name": job.position.job_mid_code.name,
+                        "job_code": str(job.position.job_code.code),
+                        "job_name": job.position.job_code.name,
+                        "location_code": str(job.position.location.code),
+                        "location": job.position.location.name,
+                        "employment_type_code": str(job.position.job_type.code),
+                        "employment_type": job.position.job_type.name,
+                        "source": job.url,
+                        "source_file": str(path.relative_to(BASE_DIR)).replace("\\", "/"),
+                    },
+                )
+            )
     if not documents:
-        raise ValueError(f"No job JSON files found in {data_directory}")
+        raise ValueError(f"No Saramin jobs found in {data_directory}")
     return documents
 
 
@@ -53,8 +101,24 @@ def index_jobs(
     persist_directory: Path | None = None,
     collection_name: str | None = None,
 ) -> tuple[int, int]:
-    settings = get_settings()
     documents = load_job_documents(data_directory)
+    chunk_count = index_documents(
+        documents,
+        embeddings=embeddings,
+        persist_directory=persist_directory,
+        collection_name=collection_name,
+    )
+    return len(documents), chunk_count
+
+
+def index_documents(
+    documents: list[Document],
+    *,
+    embeddings: Embeddings | None = None,
+    persist_directory: Path | None = None,
+    collection_name: str | None = None,
+) -> int:
+    settings = get_settings()
     chunks = split_job_documents(documents)
     embedding_function = embeddings or OpenAIEmbeddings(
         model=settings.openai_embedding_model,
@@ -68,31 +132,44 @@ def index_jobs(
     )
     ids = [_chunk_id(chunk, index) for index, chunk in enumerate(chunks)]
     vector_store.add_documents(chunks, ids=ids)
-    return len(documents), len(chunks)
+    return len(chunks)
 
 
-def _validate_job(payload: dict[str, Any], path: Path) -> None:
-    required = {"job_id", "company", "title", "summary", "responsibilities", "requirements"}
-    missing = sorted(required - payload.keys())
-    if missing:
-        raise ValueError(f"{path.name} is missing fields: {', '.join(missing)}")
-    if not isinstance(payload["requirements"], list) or not payload["requirements"]:
-        raise ValueError(f"{path.name} requirements must be a non-empty list")
+def _load_enrichments(enrichment_directory: Path) -> dict[str, JobEnrichment]:
+    enrichments: dict[str, JobEnrichment] = {}
+    for path in sorted(enrichment_directory.glob("*.json")):
+        try:
+            enrichment = JobEnrichment.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except ValidationError as error:
+            raise ValueError(f"{path.name} is not a valid enrichment: {error}") from error
+        if enrichment.job_id in enrichments:
+            raise ValueError(f"Duplicate enrichment job_id: {enrichment.job_id}")
+        enrichments[enrichment.job_id] = enrichment
+    return enrichments
 
 
-def _render_job(job: dict[str, Any]) -> str:
-    responsibilities = "\n".join(f"- {item}" for item in job["responsibilities"])
+def _render_job(job: SaraminJob, enrichment: JobEnrichment) -> str:
+    responsibilities = "\n".join(f"- {item}" for item in enrichment.responsibilities)
     requirements = "\n".join(
-        f"- [{item.get('type', '기타')}] {item['text']}"
-        for item in job["requirements"]
+        f"- [{item.type}] {item.text}"
+        for item in enrichment.requirements
     )
-    preferred = "\n".join(f"- {item}" for item in job.get("preferred", [])) or "- 없음"
+    preferred = "\n".join(f"- {item}" for item in enrichment.preferred) or "- 없음"
     return (
-        f"회사: {job['company']}\n"
-        f"직무: {job['title']}\n"
-        f"근무지: {job.get('location', '미정')}\n"
-        f"고용형태: {job.get('employment_type', '미정')}\n\n"
-        f"요약\n{job['summary']}\n\n"
+        f"공고 ID: {job.id}\n"
+        f"회사: {job.company.detail.name}\n"
+        f"직무: {job.position.title}\n"
+        f"산업: {job.position.industry.name} ({job.position.industry.code})\n"
+        f"직무 분류: {job.position.job_mid_code.name} ({job.position.job_mid_code.code})\n"
+        f"직무 키워드: {job.position.job_code.name} ({job.position.job_code.code})\n"
+        f"근무지: {job.position.location.name}\n"
+        f"고용형태: {job.position.job_type.name}\n"
+        f"경력: {job.position.experience_level.name}\n"
+        f"학력: {job.position.required_education_level.name}\n"
+        f"키워드: {job.keyword}\n\n"
+        f"요약\n{enrichment.summary}\n\n"
         f"주요 업무\n{responsibilities}\n\n"
         f"자격요건\n{requirements}\n\n"
         f"우대사항\n{preferred}"
@@ -105,7 +182,9 @@ def _chunk_id(document: Document, index: int) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Index static job postings into local Chroma")
+    parser = argparse.ArgumentParser(
+        description="Index Saramin-shaped static job postings into local Chroma"
+    )
     parser.add_argument("--data-dir", type=Path, default=BASE_DIR / "data" / "jobs")
     parser.add_argument(
         "--validate-only",
