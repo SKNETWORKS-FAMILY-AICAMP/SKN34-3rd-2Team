@@ -195,6 +195,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         const SizedBox(height: 4),
                         _QuickLoginRow(
+                          label: '강사',
+                          email: DemoAccounts.instructorEmail,
+                          onTap: () => _quickLogin(
+                            DemoAccounts.instructorEmail,
+                            DemoAccounts.instructorPassword,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        _QuickLoginRow(
                           label: '학생',
                           email: DemoAccounts.studentEmail,
                           onTap: () => _quickLogin(
@@ -248,7 +257,7 @@ class _QuickLoginRow extends StatelessWidget {
           child: Row(
             children: [
               SizedBox(
-                width: 48,
+                width: 52,
                 child: Text(
                   label,
                   style: const TextStyle(

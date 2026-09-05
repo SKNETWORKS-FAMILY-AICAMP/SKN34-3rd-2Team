@@ -97,6 +97,7 @@ scripts/node_modules/
 !.env.example
 functions/.env
 functions/.env.*
+!functions/.env.example
 
 # 시드 스크립트 실행 시 생성되는 rules 백업
 firestore.rules.production.bak

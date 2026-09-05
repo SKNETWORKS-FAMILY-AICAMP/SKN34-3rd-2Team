@@ -14,9 +14,13 @@ abstract final class FirestorePaths {
   static String seating(String cohortId) => '${cohort(cohortId)}/seating';
   static String attendances(String cohortId) =>
       '${cohort(cohortId)}/attendances';
+  static String rollCalls(String cohortId) =>
+      '${cohort(cohortId)}/rollCalls';
   static String notices(String cohortId) => '${cohort(cohortId)}/notices';
   static String scheduledNotices(String cohortId) =>
       '${cohort(cohortId)}/scheduledNotices';
+  static String alertPopups(String cohortId) =>
+      '${cohort(cohortId)}/alertPopups';
   static String posts(String cohortId) => '${cohort(cohortId)}/posts';
   static String qna(String cohortId) => '${cohort(cohortId)}/qna';
   static String materials(String cohortId) => '${cohort(cohortId)}/materials';
@@ -35,6 +39,10 @@ abstract final class FirestorePaths {
       '${cohort(cohortId)}/purchaseRequests';
   static String mileageCart(String cohortId) =>
       '${cohort(cohortId)}/mileageCart';
+  static String missionProgress(String cohortId) =>
+      '${cohort(cohortId)}/missionProgress';
+  static String missionProgressDoc(String cohortId, String userId) =>
+      '${missionProgress(cohortId)}/$userId';
   static String weeklyTasks(String cohortId) =>
       '${cohort(cohortId)}/weeklyTasks';
   static String userProgress(String cohortId) =>
@@ -43,18 +51,32 @@ abstract final class FirestorePaths {
       '${cohort(cohortId)}/submissions';
   static String assessments(String cohortId) =>
       '${cohort(cohortId)}/assessments';
+  static String assessment(String cohortId, String assessmentId) =>
+      '${assessments(cohortId)}/$assessmentId';
+  static String assessmentQuestions(String cohortId, String assessmentId) =>
+      '${assessment(cohortId, assessmentId)}/questions';
+  static String assessmentQuestion(
+    String cohortId,
+    String assessmentId,
+    String questionId,
+  ) =>
+      '${assessmentQuestions(cohortId, assessmentId)}/$questionId';
   static String assessmentSubmissions(String cohortId) =>
       '${cohort(cohortId)}/assessmentSubmissions';
+  static String assessmentSubmission(
+    String cohortId,
+    String assessmentId,
+    String userId,
+  ) =>
+      '${assessmentSubmissions(cohortId)}/${assessmentId}_$userId';
   static String inflearnPackages(String cohortId) =>
       '${cohort(cohortId)}/inflearnPackages';
   static String curriculumMeta(String cohortId) =>
       '${cohort(cohortId)}/curriculum/meta';
-  static String curriculumWeeks(String cohortId) =>
-      '${cohort(cohortId)}/curriculumWeeks';
-  static String curriculumDays(String cohortId) =>
-      '${cohort(cohortId)}/curriculumDays';
-  static String curriculumProgress(String cohortId) =>
-      '${cohort(cohortId)}/curriculumProgress';
+  static String curriculumSheets(String cohortId) =>
+      '${cohort(cohortId)}/curriculumSheets';
+  static String curriculumSheet(String cohortId, String sheetId) =>
+      '${curriculumSheets(cohortId)}/$sheetId';
 
   // ── 유저 하위 Subcollection ──
   static String userTodos(String uid) => 'users/$uid/todos';

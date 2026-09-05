@@ -22,4 +22,5 @@ firebase deploy --only firestore:rules
 
 Write-Host "`n[4/4] 완료! flutter run -d chrome 후 로그인하세요." -ForegroundColor Green
 Write-Host "  관리자: admin@playdata.co.kr / Playdata123!"
+Write-Host "  강사:   instructor@playdata.co.kr / Playdata123!"
 Write-Host "  학생:   student@playdata.co.kr / Playdata123!`n"

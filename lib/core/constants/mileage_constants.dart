@@ -63,9 +63,5 @@ abstract final class MileageDefaults {
     MileageCategories.onlineCourse: 200000,
   };
 
-  static const accrualRules = {
-    'certification': 5000,
-    'study': 3000,
-    'blog': 2000,
-  };
+  static const accrualRules = <String, int>{};
 }

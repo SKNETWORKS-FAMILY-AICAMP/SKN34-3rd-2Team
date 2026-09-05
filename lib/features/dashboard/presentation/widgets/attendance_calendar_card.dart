@@ -9,7 +9,7 @@ import '../../../../shared/models/user_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
 
-/// 대시보드 출석 캘린더 — 5종 상태 색상
+/// 대시보드 출석 캘린더 — 상태 색상 (외출 포함)
 class AttendanceCalendarCard extends ConsumerStatefulWidget {
   const AttendanceCalendarCard({
     super.key,
@@ -239,6 +239,13 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                     },
                   ),
             ],
+            if (statusMapAsync.hasError) ...[
+              const SizedBox(height: 8),
+              Text(
+                '출석 불러오기 실패: ${statusMapAsync.error}',
+                style: const TextStyle(fontSize: 11, color: AppColors.error),
+              ),
+            ],
             SizedBox(height: compact ? 4 : 8),
             Row(
               children: [
@@ -310,10 +317,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
               onDaySelected: (selected, focused) {
                 setState(() => _focusedDay = focused);
                 if (isAdmin) {
-                  final key = AppDateUtils.toDateKey(selected);
+                  final key = _dateKeyOf(selected);
                   _onAdminSetStatus(selected, statusMap[key]);
                 } else {
-                  final key = AppDateUtils.toDateKey(selected);
+                  final key = _dateKeyOf(selected);
                   final s = statusMap[key];
                   if (s != null) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -349,32 +356,12 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                 selectedTextStyle: const TextStyle(color: Colors.white),
               ),
               calendarBuilders: CalendarBuilders(
-                defaultBuilder: (context, day, focusedDay) {
-                  final key = AppDateUtils.toDateKey(day);
-                  final status = statusMap[key];
-                  if (status == null) return null;
-                  final color = AttendanceStatus.colorOf(status);
-                  final isToday = isSameDay(day, DateTime.now());
-                  return Container(
-                    margin: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.22),
-                      shape: BoxShape.circle,
-                      border: isToday
-                          ? Border.all(color: AppColors.textPrimary, width: 1.5)
-                          : Border.all(color: color.withValues(alpha: 0.5)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${day.day}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: color.computeLuminance() > 0.5
-                            ? AppColors.textPrimary
-                            : Colors.white,
-                      ),
-                    ),
+                // today/selected보다 우선 — 출석 색이 항상 보이게
+                prioritizedBuilder: (context, day, focusedDay) {
+                  return _statusDayCell(
+                    day: day,
+                    statusMap: statusMap,
+                    compact: compact,
                   );
                 },
               ),
@@ -382,6 +369,42 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
             SizedBox(height: compact ? 4 : 6),
             _AttendanceStatusLegend(compact: compact),
           ],
+        ),
+      ),
+    );
+  }
+
+  static String _dateKeyOf(DateTime day) =>
+      AppDateUtils.toDateKey(DateTime(day.year, day.month, day.day));
+
+  static Widget? _statusDayCell({
+    required DateTime day,
+    required Map<String, String> statusMap,
+    required bool compact,
+  }) {
+    final key = _dateKeyOf(day);
+    final status = statusMap[key];
+    if (status == null) return null;
+
+    final color = AttendanceStatus.colorOf(status);
+    final isToday = isSameDay(day, DateTime.now());
+    return Container(
+      margin: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isToday ? AppColors.textPrimary : color,
+          width: isToday ? 1.5 : 1.4,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '${day.day}',
+        style: TextStyle(
+          fontSize: compact ? 11 : 12,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

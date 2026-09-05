@@ -18,8 +18,12 @@ abstract final class DemoAccounts {
   static const studentEmail = 'student@playdata.co.kr';
   static const studentPassword = 'Playdata123!';
 
+  static const instructorEmail = 'instructor@playdata.co.kr';
+  static const instructorPassword = 'Playdata123!';
+
   static const adminUid = 'demo-admin-001';
   static const studentUid = 'demo-student-001';
+  static const instructorUid = 'demo-instructor-001';
 
   static UserModel get admin => UserModel(
     uid: adminUid,
@@ -44,14 +48,28 @@ abstract final class DemoAccounts {
     mustChangePassword: false,
   );
 
+  static UserModel get instructor => UserModel(
+    uid: instructorUid,
+    email: instructorEmail,
+    displayName: 'PLAYDATA 강사',
+    role: UserRole.instructor,
+    cohortId: DemoConfig.cohortId,
+    cohortName: DemoConfig.cohortName,
+    isActive: true,
+    mustChangePassword: false,
+  );
+
   /// 이메일/비밀번호로 데모 유저 조회
   static UserModel? tryLogin(String email, String password) {
     final e = email.trim().toLowerCase();
     if (e == adminEmail && password == adminPassword) return admin;
     if (e == studentEmail && password == studentPassword) return student;
+    if (e == instructorEmail && password == instructorPassword) {
+      return instructor;
+    }
     return null;
   }
 
   static bool isDemoUid(String uid) =>
-      uid == adminUid || uid == studentUid;
+      uid == adminUid || uid == studentUid || uid == instructorUid;
 }

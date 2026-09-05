@@ -9,6 +9,7 @@ import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/user_model.dart';
+import '../../../shared/widgets/profile_nav_chip.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../auth/presentation/widgets/password_change_panel.dart';
@@ -177,7 +178,7 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
     if (context.canPop()) {
       context.pop();
     } else {
-      context.go(user.isAdmin ? RoutePaths.admin : RoutePaths.dashboard);
+      context.go(RoutePaths.homeFor(user.role));
     }
   }
 
@@ -195,7 +196,7 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+              constraints: const BoxConstraints(maxWidth: 560),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -281,23 +282,12 @@ class _ProfileOverviewCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: AppColors.primaryLight,
-              child: Text(
-                user.displayName.isNotEmpty ? user.displayName[0] : '?',
-                style: const TextStyle(
-                  fontSize: 24,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              user.displayName,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ProfileSummaryRow(
+              user: user,
+              avatarRadius: 32,
+              showEditBadge: true,
             ),
             const SizedBox(height: 16),
             Container(

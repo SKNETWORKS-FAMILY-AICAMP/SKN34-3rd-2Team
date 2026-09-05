@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/user_model.dart';
+import '../../../shared/widgets/profile_nav_chip.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../shell/widgets/app_shell_header.dart';
 
@@ -23,6 +24,19 @@ class AdminShellScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const AppShellHeader(homePath: RoutePaths.admin),
+        actions: [
+          if (user != null)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: ProfileNavChip(
+                  user: user,
+                  style: ProfileNavChipStyle.appBar,
+                  onTap: () => context.go(RoutePaths.adminMyPage),
+                ),
+              ),
+            ),
+        ],
       ),
       drawer: _AdminDrawer(user: user, currentLocation: location),
       body: child,
@@ -45,68 +59,68 @@ class _AdminDrawer extends ConsumerWidget {
       _DrawerItem(Icons.dashboard, '관리자 대시보드', RoutePaths.admin),
       _DrawerItem(Icons.calendar_month, '기수 관리', RoutePaths.adminCohorts),
       _DrawerItem(Icons.groups, '학생 관리', RoutePaths.adminStudents),
+      _DrawerItem(Icons.fact_check_outlined, '출석관리', RoutePaths.adminAttendance),
+      _DrawerItem(Icons.badge_outlined, '강사 관리', RoutePaths.adminInstructors),
       _DrawerItem(Icons.event_seat, '좌석 배치', RoutePaths.adminSeating),
-      _DrawerItem(Icons.school_outlined, '커리큘럼 관리', RoutePaths.adminCurriculum),
       _DrawerItem(Icons.ballot_outlined, '설문 · 제출', RoutePaths.adminFormTasks),
       _DrawerItem(Icons.history, '기록실 관리', RoutePaths.adminRecords),
       _DrawerItem(Icons.description, '이력서 관리', RoutePaths.adminResumes),
       _DrawerItem(Icons.forum, '게시판 관리', RoutePaths.adminBoard),
       _DrawerItem(Icons.menu_book, '학습실 관리', RoutePaths.adminStudyRoom),
       _DrawerItem(Icons.card_giftcard, '마일리지 관리', RoutePaths.adminMileage),
+      _DrawerItem(Icons.quiz_outlined, '성취도평가', RoutePaths.adminAssessments),
       _DrawerItem(Icons.person, '마이페이지', RoutePaths.adminMyPage),
     ];
-
-    final displayName = user?.displayName ?? '';
-    final email = user?.email ?? '';
 
     return Drawer(
       child: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 48, 20, 16),
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(bottom: BorderSide(color: AppColors.border)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    '관리자',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  displayName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (email.isNotEmpty)
-                  Text(
-                    email,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-              ],
+          SafeArea(
+            bottom: false,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(bottom: BorderSide(color: AppColors.border)),
+              ),
+              child: user != null
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              '관리자',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ProfileNavChip(
+                          user: user!,
+                          style: ProfileNavChipStyle.drawer,
+                          onTap: () {
+                            Navigator.pop(context);
+                            context.go(RoutePaths.adminMyPage);
+                          },
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
           Expanded(

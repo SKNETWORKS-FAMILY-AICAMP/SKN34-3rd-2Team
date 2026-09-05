@@ -8,6 +8,7 @@ class NoticeModel {
     required this.title,
     required this.content,
     required this.authorName,
+    this.authorId,
     this.isFavorite = false,
     this.priority = 0,
     this.source,
@@ -20,6 +21,7 @@ class NoticeModel {
   final String title;
   final String content;
   final String authorName;
+  final String? authorId;
   final bool isFavorite;
   final int priority;
   final String? source;
@@ -38,6 +40,7 @@ class NoticeModel {
       title: data['title'] as String? ?? '',
       content: data['content'] as String? ?? '',
       authorName: data['authorName'] as String? ?? '',
+      authorId: data['authorId'] as String?,
       isFavorite: data['isFavorite'] as bool? ??
           data['isPinned'] as bool? ??
           false,

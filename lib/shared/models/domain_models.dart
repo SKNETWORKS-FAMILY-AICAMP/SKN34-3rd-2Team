@@ -12,6 +12,13 @@ class AttendanceModel {
     this.status,
     this.userDisplayName,
     this.timestamp,
+    this.checkInTime,
+    this.checkOutTime,
+    this.statusSource,
+    this.formAttendanceType,
+    this.officialLeaveUsed,
+    this.officialLeaveType,
+    this.officialLeaveOther,
   });
 
   final String id;
@@ -21,6 +28,13 @@ class AttendanceModel {
   final String? status;
   final String? userDisplayName;
   final DateTime? timestamp;
+  final String? checkInTime;
+  final String? checkOutTime;
+  final String? statusSource; // demo | form | manual
+  final String? formAttendanceType;
+  final bool? officialLeaveUsed;
+  final String? officialLeaveType;
+  final String? officialLeaveOther;
 
   String? get dayStatus =>
       AttendanceStatus.normalize(status, legacyType: type);
@@ -28,6 +42,24 @@ class AttendanceModel {
   String get typeLabel => dayStatus != null
       ? AttendanceStatus.labelOf(dayStatus)
       : (type == 'checkIn' ? '출석' : '퇴실');
+
+  String get sourceLabel => switch (statusSource) {
+        'form' => '구글폼',
+        'manual' => '수동',
+        'demo' => '입퇴실 예시',
+        _ => '-',
+      };
+
+  String get formSummary {
+    if (officialLeaveUsed == true) {
+      final leave = OfficialLeaveType.labelOf(officialLeaveType);
+      return '공가 · $leave';
+    }
+    if (formAttendanceType != null && formAttendanceType!.isNotEmpty) {
+      return AttendanceStatus.labelOf(formAttendanceType);
+    }
+    return '-';
+  }
 
   factory AttendanceModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -41,6 +73,13 @@ class AttendanceModel {
       status: data['status'] as String?,
       userDisplayName: data['userDisplayName'] as String?,
       timestamp: AppDateUtils.timestampToDateTime(data['timestamp']),
+      checkInTime: data['checkInTime'] as String?,
+      checkOutTime: data['checkOutTime'] as String?,
+      statusSource: data['statusSource'] as String?,
+      formAttendanceType: data['formAttendanceType'] as String?,
+      officialLeaveUsed: data['officialLeaveUsed'] as bool?,
+      officialLeaveType: data['officialLeaveType'] as String?,
+      officialLeaveOther: data['officialLeaveOther'] as String?,
     );
   }
 
@@ -53,7 +92,7 @@ class AttendanceModel {
         'userDisplayName': userDisplayName,
         if (type.isNotEmpty) 'type': type,
         'dateKey': dateKey,
-        if (status != null) 'status': status,
+        'status': ?status,
         'timestamp': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),

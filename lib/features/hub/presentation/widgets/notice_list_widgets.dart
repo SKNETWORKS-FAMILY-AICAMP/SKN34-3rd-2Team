@@ -354,12 +354,12 @@ class NoticeCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(compact ? 12 : 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _NoticeIconBadge(notice: notice),
-                const SizedBox(width: 12),
+                SizedBox(width: compact ? 10 : 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,9 +369,9 @@ class NoticeCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               notice.title,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                fontSize: 15,
+                                fontSize: compact ? 14 : 15,
                                 color: AppColors.textPrimary,
                               ),
                             ),
@@ -383,18 +383,18 @@ class NoticeCard extends StatelessWidget {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: compact ? 4 : 6),
                       Text(
                         notice.content,
                         maxLines: compact ? 2 : 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          height: 1.55,
+                        style: TextStyle(
+                          fontSize: compact ? 12 : 13,
+                          height: 1.45,
                           color: AppColors.textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: compact ? 8 : 10),
                       Row(
                         children: [
                           BoardMetaChip(
@@ -416,7 +416,7 @@ class NoticeCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                trailing!,
+                ?trailing,
               ],
             ),
           ),
@@ -426,10 +426,10 @@ class NoticeCard extends StatelessWidget {
   }
 
   String _metaLine(NoticeModel notice) {
-    final parts = <String>[notice.authorName];
-    if (notice.createdAt != null) {
-      parts.add(noticeTimeAgo(notice.createdAt));
-    }
+    final parts = <String>[
+      if (notice.authorName.isNotEmpty) notice.authorName,
+      if (notice.createdAt != null) noticeTimeAgo(notice.createdAt),
+    ];
     return parts.join(' · ');
   }
 }

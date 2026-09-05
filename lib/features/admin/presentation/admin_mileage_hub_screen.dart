@@ -48,7 +48,7 @@ class AdminMileageHubScreen extends StatelessWidget {
             _HubCard(
               icon: Icons.tune,
               title: '기수 설정',
-              subtitle: '카테고리 한도 · 자동 적립 규칙',
+              subtitle: '카테고리 한도 · 미션 적립 안내',
               onTap: () => context.go(RoutePaths.adminMileageSettings),
             ),
           ],

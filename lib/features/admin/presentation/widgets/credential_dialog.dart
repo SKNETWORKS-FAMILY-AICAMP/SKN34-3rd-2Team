@@ -8,6 +8,7 @@ Future<void> showCredentialDialog(
   required String displayName,
   required String email,
   required String password,
+  String personLabel = '학생',
 }) {
   return showDialog<void>(
     context: context,
@@ -19,7 +20,7 @@ Future<void> showCredentialDialog(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            '$displayName 학생의 로그인 정보입니다.\n아래 내용을 학생에게 전달해주세요.',
+            '$displayName $personLabel의 로그인 정보입니다.\n아래 내용을 전달해주세요.',
             style: const TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,
@@ -37,7 +38,7 @@ Future<void> showCredentialDialog(
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
-              '학생 관리 페이지에서도 언제든 확인할 수 있습니다.',
+              '관리 페이지에서 비밀번호를 다시 발급할 수 있습니다.',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
           ),

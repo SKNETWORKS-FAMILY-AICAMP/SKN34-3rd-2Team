@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/role.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/auth_providers.dart';
@@ -66,16 +67,16 @@ class ChangePasswordScreen extends ConsumerWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('비밀번호가 변경되었습니다.')),
                           );
-                          final isAdmin = user?.isAdmin ?? false;
-                          context.go(
-                            isAdmin ? RoutePaths.admin : RoutePaths.dashboard,
+                          final home = RoutePaths.homeFor(
+                            user?.role ?? UserRole.student,
                           );
+                          context.go(home);
                         },
                         onSkip: () {
-                          final isAdmin = user?.isAdmin ?? false;
-                          context.go(
-                            isAdmin ? RoutePaths.admin : RoutePaths.dashboard,
+                          final home = RoutePaths.homeFor(
+                            user?.role ?? UserRole.student,
                           );
+                          context.go(home);
                         },
                       ),
                     ],

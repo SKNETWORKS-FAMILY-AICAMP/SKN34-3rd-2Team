@@ -39,6 +39,23 @@ final isAdminProvider = Provider<bool>((ref) {
   return ref.watch(currentUserSyncProvider)?.isAdmin ?? false;
 });
 
+/// 강사 여부
+final isInstructorProvider = Provider<bool>((ref) {
+  return ref.watch(currentUserSyncProvider)?.isInstructor ?? false;
+});
+
+/// 기수 이력서 열람·피드백 (관리자 + 강사)
+final canReviewResumesProvider = Provider<bool>((ref) {
+  final role = ref.watch(currentUserSyncProvider)?.role;
+  return role?.canReviewResumes ?? false;
+});
+
+/// 기수 공지 작성 (관리자 + 강사)
+final canWriteNoticesProvider = Provider<bool>((ref) {
+  final role = ref.watch(currentUserSyncProvider)?.role;
+  return role?.canWriteNotices ?? false;
+});
+
 /// 관리자 기수 선택 헬퍼
 void selectCohort(WidgetRef ref, String cohortId) {
   ref.read(selectedCohortIdProvider.notifier).select(cohortId);

@@ -190,6 +190,15 @@ class _PendingSummary extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _SummaryCard(
+          icon: Icons.fact_check_outlined,
+          label: '출석관리 — 기수별 전원 / 폼 반영',
+          count: null,
+          color: const Color(0xFF0F766E),
+          onTap: () => context.go(RoutePaths.adminAttendance),
+          fullWidth: true,
+        ),
+        const SizedBox(height: 12),
+        _SummaryCard(
           icon: Icons.event_seat,
           label: '좌석 배치 — 틀 설정 / 확정',
           count: null,

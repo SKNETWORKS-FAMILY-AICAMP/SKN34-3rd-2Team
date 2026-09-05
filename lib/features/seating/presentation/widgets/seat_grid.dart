@@ -13,10 +13,14 @@ class SeatGrid extends StatelessWidget {
     required this.seatUserIds,
     required this.seatDisplayNames,
     this.highlightUserId,
+    this.highlightCaption,
+    this.pulseHighlight = false,
     this.editable = false,
     this.compact = false,
     this.showInstructorHint = true,
     this.inactiveSeatIds = const {},
+    this.confirmedUserIds = const {},
+    this.heldUserIds = const {},
     this.onAssign,
     this.onSwap,
   });
@@ -25,10 +29,14 @@ class SeatGrid extends StatelessWidget {
   final Map<String, String> seatUserIds;
   final Map<String, String> seatDisplayNames;
   final String? highlightUserId;
+  final String? highlightCaption;
+  final bool pulseHighlight;
   final bool editable;
   final bool compact;
   final bool showInstructorHint;
   final Set<String> inactiveSeatIds;
+  final Set<String> confirmedUserIds;
+  final Set<String> heldUserIds;
   final void Function(String seatId, SeatDragPayload payload)? onAssign;
   final void Function(String fromSeatId, String toSeatId)? onSwap;
 
@@ -88,7 +96,15 @@ class SeatGrid extends StatelessWidget {
                     userId: seatUserIds[cell.seatId],
                     isHighlighted: highlightUserId != null &&
                         seatUserIds[cell.seatId] == highlightUserId,
+                    isConfirmed: confirmedUserIds.contains(
+                      seatUserIds[cell.seatId],
+                    ),
+                    isHeld: heldUserIds.contains(
+                      seatUserIds[cell.seatId],
+                    ),
                     isInactive: inactiveSeatIds.contains(cell.seatId),
+                    highlightCaption: highlightCaption,
+                    pulseHighlight: pulseHighlight,
                     editable: editable,
                     compact: compact,
                     cellW: _cellW,
@@ -113,7 +129,11 @@ class _SeatCell extends StatelessWidget {
     required this.displayName,
     required this.userId,
     required this.isHighlighted,
+    required this.isConfirmed,
+    required this.isHeld,
     required this.isInactive,
+    required this.highlightCaption,
+    required this.pulseHighlight,
     required this.editable,
     required this.compact,
     required this.cellW,
@@ -127,7 +147,11 @@ class _SeatCell extends StatelessWidget {
   final String displayName;
   final String? userId;
   final bool isHighlighted;
+  final bool isConfirmed;
+  final bool isHeld;
   final bool isInactive;
+  final String? highlightCaption;
+  final bool pulseHighlight;
   final bool editable;
   final bool compact;
   final double cellW;
@@ -151,7 +175,13 @@ class _SeatCell extends StatelessWidget {
 
     Color bgColor;
     if (isHighlighted) {
-      bgColor = const Color(0xFFE9D5FF);
+      bgColor = pulseHighlight
+          ? const Color(0xFFFEF3C7)
+          : const Color(0xFFE9D5FF);
+    } else if (isConfirmed) {
+      bgColor = const Color(0xFFDCFCE7);
+    } else if (isHeld) {
+      bgColor = const Color(0xFFFFEDD5);
     } else if (isInactive) {
       bgColor = const Color(0xFFFEE2E2);
     } else if (edges.isGrouped) {
@@ -163,12 +193,16 @@ class _SeatCell extends StatelessWidget {
     }
 
     final borderColor = isHighlighted
-        ? const Color(0xFF7C3AED)
-        : isInactive
-            ? const Color(0xFFEF4444)
-            : edges.isGrouped
-                ? const Color(0xFF93C5FD)
-                : AppColors.border;
+        ? (pulseHighlight ? const Color(0xFFF59E0B) : const Color(0xFF7C3AED))
+        : isConfirmed
+            ? const Color(0xFF22C55E)
+            : isHeld
+                ? const Color(0xFFF97316)
+                : isInactive
+                    ? const Color(0xFFEF4444)
+                    : edges.isGrouped
+                        ? const Color(0xFF93C5FD)
+                        : AppColors.border;
 
     final borderWidth = isHighlighted ? (compact ? 1.5 : 2.0) : (compact ? 1.0 : 1.5);
 
@@ -206,24 +240,50 @@ class _SeatCell extends StatelessWidget {
                   fontSize: compact ? 6 : 11,
                   fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
                   color: isHighlighted
-                      ? const Color(0xFF5B21B6)
+                      ? (pulseHighlight
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF5B21B6))
                       : AppColors.textPrimary,
                 ),
               ),
             ),
           ),
           if (isHighlighted && !compact)
-            const Text(
-              '내 자리',
+            Text(
+              highlightCaption ?? '내 자리',
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF7C3AED),
+                color: pulseHighlight
+                    ? const Color(0xFFD97706)
+                    : const Color(0xFF7C3AED),
+              ),
+            )
+          else if (isConfirmed && !compact && !isHighlighted)
+            const Text(
+              '확인',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF15803D),
+              ),
+            )
+          else if (isHeld && !compact && !isHighlighted)
+            const Text(
+              '보류',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFC2410C),
               ),
             ),
         ],
       ),
     );
+
+    if (isHighlighted && pulseHighlight) {
+      seatContent = _PulseGlow(child: seatContent);
+    }
 
     if (!editable) return seatContent;
 
@@ -319,6 +379,53 @@ class _SeatCell extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+class _PulseGlow extends StatefulWidget {
+  const _PulseGlow({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_PulseGlow> createState() => _PulseGlowState();
+}
+
+class _PulseGlowState extends State<_PulseGlow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = _controller.value;
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.25 + t * 0.45),
+                blurRadius: 8 + t * 14,
+                spreadRadius: 1 + t * 3,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }

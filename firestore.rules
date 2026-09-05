@@ -27,6 +27,16 @@ service cloud.firestore {
       return isActiveUser() && getUserData().role == 'admin';
     }
 
+    /// 강사 여부
+    function isInstructor() {
+      return isActiveUser() && getUserData().role == 'instructor';
+    }
+
+    /// 해당 기수 담당 강사
+    function isInstructorOfCohort(cohortId) {
+      return isInstructor() && getUserData().cohortId == cohortId;
+    }
+
     /// 특정 기수 소속 여부
     function belongsToCohort(cohortId) {
       return isActiveUser() && getUserData().cohortId == cohortId;
@@ -81,7 +91,8 @@ service cloud.firestore {
     // ── users 컬렉션 ──
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin()
+        || (isInstructor() && resource.data.cohortId == getUserData().cohortId);
 
       // 학생: 본인 프로필 일부 필드만 수정 (skills, motto, socialLinks, personalEmail 등)
       allow update: if isOwner(userId)
@@ -100,6 +111,11 @@ service cloud.firestore {
       match /todos/{todoId} {
         allow read, write: if isOwner(userId) && isActiveUser();
       }
+
+      // 알림 팝업 「오늘 다시 보지 않기」
+      match /alertPopupDismissals/{popupId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // ── cohorts 컬렉션 ──
@@ -117,13 +133,16 @@ service cloud.firestore {
 
       // ── 자리 배치 (레거시) ──
       match /seating/{docId} {
-        allow read: if isAdmin() || canReadSeatingAsStudent(cohortId);
+        allow read: if isAdmin()
+          || isInstructorOfCohort(cohortId)
+          || canReadSeatingAsStudent(cohortId);
         allow write: if isAdmin();
       }
 
       // ── 자리 배치: 강의실 틀 ──
       match /seatingRooms/{roomId} {
         allow read: if isAdmin()
+          || isInstructorOfCohort(cohortId)
           || (canReadSeatingAsStudent(cohortId)
             && exists(/databases/$(database)/documents/cohorts/$(cohortId)/seatingMeta/default)
             && roomId == get(/databases/$(database)/documents/cohorts/$(cohortId)/seatingMeta/default).data.publishedRoomId);
@@ -133,35 +152,61 @@ service cloud.firestore {
       // ── 자리 배치: 강의실별 학생 배정 ──
       match /seatingAssignments/{roomId} {
         allow read: if isAdmin()
+          || isInstructorOfCohort(cohortId)
           || (canReadSeatingAsStudent(cohortId) && resource.data.status == 'published');
         allow write: if isAdmin();
       }
 
       // ── 자리 배치: 확정 메타 ──
       match /seatingMeta/{docId} {
-        allow read: if belongsToCohort(cohortId) || isAdmin();
+        allow read: if belongsToCohort(cohortId)
+          || isAdmin()
+          || isInstructorOfCohort(cohortId);
         allow write: if isAdmin();
+      }
+
+      // ── 강사 호명 확인 (출석 상태와 별개) ──
+      match /rollCalls/{dateKey} {
+        allow read, write: if isAdmin() || isInstructorOfCohort(cohortId);
       }
 
       // ── 출결 ──
       match /attendances/{attendanceId} {
         allow read: if isAdmin()
+          || isInstructorOfCohort(cohortId)
           || (belongsToCohort(cohortId)
             && resource.data.userId == request.auth.uid);
-        allow create: if belongsToCohort(cohortId)
-          && request.resource.data.userId == request.auth.uid;
-        allow update, delete: if isAdmin();
+        allow create: if isAdmin()
+          || isInstructorOfCohort(cohortId)
+          || (belongsToCohort(cohortId)
+            && request.resource.data.userId == request.auth.uid);
+        allow update, delete: if isAdmin() || isInstructorOfCohort(cohortId);
       }
 
       // ── 공지사항 ──
       match /notices/{noticeId} {
         allow read: if canAccessCohort(cohortId);
-        allow write: if isAdmin();
+        allow create: if isAdmin()
+          || (isInstructorOfCohort(cohortId)
+            && request.resource.data.authorId == request.auth.uid);
+        allow update: if isAdmin()
+          || (isInstructorOfCohort(cohortId)
+            && resource.data.authorId == request.auth.uid
+            && request.resource.data.authorId == request.auth.uid);
+        allow delete: if isAdmin();
       }
 
       // ── 예약 공지 ──
       match /scheduledNotices/{scheduledId} {
         allow read: if isAdmin();
+        allow write: if isAdmin();
+      }
+
+      // ── 로그인 알림 팝업 (매일 해야 할 일) ──
+      match /alertPopups/{popupId} {
+        allow read: if isAuthenticated()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && (isAdmin() || getUserData().cohortId == cohortId);
         allow write: if isAdmin();
       }
 
@@ -242,26 +287,33 @@ service cloud.firestore {
       // ── 이력서 ──
       match /resumes/{resumeId} {
         allow read: if isAdmin()
+          || isInstructorOfCohort(cohortId)
           || (belongsToCohort(cohortId)
             && resource.data.userId == request.auth.uid);
         allow create: if belongsToCohort(cohortId)
           && request.resource.data.userId == request.auth.uid;
         allow update: if isAdmin()
           || (belongsToCohort(cohortId)
-            && resource.data.userId == request.auth.uid);
+            && resource.data.userId == request.auth.uid)
+          || (isInstructorOfCohort(cohortId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['feedbackCount', 'updatedAt']));
         allow delete: if belongsToCohort(cohortId)
           && resource.data.userId == request.auth.uid;
 
         match /feedback/{feedbackId} {
           allow read: if isAdmin()
+            || isInstructorOfCohort(cohortId)
             || (belongsToCohort(cohortId)
               && get(/databases/$(database)/documents/cohorts/$(cohortId)/resumes/$(resumeId)).data.userId
                 == request.auth.uid);
-          allow write: if isAdmin();
+          allow create: if isAdmin() || isInstructorOfCohort(cohortId);
+          allow update, delete: if isAdmin();
         }
 
         match /revisions/{revisionId} {
           allow read: if isAdmin()
+            || isInstructorOfCohort(cohortId)
             || (belongsToCohort(cohortId)
               && get(/databases/$(database)/documents/cohorts/$(cohortId)/resumes/$(resumeId)).data.userId
                 == request.auth.uid);
@@ -332,13 +384,20 @@ service cloud.firestore {
             && request.resource.data.status == resource.data.status);
       }
 
+      // ── 마일리지 미션 진행도 ──
+      match /missionProgress/{userId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId) && userId == request.auth.uid);
+        allow write: if false;
+      }
+
       // ── 인프런 강의 패키지 (학습실) ──
       match /inflearnPackages/{packageId} {
         allow read: if canAccessCohort(cohortId);
         allow write: if isAdmin();
       }
 
-      // ── 커리큘럼 ──
+      // ── 커리큘럼 (기수별 PDF 메타) ──
       match /curriculum/{docId} {
         allow read: if isAdmin()
           || (belongsToCohort(cohortId)
@@ -347,38 +406,31 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
-      match /curriculumWeeks/{weekId} {
-        allow read: if isAdmin()
-          || (belongsToCohort(cohortId) && resource.data.published == true);
-        allow write: if isAdmin();
+      // ── 성취도평가용 커리큘럼 CSV 시트 ──
+      match /curriculumSheets/{sheetId} {
+        allow read, write: if isAdmin() || isInstructorOfCohort(cohortId);
       }
 
-      match /curriculumDays/{dayId} {
-        allow read: if isAdmin()
-          || (belongsToCohort(cohortId) && resource.data.published == true);
-        allow write: if isAdmin();
-      }
-
-      match /curriculumProgress/{userId} {
-        allow read: if isAdmin()
-          || (belongsToCohort(cohortId) && userId == request.auth.uid);
-        allow create, update: if belongsToCohort(cohortId)
-          && userId == request.auth.uid;
-      }
-
-      // ── 성취도 평가 (deprecated) ──
+      // ── 성취도 평가 (인앱 퀴즈) ──
       match /assessments/{assessmentId} {
-        allow read: if canAccessCohort(cohortId);
-        allow write: if isAdmin();
+        allow read: if isAdmin()
+          || isInstructorOfCohort(cohortId)
+          || (belongsToCohort(cohortId) && resource.data.published == true);
+        allow create, update, delete: if isAdmin() || isInstructorOfCohort(cohortId);
+
+        // 정답 포함 — 강사/관리자만 클라이언트 읽기
+        match /questions/{questionId} {
+          allow read, write: if isAdmin() || isInstructorOfCohort(cohortId);
+        }
       }
 
       match /assessmentSubmissions/{submissionId} {
         allow read: if isAdmin()
+          || isInstructorOfCohort(cohortId)
           || (belongsToCohort(cohortId)
             && resource.data.userId == request.auth.uid);
-        allow create, update: if belongsToCohort(cohortId)
-          && request.resource.data.userId == request.auth.uid;
-        allow delete: if isAdmin();
+        // 제출/채점은 Cloud Functions(Admin SDK)만 — 클라이언트 직접 write 금지
+        allow create, update, delete: if false;
       }
 
     }

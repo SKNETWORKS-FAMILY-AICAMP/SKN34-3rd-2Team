@@ -97,6 +97,7 @@ flutter run -d windows
 | 역할 | 이메일 | 비밀번호 |
 |------|--------|----------|
 | 관리자 | `admin@playdata.co.kr` | `Playdata123!` |
+| 강사 | `instructor@playdata.co.kr` | `Playdata123!` |
 | 학생 | `student@playdata.co.kr` | `Playdata123!` |
 
 > 최초 로그인 시 비밀번호 변경 화면이 나올 수 있습니다.
@@ -371,6 +372,53 @@ SKN34-3rd-2Team/
 ├── firestore.rules   # Firestore 보안 규칙
 └── storage.rules     # Storage 보안 규칙
 ```
+
+---
+
+## 성취도 평가 (CSV 커리큘럼 + AI)
+
+강사가 구글시트를 CSV로 내려받아 업로드하면, 일수 구간을 골라 AI가 객관식/단답 초안을 만듭니다.
+Google Sheets API / Notion Integration은 사용하지 않습니다.
+
+### 1) OpenAI API 키 (`functions/.env`)
+
+```powershell
+copy functions\.env.example functions\.env
+# OPENAI_API_KEY=sk-... 입력 (Git에 올리지 말 것)
+```
+
+앱은 **배포된 Cloud Functions**를 호출합니다. `.env`는 Flutter `R`로는 안 먹고, 아래처럼 Functions를 다시 배포해야 반영됩니다.
+
+```powershell
+cd functions
+npm run build
+cd ..
+firebase deploy --only functions
+```
+
+CSV 업로드 permission-denied 가 나면 rules도 배포:
+
+```powershell
+firebase deploy --only firestore:rules,storage
+```
+
+### 2) 배포
+
+```powershell
+cd functions
+npm run build
+cd ..
+firebase deploy --only functions,firestore:rules,storage
+```
+
+OPENAI_API_KEY가 없어도 앱은 동작합니다. 커리큘럼 AI 생성만 설정 안내 오류를 반환합니다.
+Demo 계정에서는 샘플 커리큘럼으로 AI 다이얼로그가 동작합니다.
+
+### 3) 강사 사용 흐름
+
+1. 구글시트 → 파일 → 다운로드 → CSV
+2. 강사 메뉴 **커리큘럼**에서 CSV 업로드
+3. 성취도평가 만들기 → **커리큘럼 AI** → 일수 구간 선택 → 초안 생성 → 수정 후 발행
 
 ---
 

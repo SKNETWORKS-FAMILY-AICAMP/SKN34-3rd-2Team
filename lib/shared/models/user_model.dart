@@ -20,6 +20,8 @@ class UserModel {
     this.skills = const [],
     this.socialLinks = const {},
     this.birthDate,
+    this.photoUrl,
+    this.photoStoragePath,
     this.mileageBalance = 0,
     this.createdAt,
     this.updatedAt,
@@ -41,12 +43,16 @@ class UserModel {
   final List<String> skills;
   final Map<String, String> socialLinks;
   final String? birthDate;
+  final String? photoUrl;
+  final String? photoStoragePath;
   final int mileageBalance;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? lastLoginAt;
 
   bool get isAdmin => role.isAdmin;
+  bool get isInstructor => role.isInstructor;
+  bool get isStudent => role.isStudent;
 
   /// Firestore Document → UserModel
   factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -68,6 +74,8 @@ class UserModel {
         data['socialLinks'] as Map? ?? {},
       ),
       birthDate: data['birthDate'] as String?,
+      photoUrl: data['photoUrl'] as String?,
+      photoStoragePath: data['photoStoragePath'] as String?,
       mileageBalance: data['mileageBalance'] as int? ?? 0,
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
       updatedAt: AppDateUtils.timestampToDateTime(data['updatedAt']),
@@ -92,6 +100,9 @@ class UserModel {
       'skills': skills,
       'socialLinks': socialLinks,
       if (birthDate != null) 'birthDate': birthDate,
+      if (photoUrl != null && photoUrl!.isNotEmpty) 'photoUrl': photoUrl,
+      if (photoStoragePath != null && photoStoragePath!.isNotEmpty)
+        'photoStoragePath': photoStoragePath,
       'mileageBalance': mileageBalance,
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -104,6 +115,8 @@ class UserModel {
     Map<String, String>? socialLinks,
     String? birthDate,
     String? personalEmail,
+    String? photoUrl,
+    String? photoStoragePath,
     bool? mustChangePassword,
     DateTime? lastLoginAt,
   }) {
@@ -122,6 +135,8 @@ class UserModel {
       skills: skills ?? this.skills,
       socialLinks: socialLinks ?? this.socialLinks,
       birthDate: birthDate ?? this.birthDate,
+      photoUrl: photoUrl ?? this.photoUrl,
+      photoStoragePath: photoStoragePath ?? this.photoStoragePath,
       mileageBalance: mileageBalance,
       createdAt: createdAt,
       updatedAt: updatedAt,

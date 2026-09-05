@@ -9,7 +9,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'widgets/record_page_layout.dart';
 
-/// 기록 유형 선택 (자격증 / 스터디 / 블로그)
+/// Record type selection
 class RecordTypeSelectScreen extends ConsumerWidget {
   const RecordTypeSelectScreen({super.key});
 
@@ -31,6 +31,22 @@ class RecordTypeSelectScreen extends ConsumerWidget {
           title: '새로운 기록 추가',
           child: Column(
             children: [
+              _TypeCard(
+                icon: Icons.menu_book_outlined,
+                title: RecordTypes.labels[RecordTypes.studyCert]!,
+                description: RecordTypes.descriptions[RecordTypes.studyCert]!,
+                onTap: () => context.push(RoutePaths.recordsCreateStudyCert),
+              ),
+              const SizedBox(height: 12),
+              _TypeCard(
+                icon: Icons.quiz_outlined,
+                title: RecordTypes.labels[RecordTypes.precourseQuiz]!,
+                description:
+                    RecordTypes.descriptions[RecordTypes.precourseQuiz]!,
+                onTap: () =>
+                    context.push(RoutePaths.recordsCreatePrecourseQuiz),
+              ),
+              const SizedBox(height: 12),
               _TypeCard(
                 icon: Icons.workspace_premium_outlined,
                 title: RecordTypes.labels[RecordTypes.certification]!,

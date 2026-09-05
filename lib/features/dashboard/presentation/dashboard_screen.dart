@@ -15,6 +15,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/qual_exam_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../curriculum/presentation/widgets/curriculum_dashboard_section.dart';
+import '../../curriculum/providers/curriculum_providers.dart';
 import '../../forms/presentation/form_tasks_screen.dart';
 import '../../seating/providers/seating_providers.dart';
 import 'widgets/attendance_calendar_card.dart';
@@ -87,6 +88,8 @@ class _DashboardBody extends ConsumerWidget {
         ref.invalidate(qualExamSchedulesProvider);
         ref.invalidate(publishedSeatingLayoutProvider);
         ref.invalidate(publishedSeatingAssignmentProvider);
+        ref.invalidate(activeAlertPopupsProvider);
+        ref.invalidate(curriculumMetaProvider);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -175,8 +178,6 @@ class _DashboardMainColumn extends StatelessWidget {
         const SizedBox(height: 16),
         const FormTasksDashboardSection(),
         const SizedBox(height: 16),
-        const CurriculumDashboardSection(),
-        const SizedBox(height: 16),
         const QualExamScheduleSection(),
         const SizedBox(height: 16),
         const _SectionTitle('이번 주 필수 학습'),
@@ -226,6 +227,8 @@ class _DashboardSidebar extends StatelessWidget {
           controller: todoController,
           uid: user.uid,
         ),
+        const SizedBox(height: 16),
+        const CurriculumDashboardSection(),
         const SizedBox(height: 16),
         const _SectionTitle('승인 현황', compact: true),
         submissions.when(

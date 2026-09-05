@@ -14,11 +14,8 @@ const DEFAULT_CATEGORY_LIMITS: Record<string, number> = {
   onlineCourse: 200000,
 };
 
-const DEFAULT_ACCRUAL_RULES: Record<string, number> = {
-  certification: 5000,
-  study: 3000,
-  blog: 2000,
-};
+/** @deprecated 미션 엔진으로 이전. 카테고리 한도만 사용 */
+const DEFAULT_ACCRUAL_RULES: Record<string, number> = {};
 
 const LIMIT_STATUSES = ["pending", "approved", "modify_requested"];
 
@@ -424,62 +421,6 @@ export const cancelPurchaseRequest = onCall({region: REGION}, async (request) =>
   return {message: "구매 요청이 취소되었습니다."};
 });
 
-/**
- * 기록실 승인 시 자동 마일리지 적립 (reviewSubmission에서 호출)
- */
-export async function grantMileageForSubmission(
-  cohortId: string,
-  submissionId: string,
-  submissionType: string,
-  userId: string,
-  submissionTitle: string,
-  reviewedBy: string,
-): Promise<number> {
-  const settings = await getMileageSettings(cohortId);
-  const amount = settings.accrualRules[submissionType] ?? 0;
-  if (amount <= 0) return 0;
-
-  const subRef = db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("submissions")
-    .doc(submissionId);
-  const userRef = db.collection("users").doc(userId);
-
-  return db.runTransaction(async (tx) => {
-    const subDoc = await tx.get(subRef);
-    if (!subDoc.exists) return 0;
-    if (subDoc.data()?.mileageGranted === true) return 0;
-
-    const txRef = db
-      .collection("cohorts")
-      .doc(cohortId)
-      .collection("mileageTransactions")
-      .doc();
-
-    tx.update(subRef, {
-      mileageGranted: true,
-      mileageAmount: amount,
-    });
-
-    tx.update(userRef, {
-      mileageBalance: fieldValue.increment(amount),
-      updatedAt: fieldValue.serverTimestamp(),
-    });
-
-    tx.set(txRef, {
-      userId,
-      amount,
-      reason: `${submissionTitle} 승인 적립`,
-      type: "accrual",
-      relatedId: submissionId,
-      adjustedBy: reviewedBy,
-      createdAt: fieldValue.serverTimestamp(),
-    });
-
-    return amount;
-  });
-}
 
 /**
  * 종강 + 14일 경과 마일리지 소멸 배치 (공통 로직)

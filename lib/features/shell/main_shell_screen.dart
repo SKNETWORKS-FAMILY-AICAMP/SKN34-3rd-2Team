@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/routing/route_paths.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/user_model.dart';
+import '../../shared/widgets/profile_nav_chip.dart';
 import '../auth/providers/auth_providers.dart';
+import 'widgets/alert_popup_host.dart';
 import 'widgets/app_shell_header.dart';
 
 /// 메인 Shell — Drawer(전체 메뉴)
@@ -24,23 +26,20 @@ class MainShellScreen extends ConsumerWidget {
         title: const AppShellHeader(),
         actions: [
           if (user != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: CircleAvatar(
-                backgroundColor: AppColors.primaryLight,
-                child: Text(
-                  user.displayName.isNotEmpty ? user.displayName[0] : '?',
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: ProfileNavChip(
+                  user: user,
+                  style: ProfileNavChipStyle.appBar,
+                  onTap: () => context.go(RoutePaths.myPage),
                 ),
               ),
             ),
         ],
       ),
       drawer: _AppDrawer(user: user),
-      body: child,
+      body: AlertPopupHost(child: child),
     );
   }
 }
@@ -56,50 +55,41 @@ class _AppDrawer extends ConsumerWidget {
       _DrawerItem(Icons.dashboard, '대시보드', RoutePaths.dashboard),
       _DrawerItem(Icons.description, '이력서 관리', RoutePaths.resume),
       _DrawerItem(Icons.menu_book, '학습실', RoutePaths.studyRoom),
-      _DrawerItem(Icons.school_outlined, '커리큘럼', RoutePaths.curriculum),
       _DrawerItem(Icons.forum, '게시판', RoutePaths.board),
       _DrawerItem(Icons.event_seat, '자리 배치', RoutePaths.seating),
       _DrawerItem(Icons.ballot_outlined, '설문 · 제출', RoutePaths.forms),
       _DrawerItem(Icons.workspace_premium_outlined, '자격 시험 일정', RoutePaths.qualExams),
       _DrawerItem(Icons.history, '기록실', RoutePaths.records),
       _DrawerItem(Icons.card_giftcard, '마일리지', RoutePaths.mileage),
+      _DrawerItem(Icons.quiz_outlined, '성취도평가', RoutePaths.assessments),
       _DrawerItem(Icons.person, '마이페이지', RoutePaths.myPage),
     ];
-
-    final displayName = user?.displayName ?? '';
-    final initial = displayName.isNotEmpty ? displayName[0] : '?';
 
     return Drawer(
       child: Column(
         children: [
-          UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(
-                bottom: BorderSide(color: AppColors.border),
+          SafeArea(
+            bottom: false,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(bottom: BorderSide(color: AppColors.border)),
               ),
-            ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: AppColors.primaryLight,
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 24,
-                ),
-              ),
-            ),
-            accountName: Text(
-              displayName.isNotEmpty ? '$displayName님' : '게스트',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            accountEmail: Text(
-              user?.cohortName ?? user?.email ?? '',
-              style: const TextStyle(color: AppColors.textSecondary),
+              child: user != null
+                  ? ProfileNavChip(
+                      user: user!,
+                      style: ProfileNavChipStyle.drawer,
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.go(RoutePaths.myPage);
+                      },
+                    )
+                  : const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('게스트'),
+                    ),
             ),
           ),
           Expanded(

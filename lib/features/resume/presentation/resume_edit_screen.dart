@@ -46,7 +46,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   late final ScrollController _scrollController;
   late final Map<String, GlobalKey> _sectionKeys;
   String? _selectedSection;
-  bool _isAdmin = false;
+  bool _isReviewer = false;
   ResumeModel? _resume;
 
   @override
@@ -76,7 +76,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     _title = resume.title;
     _content = resume.content;
     _initialized = true;
-    if (ref.read(isAdminProvider) || resume.isApproved) {
+    if (ref.read(canReviewResumesProvider) || resume.isApproved) {
       _viewMode = _ResumeViewMode.doc;
     }
     if (_pendingInitialScroll && widget.initialSection != null) {
@@ -85,7 +85,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
         _scrollToSection(widget.initialSection!);
       });
     }
-    if (!ref.read(isAdminProvider) && resume.hasUnreadFeedback) {
+    if (!ref.read(canReviewResumesProvider) && resume.hasUnreadFeedback) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final cohortId = ref.read(effectiveCohortIdProvider);
         if (cohortId == null) return;
@@ -98,14 +98,17 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     }
   }
 
-  bool _isReadOnly({required bool isAdmin, required ResumeModel resume}) =>
-      isAdmin ||
+  bool _isReadOnly({required bool isReviewer, required ResumeModel resume}) =>
+      isReviewer ||
       _viewMode == _ResumeViewMode.doc ||
-      (!isAdmin && resume.isApproved);
+      (!isReviewer && resume.isApproved);
 
   void _markDirty() {
     final resume = _resume;
-    if (resume == null || _isReadOnly(isAdmin: _isAdmin, resume: resume)) return;
+    if (resume == null ||
+        _isReadOnly(isReviewer: _isReviewer, resume: resume)) {
+      return;
+    }
     setState(() => _dirty = true);
   }
 
@@ -127,7 +130,15 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   Future<void> _goBack() async {
     if (!await _confirmLeave() || !mounted) return;
-    context.go(RoutePaths.resume);
+    context.go(_resumeListPath());
+  }
+
+  String _resumeListPath() {
+    final user = ref.read(currentUserSyncProvider);
+    if (user == null) return RoutePaths.resume;
+    if (user.isAdmin) return RoutePaths.adminResumes;
+    if (user.isInstructor) return RoutePaths.instructorResumes;
+    return RoutePaths.resume;
   }
 
   void _scrollToSection(String key) {
@@ -151,8 +162,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     String? status,
     bool incrementRevision = true,
   }) async {
-    final isAdmin = ref.read(isAdminProvider);
-    if (_isReadOnly(isAdmin: isAdmin, resume: resume) && status == null) return;
+    final isReviewer = ref.read(canReviewResumesProvider);
+    if (_isReadOnly(isReviewer: isReviewer, resume: resume) &&
+        status == null) {
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       final cohortId = ref.read(effectiveCohortIdProvider)!;
@@ -258,6 +272,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
+    final isReviewer = ref.watch(canReviewResumesProvider);
     final resumeAsync = ref.watch(resumeDetailProvider(widget.resumeId));
 
     return resumeAsync.when(
@@ -271,9 +286,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
           );
         }
         _initFromResume(resume);
-        _isAdmin = isAdmin;
+        _isReviewer = isReviewer;
         _resume = resume;
-        final readOnly = _isReadOnly(isAdmin: isAdmin, resume: resume);
+        final readOnly = _isReadOnly(isReviewer: isReviewer, resume: resume);
         final liveSections = _content.computeSections();
         final completed = liveSections.values.where((v) => v).length;
 
@@ -282,7 +297,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
           onPopInvokedWithResult: (didPop, result) async {
             if (didPop) return;
             if (await _confirmLeave() && context.mounted) {
-              context.go(RoutePaths.resume);
+              context.go(_resumeListPath());
             }
           },
           child: Scaffold(
@@ -295,7 +310,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
               ),
               leadingWidth: 110,
               actions: [
-                if (!resume.isApproved || isAdmin)
+                if (!resume.isApproved || isReviewer)
                   _ModeToggle(
                     isEdit: _viewMode == _ResumeViewMode.edit,
                     onEdit: () => setState(() => _viewMode = _ResumeViewMode.edit),
@@ -309,7 +324,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     icon: const Icon(Icons.picture_as_pdf_outlined),
                   ),
                 ],
-                if (!isAdmin && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit) ...[
+                if (!isReviewer && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit) ...[
                   const SizedBox(width: 8),
                   OutlinedButton(
                     onPressed: _isSaving ? null : () => _save(resume: resume),
@@ -353,7 +368,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   revisionCount: resume.revisionCount,
                   statusLabel: resume.statusLabel,
                 ),
-                if (resume.isSubmitted && !resume.isApproved && !isAdmin)
+                if (resume.isSubmitted && !resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -576,7 +591,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
                       final feedbackPanel = ResumeEditFeedbackPanel(
                         resumeId: widget.resumeId,
-                        isAdmin: isAdmin,
+                        isAdmin: isReviewer,
                         selectedSectionKey: _selectedSection,
                         isSidebar: wide,
                       );
