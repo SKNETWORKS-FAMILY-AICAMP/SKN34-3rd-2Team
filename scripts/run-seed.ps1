@@ -3,11 +3,12 @@
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$Fb = Join-Path $Root "config\firebase"
 
 Write-Host "`n[1/4] Bootstrap Rules 배포..." -ForegroundColor Cyan
-Copy-Item "$Root\firestore.rules.production" "$Root\firestore.rules.production.bak" -ErrorAction SilentlyContinue
-Copy-Item "$Root\firestore.rules" "$Root\firestore.rules.production" -Force
-Copy-Item "$Root\firestore.rules.bootstrap" "$Root\firestore.rules" -Force
+Copy-Item "$Fb\firestore.rules.production" "$Fb\firestore.rules.production.bak" -ErrorAction SilentlyContinue
+Copy-Item "$Fb\firestore.rules" "$Fb\firestore.rules.production" -Force
+Copy-Item "$Fb\firestore.rules.bootstrap" "$Fb\firestore.rules" -Force
 Set-Location $Root
 firebase deploy --only firestore:rules
 
@@ -16,7 +17,7 @@ Set-Location "$Root\scripts"
 node seed-via-client.mjs
 
 Write-Host "`n[3/4] Production Rules 복원..." -ForegroundColor Cyan
-Copy-Item "$Root\firestore.rules.production" "$Root\firestore.rules" -Force
+Copy-Item "$Fb\firestore.rules.production" "$Fb\firestore.rules" -Force
 Set-Location $Root
 firebase deploy --only firestore:rules
 

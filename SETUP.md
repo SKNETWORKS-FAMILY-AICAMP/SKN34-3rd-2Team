@@ -365,12 +365,11 @@ SKN34-3rd-2Team/
 ├── lib/              # Flutter 앱 소스
 ├── functions/        # Firebase Cloud Functions (TypeScript)
 ├── scripts/          # 시드·설정 스크립트
+├── config/firebase/  # Firestore·Storage rules / indexes / CORS
 ├── android/          # Android 빌드
 ├── ios/              # iOS 빌드
 ├── web/              # Web 빌드
-├── firebase.json     # Firebase 설정
-├── firestore.rules   # Firestore 보안 규칙
-└── storage.rules     # Storage 보안 규칙
+└── firebase.json     # Firebase 설정 (rules 경로 포함)
 ```
 
 ---
