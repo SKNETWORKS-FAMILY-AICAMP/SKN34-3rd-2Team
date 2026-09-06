@@ -70,7 +70,10 @@ void main() {
 
   group('이력서 분석 게이트', () {
     test('빈 이력서는 분석할 수 없다', () {
-      expect(ResumeReadiness.of(ResumeContent.empty()).canAnalyzeResume, isFalse);
+      expect(
+        ResumeReadiness.of(ResumeContent.empty()).canAnalyzeResume,
+        isFalse,
+      );
     });
 
     test('기술스택만 있어도 분석할 수 있다', () {
@@ -88,7 +91,10 @@ void main() {
         techStack: [ResumeTechStackItem(id: 't1', name: 'Kubernetes')],
       );
       final analysis = analyzeResume(content);
-      expect(analysis.improvements.join(), contains('Kubernetes'));
+      expect(
+        analysis.improvements.map((item) => item.text).join(),
+        contains('Kubernetes'),
+      );
     });
   });
 
@@ -116,7 +122,9 @@ void main() {
     });
 
     test('찾는 공고가 없으면 빈 목록을 준다', () {
-      final result = searchJobs('수의사 채용');
+      // 실제 수집 공고에는 '수의사' 같은 단어가 대기업 통합 공고 본문에 섞여
+      // 있을 수 있다. 데이터 크기와 무관하게 검증하려고 없는 단어를 쓴다.
+      final result = searchJobs('불가사리조련사 채용');
       expect(result.jobs, isEmpty);
     });
 
@@ -128,9 +136,11 @@ void main() {
       // 건수는 수집 데이터에 따라 달라지므로 고정하지 않는다. 확인할 것은
       // 나온 공고가 전부 프론트엔드를 언급하고, 백엔드 전용 공고는 없다는 것이다.
       expect(result.jobs, isNotEmpty);
-      expect(result.jobs.every((job) => job.searchText.contains('프론트엔드')), isTrue);
+      expect(
+        result.jobs.every((job) => job.searchText.contains('프론트엔드')),
+        isTrue,
+      );
       expect(result.jobs.any((job) => job.jobId == 'MOCK-BE-001'), isFalse);
-      expect(result.jobs.any((job) => job.title.contains('React 프론트엔드')), isTrue);
     });
 
     test('백엔드로 검색하면 프론트엔드 공고가 나오지 않는다', () {

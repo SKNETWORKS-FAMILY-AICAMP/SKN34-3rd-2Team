@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/constants/role.dart';
 import '../../core/utils/date_utils.dart';
+import 'job_preferences.dart';
 
 /// Firestore `users/{uid}` 문서 모델
 class UserModel {
@@ -19,6 +20,7 @@ class UserModel {
     this.motto,
     this.skills = const [],
     this.socialLinks = const {},
+    this.jobPreferences = const JobPreferences(),
     this.birthDate,
     this.mileageBalance = 0,
     this.createdAt,
@@ -40,6 +42,9 @@ class UserModel {
   final String? motto;
   final List<String> skills;
   final Map<String, String> socialLinks;
+
+  /// 취업 희망 조건(직무·지역·고용형태). 이력서가 아니라 프로필에 둔다.
+  final JobPreferences jobPreferences;
   final String? birthDate;
   final int mileageBalance;
   final DateTime? createdAt;
@@ -67,6 +72,7 @@ class UserModel {
       socialLinks: Map<String, String>.from(
         data['socialLinks'] as Map? ?? {},
       ),
+      jobPreferences: JobPreferences.fromMap(data['jobPreferences'] as Map?),
       birthDate: data['birthDate'] as String?,
       mileageBalance: data['mileageBalance'] as int? ?? 0,
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
@@ -91,6 +97,7 @@ class UserModel {
       if (motto != null) 'motto': motto,
       'skills': skills,
       'socialLinks': socialLinks,
+      'jobPreferences': jobPreferences.toMap(),
       if (birthDate != null) 'birthDate': birthDate,
       'mileageBalance': mileageBalance,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -102,6 +109,7 @@ class UserModel {
     String? motto,
     List<String>? skills,
     Map<String, String>? socialLinks,
+    JobPreferences? jobPreferences,
     String? birthDate,
     String? personalEmail,
     bool? mustChangePassword,
@@ -121,6 +129,7 @@ class UserModel {
       motto: motto ?? this.motto,
       skills: skills ?? this.skills,
       socialLinks: socialLinks ?? this.socialLinks,
+      jobPreferences: jobPreferences ?? this.jobPreferences,
       birthDate: birthDate ?? this.birthDate,
       mileageBalance: mileageBalance,
       createdAt: createdAt,

@@ -21,6 +21,14 @@ const _weightSkills = 0.45;
 const _weightProject = 0.10;
 const _weightConditions = 0.10;
 
+/// 추천 카드가 점수 구성을 보여줄 때 쓴다. 값은 위 상수와 같다.
+const recommendationWeights = (
+  role: _weightRole,
+  skills: _weightSkills,
+  project: _weightProject,
+  conditions: _weightConditions,
+);
+
 const _roleHitsForFullScore = 3;
 
 /// ranking.py 의 SKILL_POOL_FLOOR. 기술을 1개만 적은 공고가 만점을 받지 않게 한다.
@@ -116,6 +124,8 @@ class LocalResumeProfile {
     required this.preferredRegions,
     required this.preferredEmploymentTypes,
     required this.confirmedMissingSkills,
+    this.majors = const [],
+    this.certifications = const [],
   });
 
   final Set<String> skills;
@@ -130,6 +140,10 @@ class LocalResumeProfile {
   final List<String> preferredRegions;
   final List<String> preferredEmploymentTypes;
   final Set<String> confirmedMissingSkills;
+
+  /// 학력사항의 전공과 자격사항 이름. 전공·자격증 요건 판정에 쓴다.
+  final List<String> majors;
+  final List<String> certifications;
 
   factory LocalResumeProfile.fromContent(
     ResumeContent content, {
@@ -153,6 +167,11 @@ class LocalResumeProfile {
       preferredRegions: preferredRegions,
       preferredEmploymentTypes: preferredEmploymentTypes,
       confirmedMissingSkills: canonicalSet(confirmedMissingSkills),
+      majors: [for (final e in education) if (e.major.trim().isNotEmpty) e.major.trim()],
+      certifications: [
+        for (final c in content.certifications)
+          if (c.name.trim().isNotEmpty) c.name.trim(),
+      ],
     );
   }
 }
@@ -204,6 +223,53 @@ bool? _educationPasses(String resumeLevel, String requiredLevel) {
   return resume >= required;
 }
 
+/// 공백·기호를 지우고 소문자로. qualifications.py / jobCoach.ts 와 같은 정규화.
+String normalizeTerm(String text) =>
+    text.replaceAll(RegExp(r'[\s\-_/·.()\[\]]'), '').toLowerCase();
+
+/// 전공·자격증·병역. 맞으면 통과, 확인할 수 없으면 확인 필요. 탈락시키지 않는다.
+void _qualificationChecks(
+  CollectedJob job,
+  LocalResumeProfile resume,
+  List<String> passed,
+  List<String> unknown,
+) {
+  if (job.requiredMajors.isNotEmpty) {
+    final resumeMajors = resume.majors.map((m) => m.trim()).where((m) => m.isNotEmpty).toList();
+    if (resumeMajors.isEmpty) {
+      unknown.add('전공 확인 필요: ${job.requiredMajors.join(', ')}');
+    } else {
+      final matched = resumeMajors.where(
+        (m) => job.requiredMajorTerms.any((t) => t.isNotEmpty && normalizeTerm(m).contains(t)),
+      );
+      if (matched.isNotEmpty) {
+        passed.add('전공 요건 충족: ${matched.first}');
+      } else {
+        unknown.add(
+          '전공 요건 미확인: 공고 ${job.requiredMajors.join(', ')} / 이력서 ${resumeMajors.join(', ')}',
+        );
+      }
+    }
+  }
+  final resumeCerts = resume.certifications
+      .where((c) => c.trim().isNotEmpty)
+      .map(normalizeTerm)
+      .toList();
+  for (final cert in job.requiredCertifications) {
+    final key = normalizeTerm(cert);
+    if (resumeCerts.any((c) => key.isNotEmpty && (c.contains(key) || key.contains(c)))) {
+      passed.add('자격증 요건 충족: $cert');
+    } else {
+      unknown.add('자격증 확인 필요: $cert');
+    }
+  }
+  if (job.militaryRequired) unknown.add('병역 조건 확인 필요 (병역필 또는 면제)');
+}
+
+/// 공고 지역이 "전국"을 포함하면 어느 희망 지역이든 통과시킨다.
+/// hard_filter.py / jobCoach.ts 의 같은 규칙과 맞춰야 한다.
+bool isNationwide(String jobRegion) => jobRegion.contains('전국');
+
 LocalFilterResult hardFilter(CollectedJob job, LocalResumeProfile resume) {
   final passed = <String>[];
   final failed = <String>[];
@@ -214,6 +280,9 @@ LocalFilterResult hardFilter(CollectedJob job, LocalResumeProfile resume) {
   } else {
     passed.add('공고 진행 중');
   }
+
+  // 본문이 이미지뿐이면 텍스트로 확인한 요구사항이 없다. 탈락이 아니라 확인 필요다.
+  if (job.bodyIsImage) unknown.add('공고 상세가 이미지라 요구사항 미확인');
 
   if (job.careerType == 'EXPERIENCED') {
     final minYears = job.minCareerYears;
@@ -246,8 +315,13 @@ LocalFilterResult hardFilter(CollectedJob job, LocalResumeProfile resume) {
     }
   }
 
+  _qualificationChecks(job, resume, passed, unknown);
+
   if (resume.preferredRegions.isEmpty) {
     unknown.add('희망 근무지역 미입력');
+  } else if (isNationwide(job.region) || resume.preferredRegions.contains('전국')) {
+    // 공고가 전국 근무이거나 사용자가 전국을 골랐으면 지역은 따지지 않는다.
+    passed.add('전국 근무 가능 — 지역 조건 충족');
   } else if (resume.preferredRegions.any(job.region.contains)) {
     passed.add('희망 근무지역 일치');
   } else {
@@ -293,6 +367,22 @@ LocalFilterResult hardFilter(CollectedJob job, LocalResumeProfile resume) {
   return (pool, sources);
 }
 
+/// 공고가 언급한 기술의 출처. 같은 기술이 여러 곳에 있으면 필수 > 우대 > 태그 순으로 앞선 곳을 쓴다.
+/// ranking.py / jobCoach.ts 의 skill_buckets 와 같은 규칙.
+Map<String, String> skillBuckets(CollectedJob job) {
+  final buckets = <String, String>{};
+  for (final (bucket, values) in <(String, List<String>)>[
+    ('required', job.requiredSkills),
+    ('preferred', job.preferredSkills),
+    ('tag', job.techStack),
+  ]) {
+    for (final value in values) {
+      buckets.putIfAbsent(canonicalSkill(value), () => bucket);
+    }
+  }
+  return buckets;
+}
+
 (double, List<String>) _skillScore(Set<String> resumeKeys, Map<String, String> pool) {
   if (pool.isEmpty) return (0, const []);
   final matched = [
@@ -327,6 +417,22 @@ List<Map<String, dynamic>> rankJobs(List<CollectedJob> jobs, LocalResumeProfile 
     final (pool, skillsSource) = declaredSkills(job);
     final (skills, matchedSkills) = _skillScore(resume.skills, pool);
     final (project, projectSkills) = _skillScore(resume.projectSkills, pool);
+    // 공고가 요구하지만 이력서 어디에도 근거가 없는 기술. 경험이 없다는 판단이 아니라
+    // 적혀 있지 않다는 뜻이며, 카드에서 그렇게 표시한다.
+    final unmatchedSkills = [
+      for (final entry in pool.entries)
+        if (!resume.skills.contains(entry.key) &&
+            !resume.projectSkills.contains(entry.key))
+          entry.value,
+    ]..sort();
+    // 카드가 "필수 2/3 · 우대 1/2 · 태그 3/5"처럼 출처별로 보여줄 수 있게 나눠 둔다.
+    final buckets = skillBuckets(job);
+    final knownKeys = {...resume.skills, ...resume.projectSkills};
+    List<String> pick(String bucket, bool matched) => [
+      for (final entry in pool.entries)
+        if (buckets[entry.key] == bucket && knownKeys.contains(entry.key) == matched)
+          entry.value,
+    ]..sort();
     final conditions = filter.status == 'PASS' ? 1.0 : 0.5;
     final score = ((role * _weightRole +
                 skills * _weightSkills +
@@ -341,6 +447,15 @@ List<Map<String, dynamic>> rankJobs(List<CollectedJob> jobs, LocalResumeProfile 
       'sourceUrl': job.sourceUrl,
       'company': job.company,
       'title': job.title,
+      'bodyIsImage': job.bodyIsImage,
+      'region': job.region,
+      'employmentType': job.employmentType,
+      'careerType': job.careerType,
+      'minCareerYears': job.minCareerYears,
+      'education': job.education,
+      'requiredMajors': job.requiredMajors,
+      'requiredCertifications': job.requiredCertifications,
+      'militaryRequired': job.militaryRequired,
       'recommendationScore': score,
       'grade': gradeOf(score),
       'hardFilter': filter.toMap(),
@@ -356,6 +471,13 @@ List<Map<String, dynamic>> rankJobs(List<CollectedJob> jobs, LocalResumeProfile 
         'roleTerms': roleTerms,
         'matchedSkills': matchedSkills,
         'projectSkills': projectSkills,
+        'unmatchedSkills': unmatchedSkills,
+        'matchedRequired': pick('required', true),
+        'matchedPreferred': pick('preferred', true),
+        'matchedTags': pick('tag', true),
+        'unmatchedRequired': pick('required', false),
+        'unmatchedPreferred': pick('preferred', false),
+        'unmatchedTags': pick('tag', false),
       },
     });
   }

@@ -87,15 +87,19 @@ String? _adminRedirectForStudentRoute(String location) {
 
 /// go_router Provider — authState + role 기반 redirect
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final sessionUid = ref.watch(sessionUidProvider);
-  final currentUser = ref.watch(currentUserProvider);
+  // 여기서 currentUserProvider를 watch하면 프로필 저장(updatedAt 갱신)마다
+  // Provider가 다시 빌드돼 GoRouter가 새로 만들어지고, 화면이 initialLocation으로
+  // 돌아간다. 최신 값은 redirect 안에서 read하고, 재평가는 refreshListenable이 맡는다.
   final refresh = _RouterRefresh(ref);
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
     initialLocation: RoutePaths.dashboard,
     debugLogDiagnostics: true,
     refreshListenable: refresh,
     redirect: (context, state) {
+      final sessionUid = ref.read(sessionUidProvider);
+      final currentUser = ref.read(currentUserProvider);
       final isLoggedIn = sessionUid.value != null;
       final isLoggingIn = state.matchedLocation == RoutePaths.login;
       final isChangingPassword =

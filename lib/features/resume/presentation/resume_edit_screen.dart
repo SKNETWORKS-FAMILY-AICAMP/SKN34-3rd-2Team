@@ -10,11 +10,14 @@ import '../../../shared/models/resume_content.dart';
 import '../../../shared/models/resume_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../auth/providers/auth_providers.dart';
+import '../data/basic_info_prefill.dart';
 import '../ai_coach/presentation/ai_job_coach_panel.dart';
 import '../ai_coach/presentation/resume_mock_menu.dart';
 import '../services/resume_pdf_exporter.dart';
 import 'widgets/resume_edit_feedback_panel.dart';
 import 'widgets/resume_section_nav.dart';
+import 'widgets/tech_stack_editor.dart';
 
 enum _ResumeViewMode { edit, doc }
 
@@ -45,6 +48,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   ResumeContent _content = ResumeContent.empty();
   bool _initialized = false;
   bool _pendingInitialScroll = false;
+  bool _profilePrefillTried = false;
 
   late final ScrollController _scrollController;
   late final Map<String, GlobalKey> _sectionKeys;
@@ -105,6 +109,34 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
       isAdmin ||
       _viewMode == _ResumeViewMode.doc ||
       (!isAdmin && resume.isApproved);
+
+  /// 마이페이지 프로필로 기본정보의 빈 칸을 채운다. 학생 본인이 편집할 수 있는
+  /// 이력서에서만 동작하고, 이미 적힌 값은 건드리지 않는다.
+  ///
+  /// [announce]가 true면 채운 항목을 스낵바로 알린다(첫 로드). 프로필 스트림이
+  /// 아직 안 왔으면 조용히 건너뛰고, 기본정보 섹션의 버튼으로 다시 시도할 수 있다.
+  bool _prefillBasicInfoFromProfile(ResumeModel resume, {required bool announce}) {
+    if (ref.read(isAdminProvider) || resume.isApproved) return false;
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return false;
+    final result = prefillBasicInfoFromProfile(_content.basicInfo, user);
+    if (!result.changed) return false;
+    _content = _content.copyWith(basicInfo: result.info);
+    _dirty = true;
+    if (announce) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '마이페이지 정보로 ${result.filledLabels.join(', ')}을(를) 채웠습니다. 저장하면 반영됩니다.',
+            ),
+          ),
+        );
+      });
+    }
+    return true;
+  }
 
   void _markDirty() {
     final resume = _resume;
@@ -274,6 +306,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
           );
         }
         _initFromResume(resume);
+        // 첫 로드 때 프로필 스트림이 아직 안 왔으면 도착한 뒤 한 번만 자동으로 채운다.
+        if (!_profilePrefillTried && ref.watch(currentUserProvider).value != null) {
+          _profilePrefillTried = true;
+          _prefillBasicInfoFromProfile(resume, announce: true);
+        }
         _isAdmin = isAdmin;
         _resume = resume;
         final readOnly = _isReadOnly(isAdmin: isAdmin, resume: resume);
@@ -303,7 +340,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     onPick: (title, content) {
                       setState(() {
                         _title = title;
-                        _content = content;
+                        // 기본정보는 사용자가 적었거나 프로필에서 채워진 값을 지키고,
+                        // 목업은 빈 칸과 그 아래 섹션만 채운다.
+                        _content = content.copyWith(
+                          basicInfo: mergeBasicInfo(_content.basicInfo, content.basicInfo),
+                        );
                       });
                       _markDirty();
                     },
@@ -434,6 +475,24 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                       );
                                       _markDirty();
                                     },
+                                    onPrefill: readOnly
+                                        ? null
+                                        : () {
+                                            final changed = _prefillBasicInfoFromProfile(
+                                              resume,
+                                              announce: false,
+                                            );
+                                            setState(() {});
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  changed
+                                                      ? '마이페이지 정보로 빈 칸을 채웠습니다.'
+                                                      : '채울 빈 칸이 없거나 마이페이지에 정보가 없습니다.',
+                                                ),
+                                              ),
+                                            );
+                                          },
                                   ),
                                 ),
                                 const SizedBox(height: 24),
@@ -1009,11 +1068,15 @@ class _BasicInfoSection extends StatelessWidget {
     required this.info,
     required this.readOnly,
     required this.onChanged,
+    this.onPrefill,
   });
 
   final ResumeBasicInfo info;
   final bool readOnly;
   final ValueChanged<ResumeBasicInfo> onChanged;
+
+  /// 마이페이지 정보로 빈 칸을 채우는 동작. 읽기 전용이면 null.
+  final VoidCallback? onPrefill;
 
   @override
   Widget build(BuildContext context) {
@@ -1030,6 +1093,22 @@ class _BasicInfoSection extends StatelessWidget {
             value: info.name,
             onChanged: (v) => onChanged(info.copyWith(name: v)),
           ),
+        if (onPrefill != null) ...[
+          const SizedBox(height: 4),
+          TextButton.icon(
+            onPressed: onPrefill,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: const Icon(Icons.person_outline, size: 16),
+            label: const Text(
+              '마이페이지 정보로 빈 칸 채우기',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         Wrap(
           spacing: 24,
@@ -1411,40 +1490,16 @@ class _TechStackSection extends StatelessWidget {
   final bool readOnly;
   final ValueChanged<List<ResumeTechStackItem>> onChanged;
 
-  void _update(int i, ResumeTechStackItem item) {
-    final list = [...items];
-    list[i] = item;
-    onChanged(list);
-  }
-
   @override
   Widget build(BuildContext context) {
+    // 기술은 태그로 고르고 숙련도는 설명이 달린 단계로 정한다.
+    // 자유 입력 카드 방식은 표기가 제각각이라 공고 키워드 매칭에 잘 안 잡혔다.
     return _FlatSection(
       title: AppConstants.resumeSectionLabels['techStack']!,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ...items.asMap().entries.map((e) {
-            final i = e.key;
-            final item = e.value;
-            return _ItemCard(
-              index: i,
-              readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
-              child: Column(
-                children: [
-                  _Field(label: '기술명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
-                  _Field(label: '숙련도 (선택)', value: item.level, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(level: v))),
-                ],
-              ),
-            );
-          }),
-          if (!readOnly)
-            _AddButton(
-              label: '기술스택 추가',
-              onPressed: () => onChanged([...items, ResumeTechStackItem.empty()]),
-            ),
-        ],
+      child: TechStackEditor(
+        items: items,
+        readOnly: readOnly,
+        onChanged: onChanged,
       ),
     );
   }

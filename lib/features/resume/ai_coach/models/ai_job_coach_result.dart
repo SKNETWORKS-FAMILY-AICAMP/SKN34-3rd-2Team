@@ -42,6 +42,24 @@ class AiJobCoachResult {
   }
 }
 
+extension AiJobCoachResultCopy on AiJobCoachResult {
+  AiJobCoachResult copyWith({
+    List<JobRecommendation>? recommendations,
+    String? notice,
+  }) {
+    return AiJobCoachResult(
+      testMode: testMode,
+      notice: notice ?? this.notice,
+      recommendations: recommendations ?? this.recommendations,
+      selectedJob: selectedJob,
+      skillJudgements: skillJudgements,
+      resumeFeedback: resumeFeedback,
+      learningRecommendations: learningRecommendations,
+      analysisId: analysisId,
+    );
+  }
+}
+
 class JobRecommendation {
   const JobRecommendation({
     required this.jobId,
@@ -54,6 +72,29 @@ class JobRecommendation {
     required this.hardFilterStatus,
     required this.unknownConditions,
     required this.evidence,
+    this.passedConditions = const [],
+    this.roleTerms = const [],
+    this.matchedSkills = const [],
+    this.projectSkills = const [],
+    this.unmatchedSkills = const [],
+    this.scoreDetail,
+    this.bodyIsImage = false,
+    this.region = '',
+    this.employmentType,
+    this.careerType = '',
+    this.minCareerYears,
+    this.education = '',
+    this.requiredMajors = const [],
+    this.requiredCertifications = const [],
+    this.militaryRequired = false,
+    this.matchedRequired = const [],
+    this.matchedPreferred = const [],
+    this.matchedTags = const [],
+    this.unmatchedRequired = const [],
+    this.unmatchedPreferred = const [],
+    this.unmatchedTags = const [],
+    this.embeddingRank,
+    this.fusedScore,
   });
 
   final String jobId;
@@ -65,11 +106,118 @@ class JobRecommendation {
   final String grade;
   final String hardFilterStatus;
   final List<String> unknownConditions;
+
+  /// 직무 키워드·일치 기술을 합친 짧은 목록. 요약 표시와 예전 응답 호환용.
   final List<String> evidence;
+
+  /// 하드 필터를 통과한 조건 문구(예: '학력 조건 충족').
+  final List<String> passedConditions;
+
+  /// 공고 제목·본문에서 맞은 희망 직무 키워드.
+  final List<String> roleTerms;
+
+  /// 공고가 언급한 기술 중 이력서 기술스택과 겹친 것(공고 쪽 표기).
+  final List<String> matchedSkills;
+
+  /// 공고가 언급한 기술 중 프로젝트 경험에서 확인된 것.
+  final List<String> projectSkills;
+
+  /// 공고가 언급하지만 이력서 어디에도 근거가 없는 기술. 경험 없음 판단이 아니다.
+  final List<String> unmatchedSkills;
+
+  /// 점수 구성. 예전 응답에는 없을 수 있다.
+  final RecommendationScoreDetail? scoreDetail;
+
+  /// 공고 상세가 이미지뿐이라 기업이 고른 기술 태그로만 비교한 경우.
+  final bool bodyIsImage;
+
+  /// 공고에 적힌 조건. 카드가 희망 조건과 나란히 보여준다.
+  final String region;
+  final String? employmentType;
+  final String careerType;
+  final int? minCareerYears;
+  final String education;
+
+  /// 자격요건 구간에서 뽑은 전공·자격증·병역 요건.
+  final List<String> requiredMajors;
+  final List<String> requiredCertifications;
+  final bool militaryRequired;
+
+  /// 출처별 기술 근거. 필수·우대는 본문에서 뽑은 것, 태그는 기업이 등록 때 고른 것.
+  final List<String> matchedRequired;
+  final List<String> matchedPreferred;
+  final List<String> matchedTags;
+  final List<String> unmatchedRequired;
+  final List<String> unmatchedPreferred;
+  final List<String> unmatchedTags;
+
+  /// 신입/경력무관/경력 n년 이상 같은 표시용 문구.
+  String get careerLabel {
+    switch (careerType) {
+      case 'ENTRY':
+        return '신입';
+      case 'ANY':
+        return '경력무관';
+      case 'EXPERIENCED':
+        return minCareerYears == null ? '경력' : '경력 $minCareerYears년 이상';
+      default:
+        return '미기재';
+    }
+  }
+
+  /// cover_letter_rag 임베딩 검색에서 이 공고가 나온 순위. 검색에 안 잡히면 null.
+  final int? embeddingRank;
+
+  /// 키워드 순위와 임베딩 순위를 RRF로 합친 값. 재정렬 전에는 null.
+  final double? fusedScore;
+
+  JobRecommendation copyWith({
+    List<String>? evidence,
+    int? embeddingRank,
+    double? fusedScore,
+  }) {
+    return JobRecommendation(
+      jobId: jobId,
+      source: source,
+      sourceUrl: sourceUrl,
+      company: company,
+      title: title,
+      score: score,
+      grade: grade,
+      hardFilterStatus: hardFilterStatus,
+      unknownConditions: unknownConditions,
+      evidence: evidence ?? this.evidence,
+      passedConditions: passedConditions,
+      roleTerms: roleTerms,
+      matchedSkills: matchedSkills,
+      projectSkills: projectSkills,
+      unmatchedSkills: unmatchedSkills,
+      scoreDetail: scoreDetail,
+      bodyIsImage: bodyIsImage,
+      region: region,
+      employmentType: employmentType,
+      careerType: careerType,
+      minCareerYears: minCareerYears,
+      education: education,
+      requiredMajors: requiredMajors,
+      requiredCertifications: requiredCertifications,
+      militaryRequired: militaryRequired,
+      matchedRequired: matchedRequired,
+      matchedPreferred: matchedPreferred,
+      matchedTags: matchedTags,
+      unmatchedRequired: unmatchedRequired,
+      unmatchedPreferred: unmatchedPreferred,
+      unmatchedTags: unmatchedTags,
+      embeddingRank: embeddingRank ?? this.embeddingRank,
+      fusedScore: fusedScore ?? this.fusedScore,
+    );
+  }
 
   factory JobRecommendation.fromMap(Map<String, dynamic> map) {
     final hardFilter = _map(map['hardFilter']);
     final evidenceMap = _map(map['evidence']);
+    final detail = _map(map['scoreDetail']);
+    final matchedSkills = _stringList(evidenceMap['matchedSkills']);
     return JobRecommendation(
       jobId: map['jobId'] as String? ?? '',
       source: map['source'] as String? ?? '',
@@ -80,13 +228,65 @@ class JobRecommendation {
       grade: map['grade'] as String? ?? '낮음',
       hardFilterStatus: hardFilter['status'] as String? ?? '',
       unknownConditions: _stringList(hardFilter['unknown']),
+      passedConditions: _stringList(hardFilter['passed']),
       evidence: {
         ..._stringList(evidenceMap['roleTerms']),
-        ..._stringList(evidenceMap['matchedSkills']),
+        ...matchedSkills,
         // 예전 응답 형식(필수/우대를 따로 채점하던 때)도 읽는다.
         ..._stringList(evidenceMap['requiredSkills']),
         ..._stringList(evidenceMap['preferredSkills']),
       }.toList(),
+      roleTerms: _stringList(evidenceMap['roleTerms']),
+      matchedSkills: matchedSkills,
+      projectSkills: _stringList(evidenceMap['projectSkills']),
+      unmatchedSkills: _stringList(evidenceMap['unmatchedSkills']),
+      scoreDetail: detail.isEmpty ? null : RecommendationScoreDetail.fromMap(detail),
+      bodyIsImage: map['bodyIsImage'] as bool? ?? false,
+      region: map['region'] as String? ?? '',
+      employmentType: map['employmentType'] as String?,
+      careerType: map['careerType'] as String? ?? '',
+      minCareerYears: (map['minCareerYears'] as num?)?.toInt(),
+      education: map['education'] as String? ?? '',
+      requiredMajors: _stringList(map['requiredMajors']),
+      requiredCertifications: _stringList(map['requiredCertifications']),
+      militaryRequired: map['militaryRequired'] as bool? ?? false,
+      matchedRequired: _stringList(evidenceMap['matchedRequired']),
+      matchedPreferred: _stringList(evidenceMap['matchedPreferred']),
+      matchedTags: _stringList(evidenceMap['matchedTags']),
+      unmatchedRequired: _stringList(evidenceMap['unmatchedRequired']),
+      unmatchedPreferred: _stringList(evidenceMap['unmatchedPreferred']),
+      unmatchedTags: _stringList(evidenceMap['unmatchedTags']),
+      embeddingRank: (map['embeddingRank'] as num?)?.toInt(),
+      fusedScore: (map['fusedScore'] as num?)?.toDouble(),
+    );
+  }
+}
+
+/// 추천 점수 구성. 각 값은 0~1 비율이고, 가중치를 곱한 것이 점수 기여분이다.
+class RecommendationScoreDetail {
+  const RecommendationScoreDetail({
+    required this.role,
+    required this.skills,
+    required this.project,
+    required this.conditions,
+    required this.skillsTotal,
+  });
+
+  final double role;
+  final double skills;
+  final double project;
+  final double conditions;
+
+  /// 공고가 언급한 기술 수(필수·우대·태그 합산, 중복 제거).
+  final int skillsTotal;
+
+  factory RecommendationScoreDetail.fromMap(Map<String, dynamic> map) {
+    return RecommendationScoreDetail(
+      role: (map['role'] as num?)?.toDouble() ?? 0,
+      skills: (map['skills'] as num?)?.toDouble() ?? 0,
+      project: (map['project'] as num?)?.toDouble() ?? 0,
+      conditions: (map['conditions'] as num?)?.toDouble() ?? 0,
+      skillsTotal: (map['skillsTotal'] as num?)?.toInt() ?? 0,
     );
   }
 }

@@ -11,6 +11,11 @@ class CollectedJob {
     required this.requiredSkills,
     required this.preferredSkills,
     required this.techStack,
+    this.bodyIsImage = false,
+    this.requiredMajors = const [],
+    this.requiredMajorTerms = const [],
+    this.requiredCertifications = const [],
+    this.militaryRequired = false,
     required this.careerType,
     this.minCareerYears,
     required this.education,
@@ -31,6 +36,20 @@ class CollectedJob {
 
   /// 기업이 공고 등록 때 고른 기술 태그. 필수·우대 구분이 없다.
   final List<String> techStack;
+
+  /// 본문이 이미지뿐이라 요구역량을 텍스트로 확보하지 못한 공고.
+  /// 매칭은 기업이 고른 기술 태그로만 하며, 카드에 그 사실을 표시한다.
+  final bool bodyIsImage;
+
+  /// 자격요건 구간에서 뽑은 전공 요건. 표시명과, 이력서 전공에 부분 일치시킬 정규화 용어.
+  final List<String> requiredMajors;
+  final List<String> requiredMajorTerms;
+
+  /// 자격요건 구간에서 뽑은 자격증·어학 요건.
+  final List<String> requiredCertifications;
+
+  /// 병역필 또는 면제를 요구하는 공고.
+  final bool militaryRequired;
 
   /// 신입·경력 조건. `ENTRY` / `EXPERIENCED` / `ANY` / `UNKNOWN`.
   final String careerType;

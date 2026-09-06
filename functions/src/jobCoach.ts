@@ -36,6 +36,9 @@ interface ResumeProfile {
   preferredRegions: string[];
   preferredEmploymentTypes: string[];
   confirmedMissingSkills: Set<string>;
+  /** 학력사항의 전공과 자격사항 이름. 전공·자격증 요건 판정에 쓴다. */
+  majors: string[];
+  certifications: string[];
 }
 
 
@@ -133,7 +136,60 @@ function buildResumeProfile(
     preferredRegions: stringList(request.preferredRegions, []),
     preferredEmploymentTypes: stringList(request.preferredEmploymentTypes, []),
     confirmedMissingSkills: canonicalSet(stringList(request.confirmedMissingSkills, [])),
+    majors: education
+      .map((item) => item.major)
+      .filter((major): major is string => typeof major === "string" && Boolean(major.trim()))
+      .map((major) => major.trim()),
+    certifications: readMapList(content.certifications)
+      .map((item) => item.name)
+      .filter((name): name is string => typeof name === "string" && Boolean(name.trim()))
+      .map((name) => name.trim()),
   };
+}
+
+/** 공백·기호를 지우고 소문자로. qualifications.py / local_job_matcher.dart 와 같은 정규화. */
+function normalizeTerm(text: string): string {
+  return text.replace(/[\s\-_/·.()[\]]/g, "").toLowerCase();
+}
+
+/** 전공·자격증·병역. 맞으면 통과, 확인할 수 없으면 확인 필요. 탈락시키지 않는다. */
+function qualificationChecks(
+  job: CollectedJob,
+  resume: ResumeProfile,
+  passed: string[],
+  unknown: string[],
+): void {
+  const requiredMajors = job.requiredMajors ?? [];
+  const majorTerms = job.requiredMajorTerms ?? [];
+  if (requiredMajors.length > 0) {
+    const resumeMajors = resume.majors.map((m) => m.trim()).filter(Boolean);
+    if (resumeMajors.length === 0) {
+      unknown.push(`전공 확인 필요: ${requiredMajors.join(", ")}`);
+    } else {
+      const matched = resumeMajors.filter((m) =>
+        majorTerms.some((t) => t.length > 0 && normalizeTerm(m).includes(t)),
+      );
+      if (matched.length > 0) passed.push(`전공 요건 충족: ${matched[0]}`);
+      else {
+        unknown.push(`전공 요건 미확인: 공고 ${requiredMajors.join(", ")} / 이력서 ${resumeMajors.join(", ")}`);
+      }
+    }
+  }
+  const resumeCerts = resume.certifications.filter((c) => c.trim()).map(normalizeTerm);
+  for (const cert of job.requiredCertifications ?? []) {
+    const key = normalizeTerm(cert);
+    if (resumeCerts.some((c) => key.length > 0 && (c.includes(key) || key.includes(c)))) {
+      passed.push(`자격증 요건 충족: ${cert}`);
+    } else unknown.push(`자격증 확인 필요: ${cert}`);
+  }
+  if (job.militaryRequired) unknown.push("병역 조건 확인 필요 (병역필 또는 면제)");
+}
+
+const NATIONWIDE = "전국";
+
+/** 공고 지역이 "전국"을 포함하면 어느 희망 지역이든 통과시킨다. hard_filter.py / local_job_matcher.dart 와 같은 규칙. */
+function isNationwide(jobRegion: string): boolean {
+  return jobRegion.includes(NATIONWIDE);
 }
 
 function hardFilter(job: CollectedJob, resume: ResumeProfile): FilterResult {
@@ -143,6 +199,9 @@ function hardFilter(job: CollectedJob, resume: ResumeProfile): FilterResult {
 
   if (job.status !== "OPEN") failed.push(`공고 상태 ${job.status}`);
   else passed.push("공고 진행 중");
+
+  // 본문이 이미지뿐이면 텍스트로 확인한 요구사항이 없다. 탈락이 아니라 확인 필요다.
+  if (job.bodyIsImage) unknown.push("공고 상세가 이미지라 요구사항 미확인");
 
   if (job.careerType === "EXPERIENCED") {
     if (job.minCareerYears === null) unknown.push("경력 연수 미기재");
@@ -163,8 +222,13 @@ function hardFilter(job: CollectedJob, resume: ResumeProfile): FilterResult {
     else unknown.push("학력 조건 미기재");
   }
 
+  qualificationChecks(job, resume, passed, unknown);
+
   if (resume.preferredRegions.length === 0) {
     unknown.push("희망 근무지역 미입력");
+  } else if (isNationwide(job.region) || resume.preferredRegions.includes(NATIONWIDE)) {
+    // 공고가 전국 근무이거나 사용자가 전국을 골랐으면 지역은 따지지 않는다.
+    passed.push("전국 근무 가능 — 지역 조건 충족");
   } else if (resume.preferredRegions.some((region) => job.region.includes(region))) {
     passed.push("희망 근무지역 일치");
   } else failed.push(`희망지역 불일치: ${job.region}`);
@@ -189,6 +253,23 @@ function hardFilter(job: CollectedJob, resume: ResumeProfile): FilterResult {
  * 합치고 표기 변형은 하나로 센다. job_matching_bot/matching/ranking.py 의
  * declared_skills 와 같은 규칙이다.
  */
+/** 공고가 언급한 기술의 출처. 필수 > 우대 > 태그 순으로 앞선 곳을 쓴다. ranking.py / local_job_matcher.dart 와 같은 규칙. */
+function skillBuckets(job: CollectedJob): Map<string, string> {
+  const buckets = new Map<string, string>();
+  const sources: [string, string[]][] = [
+    ["required", job.requiredSkills],
+    ["preferred", job.preferredSkills],
+    ["tag", job.techStack],
+  ];
+  for (const [bucket, values] of sources) {
+    for (const value of values) {
+      const key = canonicalSkill(value);
+      if (!buckets.has(key)) buckets.set(key, bucket);
+    }
+  }
+  return buckets;
+}
+
 function declaredSkills(job: CollectedJob): [Map<string, string>, string[]] {
   const pool = new Map<string, string>();
   const sources: string[] = [];
@@ -236,6 +317,18 @@ function rankJobs(resume: ResumeProfile): Record<string, unknown>[] {
     const [skills, matchedSkills] = skillScore(resume.skills, pool);
     // 프로젝트 경험은 공고가 언급한 기술 어디에 닿아도 근거가 된다.
     const [project, projectSkills] = skillScore(resume.projectSkills, pool);
+    // 공고가 요구하지만 이력서 어디에도 근거가 없는 기술. 경험 없음 판단이 아니다.
+    const unmatchedSkills = [...pool.entries()]
+      .filter(([key]) => !resume.skills.has(key) && !resume.projectSkills.has(key))
+      .map(([, value]) => value)
+      .sort();
+    const buckets = skillBuckets(job);
+    const knownKeys = new Set([...resume.skills, ...resume.projectSkills]);
+    const pick = (bucket: string, matched: boolean): string[] =>
+      [...pool.entries()]
+        .filter(([key]) => buckets.get(key) === bucket && knownKeys.has(key) === matched)
+        .map(([, value]) => value)
+        .sort();
     const conditions = filter.status === "PASS" ? 1 : 0.5;
     const score = Math.round(
       (role * WEIGHTS.role +
@@ -250,6 +343,15 @@ function rankJobs(resume: ResumeProfile): Record<string, unknown>[] {
       sourceUrl: job.sourceUrl,
       company: job.company,
       title: job.title,
+      bodyIsImage: job.bodyIsImage ?? false,
+      region: job.region,
+      employmentType: job.employmentType,
+      careerType: job.careerType,
+      minCareerYears: job.minCareerYears,
+      education: job.education,
+      requiredMajors: job.requiredMajors ?? [],
+      requiredCertifications: job.requiredCertifications ?? [],
+      militaryRequired: job.militaryRequired ?? false,
       recommendationScore: score,
       grade: gradeOf(score),
       hardFilter: filter,
@@ -261,7 +363,18 @@ function rankJobs(resume: ResumeProfile): Record<string, unknown>[] {
         project,
         conditions,
       },
-      evidence: {roleTerms, matchedSkills, projectSkills},
+      evidence: {
+        roleTerms,
+        matchedSkills,
+        projectSkills,
+        unmatchedSkills,
+        matchedRequired: pick("required", true),
+        matchedPreferred: pick("preferred", true),
+        matchedTags: pick("tag", true),
+        unmatchedRequired: pick("required", false),
+        unmatchedPreferred: pick("preferred", false),
+        unmatchedTags: pick("tag", false),
+      },
     });
   }
   return ranked.sort(

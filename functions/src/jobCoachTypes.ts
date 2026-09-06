@@ -21,6 +21,13 @@ export interface CollectedJob {
   preferredSkills: string[];
   /** 기업이 공고 등록 때 고른 기술 태그. 필수·우대 구분이 없다. */
   techStack: string[];
+  /** 본문이 이미지뿐이라 요구역량을 텍스트로 확보하지 못한 공고. 예전 데이터에는 없다. */
+  bodyIsImage?: boolean;
+  /** 자격요건 구간에서 뽑은 전공·자격증·병역 요건. 예전 데이터에는 없다. */
+  requiredMajors?: string[];
+  requiredMajorTerms?: string[];
+  requiredCertifications?: string[];
+  militaryRequired?: boolean;
   careerType: CareerType;
   minCareerYears: number | null;
   /** "학력무관" / "대졸" 등. 확인할 수 없으면 "미기재". */

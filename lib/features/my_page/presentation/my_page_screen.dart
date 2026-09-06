@@ -13,6 +13,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../auth/presentation/widgets/password_change_panel.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../../shared/models/job_preferences.dart';
 
 /// 마이페이지 — 프로필 요약, 개인 정보, 비밀번호 변경
 class MyPageScreen extends ConsumerStatefulWidget {
@@ -173,6 +174,31 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
     controller.dispose();
   }
 
+  Future<void> _editJobPreferences(UserModel user) async {
+    final result = await showDialog<JobPreferences>(
+      context: context,
+      builder: (ctx) => _JobPreferencesDialog(initial: user.jobPreferences),
+    );
+    if (result == null) return;
+    try {
+      await ref.read(lmsRepositoryProvider).updateProfile(
+            uid: user.uid,
+            jobPreferences: result,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('저장되었습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('저장 실패: $e')),
+        );
+      }
+    }
+  }
+
   void _goBack(UserModel user) {
     if (context.canPop()) {
       context.pop();
@@ -217,6 +243,11 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
                       initial: user.socialLinks['blog'] ?? '',
                       onSave: (v) => _saveSocialLink(user, key: 'blog', value: v),
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  _JobPreferencesCard(
+                    preferences: user.jobPreferences,
+                    onEdit: () => _editJobPreferences(user),
                   ),
                   const SizedBox(height: 12),
                   MyPagePasswordSection(
@@ -554,6 +585,217 @@ class _LinkRow extends StatelessWidget {
           icon: const Icon(Icons.edit_outlined, size: 18),
           visualDensity: VisualDensity.compact,
           tooltip: '수정',
+        ),
+      ],
+    );
+  }
+}
+
+
+/// 취업 희망 조건 카드. 이력서 문서에는 찍히지 않고 맞춤 공고 추천에만 쓰인다.
+class _JobPreferencesCard extends StatelessWidget {
+  const _JobPreferencesCard({required this.preferences, required this.onEdit});
+
+  final JobPreferences preferences;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '취업 희망 조건',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '수정',
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '이력서에는 표시되지 않고 AI 코치의 맞춤 공고 추천에만 쓰입니다.',
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            _PreferenceRow(label: '희망 직무', values: preferences.targetRoles),
+            const SizedBox(height: 10),
+            _PreferenceRow(label: '희망 근무지역', values: preferences.regions),
+            const SizedBox(height: 10),
+            _PreferenceRow(label: '희망 고용형태', values: preferences.employmentTypes),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreferenceRow extends StatelessWidget {
+  const _PreferenceRow({required this.label, required this.values});
+
+  final String label;
+  final List<String> values;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        if (values.isEmpty)
+          const Text(
+            '미입력',
+            style: TextStyle(fontSize: 12, color: AppColors.textHint),
+          )
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final value in values)
+                Chip(
+                  label: Text(value),
+                  labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  backgroundColor: AppColors.primaryLight,
+                  side: BorderSide.none,
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// 직무·지역·고용형태를 태그로 고르는 편집 대화상자.
+/// 선택지는 공고 데이터의 표기와 맞춰 두어 하드 필터 문자열 비교에 걸리게 한다.
+class _JobPreferencesDialog extends StatefulWidget {
+  const _JobPreferencesDialog({required this.initial});
+
+  final JobPreferences initial;
+
+  @override
+  State<_JobPreferencesDialog> createState() => _JobPreferencesDialogState();
+}
+
+class _JobPreferencesDialogState extends State<_JobPreferencesDialog> {
+  late Set<String> _roles = widget.initial.targetRoles.toSet();
+  late Set<String> _regions = widget.initial.regions.toSet();
+  late Set<String> _employmentTypes = widget.initial.employmentTypes.toSet();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('취업 희망 조건'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ChoiceGroup(
+                label: '희망 직무',
+                options: JobPreferenceOptions.roles,
+                selected: _roles,
+                onChanged: (next) => setState(() => _roles = next),
+              ),
+              const SizedBox(height: 14),
+              _ChoiceGroup(
+                label: '희망 근무지역',
+                options: JobPreferenceOptions.regions,
+                selected: _regions,
+                onChanged: (next) => setState(() => _regions = next),
+              ),
+              const SizedBox(height: 14),
+              _ChoiceGroup(
+                label: '희망 고용형태',
+                options: JobPreferenceOptions.employmentTypes,
+                selected: _employmentTypes,
+                onChanged: (next) => setState(() => _employmentTypes = next),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '비워 두면 해당 조건으로 거르지 않습니다.',
+                style: TextStyle(fontSize: 11, color: AppColors.textHint),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            JobPreferences(
+              targetRoles: JobPreferenceOptions.roles.where(_roles.contains).toList(),
+              regions: JobPreferenceOptions.regions.where(_regions.contains).toList(),
+              employmentTypes:
+                  JobPreferenceOptions.employmentTypes.where(_employmentTypes.contains).toList(),
+            ),
+          ),
+          child: const Text('저장'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChoiceGroup extends StatelessWidget {
+  const _ChoiceGroup({
+    required this.label,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<String> options;
+  final Set<String> selected;
+  final ValueChanged<Set<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final option in options)
+              FilterChip(
+                label: Text(option),
+                selected: selected.contains(option),
+                showCheckmark: false,
+                onSelected: (on) {
+                  final next = {...selected};
+                  if (on) {
+                    next.add(option);
+                  } else {
+                    next.remove(option);
+                  }
+                  onChanged(next);
+                },
+              ),
+          ],
         ),
       ],
     );

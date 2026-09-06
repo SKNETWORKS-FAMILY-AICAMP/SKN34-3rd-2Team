@@ -83,6 +83,37 @@ void main() {
     });
   });
 
+  group('전국 근무 공고', () {
+    test('공고 지역에 전국이 있으면 어느 희망 지역이든 통과한다', () {
+      final job = _job(region: '대구 동구, 서울전체, 전국');
+      final seoul = LocalResumeProfile.fromContent(
+        _content(),
+        preferredRegions: const ['제주'],
+      );
+      final result = hardFilter(job, seoul);
+      expect(result.failed, isEmpty);
+      expect(result.passed, contains('전국 근무 가능 — 지역 조건 충족'));
+    });
+
+    test('사용자가 전국을 고르면 지역으로 거르지 않는다', () {
+      final job = _job(region: '부산 해운대구');
+      final anywhere = LocalResumeProfile.fromContent(
+        _content(),
+        preferredRegions: const ['전국'],
+      );
+      expect(hardFilter(job, anywhere).failed, isEmpty);
+    });
+
+    test('전국이 아니면 기존처럼 지역 불일치로 탈락한다', () {
+      final job = _job(region: '부산 해운대구');
+      final seoul = LocalResumeProfile.fromContent(
+        _content(),
+        preferredRegions: const ['서울'],
+      );
+      expect(hardFilter(job, seoul).status, 'FAIL');
+    });
+  });
+
   group('로컬 Ranking', () {
     test('표기 변형이 기술스택 태그와 맞는다', () {
       final job = _job(techStack: const ['SpringBoot', 'PostgreSQL', 'Kotlin']);
