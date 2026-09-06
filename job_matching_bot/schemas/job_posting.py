@@ -32,6 +32,15 @@ class Job:
     tech_stack: list[str] = field(default_factory=list)
     # 기업이 고른 분류 태그 중 기술이 아닌 것(직무·전문분야). 직무 점수의 근거가 된다.
     keywords: list[str] = field(default_factory=list)
+    # 본문이 이미지뿐이라 요구역량을 텍스트로 확보하지 못한 공고. 크롤러의
+    # needs_human_review에서 온다. 매칭은 기업이 고른 기술 태그로만 한다.
+    body_is_image: bool = False
+    # 자격요건 구간에서 뽑은 전공·자격증·병역 조건(ingestion/qualifications.py).
+    # majors는 표시명, major_terms는 이력서 전공에 부분 일치시킬 정규화 용어.
+    required_majors: list[str] = field(default_factory=list)
+    required_major_terms: list[str] = field(default_factory=list)
+    required_certifications: list[str] = field(default_factory=list)
+    military_required: bool = False
 
     def matching_text(self) -> str:
         return " ".join(

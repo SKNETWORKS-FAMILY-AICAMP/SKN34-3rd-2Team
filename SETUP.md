@@ -355,6 +355,44 @@ Firebase Console 또는 앱에서 관리자 로그인 후 `expireMileageNow` 호
 
 </details>
 
+<details>
+<summary><b>이력서 분석 — cover_letter_rag 서버 연결</b></summary>
+
+이력서 편집 화면의 **AI 코치 → 이력서 분석**은 기본적으로 앱 안의 규칙 기반 분석만 실행합니다.
+`cover_letter_rag` FastAPI 서버 주소를 넘기면 서버의 공고 검색(`/api/v1/jobs/search`)과
+첨삭(`/api/v1/reviews`) API를 이어 붙여, 이력서 원문 인용을 근거로 한 강점·보완점·확인 질문을 보여줍니다.
+
+### 1. 서버 실행
+
+`cover_letter_rag/README.md`대로 인덱싱 후 서버를 띄웁니다 (기본 포트 8001).
+
+### 2. 앱 실행 시 서버 주소 지정
+
+```powershell
+flutter run -d windows --dart-define=COVER_LETTER_RAG_URL=http://127.0.0.1:8001
+```
+
+- 값을 비우면 서버를 호출하지 않습니다.
+- 서버 호출에 실패하면 규칙 기반 결과로 대체하고 화면에 그 이유를 표시합니다.
+- 로그인 상태면 Firebase ID 토큰을 `Authorization: Bearer`로 함께 보냅니다. 서버 검증은 아직 계획 단계라 현재는 무시됩니다.
+- Chrome(web)에서 쓰려면 서버에 CORS 허용이 필요합니다. 현재 서버에는 CORS 설정이 없으므로 데스크톱/모바일에서 먼저 확인하세요.
+
+### 3. 수집 공고를 임베딩 인덱스에 올리기
+
+`python -m job_matching_bot`을 실행하면 수집 공고가 `job_matching_bot/artifacts/cover_letter_rag_jobs/`에
+서버 인덱서 형식(`*.json`)으로 함께 생성됩니다. 인덱서는 `cover_letter_rag` 폴더 **안의 절대 경로**만
+받으므로, 파일을 서버 데이터 폴더로 복사한 뒤 인덱싱합니다.
+
+```powershell
+Copy-Item job_matching_bot\artifacts\cover_letter_rag_jobs\*.json cover_letter_rag\data\jobs\
+cd cover_letter_rag
+python -m scripts.index_jobs
+```
+
+검색 결과의 `job_id`는 수집 공고의 `id`(예: `SARAMIN-54645823`)와 같아서 앱의 키워드 추천 결과와 조인할 수 있습니다.
+
+</details>
+
 ---
 
 ## 프로젝트 구조 (참고)

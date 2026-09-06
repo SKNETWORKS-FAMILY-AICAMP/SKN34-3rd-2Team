@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from job_matching_bot.schemas.job_posting import Job
@@ -25,6 +26,50 @@ def _education_passes(resume_level: str, required_level: str) -> bool | None:
     return EDUCATION_RANK[resume_level] >= EDUCATION_RANK[required_level]
 
 
+NATIONWIDE = "전국"
+
+
+def is_nationwide(job_region: str) -> bool:
+    """공고 지역이 '전국'을 포함하면 어느 희망 지역이든 통과시킨다.
+
+    local_job_matcher.dart / jobCoach.ts 의 같은 규칙과 맞춰야 한다.
+    """
+    return NATIONWIDE in job_region
+
+
+def normalize_term(text: str) -> str:
+    """공백·기호를 지우고 소문자로. qualifications.py 및 다른 매처와 같은 정규화."""
+    return re.sub(r"[\s\-_/·.()\[\]]", "", text).lower()
+
+
+def _qualification_checks(job: Job, resume: ResumeProfile, passed: list[str], unknown: list[str]) -> None:
+    """전공·자격증·병역. 맞으면 통과, 확인할 수 없으면 확인 필요. 탈락시키지 않는다."""
+    if job.required_majors:
+        resume_majors = [m.strip() for m in resume.majors if m.strip()]
+        if not resume_majors:
+            unknown.append(f"전공 확인 필요: {', '.join(job.required_majors)}")
+        else:
+            matched = [
+                m for m in resume_majors
+                if any(term and term in normalize_term(m) for term in job.required_major_terms)
+            ]
+            if matched:
+                passed.append(f"전공 요건 충족: {matched[0]}")
+            else:
+                unknown.append(
+                    f"전공 요건 미확인: 공고 {', '.join(job.required_majors)} / 이력서 {', '.join(resume_majors)}"
+                )
+    resume_certs = [normalize_term(c) for c in resume.certifications if c.strip()]
+    for cert in job.required_certifications:
+        key = normalize_term(cert)
+        if any(key and (key in c or c in key) for c in resume_certs):
+            passed.append(f"자격증 요건 충족: {cert}")
+        else:
+            unknown.append(f"자격증 확인 필요: {cert}")
+    if job.military_required:
+        unknown.append("병역 조건 확인 필요 (병역필 또는 면제)")
+
+
 def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
     failed: list[str] = []
     unknown: list[str] = []
@@ -34,6 +79,10 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
         failed.append(f"공고 상태 {job.status}")
     else:
         passed.append("공고 진행 중")
+
+    # 본문이 이미지뿐이면 텍스트로 확인한 요구사항이 없다. 탈락이 아니라 확인 필요다.
+    if job.body_is_image:
+        unknown.append("공고 상세가 이미지라 요구사항 미확인")
 
     if job.career_type == "EXPERIENCED":
         if job.min_career_years is None:
@@ -55,8 +104,13 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
     else:
         unknown.append("학력 조건 미기재")
 
+    _qualification_checks(job, resume, passed, unknown)
+
     if job.region == "미기재":
         unknown.append("근무지역 미기재")
+    elif is_nationwide(job.region) or NATIONWIDE in resume.preferred_regions:
+        # 공고가 전국 근무이거나 사용자가 전국을 골랐으면 지역은 따지지 않는다.
+        passed.append("전국 근무 가능 — 지역 조건 충족")
     elif any(region in job.region for region in resume.preferred_regions):
         passed.append("희망 근무지역 일치")
     else:

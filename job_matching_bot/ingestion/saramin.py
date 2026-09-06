@@ -231,6 +231,12 @@ def normalize_saramin(
         required, preferred, unknown = [], [], sectors
         skill_method = "job_sector_only"
 
+    # 자격요건 구간의 전공·자격증·병역. LLM 유무와 무관하게 규칙으로 뽑는다.
+    from job_matching_bot.ingestion.qualifications import extract_qualifications
+    from job_matching_bot.ingestion.requirement_sections import split_sections
+
+    qualifications = extract_qualifications(split_sections(description).required)
+
     raw_for_hash = json.dumps(record, ensure_ascii=False, sort_keys=True)
 
     return Job(
@@ -246,6 +252,11 @@ def normalize_saramin(
         preferred_skills=preferred,
         tech_stack=tech_stack,
         keywords=keywords,
+        body_is_image=bool(record.get("needs_human_review")),
+        required_majors=qualifications.majors,
+        required_major_terms=qualifications.major_terms,
+        required_certifications=qualifications.certifications,
+        military_required=qualifications.military_required,
         career_type=career_type,
         min_career_years=min_years,
         education=education,
@@ -272,6 +283,7 @@ def normalize_saramin(
             "tags": {"method": "detail_tags_block", "evidence": list(record.get("tags") or [])},
             # 본문이 이미지에만 있으면 요구역량을 텍스트로 확보하지 못한 상태다.
             "needs_human_review": bool(record.get("needs_human_review")),
+            "qualifications": {"method": "section_rules", "evidence": qualifications.evidence},
         },
     )
 

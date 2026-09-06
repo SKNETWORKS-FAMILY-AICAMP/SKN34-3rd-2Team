@@ -64,11 +64,19 @@ def ingest(
     raw_root: Path = DEFAULT_RAW_ROOT,
     as_of: datetime = AS_OF,
     observed_ids: set[str] | None = None,
+    extract: bool = False,
+    allow_llm: bool = True,
 ) -> CollectionReport:
     """원본을 보존하고 정규화한 뒤 저장소에 반영한다.
 
     `observed_ids`를 주면 목록에서 본 공고는 상세가 없어도 살아 있는 것으로
     본다(증분 수집). 이번에 받은 상세의 ID는 자동으로 포함된다.
+
+    `extract=True`면 사람인 본문에서 필수·우대 기술을 뽑는다. CLI는 기본으로 켜고,
+    테스트처럼 함수를 직접 부르는 곳은 명시해야 외부 API를 부르지 않는다.
+
+    `allow_llm=False`면 LLM을 부르지 않고 본문 제목(자격요건/우대사항) 구간의
+    사전 매칭만 쓴다. 비용이 없고 결과가 결정적이다.
     """
     if observed_ids is not None:
         observed_ids = set(observed_ids) | record_ids(records)
@@ -80,7 +88,21 @@ def ingest(
     for index, record in enumerate(records):
         source_job_id = extract_id(record) or f"unknown-{index}"
         try:
-            job = parser(record, as_of=as_of)
+            if extract and parser is saramin.normalize_saramin:
+                # 본문 제목(자격요건/우대사항) 구간의 사전 매칭, LLM 키가 있으면 LLM 추출.
+                # 이미지뿐인 공고는 본문이 짧아 대부분 UNKNOWN으로 남는다.
+                from job_matching_bot.coach.skill_source import extract_requirements
+
+                listing = record.get("list_item") or {}
+                requirements = extract_requirements(
+                    str(listing.get("title") or ""),
+                    str(record.get("description") or ""),
+                    cache_path=ARTIFACTS_DIR / "llm_cache.json",
+                    allow_llm=allow_llm,
+                )
+                job = parser(record, as_of=as_of, requirements=requirements)
+            else:
+                job = parser(record, as_of=as_of)
             jobs.append(job)
             status, error = raw_store.PARSE_OK, None
         except Exception as exc:
@@ -135,6 +157,16 @@ def main() -> int:
     parser.add_argument("--source", default="JOBKOREA_POC", choices=sorted(SOURCES))
     parser.add_argument("--store", type=Path, default=DEFAULT_STORE)
     parser.add_argument("--raw-root", type=Path, default=DEFAULT_RAW_ROOT)
+    parser.add_argument(
+        "--no-extract",
+        action="store_true",
+        help="본문에서 필수·우대 기술을 뽑지 않는다(구간 규칙·LLM 모두 끔)",
+    )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="LLM을 부르지 않고 본문 구간 규칙으로만 필수·우대 기술을 뽑는다(비용 없음)",
+    )
     parser.add_argument("--report-output", type=Path, default=DEFAULT_REPORT)
     parser.add_argument(
         "--observed",
@@ -163,6 +195,8 @@ def main() -> int:
         store_path=args.store,
         raw_root=args.raw_root,
         observed_ids=observed_ids,
+        extract=not args.no_extract,
+        allow_llm=not args.no_llm,
     )
 
     args.report_output.parent.mkdir(parents=True, exist_ok=True)

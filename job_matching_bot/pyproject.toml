@@ -7,5 +7,17 @@ version = "0.1.0"
 description = "AI 취업 코치 Phase 1 Vertical Slice POC — 채용공고 정규화, Hard Filter, Ranking, Skill Gap"
 # `int | None`(PEP 604), `list[str]` 등을 런타임에 사용하므로 3.10 이상이 필요하다.
 requires-python = ">=3.10"
-# 표준 라이브러리만 사용한다. 외부 의존성이 생기면 여기에 먼저 적는다.
-dependencies = []
+# 수집·정제(CLI)는 표준 라이브러리와 openai만으로 돈다.
+# 추천 API(`job_matching_bot/api`)는 아래를 쓴다. 버전 범위는 cover_letter_rag와
+# 같게 맞춘다 — 나중에 두 서버를 한 프로세스로 합칠 때 충돌하지 않게 하기 위해서다.
+dependencies = [
+  "fastapi>=0.116,<2",
+  "uvicorn[standard]>=0.34,<1",
+  "langchain>=1.1,<2",
+  "langchain-core>=1.1,<2",
+  "langchain-openai>=1.4.1,<2",
+  "langchain-chroma>=1.0,<2",
+  "chromadb>=1.0,<2",
+  "pydantic-settings>=2.7,<3",
+  "python-dotenv>=1.0,<2",
+]

@@ -433,12 +433,16 @@ class SkillSourceFallbackTest(unittest.TestCase):
     """LLM을 못 쓰는 상황에서도 수집이 멈추지 않아야 한다."""
 
     def test_falls_back_to_rules_when_llm_disabled(self):
-        from job_matching_bot.coach.skill_source import METHOD_RULE, extract_requirements
+        from job_matching_bot.coach.skill_source import METHOD_SECTION_RULES, extract_requirements
 
         result = extract_requirements("백엔드", BODY, allow_llm=False)
-        self.assertEqual(METHOD_RULE, result["method"])
+        # BODY에 [자격요건]/[우대사항] 제목이 있어 규칙 경로도 필수·우대를 가른다.
+        self.assertEqual(METHOD_SECTION_RULES, result["method"])
+        # 사전 매칭은 "PostgreSQL" 안의 "SQL"도 잡으므로 포함 여부만 본다.
+        self.assertIn("PostgreSQL", result["required_skills"])
+        self.assertIn("Docker", result["preferred_skills"])
+        # 제목 밖 문장에 있는 기술은 여전히 UNKNOWN이다.
         self.assertIn("Python", result["unknown_skills"])
-        self.assertEqual([], result["required_skills"])
         self.assertTrue(result["needs_review"])
 
     def test_llm_path_separates_required_and_preferred(self):
@@ -468,7 +472,10 @@ class SkillSourceFallbackTest(unittest.TestCase):
         result = extract_requirements(
             "백엔드", BODY, extractor=RequirementExtractor(model=model)
         )
-        self.assertEqual(METHOD_RULE, result["method"])
+        # 규칙 경로는 본문 제목 유무에 따라 두 방식 중 하나다. LLM 경로가 아니면 된다.
+        from job_matching_bot.coach.skill_source import METHOD_SECTION_RULES
+
+        self.assertIn(result["method"], (METHOD_RULE, METHOD_SECTION_RULES))
         self.assertIn("스키마 검증", result["llm_error"])
 
     def test_empty_body_does_not_call_the_model(self):

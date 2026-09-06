@@ -20,6 +20,9 @@ class ResumeProfile:
     education_level: str
     career_years: int
     confirmed_missing_skills: list[str] = field(default_factory=list)
+    # 이력서 학력사항의 전공과 자격사항 이름. 전공·자격증 요건 판정에 쓴다.
+    majors: list[str] = field(default_factory=list)
+    certifications: list[str] = field(default_factory=list)
 
 
 def sample_resume() -> ResumeProfile:

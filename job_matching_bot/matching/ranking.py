@@ -72,6 +72,21 @@ def declared_skills(job: Job) -> tuple[dict[str, str], list[str]]:
     return pool, sources
 
 
+BUCKET_OF_SOURCE = {"required_skills": "required", "preferred_skills": "preferred", "tech_stack": "tag"}
+
+
+def skill_buckets(job: Job) -> dict[str, str]:
+    """공고가 언급한 기술의 출처. 필수 > 우대 > 태그 순으로 앞선 곳을 쓴다.
+
+    local_job_matcher.dart / jobCoach.ts 의 skillBuckets 와 같은 규칙.
+    """
+    buckets: dict[str, str] = {}
+    for source in SKILL_SOURCES:
+        for value in getattr(job, source):
+            buckets.setdefault(canonical_skill(value), BUCKET_OF_SOURCE.get(source, "tag"))
+    return buckets
+
+
 def _role_score(resume: ResumeProfile, job: Job) -> tuple[float, list[str]]:
     terms: list[str] = []
     for role in resume.target_roles:
@@ -108,6 +123,18 @@ def rank_jobs(jobs: list[Job], resume: ResumeProfile) -> list[dict[str, Any]]:
         skill_score, skill_hits = _skill_score(resume_keys, pool)
         # 프로젝트 경험은 공고가 언급한 기술 어디에 닿아도 근거가 된다.
         project_score, project_hits = _skill_score(project_keys, pool)
+        # 공고가 요구하지만 이력서 어디에도 근거가 없는 기술. 경험 없음 판단이 아니다.
+        unmatched = sorted(
+            pool[key] for key in pool if key not in resume_keys and key not in project_keys
+        )
+        buckets = skill_buckets(job)
+        known_keys = resume_keys | project_keys
+
+        def pick(bucket: str, matched: bool) -> list[str]:
+            return sorted(
+                pool[key] for key in pool if buckets.get(key) == bucket and (key in known_keys) == matched
+            )
+
         condition_score = 1.0 if filter_result["status"] == "PASS" else 0.5
         final_score = round(
             100
@@ -124,6 +151,15 @@ def rank_jobs(jobs: list[Job], resume: ResumeProfile) -> list[dict[str, Any]]:
                 "job_id": job.job_id,
                 "company": job.company,
                 "title": job.title,
+                "body_is_image": job.body_is_image,
+                "region": job.region,
+                "employment_type": job.employment_type,
+                "career_type": job.career_type,
+                "min_career_years": job.min_career_years,
+                "education": job.education,
+                "required_majors": job.required_majors,
+                "required_certifications": job.required_certifications,
+                "military_required": job.military_required,
                 "source": job.source,
                 "source_url": job.source_url,
                 "recommendation_score": final_score,
@@ -141,6 +177,13 @@ def rank_jobs(jobs: list[Job], resume: ResumeProfile) -> list[dict[str, Any]]:
                     "role_terms": role_hits,
                     "matched_skills": skill_hits,
                     "matched_project_skills": project_hits,
+                    "unmatched_skills": unmatched,
+                    "matched_required": pick("required", True),
+                    "matched_preferred": pick("preferred", True),
+                    "matched_tags": pick("tag", True),
+                    "unmatched_required": pick("required", False),
+                    "unmatched_preferred": pick("preferred", False),
+                    "unmatched_tags": pick("tag", False),
                 },
             }
         )

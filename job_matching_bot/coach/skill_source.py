@@ -12,14 +12,62 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from job_matching_bot.ingestion.requirement_sections import RequirementSections, split_sections
 from job_matching_bot.ingestion.skill_extractor import extract_skills
 
 METHOD_LLM = "llm_extraction"
 METHOD_RULE = "keyword_extractor"
+# 본문 제목(자격요건/우대사항)으로 구간을 갈라 사전 매칭한 경로. 필수·우대를 구분한다.
+METHOD_SECTION_RULES = "section_rules"
+
+
+def _section_based(title: str, body: str, sections: RequirementSections) -> dict[str, Any]:
+    """본문 제목으로 구간을 나눈 뒤 구간별 사전 매칭. 근거 줄을 함께 남긴다."""
+
+    def first_lines(lines: list[str]) -> dict[str, str]:
+        found: dict[str, str] = {}
+        for line in lines:
+            for name in extract_skills(line):
+                found.setdefault(name, line.strip())
+        return found
+
+    required_lines = first_lines(sections.required)
+    preferred_lines = {
+        name: line for name, line in first_lines(sections.preferred).items() if name not in required_lines
+    }
+    covered = set(required_lines) | set(preferred_lines)
+    unknown = [name for name in extract_skills(f"{title} {body}") if name not in covered]
+    skills = [
+        *[
+            {"name": name, "requirement_type": "REQUIRED", "evidence": line, "category": "TOOL"}
+            for name, line in required_lines.items()
+        ],
+        *[
+            {"name": name, "requirement_type": "PREFERRED", "evidence": line, "category": "TOOL"}
+            for name, line in preferred_lines.items()
+        ],
+        *[
+            {"name": name, "requirement_type": "UNKNOWN", "evidence": "", "category": "TOOL"}
+            for name in unknown
+        ],
+    ]
+    return {
+        "required_skills": list(required_lines),
+        "preferred_skills": list(preferred_lines),
+        "unknown_skills": unknown,
+        "skills": skills,
+        "method": METHOD_SECTION_RULES,
+        "confidence": 1.0 if covered else (0.5 if unknown else 0.0),
+        # 사전 매칭이라 사전에 없는 기술은 놓친다. 사람이 확인할 여지는 남긴다.
+        "needs_review": bool(skills),
+    }
 
 
 def _rule_based(title: str, body: str) -> dict[str, Any]:
-    """사전 매칭. 필수/우대를 구분하지 못하므로 전부 UNKNOWN으로 둔다."""
+    """사전 매칭. 본문에 자격요건/우대사항 제목이 있으면 구간별로, 없으면 전부 UNKNOWN."""
+    sections = split_sections(body)
+    if sections.required or sections.preferred:
+        return _section_based(title, body, sections)
     names = extract_skills(f"{title} {body}")
     return {
         "required_skills": [],
