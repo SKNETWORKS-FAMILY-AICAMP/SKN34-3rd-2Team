@@ -5,10 +5,15 @@
 앱은 이력서 평문과 희망 조건을 보내고, 서버는 추천 목록과 근거 문장을 돌려준다.
 이력서는 저장하지 않는다. 임베딩해 검색에 쓰고 응답 후 버린다.
 
-CORS는 개발용이다. `functions/.env`의 `CORS_ALLOW_ORIGINS`에 출처를 적어야 켜진다.
-비어 있으면 아무 출처도 허용하지 않으므로 배포본은 그대로 두면 된다.
-Chrome에서 `flutter run -d chrome --web-port 5000`으로 띄운다면
-`CORS_ALLOW_ORIGINS = 'http://localhost:5000'` 을 넣는다.
+CORS는 개발용이다. `functions/.env`의 두 값으로 켠다. 둘 다 비어 있으면 아무 출처도
+허용하지 않으므로 배포본은 그대로 두면 된다.
+
+    CORS_ALLOW_ORIGINS       정확히 일치하는 출처 목록(쉼표 구분)
+    CORS_ALLOW_ORIGIN_REGEX  정규식. 개발 중에는 로컬호스트의 아무 포트나 허용한다
+
+`flutter run -d chrome`은 실행할 때마다 포트가 달라진다. 포트를 고정하지 않아도 되게
+`CORS_ALLOW_ORIGIN_REGEX = 'http://(localhost|127\.0\.0\.1)(:\d+)?'` 를 쓴다.
+로컬호스트만 매칭하므로 외부 사이트는 여전히 막힌다.
 """
 
 from __future__ import annotations
@@ -36,10 +41,12 @@ _origins = [
     for origin in os.environ.get("CORS_ALLOW_ORIGINS", "").split(",")
     if origin.strip()
 ]
-if _origins:
+_origin_regex = os.environ.get("CORS_ALLOW_ORIGIN_REGEX", "").strip() or None
+if _origins or _origin_regex:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_origins,
+        allow_origin_regex=_origin_regex,
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type", "Authorization"],
     )

@@ -445,10 +445,10 @@ python -m uvicorn job_matching_bot.api.main:app --host 127.0.0.1 --port 8000
 
 ```powershell
 flutter run -d windows                                  # 데스크톱: 그대로
-flutter run -d chrome --web-port 5000                   # 웹: 포트를 고정해야 CORS가 맞음
+flutter run -d chrome                                   # 웹: 포트가 매번 달라도 됩니다
 ```
 
-- Chrome은 `functions/.env`의 `CORS_ALLOW_ORIGINS=http://localhost:5000` 과 포트가 같아야 합니다.
+- Chrome에서 "Failed to fetch"가 나오면 서버가 꺼져 있거나 `functions/.env`에 `CORS_ALLOW_ORIGIN_REGEX=http://(localhost|127\.0\.0\.1)(:\d+)?` 가 없는 경우입니다. 이 값이 로컬호스트의 아무 포트나 허용하므로 `--web-port`를 고정하지 않아도 됩니다.
 - 다른 주소를 쓰려면 `--dart-define=JOB_RECOMMEND_API_URL=http://호스트:포트`. 빈 값이면 추천 버튼이 안내 오류를 냅니다.
 - 응답은 LLM 재정렬 때문에 평균 30초쯤 걸립니다. 화면의 진행 표시가 그동안 돕니다.
 - 지금은 내 컴퓨터에서만 됩니다. 팀원 환경·실제 폰은 서버를 클라우드에 올린 뒤에 됩니다.
