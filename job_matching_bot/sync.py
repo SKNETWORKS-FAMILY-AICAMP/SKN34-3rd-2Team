@@ -66,8 +66,10 @@ def validate(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[
 def load_store_jobs(store_path: Path) -> list:
     if not Path(store_path).exists():
         return []
-    payloads = json.loads(Path(store_path).read_text(encoding="utf-8"))
-    return [JobRecord.from_dict(p).job for p in payloads]
+    from job_matching_bot.ingestion.job_store import open_store
+
+    store = open_store(store_path).load()
+    return [record.job for record in store.all_records()]
 
 
 def main() -> int:

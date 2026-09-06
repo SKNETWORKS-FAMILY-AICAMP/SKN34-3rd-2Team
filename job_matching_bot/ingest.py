@@ -25,11 +25,12 @@ from job_matching_bot.config import AS_OF, ARTIFACTS_DIR, DEFAULT_INPUT, DEFAULT
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records, record_ids
 from job_matching_bot.ingestion import raw_store
 from job_matching_bot.ingestion import jobkorea, saramin
-from job_matching_bot.ingestion.job_store import JobStore
+from job_matching_bot.ingestion.job_store import open_store
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import CollectionReport
 
-DEFAULT_STORE = ARTIFACTS_DIR / "job_store.json"
+# SQLite. JSON은 전 카테고리 규모(활성 17만 건, 1GB)를 통째로 읽고 쓸 수 없다.
+DEFAULT_STORE = ARTIFACTS_DIR / "job_store.sqlite"
 DEFAULT_RAW_ROOT = ARTIFACTS_DIR / "job_raw"
 DEFAULT_REPORT = ARTIFACTS_DIR / "collection_report.json"
 
@@ -120,14 +121,14 @@ def ingest(
             fetched_at=as_of,
         )
 
-    store = JobStore(store_path).load()
+    store = open_store(store_path).load()
     report = store.upsert(jobs, source=source, as_of=as_of, observed_ids=observed_ids)
     store.save()
     return report
 
 
 def _print_report(report: CollectionReport, store_path: Path) -> None:
-    store = JobStore(store_path).load()
+    store = open_store(store_path).load()
     stats = store.stats()
     print(f"수집 소스: {report.source}  기준시각: {report.collected_at}")
     print(

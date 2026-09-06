@@ -24,7 +24,7 @@ from job_matching_bot.exporters.resume_mocks_dart import build_resume_mocks_modu
 from job_matching_bot.exporters.typescript import build_typescript_module
 from job_matching_bot.ingestion.collection import deduplicate, to_collection_record
 from job_matching_bot.ingestion.it_filter import classify_it_job, filter_it_jobs
-from job_matching_bot.ingestion.job_store import JobStore
+from job_matching_bot.ingestion.job_store import open_store
 from job_matching_bot.ingestion.jobkorea import normalize_jobkorea
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.matching.hard_filter import hard_filter
@@ -47,7 +47,7 @@ def load_store_jobs(store_path: Path | None) -> list[Job]:
     """
     if store_path is None or not Path(store_path).exists():
         return []
-    return JobStore(Path(store_path)).load().active_jobs()
+    return open_store(Path(store_path)).load().active_jobs()
 
 
 def collect_jobs(

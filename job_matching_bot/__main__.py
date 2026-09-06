@@ -59,7 +59,7 @@ def main() -> int:
         "--store",
         type=Path,
         default=DEFAULT_STORE,
-        help="수집 저장소(job_store.json). 있으면 진행 중 공고를 함께 내보낸다",
+        help="수집 저장소(job_store.sqlite). 있으면 진행 중 공고를 함께 내보낸다",
     )
     parser.add_argument(
         "--no-store", action="store_true", help="저장소를 읽지 않고 fixture만 쓴다"

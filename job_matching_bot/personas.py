@@ -16,7 +16,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from job_matching_bot.ingestion.job_store import JobStore
+from job_matching_bot.ingestion.job_store import open_store
 from job_matching_bot.ingest import DEFAULT_STORE
 from job_matching_bot.matching.hard_filter import hard_filter
 from job_matching_bot.matching.ranking import rank_jobs
@@ -25,8 +25,7 @@ from job_matching_bot.schemas.resume import ResumeProfile, mock_resumes
 
 
 def open_jobs(store_path: Path) -> list[Job]:
-    store = JobStore(store_path).load()
-    return [record.job for record in store.records.values() if record.status == "OPEN"]
+    return open_store(store_path).load().active_jobs()
 
 
 def describe(name: str, resume: ResumeProfile, jobs: list[Job], top: int) -> list[str]:

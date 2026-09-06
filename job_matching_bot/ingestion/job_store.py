@@ -150,12 +150,24 @@ def reconcile(
     return merged, report
 
 
-class JobStore:
-    """JSON 파일 한 개로 동작하는 저장소.
+def open_store(path: Path):
+    """경로 확장자로 저장소 구현을 고른다. `.sqlite`/`.db`면 SQLite, 아니면 JSON.
 
-    운영에서는 Firestore `jobs` 컬렉션이 이 자리를 대신한다. upsert 판정 로직은
-    `reconcile`에 있고 이 클래스는 읽고 쓰는 일만 하므로, 백엔드를 바꿔도
-    판정 규칙은 그대로 쓴다.
+    JSON은 전량을 메모리에 올렸다 통째로 쓰는 방식이라 수만 건까지만 맞다.
+    테스트와 작은 실험은 JSON을, 실제 수집은 SQLite를 쓴다.
+    """
+    from job_matching_bot.ingestion.sqlite_store import SqliteJobStore, is_sqlite_path
+
+    path = Path(path)
+    return SqliteJobStore(path) if is_sqlite_path(path) else JobStore(path)
+
+
+class JobStore:
+    """JSON 파일 한 개로 동작하는 저장소. 작은 규모와 테스트용.
+
+    수집 운영은 `sqlite_store.SqliteJobStore`가 맡는다(`open_store`가 경로로 고른다).
+    upsert 판정 로직은 `reconcile`에 있고 이 클래스는 읽고 쓰는 일만 하므로,
+    백엔드를 바꿔도 판정 규칙은 그대로 쓴다.
     """
 
     def __init__(self, path: Path):
@@ -204,6 +216,9 @@ class JobStore:
             for record in self.records.values()
             if record.status == STATUS_OPEN
         ]
+
+    def all_records(self) -> list[JobRecord]:
+        return list(self.records.values())
 
     def stats(self) -> dict[str, Any]:
         by_status: dict[str, int] = {}

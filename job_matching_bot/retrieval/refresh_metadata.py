@@ -24,7 +24,7 @@ from job_matching_bot.retrieval import dedup, documents as doc
 from job_matching_bot.retrieval.pinecone_index import client, ensure_index
 from job_matching_bot.schemas.job_record import JobRecord
 
-DEFAULT_STORE = ARTIFACTS_DIR / "job_store.json"
+DEFAULT_STORE = ARTIFACTS_DIR / "job_store.sqlite"
 PAUSE_EVERY = 200
 PAUSE_SECONDS = 0.5
 
@@ -41,7 +41,9 @@ def main() -> int:
     info = ensure_index()
     index = client().Index(info["name"])
 
-    jobs = [JobRecord.from_dict(p).job for p in json.loads(args.store.read_text(encoding="utf-8"))]
+    from job_matching_bot.ingestion.job_store import open_store
+
+    jobs = [record.job for record in open_store(args.store).load().all_records()]
     selected, _ = dedup.select(jobs)
     if args.limit:
         selected = selected[: args.limit]

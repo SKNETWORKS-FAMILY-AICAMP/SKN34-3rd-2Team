@@ -34,7 +34,7 @@ from job_matching_bot.retrieval.pinecone_index import (
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import JobRecord
 
-DEFAULT_STORE = ARTIFACTS_DIR / "job_store.json"
+DEFAULT_STORE = ARTIFACTS_DIR / "job_store.sqlite"
 
 # 한 번에 보내는 건수. 두 서비스의 한도가 서로 달라 따로 둔다.
 #   OpenAI  — 분당 토큰 한도(TPM). 문서가 평균 500자라 100건이면 약 2.5만 토큰
@@ -51,8 +51,9 @@ DELETE_BATCH = 500
 
 
 def load_jobs(store_path: Path) -> list[Job]:
-    payloads = json.loads(Path(store_path).read_text(encoding="utf-8"))
-    return [JobRecord.from_dict(p).job for p in payloads]
+    from job_matching_bot.ingestion.job_store import open_store
+
+    return [record.job for record in open_store(store_path).load().all_records()]
 
 
 def existing_hashes(index, ids: list[str]) -> dict[str, str]:
