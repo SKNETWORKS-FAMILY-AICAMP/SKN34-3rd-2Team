@@ -1,104 +1,72 @@
-# 잡코리아 POC 크롤러 (별도 폴더)
+# 채용공고 수집 크롤러
 
-`job_matching_bot/` 패키지와는 완전히 분리된 실험용 폴더다. 기존 `job_matching_bot` 코드는
-전혀 건드리지 않는다. 결과물만 이후 `job_matching_bot/fixtures/`에 새 파일로 옮겨 사용한다.
+채용 사이트에서 공고 목록과 상세 요강을 받아 JSONL로 남기는 폴더다. 여기서 나온
+원본을 `job_matching_bot/`이 정제·중복제거·임베딩해 벡터 인덱스에 적재한다.
+이 폴더는 수집까지만 책임지고, 그 뒤 단계는 건드리지 않는다.
 
-## 왜 별도 폴더인가
+## 수집 규칙
 
-`job_matching_bot/crawlers/skill_extractor.py`는 텍스트에서 기술 키워드를 뽑아내는
-"추출기"일 뿐, 실제로 잡코리아 사이트에 접속해서 페이지를 가져오는 "크롤러"는
-프로젝트에 아직 없었다. 이 폴더가 그 크롤러 POC다.
+크롤링은 상대 서버에 부담을 주는 행위다. 아래는 지키기로 정한 선이고, 편의를 위해
+느슨하게 바꾸지 않는다. 코드에도 같은 내용이 강제돼 있다.
 
-## 실행 전 확인한 제약 사항
+1. **robots.txt가 허용한 경로만 요청한다.** 목록과 상세, 두 경로뿐이다.
+   허용 목록(`ALLOWED_PATH_PREFIXES`)에 없는 경로는 코드가 요청 자체를 막는다.
+   로그인·검색·관리 페이지는 대상이 아니다.
 
-1. **robots.txt (jobkorea.co.kr, 2026-04-01 기준)** — `ClaudeBot` 등 AI 에이전트 그룹을 포함해
-   아래 두 경로만 명시적으로 허용한다.
-   - `Allow: /recruit/joblist` (공고 목록)
-   - `Allow: /Recruit/GI_Read` (공고 상세)
-   이 스크립트는 이 두 경로만 요청하도록 코드로 강제한다(`ALLOWED_PATH_PREFIXES`).
-   그 외 경로(`/Search/`, `/login/`, `/RecrtMng/` 등)는 절대 요청하지 않는다.
+2. **요청 간격을 둔다.** 상세를 열 때마다 3~5초 쉰다. 목록 페이지 사이에도 대기를 둔다.
+   한 번에 몰아서 받지 않고, 1,000건 단위로 끊어 실행한다.
 
-2. **서버 측 봇 차단(WAF/캡차)** — 실제로 확인해보니, robots.txt 허용 여부와 별개로
-   일반 HTTP 요청(브라우저가 아닌 요청)에는 목록·상세 페이지 모두 "보안정책에 의하여
-   이용이 일시적으로 중지되었습니다" 캡차 차단 페이지가 떴다. 그래서 `requests` 기반이
-   아니라 **실제 Chromium 브라우저를 띄우는 Playwright**로 구현했다.
+3. **차단 신호가 오면 즉시 멈춘다.** 429 응답이나 차단 안내 문구
+   (`BLOCK_PAGE_MARKERS`)가 감지되면 스크립트가 그 자리에서 종료된다.
+   재시도로 밀어붙이거나 우회하지 않는다.
 
-3. **캡차는 우회하지 않는다.** 차단 페이지 문구(`BLOCK_PAGE_MARKERS`)가 감지되면
-   스크립트는 즉시 멈춘다. 자동으로 풀거나 우회하지 않고, 화면에 뜬 브라우저 창을
-   사람이 직접 보고 판단하도록 한다.
+4. **신원을 숨기지 않는다.** User-Agent는 하나로 고정한다. 무작위로 바꾸지 않고,
+   프록시나 IP 로테이션도 쓰지 않는다. 차단을 피하려고 정체를 감추는 기법은 쓰지 않는다.
 
-4. **반드시 로컬 PC에서 실행할 것.** 클라우드/데이터센터 IP로는 이미 접속 시점부터
-   차단 페이지가 뜨는 것을 확인했다. 이 스크립트는 사용자 PC의 Playwright로 실행해야
-   정상적인 페이지를 받을 가능성이 있다.
+5. **공개된 것만 받는다.** 로그인해야 보이는 정보, 지원자 정보, 개인정보는 대상이 아니다.
+   받는 것은 기업이 공개한 채용공고 본문과 조건뿐이다.
 
-5. **요청 간격을 둔다.** 상세 페이지를 열 때마다 3~8초 랜덤 대기를 넣는다
-   (`_human_delay`). 한 번 실행에 수집하는 공고 수도 `--limit` 기본값 10건으로
-   POC 규모로 제한했다.
+6. **캡차는 풀지 않는다.** 캡차가 뜨면 사람이 보고 판단한다. 자동으로 통과시키지 않는다.
 
-## 알려진 한계 (실제 DOM 미검증)
+## 폴더 구성
 
-이 세션에서는 잡코리아 페이지가 계속 차단 응답만 반환해서, **실제 렌더링된 HTML
-구조를 눈으로 확인하지 못한 채로 작성했다.** 그래서:
+| 파일 | 역할 |
+|---|---|
+| `saramin_http.py` | HTTP 세션. UA 고정, 대기, 차단 감지가 여기 있다 |
+| `crawl_saramin.py` | 목록 수집. 카테고리·정렬·페이지 크기를 인자로 받는다 |
+| `crawl_saramin_detail.py` | 상세 요강 수집. 목록에서 얻은 링크를 순회한다 |
+| `build_detail_queue.py` | 상세 수집 순서를 정한다. 인기 배지 → 목록 순위 → 마감일 순 |
+| `crawl_jobkorea.py` | 다른 사이트를 대상으로 한 초기 POC. 차단으로 중단했고 지금은 쓰지 않는다 |
+| `output/` | 수집 결과 JSONL. 저장소에 올리지 않는다 |
 
-- `json_ld` (schema.org `JobPosting`) 추출은 `<script type="application/ld+json">`을
-  그대로 파싱하는 표준 방식이라 비교적 안정적이다. `title`, `description`,
-  `datePosted`, `validThrough`, `employmentType`, `experienceRequirements`,
-  `educationRequirements`, `hiringOrganization.name`, `jobLocation.address` 등
-  대부분의 필드가 여기서 나온다.
-- `list_item.conditions`(경력/학력/지역/고용형태 조건 chip), `list_item.company`,
-  `query_data.CORP_INFO.info.companyTypeName`(기업형태)은 이 스크립트가 채우지 않고
-  빈 값으로 둔다. 실제 DOM class명을 모르기 때문이다.
-  다행히 `job_matching_bot.matching.pipeline.normalize_jobkorea()`는 conditions가
-  비어 있으면 `json_ld` 값으로 자동 대체(fallback)하도록 이미 설계되어 있어서,
-  정규화 자체는 깨지지 않는다. 다만 `company_type`은 "미기재"로 남는다.
-- `description_blocks`는 몇 가지 후보 selector(`CANDIDATE_DESCRIPTION_SELECTORS`)를
-  순서대로 시도한다. 실제 페이지를 열어보고 정확한 selector로 바꿔야 `required_skills`
-  키워드 추출 정확도가 fixture 데이터 수준으로 올라온다.
-
-**즉, 이 스크립트를 한 번 실행해서 나온 JSON을 열어보고, 위 필드들이 비어 있거나
-이상하면 selector를 실제 DOM에 맞게 고쳐야 완성된다.** 브라우저 창이 뜬 채로
-실행되므로(`--headless` 안 주면 기본이 창 띄우기), 실행 중 개발자 도구(F12)로
-실제 class명을 확인해서 `CANDIDATE_DESCRIPTION_SELECTORS`와 conditions 추출 부분에
-반영하면 된다.
-
-## 설치 및 실행
+## 실행
 
 ```powershell
 cd crawler_poc
 pip install -r requirements.txt
-playwright install chromium
 
-python crawl_jobkorea.py --limit 5
+# 전체 카테고리를 지원순으로 수집
+python crawl_saramin.py --all-categories --sort AD --page-count 100
+
+# 상세 수집 순서를 정하고
+python build_detail_queue.py
+
+# 상세 요강을 받는다. 1,000건씩 끊어 돌린다
+python crawl_saramin_detail.py --limit 1000
 ```
 
-기본 목록 URL은 `dutyStcd=1`(백엔드 개발 직무 코드 예시)로 되어 있다. 실제 잡코리아
-직무 코드 체계에 맞게 `--list-url`로 바꿔서 실행한다.
+목록만으로는 자격요건을 알 수 없어 상세 요강이 반드시 필요하다. 상세가 이미지로만
+되어 있는 공고는 텍스트를 뽑을 수 없으므로 `body_is_image`로 표시해 두고, 매칭에서는
+기업이 고른 기술 태그로만 판단한다.
 
-```powershell
-python crawl_jobkorea.py --list-url "https://www.jobkorea.co.kr/recruit/joblist?menucode=duty&dutyStcd=1" --limit 10
+## 수집 이후
+
+원본 JSONL은 `job_matching_bot/sync.py`가 받아서 처리한다.
+
+```
+원본 JSONL → 유효성 검사 → 중복 제거 → 최신 레코드 선택 → 필드 정규화
+→ 본문 정제 → 상태·품질 판정 → 변경 여부 확인 → 임베딩 → 벡터 인덱스 적재
 ```
 
-결과는 기본적으로 `crawler_poc/output/jobkorea_raw.json`에 저장된다. 이 파일은
-`job_matching_bot/fixtures/jobkorea_detail_first_page.json`과 동일한 레코드 구조이므로,
-검증 후 `job_matching_bot/fixtures/` 아래에 새 이름(예: `jobkorea_poc_batch2.json`)으로
-복사해서 기존 파이프라인에 바로 넣어볼 수 있다.
-
-```python
-from job_matching_bot.matching.pipeline import normalize_jobkorea
-import json
-
-records = json.loads(open("job_matching_bot/fixtures/jobkorea_poc_batch2.json", encoding="utf-8").read())
-jobs = [normalize_jobkorea(r) for r in records]
-```
-
-## 다음에 할 일
-
-1. 브라우저 창을 띄운 채로 한 번 실행해서 실제 목록/상세 페이지가 정상적으로
-   렌더링되는지 눈으로 확인한다 (차단 문구가 뜨면 즉시 멈추고 사람이 판단).
-2. F12 개발자 도구로 조건 chip, 회사명, 기업형태가 있는 실제 selector를 확인하고
-   `crawl_jobkorea.py`의 해당 부분을 채운다.
-3. `output/jobkorea_raw.json`을 `job_matching_bot/fixtures/`로 옮기고
-   `normalize_jobkorea()`로 정상 정규화되는지 확인한다.
-4. 운영 전환 시에는 `job_matching_bot/ai_job_coach_pipeline.md` 10.3절의 수집 운영
-   규칙(재시도/백오프, `source_job_id` 기준 upsert, 상태 전이 기록 등)을 추가로
-   반영한다.
+`content_hash`가 같으면 다시 임베딩하지 않는다. 같은 공고를 여러 번 받아도
+임베딩 비용은 처음 한 번만 든다.
