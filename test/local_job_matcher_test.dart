@@ -148,6 +148,17 @@ void main() {
       expect(sources, ['required_skills', 'tech_stack']);
     });
 
+    test('통과한 공고가 많아도 10건까지만, 같은 점수는 제목순', () {
+      final jobs = [
+        for (var i = 0; i < 15; i++)
+          _job(jobId: 'j$i', title: '공고 ${(i * 7) % 15}', techStack: const ['Python']),
+      ];
+      final ranked = rankJobs(jobs, LocalResumeProfile.fromContent(_content(techStack: const ['Python'])));
+      expect(ranked, hasLength(maxRecommendations));
+      final titles = ranked.map((r) => r['title'] as String).toList();
+      expect(titles, [...titles]..sort());
+    });
+
     test('경력 미달 공고는 랭킹에서 빠진다', () {
       final senior = _job(jobId: 'senior', careerType: 'EXPERIENCED', minCareerYears: 5);
       final entry = _job(jobId: 'entry');

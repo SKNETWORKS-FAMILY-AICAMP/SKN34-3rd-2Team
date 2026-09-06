@@ -310,6 +310,8 @@ function roleScore(resume: ResumeProfile, job: CollectedJob): [number, string[]]
   return [Math.min(1, hits.length / ROLE_HITS_FOR_FULL_SCORE), hits];
 }
 
+const MAX_RECOMMENDATIONS = 10;
+
 function rankJobs(resume: ResumeProfile): Record<string, unknown>[] {
   const ranked: Record<string, unknown>[] = [];
   for (const job of COLLECTED_JOBS) {
@@ -382,10 +384,14 @@ function rankJobs(resume: ResumeProfile): Record<string, unknown>[] {
       },
     });
   }
-  return ranked.sort(
-    (left, right) =>
-      (right.recommendationScore as number) - (left.recommendationScore as number),
-  );
+  // 점수가 같으면 제목순. local_job_matcher.dart 와 같은 규칙, 같은 상한(10).
+  return ranked
+    .sort((left, right) => {
+      const byScore = (right.recommendationScore as number) - (left.recommendationScore as number);
+      if (byScore !== 0) return byScore;
+      return (left.title as string).localeCompare(right.title as string);
+    })
+    .slice(0, MAX_RECOMMENDATIONS);
 }
 
 function analyzeSkills(job: CollectedJob, resume: ResumeProfile): Record<string, unknown> {

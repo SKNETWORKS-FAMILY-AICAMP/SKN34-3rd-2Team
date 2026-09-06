@@ -36,6 +36,10 @@ const _skillPoolFloor = 4;
 const _gradeHigh = 70;
 const _gradeMedium = 40;
 
+/// 한 번에 보여 주는 추천 수. 통과한 공고를 전부 내보내면 수백 장이 되어 읽을 수 없다.
+/// 추천 서버의 top_k 기본값과 같다.
+const maxRecommendations = 10;
+
 /// hard_filter.py 의 EDUCATION_RANK
 const _educationRank = <String, int>{
   '학력무관': 0,
@@ -487,10 +491,13 @@ List<Map<String, dynamic>> rankJobs(List<CollectedJob> jobs, LocalResumeProfile 
       },
     });
   }
-  ranked.sort(
-    (a, b) => (b['recommendationScore'] as double).compareTo(a['recommendationScore'] as double),
-  );
-  return ranked;
+  // 점수가 같으면 제목순으로 고정해, 같은 이력서에 같은 순서가 나오게 한다.
+  ranked.sort((a, b) {
+    final byScore = (b['recommendationScore'] as double).compareTo(a['recommendationScore'] as double);
+    if (byScore != 0) return byScore;
+    return (a['title'] as String).compareTo(b['title'] as String);
+  });
+  return ranked.take(maxRecommendations).toList();
 }
 
 // ── Skill Gap (jobCoach.ts analyzeSkills 와 같은 규칙) ───────────────────
