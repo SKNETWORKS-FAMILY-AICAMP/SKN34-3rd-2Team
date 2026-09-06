@@ -70,7 +70,7 @@ class JobPreferences {
 
 /// 선택지. 공고 데이터에 실제로 나오는 표기와 맞춰야 필터가 걸린다.
 abstract final class JobPreferenceOptions {
-  /// local_job_matcher.dart / ranking.py / jobCoach.ts 의 ROLE_TERMS 키와 같아야 한다.
+  /// 추천 서버(job_matching_bot/matching/ranking.py)의 ROLE_TERMS 키와 같아야 한다.
   static const roles = <String>[
     '백엔드 개발자',
     '프론트엔드 개발자',

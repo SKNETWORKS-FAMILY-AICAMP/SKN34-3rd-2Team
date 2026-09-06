@@ -6,17 +6,17 @@ import 'package:http/http.dart' as http;
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../models/ai_job_coach_result.dart';
-import 'local_job_matcher.dart';
+import 'resume_profile.dart';
 import 'resume_text_builder.dart';
 
 /// 채용공고 추천 API(`job_matching_bot`, FastAPI) 접속 설정.
 ///
 /// 기본값은 내 컴퓨터에서 띄운 서버(`127.0.0.1:8000`)다. 다른 주소는 빌드 시
 /// `--dart-define=JOB_RECOMMEND_API_URL=http://...` 로 넣는다. 빈 문자열을 넣으면
-/// 서버를 부르지 않고 앱 안의 규칙 기반 추천만 쓴다.
+/// 추천 버튼이 안내 오류를 낸다.
 ///
-/// 서버가 없거나 응답하지 못하면 앱은 규칙 기반 추천으로 대신하고 그 이유를
-/// 화면에 남긴다(`AiJobCoachRepository`).
+/// 서버가 없거나 응답하지 못하면 추천하지 않는다. 이유는 예외 메시지로 화면에
+/// 그대로 보인다(`AiJobCoachRepository`).
 abstract final class JobRecommendApiConfig {
   static const baseUrl = String.fromEnvironment(
     'JOB_RECOMMEND_API_URL',
@@ -72,14 +72,14 @@ class JobRecommendRequest {
   final List<String> certifications;
   final int topK;
 
-  /// 이력서와 프로필의 희망 조건으로 만든다. 학력·연차·전공·자격증은 앱 안의
-  /// 규칙 기반 추천(`LocalResumeProfile`)과 같은 규칙으로 뽑아 두 경로가 어긋나지 않게 한다.
+  /// 이력서와 프로필의 희망 조건으로 만든다. 학력·연차·전공·자격증은
+  /// `RecommendResumeProfile`이 이력서에서 뽑는다.
   factory JobRecommendRequest.fromResume(
     ResumeContent content, {
     JobPreferences preferences = const JobPreferences(),
     int topK = JobRecommendApiConfig.topK,
   }) {
-    final profile = LocalResumeProfile.fromContent(content);
+    final profile = RecommendResumeProfile.fromContent(content);
     return JobRecommendRequest(
       resumeText: buildResumeText(content),
       preferredRegions: preferences.regions,

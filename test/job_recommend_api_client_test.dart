@@ -160,44 +160,39 @@ void main() {
   group('저장소', () {
     test('서버 응답을 그대로 추천 결과로 쓴다', () async {
       final repository = AiJobCoachRepository(
-        null,
         apiClient: JobRecommendApiClient(
           baseUrl: 'http://127.0.0.1:8000',
           client: MockClient((_) async => _json(_serverResponse())),
         ),
       );
-      final result = await repository.analyzeAndMatch(
-        cohortId: 'local-fixture',
-        resumeId: 'r1',
-        draftContent: _resume(),
-        confirmedMissingSkills: const {},
-      );
+      final result = await repository.analyzeAndMatch(draftContent: _resume());
       expect(result.fromServer, isTrue);
       expect(result.testMode, isFalse);
       expect(result.recommendations.single.title, '백엔드 개발자');
       expect(result.searchQuery, isNotEmpty);
     });
 
-    test('서버에 닿지 못하면 앱 안의 규칙 기반 추천으로 대신하고 이유를 남긴다', () async {
+    test('서버에 닿지 못하면 추천하지 않고 연결 오류를 그대로 올린다', () async {
       final repository = AiJobCoachRepository(
-        null,
         apiClient: JobRecommendApiClient(
           baseUrl: 'http://127.0.0.1:1',
           client: MockClient((_) async => throw http.ClientException('Connection refused')),
         ),
       );
-      final result = await repository.analyzeAndMatch(
-        cohortId: 'local-fixture',
-        resumeId: 'r1',
-        draftContent: _resume(),
-        confirmedMissingSkills: const {},
+      await expectLater(
+        repository.analyzeAndMatch(draftContent: _resume()),
+        throwsA(
+          isA<JobRecommendApiException>().having((e) => e.isConnectionError, 'isConnectionError', isTrue),
+        ),
       );
-      expect(result.fromServer, isFalse);
-      expect(result.notice, contains('규칙 기반 추천'));
-      expect(result.notice, contains('Connection refused'));
-      for (final item in result.recommendations) {
-        expect(item.isFromServer, isFalse);
-      }
+    });
+
+    test('서버 주소가 비어 있으면 안내 오류를 낸다', () async {
+      final repository = AiJobCoachRepository(apiClient: null);
+      await expectLater(
+        repository.analyzeAndMatch(draftContent: _resume()),
+        throwsA(isA<JobRecommendApiException>().having((e) => e.message, 'message', contains('JOB_RECOMMEND_API_URL'))),
+      );
     });
   });
 }

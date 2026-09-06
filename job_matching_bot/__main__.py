@@ -17,7 +17,6 @@ from job_matching_bot.config import (
     DEFAULT_RAG_JOBS_OUTPUT,
     DEFAULT_REPORT_OUTPUT,
     DEFAULT_RESUME_MOCKS_DART_OUTPUT,
-    DEFAULT_TYPESCRIPT_OUTPUT,
 )
 from job_matching_bot.ingest import DEFAULT_STORE
 from job_matching_bot.pipeline import run_pipeline
@@ -31,12 +30,6 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path, default=DEFAULT_JSON_OUTPUT)
     parser.add_argument("--report-output", type=Path, default=DEFAULT_REPORT_OUTPUT)
     parser.add_argument("--collection-output", type=Path, default=DEFAULT_COLLECTION_OUTPUT)
-    parser.add_argument(
-        "--typescript-output",
-        type=Path,
-        default=DEFAULT_TYPESCRIPT_OUTPUT,
-        help="Functions가 import하는 공고 데이터 모듈 경로",
-    )
     parser.add_argument(
         "--dart-output",
         type=Path,
@@ -71,7 +64,6 @@ def main() -> int:
         args.json_output,
         args.report_output,
         collection_output=args.collection_output,
-        typescript_output=args.typescript_output,
         dart_output=args.dart_output,
         resume_mocks_output=args.resume_mocks_output,
         store_path=None if args.no_store else args.store,
@@ -90,7 +82,6 @@ def main() -> int:
     print(f"JSON: {args.json_output.resolve()}")
     print(f"REPORT: {args.report_output.resolve()}")
     print(f"COLLECTED JOBS: {args.collection_output.resolve()}")
-    print(f"FUNCTIONS DATA: {args.typescript_output.resolve()}")
     print(f"FLUTTER DATA:  {args.dart_output.resolve()}")
     print(f"RESUME MOCKS:  {args.resume_mocks_output.resolve()}")
     print(f"RAG JOBS:      {args.rag_jobs_output.resolve()}")

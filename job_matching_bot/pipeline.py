@@ -21,7 +21,6 @@ from job_matching_bot.config import AS_OF, DEFAULT_RESUME_MOCKS_INPUT
 from job_matching_bot.exporters.cover_letter_rag_jobs import write_rag_jobs
 from job_matching_bot.exporters.dart import build_dart_module
 from job_matching_bot.exporters.resume_mocks_dart import build_resume_mocks_module
-from job_matching_bot.exporters.typescript import build_typescript_module
 from job_matching_bot.ingestion.collection import deduplicate, to_collection_record
 from job_matching_bot.ingestion.it_filter import classify_it_job, filter_it_jobs
 from job_matching_bot.ingestion.job_store import open_store
@@ -146,7 +145,6 @@ def run_pipeline(
     report_output: Path,
     as_of: datetime = AS_OF,
     collection_output: Path | None = None,
-    typescript_output: Path | None = None,
     dart_output: Path | None = None,
     resume_mocks_output: Path | None = None,
     store_path: Path | None = None,
@@ -154,9 +152,9 @@ def run_pipeline(
 ) -> dict[str, Any]:
     """입력 파일을 읽어 분석하고 산출물을 저장한다.
 
-    `typescript_output`, `dart_output`을 주면 Functions와 Flutter가 읽는 공고
-    데이터 모듈도 함께 생성한다. 공고 데이터의 단일 출처를 이 파이프라인으로
-    유지하기 위한 것이다.
+    `dart_output`을 주면 Flutter의 공고 검색·기술 카탈로그가 읽는 공고 데이터
+    모듈도 함께 생성한다. 공고 데이터의 단일 출처를 이 파이프라인으로 유지하기
+    위한 것이다.
     """
     records = json.loads(Path(input_path).read_text(encoding="utf-8"))
     result = analyze(records, as_of=as_of, store_path=store_path)
@@ -167,12 +165,6 @@ def run_pipeline(
     report_path.write_text(build_report(result), encoding="utf-8")
     if collection_output is not None:
         _write_json(Path(collection_output), result["collected_jobs"])
-    if typescript_output is not None:
-        ts_path = Path(typescript_output)
-        ts_path.parent.mkdir(parents=True, exist_ok=True)
-        ts_path.write_text(
-            build_typescript_module(result["collected_jobs"]), encoding="utf-8"
-        )
     if dart_output is not None:
         dart_path = Path(dart_output)
         dart_path.parent.mkdir(parents=True, exist_ok=True)

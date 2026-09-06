@@ -24,10 +24,6 @@ DEFAULT_JSON_OUTPUT = ARTIFACTS_DIR / "job_coach_pipeline_test.json"
 DEFAULT_REPORT_OUTPUT = ARTIFACTS_DIR / "job_coach_pipeline_test.md"
 DEFAULT_COLLECTION_OUTPUT = ARTIFACTS_DIR / "collected_it_jobs.json"
 
-# Functions가 import하는 생성 파일. 공고 데이터의 단일 출처를 유지하기 위해
-# 파이프라인이 직접 써 준다.
-DEFAULT_TYPESCRIPT_OUTPUT = REPO_ROOT / "functions" / "src" / "generated" / "collectedJobs.ts"
-
 # Flutter의 채용공고 찾기(챗봇 검색)가 읽는 생성 파일.
 DEFAULT_DART_OUTPUT = (
     REPO_ROOT

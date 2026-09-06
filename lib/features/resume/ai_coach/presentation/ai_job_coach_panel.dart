@@ -1,4 +1,3 @@
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,11 +8,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../auth/providers/auth_providers.dart';
-import '../../../../shared/providers/cohort_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
 import '../data/job_search.dart';
-import '../data/local_job_matcher.dart';
 import '../data/resume_analysis_repository.dart';
 import '../data/resume_analyzer.dart';
 import '../models/ai_job_coach_result.dart';
@@ -49,7 +46,6 @@ class _ChatMessage {
 }
 
 class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
-  final Set<String> _confirmedMissingSkills = {};
   final TextEditingController _chatController = TextEditingController();
   final List<_ChatMessage> _messages = [
     const _ChatMessage.bot(
@@ -141,14 +137,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
 
   Future<void> _run() async {
     if (!_guard(AiCoachFeature.jobRecommendation)) return;
-    setState(() => _resumeAnalysis = null);
-
-    final cohortId = ref.read(effectiveCohortIdProvider);
-    if (cohortId == null && !AiJobCoachConfig.useLocalFixture) {
-      setState(() => _error = '분석할 기수 정보를 찾지 못했습니다.');
-      return;
-    }
     setState(() {
+      _resumeAnalysis = null;
       _loading = true;
       _error = null;
     });
@@ -156,17 +146,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       final result = await ref
           .read(aiJobCoachRepositoryProvider)
           .analyzeAndMatch(
-            cohortId: cohortId ?? 'local-fixture',
-            resumeId: widget.resumeId,
             draftContent: widget.draftContent,
-            confirmedMissingSkills: _confirmedMissingSkills,
             preferences: _preferences,
           );
       if (mounted) setState(() => _result = result);
-    } on FirebaseFunctionsException catch (error) {
-      if (mounted) {
-        setState(() => _error = error.message ?? 'AI 코치 요청에 실패했습니다.');
-      }
+    } on JobRecommendApiException catch (error) {
+      // 서버가 없거나 실패하면 추천하지 않는다. 이유를 그대로 보여 준다.
+      if (mounted) setState(() => _error = error.message);
     } catch (error) {
       if (mounted) setState(() => _error = '분석 실패: $error');
     } finally {
@@ -201,10 +187,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             child: ListView(
               padding: const EdgeInsets.all(14),
               children: [
-                // 추천 서버를 쓰면 fixture가 아니다. 서버가 없을 때만 안내한다.
-                if (AiJobCoachConfig.useLocalFixture &&
-                    !JobRecommendApiConfig.isConfigured)
-                  const _TestModeBanner(),
                 const SizedBox(height: 10),
                 _ReadinessCard(
                   readiness: _readiness,
@@ -375,39 +357,6 @@ class _Header extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             onPressed: onClose,
             icon: const Icon(Icons.close, size: 18),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TestModeBanner extends StatelessWidget {
-  const _TestModeBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
-        border: Border.all(color: const Color(0xFFFDE68A)),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.science_outlined, size: 17, color: AppColors.warning),
-          SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              'IT 전용 테스트 모드: 현재 이력서와 IT POC 공고만 비교합니다. 표시 점수는 합격 확률이 아닙니다.',
-              style: TextStyle(
-                fontSize: 11,
-                height: 1.4,
-                color: Color(0xFF92400E),
-              ),
-            ),
           ),
         ],
       ),
@@ -751,7 +700,6 @@ class _RecommendationRationale extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final detail = item.scoreDetail;
     final region = _condition(const ['근무지역', '전국 근무', '희망지역']);
     final employment = _condition(const ['고용형태']);
     final career = _condition(const ['경력']);
@@ -844,42 +792,6 @@ class _RecommendationRationale extends StatelessWidget {
             const Text(
               '경험이 없다는 판단이 아닙니다. 경험이 있다면 이력서에 적어 주세요.',
               style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (detail != null) ...[
-            const _AnalysisLabel('점수 구성', AppColors.textSecondary),
-            _ScoreBar(
-              label: '희망 직무 일치',
-              fraction: detail.role,
-              weight: recommendationWeights.role,
-              note: item.roleTerms.isEmpty
-                  ? '공고 제목·본문에서 희망 직무 키워드를 찾지 못함'
-                  : '키워드: ${item.roleTerms.join(', ')}',
-            ),
-            _ScoreBar(
-              label: '요구 기술 일치',
-              fraction: detail.skills,
-              weight: recommendationWeights.skills,
-              note: detail.skillsTotal == 0
-                  ? '공고에 명시된 기술 없음'
-                  : '공고 기술 ${detail.skillsTotal}개 중 ${item.matchedSkills.length}개가 기술스택에 있음',
-            ),
-            _ScoreBar(
-              label: '프로젝트 근거',
-              fraction: detail.project,
-              weight: recommendationWeights.project,
-              note: item.projectSkills.isEmpty
-                  ? '프로젝트 설명에서 공고 기술을 찾지 못함'
-                  : '프로젝트에서 확인: ${item.projectSkills.join(', ')}',
-            ),
-            _ScoreBar(
-              label: '명시 조건',
-              fraction: detail.conditions,
-              weight: recommendationWeights.conditions,
-              note: item.hardFilterStatus == 'PASS'
-                  ? '학력·경력·희망 조건 모두 확인됨'
-                  : '확인 안 된 조건이 있어 절반만 반영',
             ),
             const SizedBox(height: 8),
           ],
@@ -1042,57 +954,6 @@ class _SkillChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(text, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class _ScoreBar extends StatelessWidget {
-  const _ScoreBar({
-    required this.label,
-    required this.fraction,
-    required this.weight,
-    required this.note,
-  });
-
-  final String label;
-  final double fraction;
-  final double weight;
-  final String note;
-
-  @override
-  Widget build(BuildContext context) {
-    final maxPoints = weight * 100;
-    final points = fraction * maxPoints;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
-              ),
-              Text(
-                '${points.toStringAsFixed(1)} / ${maxPoints.toStringAsFixed(0)}점',
-                style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: fraction.clamp(0, 1).toDouble(),
-              minHeight: 4,
-              backgroundColor: AppColors.border,
-              valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(note, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.35)),
-        ],
-      ),
     );
   }
 }

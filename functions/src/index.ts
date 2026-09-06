@@ -24,7 +24,6 @@ export {
   expireMileage,
   expireMileageNow,
 } from "./mileage";
-export {analyzeResumeAndMatch} from "./jobCoach";
 export {settleMissionsOnApproval} from "./missions";
 export {
   getAssessmentForTake,

@@ -109,6 +109,9 @@ JobSearchQuery parseJobSearchQuery(String input) {
   );
 }
 
+/// 공고마다 검색 문자열을 한 번만 만든다. 수천 건을 질문마다 다시 만들면 느리다.
+final _searchTextCache = Expando<String>('searchText');
+
 /// 수집된 IT 공고에서 조건에 맞는 공고를 찾는다.
 ///
 /// 이력서와 무관하게 동작한다. 조건을 확인할 수 없는 공고는 제외하지 않고
@@ -118,7 +121,7 @@ JobSearchResult searchJobs(String input, {int limit = 5}) {
   final scored = <({CollectedJob job, int score})>[];
 
   for (final job in collectedJobs) {
-    final text = job.searchText;
+    final text = _searchTextCache[job] ??= job.searchText;
 
     if (query.regions.isNotEmpty &&
         !query.regions.any((region) => job.region.contains(region))) {
