@@ -459,6 +459,40 @@ Demo 계정에서는 샘플 커리큘럼으로 AI 다이얼로그가 동작합�
 
 ---
 
+<details>
+<summary><b>맞춤 공고 추천 — 추천 API 서버 연결 (내 컴퓨터)</b></summary>
+
+이력서 편집 화면의 **AI 코치 → 맞춤 공고 추천**은 `job_matching_bot`의 추천 API
+(`POST /api/v1/jobs/recommend`)를 부릅니다. 벡터 검색 → 하드 필터 → LLM 재정렬 → 근거 검증을
+거친 공고를 이력서·공고 원문 인용과 함께 보여 줍니다. 서버에 닿지 못하면 앱 안의 규칙 기반
+추천으로 대신하고 그 이유를 화면에 남깁니다.
+
+### 1. 서버 실행 (저장소 루트에서)
+
+```powershell
+playdata_venv\Scripts\activate
+python -m uvicorn job_matching_bot.api.main:app --host 127.0.0.1 --port 8000
+```
+
+`http://127.0.0.1:8000/health` 가 `{"status":"ok", ...}` 를 주면 됩니다. Pinecone·OpenAI 키는
+`functions/.env`에서 읽습니다.
+
+### 2. 앱 실행
+
+앱의 기본 서버 주소가 `http://127.0.0.1:8000` 이라 별도 설정이 없습니다.
+
+```powershell
+flutter run -d windows                                  # 데스크톱: 그대로
+flutter run -d chrome --web-port 5000                   # 웹: 포트를 고정해야 CORS가 맞음
+```
+
+- Chrome은 `functions/.env`의 `CORS_ALLOW_ORIGINS=http://localhost:5000` 과 포트가 같아야 합니다.
+- 다른 주소를 쓰려면 `--dart-define=JOB_RECOMMEND_API_URL=http://호스트:포트`, 빈 값이면 서버를 부르지 않습니다.
+- 응답은 LLM 재정렬 때문에 평균 30초쯤 걸립니다. 화면의 진행 표시가 그동안 돕니다.
+- 지금은 내 컴퓨터에서만 됩니다. 팀원 환경·실제 폰은 서버를 클라우드에 올린 뒤에 됩니다.
+
+</details>
+
 ## 도움이 필요할 때
 
 1. 이 문서의 [자주 겪는 문제](#자주-겪는-문제) 확인

@@ -11,6 +11,7 @@ import '../../../../shared/models/resume_content.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../data/ai_job_coach_repository.dart';
+import '../data/job_recommend_api_client.dart';
 import '../data/job_search.dart';
 import '../data/local_job_matcher.dart';
 import '../data/resume_analysis_repository.dart';
@@ -200,7 +201,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             child: ListView(
               padding: const EdgeInsets.all(14),
               children: [
-                if (AiJobCoachConfig.useLocalFixture) const _TestModeBanner(),
+                // 추천 서버를 쓰면 fixture가 아니다. 서버가 없을 때만 안내한다.
+                if (AiJobCoachConfig.useLocalFixture &&
+                    !JobRecommendApiConfig.isConfigured)
+                  const _TestModeBanner(),
                 const SizedBox(height: 10),
                 _ReadinessCard(
                   readiness: _readiness,
@@ -489,6 +493,18 @@ class _RecommendationSection extends StatelessWidget {
       subtitle: result.notice,
       child: Column(
         children: [
+          if (result.searchQuery.isNotEmpty) ...[
+            _ServerQueryNote(
+              searchQuery: result.searchQuery,
+              profileSummary: result.profileSummary,
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (result.fromServer && result.recommendations.isEmpty)
+            const Text(
+              '조건에 맞는 공고를 찾지 못했습니다. 희망 지역·고용형태를 넓히거나 이력서에 기술과 프로젝트를 더 적어 보세요.',
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.4),
+            ),
           for (var index = 0; index < result.recommendations.length; index++)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -527,6 +543,16 @@ class _RecommendationCardState extends State<_RecommendationCard> {
 
   /// 접힌 상태에서도 왜 이 순위인지 한 줄로 보이게 한다.
   String _summary() {
+    if (item.isFromServer) {
+      return [
+        '근거 ${item.reasons.length}건',
+        if (item.concerns.isNotEmpty) '확인할 요건 ${item.concerns.length}건',
+        if (item.region.isNotEmpty) item.region,
+        ?item.employmentType,
+        item.careerLabel,
+        item.hardFilterStatus == 'PASS' ? '조건 통과' : '조건 확인 필요',
+      ].join(' · ');
+    }
     String bucket(String label, List<String> matched, List<String> unmatched) =>
         '$label ${matched.length}/${matched.length + unmatched.length}';
     final hasBuckets = item.matchedRequired.isNotEmpty ||
@@ -593,7 +619,9 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '${item.company} · ${item.source}',
+                        item.source.isEmpty
+                            ? item.company
+                            : '${item.company} · ${item.source}',
                         style: const TextStyle(
                           fontSize: 10,
                           color: AppColors.textSecondary,
@@ -621,17 +649,20 @@ class _RecommendationCardState extends State<_RecommendationCard> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    '${item.score.toStringAsFixed(1)}점',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                  // 서버 추천은 점수가 아니라 적합도(높음/보통/낮음)만 준다.
+                  if (!item.isFromServer)
+                    Text(
+                      '${item.score.toStringAsFixed(1)}점',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
                   Text(
-                    item.grade,
+                    item.isFromServer ? '적합도 ${item.grade}' : item.grade,
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: item.isFromServer ? 11 : 10,
+                      fontWeight: item.isFromServer ? FontWeight.w700 : FontWeight.w400,
                       color: item.grade == '높음'
                           ? AppColors.success
                           : AppColors.textSecondary,
@@ -792,7 +823,30 @@ class _RecommendationRationale extends StatelessWidget {
               ok: military.$1,
               note: military.$2,
             ),
+          if (item.deadline case final deadline?)
+            _ConditionRow(label: '마감', value: deadline, ok: null, note: null),
           const SizedBox(height: 8),
+          if (item.reasons.isNotEmpty) ...[
+            const _AnalysisLabel('추천 근거 — 이력서 문장 ↔ 공고 문장', AppColors.success),
+            for (final reason in item.reasons) _ReasonTile(reason: reason),
+            const SizedBox(height: 6),
+          ],
+          if (item.concerns.isNotEmpty) ...[
+            const _AnalysisLabel('공고 자격요건 중 이력서에서 확인되지 않는 것', AppColors.warning),
+            for (final concern in item.concerns)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  '• $concern',
+                  style: const TextStyle(fontSize: 10.5, height: 1.4),
+                ),
+              ),
+            const Text(
+              '경험이 없다는 판단이 아닙니다. 경험이 있다면 이력서에 적어 주세요.',
+              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 8),
+          ],
           if (detail != null) ...[
             const _AnalysisLabel('점수 구성', AppColors.textSecondary),
             _ScoreBar(
@@ -1601,6 +1655,102 @@ class _ChatJobCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+/// 서버가 이력서에서 만든 검색 질의문. 어떤 기준으로 찾았는지 사용자가 볼 수 있게 한다.
+class _ServerQueryNote extends StatelessWidget {
+  const _ServerQueryNote({required this.searchQuery, required this.profileSummary});
+
+  final String searchQuery;
+  final String profileSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '이력서에서 뽑은 검색 기준',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 3),
+          Text(searchQuery, style: const TextStyle(fontSize: 10.5, height: 1.4)),
+          if (profileSummary.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              profileSummary,
+              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 추천 근거 하나. 주장 한 줄과 그 근거인 이력서·공고 원문 인용.
+class _ReasonTile extends StatelessWidget {
+  const _ReasonTile({required this.reason});
+
+  final RecommendReason reason;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            reason.claim,
+            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, height: 1.35),
+          ),
+          if (reason.resumeQuote.isNotEmpty)
+            _QuoteLine(label: '이력서', text: reason.resumeQuote, color: AppColors.success),
+          if (reason.jobQuote.isNotEmpty)
+            _QuoteLine(label: '공고', text: reason.jobQuote, color: AppColors.info),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuoteLine extends StatelessWidget {
+  const _QuoteLine({required this.label, required this.text, required this.color});
+
+  final String label;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, left: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 34,
+            child: Text(label, style: TextStyle(fontSize: 9.5, color: color, fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            child: Text(
+              '“$text”',
+              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.35),
+            ),
+          ),
+        ],
       ),
     );
   }

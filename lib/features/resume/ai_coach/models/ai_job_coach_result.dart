@@ -8,6 +8,10 @@ class AiJobCoachResult {
     required this.resumeFeedback,
     required this.learningRecommendations,
     required this.analysisId,
+    this.fromServer = false,
+    this.searchQuery = '',
+    this.profileSummary = '',
+    this.warnings = const [],
   });
 
   final bool testMode;
@@ -18,6 +22,16 @@ class AiJobCoachResult {
   final List<String> resumeFeedback;
   final List<LearningRecommendation> learningRecommendations;
   final String analysisId;
+
+  /// 추천 서버(벡터 검색 + LLM 재정렬)가 만든 결과인지. false면 앱 안의 규칙 기반.
+  final bool fromServer;
+
+  /// 서버가 이력서에서 만든 검색 질의문. 규칙 기반 결과에는 없다.
+  final String searchQuery;
+  final String profileSummary;
+
+  /// 서버가 근거 검증에서 제거한 내용.
+  final List<String> warnings;
 
   factory AiJobCoachResult.fromMap(Map<String, dynamic> map) {
     final skillAnalysis = _map(map['skillAnalysis']);
@@ -56,6 +70,10 @@ extension AiJobCoachResultCopy on AiJobCoachResult {
       resumeFeedback: resumeFeedback,
       learningRecommendations: learningRecommendations,
       analysisId: analysisId,
+      fromServer: fromServer,
+      searchQuery: searchQuery,
+      profileSummary: profileSummary,
+      warnings: warnings,
     );
   }
 }
@@ -95,6 +113,11 @@ class JobRecommendation {
     this.unmatchedTags = const [],
     this.embeddingRank,
     this.fusedScore,
+    this.careerText = '',
+    this.deadline,
+    this.reasons = const [],
+    this.concerns = const [],
+    this.searchRank,
   });
 
   final String jobId;
@@ -151,8 +174,26 @@ class JobRecommendation {
   final List<String> unmatchedPreferred;
   final List<String> unmatchedTags;
 
+  /// 추천 서버가 이미 문구로 만든 경력 조건(예: '경력 3년 이상'). 규칙 기반 결과에는 없다.
+  final String careerText;
+
+  /// 마감일. 서버 결과에만 있다.
+  final String? deadline;
+
+  /// 추천 서버의 근거. 이력서 원문과 공고 원문 인용 한 쌍씩.
+  final List<RecommendReason> reasons;
+
+  /// 공고 자격요건 중 이력서에서 확인되지 않은 것. 경험이 없다는 판단이 아니다.
+  final List<String> concerns;
+
+  /// 벡터 검색에서의 순위. 서버 결과에만 있고, 있으면 서버 결과다.
+  final int? searchRank;
+
+  bool get isFromServer => searchRank != null;
+
   /// 신입/경력무관/경력 n년 이상 같은 표시용 문구.
   String get careerLabel {
+    if (careerText.isNotEmpty) return careerText;
     switch (careerType) {
       case 'ENTRY':
         return '신입';
@@ -210,6 +251,11 @@ class JobRecommendation {
       unmatchedTags: unmatchedTags,
       embeddingRank: embeddingRank ?? this.embeddingRank,
       fusedScore: fusedScore ?? this.fusedScore,
+      careerText: careerText,
+      deadline: deadline,
+      reasons: reasons,
+      concerns: concerns,
+      searchRank: searchRank,
     );
   }
 
@@ -258,6 +304,58 @@ class JobRecommendation {
       unmatchedTags: _stringList(evidenceMap['unmatchedTags']),
       embeddingRank: (map['embeddingRank'] as num?)?.toInt(),
       fusedScore: (map['fusedScore'] as num?)?.toDouble(),
+    );
+  }
+
+  /// 추천 서버(`POST /api/v1/jobs/recommend`) 응답의 공고 하나.
+  ///
+  /// 서버는 점수 대신 적합도(높음/보통/낮음)와 근거 인용을 준다. 점수 구성이나
+  /// 기술 버킷은 없으므로 비워 두고, 카드는 그 경우 근거·우려를 대신 보여 준다.
+  factory JobRecommendation.fromRecommendApi(Map<String, dynamic> map) {
+    final conditions = _map(map['conditions']);
+    final reasons = _mapList(map['reasons']).map(RecommendReason.fromMap).toList();
+    return JobRecommendation(
+      jobId: map['job_id'] as String? ?? '',
+      source: '',
+      sourceUrl: map['source_url'] as String? ?? '',
+      company: map['company'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      score: 0,
+      grade: map['fit'] as String? ?? '보통',
+      hardFilterStatus: map['filter_status'] as String? ?? 'PASS',
+      unknownConditions: _stringList(map['unknown_conditions']),
+      passedConditions: _stringList(map['passed_conditions']),
+      evidence: [for (final reason in reasons) reason.claim],
+      bodyIsImage: map['body_is_image'] as bool? ?? false,
+      region: conditions['region'] as String? ?? '',
+      employmentType: conditions['employment_type'] as String?,
+      education: conditions['education'] as String? ?? '',
+      careerText: conditions['career'] as String? ?? '',
+      deadline: conditions['deadline'] as String?,
+      reasons: reasons,
+      concerns: _stringList(map['concerns']),
+      searchRank: (map['search_rank'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// 추천 서버가 든 근거 하나. 두 인용은 각각 이력서·공고 원문에 그대로 있는 문장이다.
+class RecommendReason {
+  const RecommendReason({
+    required this.claim,
+    required this.resumeQuote,
+    required this.jobQuote,
+  });
+
+  final String claim;
+  final String resumeQuote;
+  final String jobQuote;
+
+  factory RecommendReason.fromMap(Map<String, dynamic> map) {
+    return RecommendReason(
+      claim: map['claim'] as String? ?? '',
+      resumeQuote: map['resume_quote'] as String? ?? '',
+      jobQuote: map['job_quote'] as String? ?? '',
     );
   }
 }

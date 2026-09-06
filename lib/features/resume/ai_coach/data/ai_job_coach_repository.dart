@@ -10,6 +10,7 @@ import '../models/resume_readiness.dart';
 import 'cover_letter_rag_client.dart';
 import 'embedding_rerank.dart';
 import 'generated/collected_jobs.g.dart';
+import 'job_recommend_api_client.dart';
 import 'local_job_matcher.dart';
 import 'resume_analysis_repository.dart';
 import 'resume_text_builder.dart';
@@ -26,21 +27,24 @@ abstract final class AiJobCoachConfig {
 
 /// 맞춤 공고 추천.
 ///
-/// 1. 키워드 추천: 하드 필터(학력·경력·희망 지역·고용형태) 뒤 직무·기술·프로젝트
-///    점수로 정렬한다. 로컬 fixture 모드와 Functions 모드가 같은 규칙이다.
-/// 2. 임베딩 재정렬: cover_letter_rag 서버가 설정돼 있으면 자기소개서와 프로젝트
-///    경험 문장으로 공고를 검색해, 그 순위를 키워드 순위와 RRF로 합친다.
-///    서버가 없거나 실패하면 키워드 순위를 그대로 쓰고 안내 문구만 남긴다.
+/// 1. 추천 서버(`job_matching_bot` API): 이력서 평문과 희망 조건을 보내면 벡터 검색 →
+///    하드 필터 → LLM 재정렬 → 근거 검증을 거친 공고를 근거 인용과 함께 돌려준다.
+///    서버가 설정돼 있으면 이 경로가 기본이다.
+/// 2. 서버에 닿지 못하거나 실패하면 예전 경로로 대신한다. 키워드 추천(하드 필터 뒤
+///    직무·기술·프로젝트 점수)에, cover_letter_rag 서버가 있으면 임베딩 재정렬을 더한다.
+///    화면에는 왜 대신했는지 남긴다.
 class AiJobCoachRepository {
   AiJobCoachRepository(
     this._functions, {
     this._ragClient,
     this._auth,
+    this._apiClient,
   });
 
-  final FirebaseFunctions _functions;
+  final FirebaseFunctions? _functions;
   final CoverLetterRagClient? _ragClient;
   final FirebaseAuth? _auth;
+  final JobRecommendApiClient? _apiClient;
 
   Future<AiJobCoachResult> analyzeAndMatch({
     required String cohortId,
@@ -58,6 +62,67 @@ class AiJobCoachRepository {
       );
     }
 
+    final api = _apiClient;
+    if (api != null) {
+      try {
+        return await _runApi(api, draftContent, preferences);
+      } on JobRecommendApiException catch (error) {
+        // 서버 없이도 앱이 동작해야 한다. 규칙 기반으로 대신하고 이유를 남긴다.
+        final fallback = await _runKeyword(
+          cohortId: cohortId,
+          resumeId: resumeId,
+          draftContent: draftContent,
+          confirmedMissingSkills: confirmedMissingSkills,
+          preferences: preferences,
+        );
+        return fallback.copyWith(
+          notice: '${fallback.notice} · 추천 서버를 쓰지 못해 앱 안의 규칙 기반 추천을 '
+              '표시합니다: ${error.message}',
+        );
+      }
+    }
+    return _runKeyword(
+      cohortId: cohortId,
+      resumeId: resumeId,
+      draftContent: draftContent,
+      confirmedMissingSkills: confirmedMissingSkills,
+      preferences: preferences,
+    );
+  }
+
+  Future<AiJobCoachResult> _runApi(
+    JobRecommendApiClient api,
+    ResumeContent draftContent,
+    JobPreferences preferences,
+  ) async {
+    final response = await api.recommend(
+      JobRecommendRequest.fromResume(draftContent, preferences: preferences),
+    );
+    return AiJobCoachResult(
+      testMode: false,
+      notice: response.reranked
+          ? response.notice
+          : '${response.notice} · LLM 재정렬 없이 검색 순서대로 표시했습니다.',
+      recommendations: response.recommendations,
+      selectedJob: null,
+      skillJudgements: const [],
+      resumeFeedback: const [],
+      learningRecommendations: const [],
+      analysisId: '',
+      fromServer: true,
+      searchQuery: response.searchQuery,
+      profileSummary: response.profileSummary,
+      warnings: response.warnings,
+    );
+  }
+
+  Future<AiJobCoachResult> _runKeyword({
+    required String cohortId,
+    required String resumeId,
+    required ResumeContent draftContent,
+    required Set<String> confirmedMissingSkills,
+    required JobPreferences preferences,
+  }) async {
     final keywordResult = AiJobCoachConfig.useLocalFixture
         ? _runLocal(draftContent, confirmedMissingSkills, preferences)
         : await _runFunctions(
@@ -95,7 +160,11 @@ class AiJobCoachRepository {
     required Set<String> confirmedMissingSkills,
     required JobPreferences preferences,
   }) async {
-    final callable = _functions.httpsCallable(
+    final functions = _functions;
+    if (functions == null) {
+      throw StateError('Firebase Functions가 설정되지 않아 서버 추천을 부를 수 없습니다.');
+    }
+    final callable = functions.httpsCallable(
       'analyzeResumeAndMatch',
       options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
     );
@@ -158,10 +227,16 @@ class AiJobCoachRepository {
   }
 }
 
+/// 추천 서버 클라이언트. 주소가 비어 있으면 null이고 앱은 규칙 기반 추천만 쓴다.
+final jobRecommendApiClientProvider = Provider<JobRecommendApiClient?>((ref) {
+  return JobRecommendApiConfig.isConfigured ? JobRecommendApiClient() : null;
+});
+
 final aiJobCoachRepositoryProvider = Provider<AiJobCoachRepository>((ref) {
   return AiJobCoachRepository(
     FirebaseFunctions.instanceFor(region: 'asia-northeast3'),
     ragClient: ref.watch(coverLetterRagClientProvider),
     auth: ref.watch(firebaseAuthProvider),
+    apiClient: ref.watch(jobRecommendApiClientProvider),
   );
 });
