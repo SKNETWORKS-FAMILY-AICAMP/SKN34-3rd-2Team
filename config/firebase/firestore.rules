@@ -397,6 +397,27 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
+      // ── YouTube 추천 영상 (학습실 관심사 추천) ──
+      match /youtubeRecommendations/{videoId} {
+        allow read: if canAccessCohort(cohortId);
+        allow write: if isAdmin();
+      }
+
+      // ── 추천 클릭 로그 (향후 ML용) ──
+      match /recommendationEvents/{eventId} {
+        allow create: if isAuthenticated()
+          && belongsToCohort(cohortId)
+          && request.resource.data.userId == request.auth.uid;
+        allow read: if isAdmin();
+        allow update, delete: if false;
+      }
+
+      // ── 커리큘럼 주차 YouTube 캐시 (Functions Admin SDK 기록, 클라이언트 읽기 허용) ──
+      match /youtubeCurriculumCache/{weekKey} {
+        allow read: if canAccessCohort(cohortId);
+        allow write: if false;
+      }
+
       // ── 커리큘럼 (기수별 PDF 메타) ──
       match /curriculum/{docId} {
         allow read: if isAdmin()

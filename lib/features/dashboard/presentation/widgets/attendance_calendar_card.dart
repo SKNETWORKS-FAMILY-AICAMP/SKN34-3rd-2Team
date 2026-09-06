@@ -311,8 +311,8 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
               },
               onFormatChanged: (f) => setState(() => _format = f),
               headerVisible: false,
-              daysOfWeekHeight: compact ? 20 : 24,
-              rowHeight: compact ? 28 : 34,
+              daysOfWeekHeight: compact ? 18 : 24,
+              rowHeight: compact ? 26 : 34,
               onPageChanged: (focused) => setState(() => _focusedDay = focused),
               onDaySelected: (selected, focused) {
                 setState(() => _focusedDay = focused);
@@ -389,7 +389,7 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
     final color = AttendanceStatus.colorOf(status);
     final isToday = isSameDay(day, DateTime.now());
     return Container(
-      margin: const EdgeInsets.all(4),
+      margin: EdgeInsets.all(compact ? 2 : 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.2),
         shape: BoxShape.circle,
@@ -402,7 +402,7 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
       child: Text(
         '${day.day}',
         style: TextStyle(
-          fontSize: compact ? 11 : 12,
+          fontSize: compact ? 10 : 12,
           fontWeight: FontWeight.w700,
           color: color,
         ),

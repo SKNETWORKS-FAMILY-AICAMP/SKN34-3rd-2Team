@@ -71,6 +71,10 @@ abstract final class FirestorePaths {
       '${assessmentSubmissions(cohortId)}/${assessmentId}_$userId';
   static String inflearnPackages(String cohortId) =>
       '${cohort(cohortId)}/inflearnPackages';
+  static String youtubeRecommendations(String cohortId) =>
+      '${cohort(cohortId)}/youtubeRecommendations';
+  static String recommendationEvents(String cohortId) =>
+      '${cohort(cohortId)}/recommendationEvents';
   static String curriculumMeta(String cohortId) =>
       '${cohort(cohortId)}/curriculum/meta';
   static String curriculumSheets(String cohortId) =>

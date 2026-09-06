@@ -162,7 +162,7 @@ class _AdminAlertPopupFormScreenState
     popups.whenData(_load);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: Text(_isEdit ? '알림 팝업 수정' : '알림 팝업 등록'),
         actions: [

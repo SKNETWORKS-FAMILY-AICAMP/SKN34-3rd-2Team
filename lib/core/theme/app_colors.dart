@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// 깔끔한 화이트 기반 컬러 팔레트
+/// 코스모스 블루 톤 기반 라이트 UI 팔레트
 abstract final class AppColors {
-  static const primary = Color(0xFF1A1A1A);
-  static const primaryDark = Color(0xFF000000);
-  static const primaryLight = Color(0xFFF3F4F6);
+  static const primary = Color(0xFF0055FF);
+  static const primaryDark = Color(0xFF0044CC);
+  static const primaryLight = Color(0xFFE8F0FF);
   static const secondary = Color(0xFF6B7280);
 
-  static const background = Colors.white;
+  static const background = Color(0xFFF8F9FB);
   static const surface = Colors.white;
-  static const surfaceVariant = Color(0xFFF9FAFB);
+  static const surfaceVariant = Color(0xFFF3F5F9);
 
   static const textPrimary = Color(0xFF111827);
   static const textSecondary = Color(0xFF6B7280);
@@ -19,7 +19,19 @@ abstract final class AppColors {
   static const divider = Color(0xFFF3F4F6);
 
   static const success = Color(0xFF16A34A);
-  static const warning = Color(0xFFD97706);
+  static const warning = Color(0xFFF59E0B);
   static const error = Color(0xFFDC2626);
-  static const info = Color(0xFF2563EB);
+  static const info = Color(0xFF0055FF);
+
+  /// 사이드바 / 네비 액센트
+  static const sidebar = Color(0xFF0B2A6F);
+  static const sidebarIconInactive = Color(0xFF94A3B8);
+
+  /// 상태 뱃지
+  static const badgeOpen = Color(0xFF0055FF);
+  static const badgeLate = Color(0xFFF59E0B);
+  static const badgeClosed = Color(0xFF4B5563);
+
+  /// 로그인 카드 그림자용
+  static const shadow = Color(0x1A0F172A);
 }

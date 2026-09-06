@@ -115,9 +115,9 @@ class MySeatingDashboardCard extends ConsumerWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF5F3FF),
+                        color: AppColors.primaryLight,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF7C3AED)),
+                        border: Border.all(color: AppColors.primary),
                       ),
                       child: Text(
                         '내 자리: $mySeatId번',
@@ -125,7 +125,7 @@ class MySeatingDashboardCard extends ConsumerWidget {
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF5B21B6),
+                          color: AppColors.primaryDark,
                         ),
                       ),
                     ),

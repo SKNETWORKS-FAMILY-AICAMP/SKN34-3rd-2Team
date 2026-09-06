@@ -5,6 +5,7 @@ import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/form_task_model.dart';
@@ -277,6 +278,53 @@ final publishedInflearnPackagesProvider =
   return ref
       .watch(lmsRepositoryProvider)
       .watchPublishedInflearnPackages(cohortId);
+});
+
+final youtubeRecommendationsProvider =
+    StreamProvider.autoDispose<List<YoutubeRecommendationModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchYoutubeRecommendations(cohortId);
+});
+
+final publishedYoutubeRecommendationsProvider =
+    StreamProvider.autoDispose<List<YoutubeRecommendationModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchPublishedYoutubeRecommendations(cohortId);
+});
+
+/// 현재 유저 skills 기준 랭킹된 YouTube 추천
+final rankedYoutubeRecommendationsProvider =
+    Provider.autoDispose<AsyncValue<List<RankedYoutubeRecommendation>>>((ref) {
+  final user = ref.watch(currentUserSyncProvider);
+  final videosAsync = ref.watch(publishedYoutubeRecommendationsProvider);
+
+  return videosAsync.when(
+    loading: () => const AsyncValue.loading(),
+    error: (e, st) => AsyncValue.error(e, st),
+    data: (videos) {
+      final skills = user?.skills ?? const <String>[];
+      if (skills.isEmpty) {
+        // 스킬 없으면 매칭 없이 공개 영상 상위만 (score 0)
+        final ranked = rankYoutubeRecommendations(
+          videos: videos,
+          skills: const [],
+        );
+        return AsyncValue.data(ranked.take(6).toList());
+      }
+      final ranked = rankYoutubeRecommendations(
+        videos: videos,
+        skills: skills,
+      );
+      final matched = ranked.where((r) => r.score > 0).toList();
+      // 매칭 없으면 전체 공개 목록(점수 0)으로 폴백
+      final result = matched.isNotEmpty ? matched : ranked;
+      return AsyncValue.data(result.take(12).toList());
+    },
+  );
 });
 
 final assessmentsProvider =

@@ -33,7 +33,7 @@ class StudyRoomPageHeader extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F),
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 6),
@@ -60,13 +60,13 @@ class StudyRoomPageHeader extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFFE9D5FF),
+                  backgroundColor: AppColors.primaryLight,
                   child: Text(
                     initial,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF7C3AED),
+                      color: AppColors.primary,
                     ),
                   ),
                 ),

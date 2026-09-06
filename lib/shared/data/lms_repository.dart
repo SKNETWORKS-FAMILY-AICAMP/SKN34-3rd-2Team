@@ -10,6 +10,7 @@ import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/notice_model.dart';
@@ -1041,6 +1042,75 @@ class LmsRepository {
     required String packageId,
   }) async {
     await cohortSub(cohortId, 'inflearnPackages').doc(packageId).delete();
+  }
+
+  // ── YouTube Recommendations (학습실 관심사 추천) ──
+
+  Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return cohortSub(cohortId, 'youtubeRecommendations')
+        .orderBy('sortOrder')
+        .snapshots()
+        .map(
+          (s) => s.docs.map(YoutubeRecommendationModel.fromFirestore).toList(),
+        );
+  }
+
+  Stream<List<YoutubeRecommendationModel>> watchPublishedYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return watchYoutubeRecommendations(cohortId).map(
+      (list) => list.where((v) => v.isPublished).toList(),
+    );
+  }
+
+  Future<String> createYoutubeRecommendation({
+    required String cohortId,
+    required YoutubeRecommendationModel video,
+  }) async {
+    final ref = cohortSub(cohortId, 'youtubeRecommendations').doc();
+    await ref.set(video.toFirestore(isCreate: true));
+    return ref.id;
+  }
+
+  Future<void> updateYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+    required Map<String, dynamic> updates,
+  }) async {
+    await cohortSub(cohortId, 'youtubeRecommendations').doc(videoId).update({
+      ...updates,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+  }) async {
+    await cohortSub(cohortId, 'youtubeRecommendations').doc(videoId).delete();
+  }
+
+  /// 추천 클릭/오픈 이벤트 (향후 ML용 로그)
+  Future<void> logRecommendationEvent({
+    required String cohortId,
+    required String userId,
+    required String videoDocId,
+    required String youtubeVideoId,
+    required List<String> userSkills,
+    required List<String> matchedTags,
+    String action = 'open',
+  }) async {
+    await cohortSub(cohortId, 'recommendationEvents').add({
+      'userId': userId,
+      'videoDocId': videoDocId,
+      'youtubeVideoId': youtubeVideoId,
+      'userSkills': userSkills,
+      'matchedTags': matchedTags,
+      'action': action,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ── Assessments (성취도 평가 — 인앱 퀴즈) ──

@@ -11,16 +11,16 @@ class AssessmentStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg) = switch (label) {
-      '진행중' => (const Color(0xFFDCFCE7), const Color(0xFF166534)),
-      '예정' => (const Color(0xFFDBEAFE), const Color(0xFF1E40AF)),
-      '종료' => (const Color(0xFFE5E7EB), const Color(0xFF374151)),
-      _ => (const Color(0xFFFEF3C7), const Color(0xFF92400E)),
+      '진행중' => (AppColors.success.withValues(alpha: 0.12), AppColors.success),
+      '예정' => (AppColors.primaryLight, AppColors.primary),
+      '종료' => (AppColors.surfaceVariant, AppColors.badgeClosed),
+      _ => (AppColors.warning.withValues(alpha: 0.15), AppColors.badgeLate),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,

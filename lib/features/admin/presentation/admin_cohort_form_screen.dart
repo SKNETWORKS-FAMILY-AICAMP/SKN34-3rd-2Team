@@ -351,7 +351,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 20),

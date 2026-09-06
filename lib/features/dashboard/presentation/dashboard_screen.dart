@@ -112,12 +112,12 @@ class _DashboardBody extends ConsumerWidget {
           if (!wide) {
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   mainColumn,
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   sidebar,
                 ],
               ),
@@ -126,13 +126,13 @@ class _DashboardBody extends ConsumerWidget {
 
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: mainColumn),
-                const SizedBox(width: 16),
-                SizedBox(width: 320, child: sidebar),
+                const SizedBox(width: 20),
+                SizedBox(width: 240, child: sidebar),
               ],
             ),
           );
@@ -161,7 +161,7 @@ class _DashboardMainColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DashboardProfileHeader(user: user),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         _NoticeSectionHeader(
           onViewAll: () => context.go(RoutePaths.board),
         ),
@@ -173,13 +173,13 @@ class _DashboardMainColumn extends StatelessWidget {
             hasMore: list.length > 10,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const ResumeDashboardSection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const FormTasksDashboardSection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const QualExamScheduleSection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const _SectionTitle('이번 주 필수 학습'),
         weeklyTask.when(
           loading: () => const _ShimmerCard(),
@@ -219,7 +219,7 @@ class _DashboardSidebar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AttendanceCalendarCard(user: user, compact: compactCalendar),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const MySeatingDashboardSection(),
         const _SectionTitle('TODO', compact: true),
         _TodoSection(
@@ -227,9 +227,9 @@ class _DashboardSidebar extends StatelessWidget {
           controller: todoController,
           uid: user.uid,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const CurriculumDashboardSection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const _SectionTitle('승인 현황', compact: true),
         submissions.when(
           loading: () => const _ShimmerCard(),
@@ -256,14 +256,18 @@ class _NoticeSectionHeader extends StatelessWidget {
       child: Row(
         children: [
           const Text(
-            '공지',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            '시스템 공지',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: AppColors.textPrimary,
+            ),
           ),
           const Spacer(),
           TextButton(
             onPressed: onViewAll,
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.textSecondary,
+              foregroundColor: AppColors.primary,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -271,7 +275,7 @@ class _NoticeSectionHeader extends StatelessWidget {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('전체 보기', style: TextStyle(fontSize: 13)),
+                Text('더보기', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                 Icon(Icons.chevron_right_rounded, size: 18),
               ],
             ),
@@ -296,11 +300,18 @@ class _NoticesPreview extends StatelessWidget {
     if (notices.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.symmetric(vertical: 28),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 16,
+              offset: Offset(0, 4),
+            ),
+          ],
         ),
         child: const Center(
           child: Text(
@@ -356,72 +367,73 @@ class _WeeklyLearningCard extends StatelessWidget {
     final completed = progress?.completedCount ?? 0;
     final total = task.totalCount;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: CircularProgressIndicator(
-                    value: percent / 100,
-                    strokeWidth: 6,
-                    color: AppColors.primary,
-                    backgroundColor: AppColors.primaryLight,
-                  ),
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 64,
+                height: 64,
+                child: CircularProgressIndicator(
+                  value: percent / 100,
+                  strokeWidth: 6,
+                  color: AppColors.primary,
+                  backgroundColor: AppColors.primaryLight,
                 ),
-                Text('${percent.toInt()}%'),
+              ),
+              Text(
+                '${percent.toInt()}%',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _StatusBadge(
+                      label: 'D-${task.daysRemaining}',
+                      color: AppColors.badgeLate,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        task.title,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$completed / $total 완료',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
               ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.warning.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'D-${task.daysRemaining}',
-                          style: const TextStyle(
-                            color: AppColors.warning,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          task.title,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '$completed / $total 완료',
-                    style: const TextStyle(color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -584,12 +596,32 @@ class _TodoSection extends ConsumerWidget {
   }
 }
 
-class _SubmissionsList extends StatelessWidget {
+class _SubmissionsList extends StatefulWidget {
   const _SubmissionsList({required this.submissions});
   final List<SubmissionModel> submissions;
 
   @override
+  State<_SubmissionsList> createState() => _SubmissionsListState();
+}
+
+class _SubmissionsListState extends State<_SubmissionsList> {
+  /// 한 칸에 보이는 최근 항목 수
+  static const _visibleCount = 3;
+
+  /// 항목 1개당 대략 높이 (패딩 + 뱃지 + 제목 + 날짜)
+  static const _itemExtent = 86.0;
+
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final submissions = widget.submissions;
     if (submissions.isEmpty) {
       return Card(
         margin: EdgeInsets.zero,
@@ -607,77 +639,115 @@ class _SubmissionsList extends StatelessWidget {
         ),
       );
     }
+
+    final needsScroll = submissions.length > _visibleCount;
+    final maxHeight = _visibleCount * _itemExtent;
+
     return Card(
       margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: needsScroll ? maxHeight : double.infinity,
+        ),
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: needsScroll,
+          child: ListView.separated(
+            controller: _scrollController,
+            shrinkWrap: !needsScroll,
+            primary: false,
+            physics: needsScroll
+                ? const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  )
+                : const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            itemCount: submissions.length,
+            separatorBuilder: (_, _) => const Divider(
+              height: 1,
+              thickness: 1,
+              color: AppColors.border,
+            ),
+            itemBuilder: (context, index) {
+              return _SubmissionTile(submission: submissions[index]);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SubmissionTile extends StatelessWidget {
+  const _SubmissionTile({required this.submission});
+
+  final SubmissionModel submission;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = submission;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Column(
-        children: submissions
-            .take(5)
-            .map(
-              (s) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3E8FF),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        s.typeLabel,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF7C3AED),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    s.typeLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.title,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (s.submittedAt != null)
-                            Text(
-                              AppDateUtils.formatDisplay(s.submittedAt!),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      s.statusLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: s.isApproved
-                            ? AppColors.success
-                            : s.isPending
-                                ? AppColors.warning
-                                : AppColors.error,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            )
-            .toList(),
+              const SizedBox(width: 6),
+              _StatusBadge(
+                label: s.statusLabel,
+                color: s.isApproved
+                    ? AppColors.success
+                    : s.isPending
+                        ? AppColors.badgeLate
+                        : AppColors.error,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            s.title,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (s.submittedAt != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              AppDateUtils.formatDisplay(s.submittedAt!),
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -692,12 +762,39 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Text(
         text,
         style: TextStyle(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           fontSize: compact ? 14 : 16,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

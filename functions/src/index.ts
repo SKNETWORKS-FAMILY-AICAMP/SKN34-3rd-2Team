@@ -32,6 +32,7 @@ export {
   adjustAssessmentScores,
   generateAssessmentQuestions,
 } from "./assessments";
+export {getCurriculumYoutubeRecommendations} from "./youtubeRecommendations";
 import {settleMissionsOnApproval} from "./missions";
 
 const EMAIL_DOMAIN = "playdata.co.kr";

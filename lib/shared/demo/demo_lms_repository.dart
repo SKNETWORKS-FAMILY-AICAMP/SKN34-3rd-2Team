@@ -6,6 +6,7 @@ import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/notice_model.dart';
@@ -34,6 +35,8 @@ class DemoLmsRepository {
       StreamController<List<AssessmentModel>>.broadcast();
   final _inflearnPackageController =
       StreamController<List<InflearnPackageModel>>.broadcast();
+  final _youtubeRecommendationController =
+      StreamController<List<YoutubeRecommendationModel>>.broadcast();
   final _assessmentSubmissionController =
       StreamController<List<AssessmentSubmissionModel>>.broadcast();
   final _curriculumSheetController =
@@ -50,6 +53,7 @@ class DemoLmsRepository {
   late Map<String, List<AssessmentQuestionModel>> _assessmentQuestions;
   late List<AssessmentSubmissionModel> _assessmentSubmissions;
   late List<InflearnPackageModel> _inflearnPackages;
+  late List<YoutubeRecommendationModel> _youtubeRecommendations;
   late List<CurriculumSheetModel> _curriculumSheets;
   late List<FormTaskModel> _formTasks;
   final Map<String, List<FormResponseModel>> _formResponses = {};
@@ -202,6 +206,52 @@ class DemoLmsRepository {
         ],
       ),
     ];
+    _youtubeRecommendations = [
+      YoutubeRecommendationModel(
+        id: 'yt1',
+        title: 'Flutter 입문 — 30분 핵심 정리',
+        youtubeUrl: 'https://www.youtube.com/watch?v=VPvVD8t02U8',
+        videoId: 'VPvVD8t02U8',
+        tags: const ['Flutter', 'Dart'],
+        description: 'Flutter 위젯·상태관리 입문 영상',
+        isPublished: true,
+        sortOrder: 1,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+      YoutubeRecommendationModel(
+        id: 'yt2',
+        title: 'Python 기초 — 변수와 자료형',
+        youtubeUrl: 'https://www.youtube.com/watch?v=kqtD5dpn9C8',
+        videoId: 'kqtD5dpn9C8',
+        tags: const ['Python', 'Django', 'FastAPI'],
+        description: '파이썬 문법 기초',
+        isPublished: true,
+        sortOrder: 2,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+      YoutubeRecommendationModel(
+        id: 'yt3',
+        title: 'SQL 입문 — SELECT부터 JOIN까지',
+        youtubeUrl: 'https://www.youtube.com/watch?v=HXV3zeQKqGY',
+        videoId: 'HXV3zeQKqGY',
+        tags: const ['SQL', 'MySQL', 'PostgreSQL'],
+        description: 'SQL 기초 쿼리',
+        isPublished: true,
+        sortOrder: 3,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+      YoutubeRecommendationModel(
+        id: 'yt4',
+        title: 'Docker 컨테이너 개념 한눈에',
+        youtubeUrl: 'https://www.youtube.com/watch?v=fqMOX6JJhGo',
+        videoId: 'fqMOX6JJhGo',
+        tags: const ['Docker', 'CI/CD', 'AWS'],
+        description: 'Docker 입문',
+        isPublished: true,
+        sortOrder: 4,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+    ];
     _assessmentSubmissions = [
       AssessmentSubmissionModel(
         id: 'a1_${DemoAccounts.studentUid}',
@@ -298,6 +348,10 @@ class DemoLmsRepository {
     }
     if (!_inflearnPackageController.isClosed) {
       _inflearnPackageController.add(List.from(_inflearnPackages));
+    }
+    if (!_youtubeRecommendationController.isClosed) {
+      _youtubeRecommendationController
+          .add(List.from(_youtubeRecommendations));
     }
     if (!_assessmentSubmissionController.isClosed) {
       _assessmentSubmissionController.add(List.from(_assessmentSubmissions));
@@ -1041,6 +1095,89 @@ class DemoLmsRepository {
   }) async {
     _inflearnPackages.removeWhere((p) => p.id == packageId);
     _emit();
+  }
+
+  Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return _youtubeRecommendationController.stream;
+  }
+
+  Stream<List<YoutubeRecommendationModel>> watchPublishedYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return watchYoutubeRecommendations(cohortId).map(
+      (list) => list.where((v) => v.isPublished).toList(),
+    );
+  }
+
+  Future<String> createYoutubeRecommendation({
+    required String cohortId,
+    required YoutubeRecommendationModel video,
+  }) async {
+    final id = 'yt${_youtubeRecommendations.length + 1}';
+    _youtubeRecommendations.add(
+      YoutubeRecommendationModel(
+        id: id,
+        title: video.title,
+        youtubeUrl: video.youtubeUrl,
+        videoId: video.effectiveVideoId,
+        thumbnailUrl: video.effectiveThumbnailUrl,
+        description: video.description,
+        tags: video.tags,
+        isPublished: video.isPublished,
+        sortOrder: video.sortOrder,
+        createdAt: DateTime.now(),
+      ),
+    );
+    _emit();
+    return id;
+  }
+
+  Future<void> updateYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+    required Map<String, dynamic> updates,
+  }) async {
+    final i = _youtubeRecommendations.indexWhere((v) => v.id == videoId);
+    if (i < 0) return;
+    final cur = _youtubeRecommendations[i];
+    final nextUrl = updates['youtubeUrl'] as String? ?? cur.youtubeUrl;
+    _youtubeRecommendations[i] = cur.copyWith(
+      title: updates['title'] as String? ?? cur.title,
+      youtubeUrl: nextUrl,
+      videoId: updates['videoId'] as String? ??
+          extractYoutubeVideoId(nextUrl) ??
+          cur.videoId,
+      thumbnailUrl: updates['thumbnailUrl'] as String? ?? cur.thumbnailUrl,
+      description: updates['description'] as String? ?? cur.description,
+      tags: updates['tags'] != null
+          ? List<String>.from(updates['tags'] as List)
+          : cur.tags,
+      isPublished: updates['isPublished'] as bool? ?? cur.isPublished,
+      sortOrder: (updates['sortOrder'] as num?)?.toInt() ?? cur.sortOrder,
+    );
+    _emit();
+  }
+
+  Future<void> deleteYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+  }) async {
+    _youtubeRecommendations.removeWhere((v) => v.id == videoId);
+    _emit();
+  }
+
+  Future<void> logRecommendationEvent({
+    required String cohortId,
+    required String userId,
+    required String videoDocId,
+    required String youtubeVideoId,
+    required List<String> userSkills,
+    required List<String> matchedTags,
+    String action = 'open',
+  }) async {
+    // demo: no-op
   }
 
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {

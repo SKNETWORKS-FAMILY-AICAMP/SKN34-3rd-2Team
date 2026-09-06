@@ -173,14 +173,14 @@ class _AdminStudentDetailScreenState
                     children: [
                       CircleAvatar(
                         radius: 28,
-                        backgroundColor: const Color(0xFFE9D5FF),
+                        backgroundColor: AppColors.primaryLight,
                         child: Text(
                           intake.displayName.isNotEmpty
                               ? intake.displayName[0]
                               : '?',
                           style: const TextStyle(
                             fontSize: 22,
-                            color: Color(0xFF7C3AED),
+                            color: AppColors.primary,
                             fontWeight: FontWeight.bold,
                           ),
                         ),

@@ -5,8 +5,10 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../providers/curriculum_youtube_providers.dart';
 import 'widgets/inflearn_package_card.dart';
 import 'widgets/study_room_layout.dart';
+import 'widgets/youtube_recommendation_section.dart';
 
 /// 학습실 — 배정된 인프런 강의 패키지 (학생)
 class StudyRoomScreen extends ConsumerStatefulWidget {
@@ -41,6 +43,8 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
         return RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(publishedInflearnPackagesProvider);
+            ref.invalidate(publishedYoutubeRecommendationsProvider);
+            ref.invalidate(curriculumYoutubeRecommendationsProvider);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -51,15 +55,26 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                   StudyRoomPageHeader(
                     user: user,
                     cohortName: cohortName,
-                    subtitle: '배정된 인프런 강의를 확인하고 학습하세요.',
+                    subtitle: '배정된 인프런 강의와 이번 주 커리큘럼 YouTube 추천을 확인하세요.',
                   ),
                   const SizedBox(height: 20),
+                  const YoutubeRecommendationSection(),
+                  const SizedBox(height: 28),
+                  const Text(
+                    '배정된 인프런 강의',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   StudyRoomSearchBar(
                     controller: _searchController,
                     hintText: '교과목·강의명 검색',
                     onChanged: (v) => setState(() => _query = v.trim()),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   packages.when(
                     loading: () => const Padding(
                       padding: EdgeInsets.all(40),

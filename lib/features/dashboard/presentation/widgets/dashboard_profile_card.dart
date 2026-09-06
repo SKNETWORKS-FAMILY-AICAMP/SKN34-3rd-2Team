@@ -14,121 +14,133 @@ class DashboardProfileCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Material(
-      color: AppColors.surface,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.border),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (user.isStudent) ...[
-                  ProfileAvatarEditor(
-                    uid: user.uid,
-                    photoUrl: user.photoUrl,
-                    photoStoragePath: user.photoStoragePath,
-                    radius: 26,
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (user.isStudent) ...[
+                    ProfileAvatarEditor(
+                      uid: user.uid,
+                      photoUrl: user.photoUrl,
+                      photoStoragePath: user.photoStoragePath,
+                      radius: 26,
+                    ),
+                    const SizedBox(width: 14),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.cohortName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          '${user.displayName}님',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 14),
                 ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.cohortName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        '${user.displayName}님',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Divider(height: 1, color: AppColors.border),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: () => showSkillPickerDialog(
-                context,
-                ref,
-                uid: user.uid,
-                initialSkills: user.skills,
               ),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: user.skills.isEmpty
-                    ? Row(
-                        children: [
-                          Icon(
-                            Icons.add_circle_outline,
-                            size: 16,
-                            color: AppColors.textHint.withValues(alpha: 0.9),
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            '탭하여 스킬을 선택해 주세요',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textHint,
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () => showSkillPickerDialog(
+                  context,
+                  ref,
+                  uid: user.uid,
+                  initialSkills: user.skills,
+                ),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: user.skills.isEmpty
+                      ? Row(
+                          children: [
+                            Icon(
+                              Icons.add_circle_outline,
+                              size: 16,
+                              color: AppColors.textHint.withValues(alpha: 0.9),
                             ),
-                          ),
-                        ],
-                      )
-                    : Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          ...user.skills.take(6).map(
-                                (s) => Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryLight,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: AppColors.border),
-                                  ),
-                                  child: Text(
-                                    s,
-                                    style: const TextStyle(fontSize: 11),
+                            const SizedBox(width: 6),
+                            const Text(
+                              '탭하여 스킬을 선택해 주세요',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textHint,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            ...user.skills.take(6).map(
+                                  (s) => Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryLight,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      s,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
                                 ),
+                            if (user.skills.length > 6)
+                              Text(
+                                '+${user.skills.length - 6}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
-                          if (user.skills.length > 6)
-                            Text(
-                              '+${user.skills.length - 6}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                        ],
-                      ),
+                          ],
+                        ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

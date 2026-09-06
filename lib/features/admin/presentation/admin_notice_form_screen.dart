@@ -117,11 +117,11 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
     notices.whenData(_loadNotice);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         title: Text(
           _isEdit ? '공지 수정' : '공지 작성',

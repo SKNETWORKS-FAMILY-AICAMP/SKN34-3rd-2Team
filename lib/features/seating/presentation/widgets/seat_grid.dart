@@ -177,7 +177,7 @@ class _SeatCell extends StatelessWidget {
     if (isHighlighted) {
       bgColor = pulseHighlight
           ? const Color(0xFFFEF3C7)
-          : const Color(0xFFE9D5FF);
+          : AppColors.primaryLight;
     } else if (isConfirmed) {
       bgColor = const Color(0xFFDCFCE7);
     } else if (isHeld) {
@@ -193,7 +193,7 @@ class _SeatCell extends StatelessWidget {
     }
 
     final borderColor = isHighlighted
-        ? (pulseHighlight ? const Color(0xFFF59E0B) : const Color(0xFF7C3AED))
+        ? (pulseHighlight ? const Color(0xFFF59E0B) : AppColors.primary)
         : isConfirmed
             ? const Color(0xFF22C55E)
             : isHeld
@@ -242,7 +242,7 @@ class _SeatCell extends StatelessWidget {
                   color: isHighlighted
                       ? (pulseHighlight
                           ? const Color(0xFFB45309)
-                          : const Color(0xFF5B21B6))
+                          : AppColors.primaryDark)
                       : AppColors.textPrimary,
                 ),
               ),
@@ -256,7 +256,7 @@ class _SeatCell extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: pulseHighlight
                     ? const Color(0xFFD97706)
-                    : const Color(0xFF7C3AED),
+                    : AppColors.primary,
               ),
             )
           else if (isConfirmed && !compact && !isHighlighted)
@@ -375,7 +375,7 @@ class _SeatCell extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFE9D5FF),
+        color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),

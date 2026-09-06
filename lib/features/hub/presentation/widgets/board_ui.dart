@@ -8,26 +8,33 @@ abstract final class BoardUi {
   static const favoriteBadgeBg = Color(0xFFFEF3C7);
   static const favoriteBadgeText = Color(0xFFB45309);
   static const favoriteBorder = Color(0xFFFDE68A);
-  static const discordChipBg = Color(0xFFEFF6FF);
-  static const discordChipText = Color(0xFF2563EB);
+  static const discordChipBg = AppColors.primaryLight;
+  static const discordChipText = AppColors.primary;
   static const activeBadgeBg = Color(0xFFDCFCE7);
-  static const activeBadgeText = Color(0xFF16A34A);
-  static const listBackground = Color(0xFFF9FAFB);
+  static const activeBadgeText = AppColors.success;
+  static const listBackground = AppColors.background;
 
   static BoxDecoration cardDecoration({
     bool isFavorite = false,
     bool isDiscord = false,
   }) {
     return BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
       border: Border.all(
         color: isFavorite
             ? favoriteBorder
             : isDiscord
-                ? const Color(0xFFBFDBFE)
+                ? AppColors.primary.withValues(alpha: 0.35)
                 : AppColors.border,
       ),
+      boxShadow: const [
+        BoxShadow(
+          color: AppColors.shadow,
+          blurRadius: 12,
+          offset: Offset(0, 4),
+        ),
+      ],
     );
   }
 
@@ -36,7 +43,7 @@ abstract final class BoardUi {
       backgroundColor: AppColors.primary,
       foregroundColor: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 0,
     );
   }
@@ -60,7 +67,7 @@ class BoardTabBar extends StatelessWidget {
       builder: (context, _) {
         return Container(
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surface,
             border: Border(bottom: BorderSide(color: AppColors.border)),
           ),
           child: Row(

@@ -17,6 +17,7 @@ class ChangePasswordScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider).value;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('비밀번호 변경'),
         centerTitle: true,
@@ -26,14 +27,24 @@ class ChangePasswordScreen extends ConsumerWidget {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 380),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 24,
-                  ),
-                  child: Column(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 28,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: AppColors.shadow,
+                      blurRadius: 32,
+                      offset: Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(
@@ -81,7 +92,6 @@ class ChangePasswordScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                ),
               ),
             ),
           ),

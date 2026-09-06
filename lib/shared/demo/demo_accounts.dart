@@ -44,6 +44,7 @@ abstract final class DemoAccounts {
     role: UserRole.student,
     cohortId: DemoConfig.cohortId,
     cohortName: DemoConfig.cohortName,
+    skills: const ['Flutter', 'Python', 'SQL'],
     isActive: true,
     mustChangePassword: false,
   );

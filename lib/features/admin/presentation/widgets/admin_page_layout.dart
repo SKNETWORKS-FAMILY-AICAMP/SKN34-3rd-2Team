@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/app_section_card.dart';
 
 abstract final class AdminPageLayout {
   static const maxWidth = 860.0;
@@ -8,13 +9,16 @@ abstract final class AdminPageLayout {
 }
 
 Widget adminPageWrapper({required Widget child}) {
-  return Align(
-    alignment: Alignment.topCenter,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: AdminPageLayout.maxWidth),
-      child: Padding(
-        padding: const EdgeInsets.all(AdminPageLayout.padding),
-        child: child,
+  return ColoredBox(
+    color: AppColors.background,
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AdminPageLayout.maxWidth),
+        child: Padding(
+          padding: const EdgeInsets.all(AdminPageLayout.padding),
+          child: child,
+        ),
       ),
     ),
   );
@@ -32,25 +36,22 @@ class AdminFormSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return AppSectionCard(
       margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1E3A5F),
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
       ),
     );
   }
@@ -83,7 +84,13 @@ class AdminDetailRow extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 14)),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ],
       ),
     );

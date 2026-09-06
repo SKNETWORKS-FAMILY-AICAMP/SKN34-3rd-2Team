@@ -34,7 +34,7 @@ abstract final class AttendanceStatus {
     late: AppColors.warning,
     absent: AppColors.error,
     officialLeave: AppColors.info,
-    earlyLeave: Color(0xFF7C3AED),
+    earlyLeave: AppColors.primary,
     outing: Color(0xFF0F766E),
   };
 
