@@ -1,8 +1,8 @@
-# 채용공고 수집 크롤러
+# 채용공고 수집
 
-채용 사이트에서 공고 목록과 상세 요강을 받아 JSONL로 남기는 폴더다. 여기서 나온
-원본을 `job_matching_bot/`이 정제·중복제거·임베딩해 벡터 인덱스에 적재한다.
-이 폴더는 수집까지만 책임지고, 그 뒤 단계는 건드리지 않는다.
+채용 사이트에서 공고 목록과 상세 요강을 받아 JSONL로 남긴다. 여기서 나온 원본을
+`job_matching_bot/sync.py`가 정제·중복제거·임베딩해 벡터 인덱스에 적재한다.
+이 모듈은 수집까지만 책임지고, 그 뒤 단계는 건드리지 않는다.
 
 ## 수집 규칙
 
@@ -32,27 +32,28 @@
 
 | 파일 | 역할 |
 |---|---|
-| `saramin_http.py` | HTTP 세션. UA 고정, 대기, 차단 감지가 여기 있다 |
-| `crawl_saramin.py` | 목록 수집. 카테고리·정렬·페이지 크기를 인자로 받는다 |
-| `crawl_saramin_detail.py` | 상세 요강 수집. 목록에서 얻은 링크를 순회한다 |
-| `build_detail_queue.py` | 상세 수집 순서를 정한다. 인기 배지 → 목록 순위 → 마감일 순 |
-| `crawl_jobkorea.py` | 다른 사이트를 대상으로 한 초기 POC. 차단으로 중단했고 지금은 쓰지 않는다 |
-| `output/` | 수집 결과 JSONL. 저장소에 올리지 않는다 |
+| `http_session.py` | HTTP 세션. UA 고정, 대기, 차단 감지가 여기 있다 |
+| `crawl_list.py` | 목록 수집. 카테고리·정렬·페이지 크기를 인자로 받는다 |
+| `crawl_detail.py` | 상세 요강 수집. 목록에서 얻은 링크를 순회한다 |
+| `detail_queue.py` | 상세 수집 순서를 정한다. 인기 배지 → 목록 순위 → 마감일 순 |
+
+수집 결과는 `job_matching_bot/artifacts/raw/`에 쌓인다. 저장소에 올리지 않는다.
 
 ## 실행
 
+저장소 루트에서 패키지 모듈로 실행한다.
+
 ```powershell
-cd crawler_poc
 pip install -r requirements.txt
 
 # 전체 카테고리를 지원순으로 수집
-python crawl_saramin.py --all-categories --sort AD --page-count 100
+python -m job_matching_bot.crawling.crawl_list --all-categories --sort AD --page-count 100
 
 # 상세 수집 순서를 정하고
-python build_detail_queue.py
+python -m job_matching_bot.crawling.detail_queue
 
 # 상세 요강을 받는다. 1,000건씩 끊어 돌린다
-python crawl_saramin_detail.py --limit 1000
+python -m job_matching_bot.crawling.crawl_detail --limit 1000
 ```
 
 목록만으로는 자격요건을 알 수 없어 상세 요강이 반드시 필요하다. 상세가 이미지로만
