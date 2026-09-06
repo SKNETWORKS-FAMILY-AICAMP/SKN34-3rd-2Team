@@ -29,17 +29,18 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from job_matching_bot.config import ARTIFACTS_DIR, DEFAULT_SARAMIN_INPUT
 from job_matching_bot.env import ensure_loaded
 from job_matching_bot.ingest import DEFAULT_RAW_ROOT, DEFAULT_STORE, SOURCES, ingest
-from job_matching_bot.ingestion.record_files import read_records, record_ids
+from job_matching_bot.ingestion.record_files import latest_by_id, read_records, record_ids
 from job_matching_bot.schemas.job_record import CollectionReport
 
 DEFAULT_REPORT = ARTIFACTS_DIR / "sync_report.json"
+KST = timezone(timedelta(hours=9))
 
 # 이 필드가 없으면 정규화가 의미 있는 값을 못 만든다.
 REQUIRED_FIELDS = ("source_job_id",)
@@ -92,6 +93,12 @@ def main() -> int:
         default=None,
         help="목록 수집 결과. 주면 목록에서 사라진 공고를 삭제 후보로 판정한다",
     )
+    parser.add_argument(
+        "--as-of",
+        type=datetime.fromisoformat,
+        default=None,
+        help="수집 기준 시각(ISO). 마감 판정과 last_seen_at에 쓴다. 기본은 지금",
+    )
     parser.add_argument("--no-llm", action="store_true", default=True, help="요건 추출에 LLM을 쓰지 않는다(기본)")
     parser.add_argument("--llm", dest="no_llm", action="store_false", help="LLM 요건 추출을 켠다")
     parser.add_argument("--skip-index", action="store_true", help="저장소까지만 하고 Pinecone은 건드리지 않는다")
@@ -100,7 +107,10 @@ def main() -> int:
 
     ensure_loaded()
     started = datetime.now()
-    report: dict[str, Any] = {"started_at": started.isoformat(timespec="seconds")}
+    as_of = args.as_of or datetime.now(KST)
+    if as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=KST)
+    report: dict[str, Any] = {"started_at": started.isoformat(timespec="seconds"), "as_of": as_of.isoformat()}
     print(f"적재 파이프라인 시작 · 원본 {args.input}")
 
     # 1~2. 원본 읽기와 유효성 검사
@@ -111,10 +121,11 @@ def main() -> int:
     for key, value in valid_stats.items():
         print(f"  {key}: {value:,}")
 
-    # 3. 중복 제거는 ingest 내부에서 최신 레코드를 쓰도록 되어 있다.
-    unique_ids = len(record_ids(records))
-    report["dedup"] = {"고유 공고": unique_ids, "중복 줄": len(records) - unique_ids}
-    print(f"\n[3] 중복 제거: 고유 {unique_ids:,}건 (중복 줄 {len(records) - unique_ids:,})")
+    # 3. 같은 공고를 여러 번 받았으면 마지막 줄만 쓴다. 줄마다 저장하면 revisions만 올라간다.
+    total_lines = len(records)
+    records = list(latest_by_id(records).values())
+    report["dedup"] = {"고유 공고": len(records), "중복 줄": total_lines - len(records)}
+    print(f"\n[3] 중복 제거: 고유 {len(records):,}건 (중복 줄 {total_lines - len(records):,})")
 
     observed = record_ids(read_records(args.observed)) if args.observed else None
     if observed is not None:
@@ -131,6 +142,7 @@ def main() -> int:
         source=args.source,
         store_path=args.store,
         raw_root=args.raw_root,
+        as_of=as_of,
         observed_ids=observed,
         extract=True,
         allow_llm=not args.no_llm,

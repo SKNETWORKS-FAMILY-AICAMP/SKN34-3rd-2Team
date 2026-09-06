@@ -14,6 +14,8 @@ JSON 파일 저장소(`job_store.JobStore`)는 전량을 메모리에 올렸다 
               revisions) + 인덱스 추적(embed_hash, indexed_embed_hash, indexed_at)
     job_tags  목록형 값(기술 태그·카테고리 등)을 (job_id, kind, value)로 풀어 둔 것. 조회용
     runs      배치 실행 기록
+    list_seen   목록 sweep에서 (공고, 대분류)를 마지막으로 본 시각. 사라짐 판정의 근거
+    list_sweeps 대분류별로 마지막으로 끝까지 훑은 시각
 
 목록·딕셔너리 필드는 JSON 문자열로 넣는다. SQLite는 타입이 느슨해 읽을 때
 `_JSON_FIELDS` / `_BOOL_FIELDS` / `_INT_FIELDS`로 되돌린다.
@@ -23,7 +25,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -87,6 +89,19 @@ CREATE TABLE IF NOT EXISTS runs (
     expired INTEGER, removed INTEGER, observed INTEGER, still_missing INTEGER,
     vectors INTEGER,
     error TEXT
+);
+CREATE TABLE IF NOT EXISTS list_seen (
+    source_job_id TEXT NOT NULL,
+    cat_mcls TEXT NOT NULL,
+    seen_at TEXT NOT NULL,
+    PRIMARY KEY (source_job_id, cat_mcls)
+);
+CREATE INDEX IF NOT EXISTS list_seen_at ON list_seen(seen_at);
+CREATE TABLE IF NOT EXISTS list_sweeps (
+    cat_mcls TEXT PRIMARY KEY,
+    swept_at TEXT NOT NULL,
+    total_count INTEGER,
+    seen INTEGER
 );
 """
 
@@ -379,6 +394,83 @@ class SqliteJobStore:
         with self.conn:
             self.conn.executemany("UPDATE jobs SET embed_hash = ? WHERE job_id = ?", changed)
         return len(changed)
+
+    # ── 목록 관측 기록 (야간 배치가 쓴다) ──────────────────────
+    # 대분류마다 훑는 주기가 다르다(IT 인접 4개는 매일, 나머지는 일요일). 그래서
+    # "오늘 목록에 없었다"만으로는 사라졌다고 할 수 없다. 여기 남긴 기록으로,
+    # 나중에 끝까지 훑은 대분류에서 안 보인 공고만 사라진 것으로 친다.
+
+    def record_list_seen(
+        self, seen: dict[str, set[str]], complete: dict[str, int], at: datetime, *, keep_days: int = 60
+    ) -> None:
+        """seen: {대분류: 오늘 본 source_job_id}. complete: {끝까지 훑은 대분류: 사이트 total_count}."""
+        stamp = at.isoformat()
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO list_seen (source_job_id, cat_mcls, seen_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(source_job_id, cat_mcls) DO UPDATE SET seen_at = excluded.seen_at",
+                [(job_id, cat, stamp) for cat, ids in seen.items() for job_id in ids],
+            )
+            self.conn.executemany(
+                "INSERT INTO list_sweeps (cat_mcls, swept_at, total_count, seen) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(cat_mcls) DO UPDATE SET swept_at = excluded.swept_at, "
+                "total_count = excluded.total_count, seen = excluded.seen",
+                [(cat, stamp, total, len(seen.get(cat, ()))) for cat, total in complete.items()],
+            )
+            self.conn.execute(
+                "DELETE FROM list_seen WHERE seen_at < ?", ((at - timedelta(days=keep_days)).isoformat(),)
+            )
+
+    def source_job_ids(self, source: str, statuses: Iterable[str] | None = None) -> set[str]:
+        sql, params = "SELECT source_job_id FROM jobs WHERE source = ?", [source]
+        if statuses:
+            statuses = list(statuses)
+            sql += f" AND status IN ({', '.join('?' for _ in statuses)})"
+            params.extend(statuses)
+        return {row[0] for row in self.conn.execute(sql, params)}
+
+    def list_observed(
+        self, source: str, *, seen_today: set[str], as_of: datetime, within_days: int, authoritative: bool
+    ) -> set[str]:
+        """목록 기준으로 살아 있다고 볼 공고. `upsert(observed_ids=...)`에 넘긴다.
+
+        - 오늘 본 것
+        - `within_days` 안에 본 기록이 있고, 그 뒤로 그 대분류를 끝까지 훑은 적이 없는 것
+          (끝까지 훑었는데 안 보였으면 그 기록은 근거가 아니다)
+        - 기록이 전혀 없는 것 — 오늘 전 대분류를 끝까지 훑은 게 아니면(`authoritative=False`)
+          모르는 것이지 사라진 게 아니므로 남긴다
+        """
+        observed = set(seen_today)
+        candidates = self.source_job_ids(source) - observed
+        if not candidates:
+            return observed
+        cutoff = (as_of - timedelta(days=within_days)).isoformat()
+        swept = {row["cat_mcls"]: row["swept_at"] for row in self.conn.execute("SELECT cat_mcls, swept_at FROM list_sweeps")}
+        evidence: dict[str, bool] = {}
+        for row in self.conn.execute("SELECT source_job_id, cat_mcls, seen_at FROM list_seen"):
+            job_id = row["source_job_id"]
+            if job_id not in candidates:
+                continue
+            alive = row["seen_at"] >= cutoff and row["seen_at"] >= swept.get(row["cat_mcls"], "")
+            evidence[job_id] = evidence.get(job_id, False) or alive
+        for job_id in candidates:
+            if job_id in evidence:
+                if evidence[job_id]:
+                    observed.add(job_id)
+            elif not authoritative:
+                observed.add(job_id)
+        return observed
+
+    def removal_candidates(self, source: str, observed: set[str], missing_run_limit: int = DEFAULT_MISSING_RUN_LIMIT) -> list[str]:
+        """이번 upsert에서 REMOVED로 넘어갈 진행 중 공고. 링크 확인 대상이다."""
+        rows = self.conn.execute(
+            "SELECT source_job_id, missing_runs FROM jobs WHERE source = ? AND status = ?", (source, STATUS_OPEN)
+        )
+        return sorted(
+            row["source_job_id"]
+            for row in rows
+            if row["source_job_id"] not in observed and int(row["missing_runs"]) + 1 >= missing_run_limit
+        )
 
     # ── 실행 기록 ─────────────────────────────────────────────
     def record_run(self, report: CollectionReport, *, started_at: datetime, finished_at: datetime,

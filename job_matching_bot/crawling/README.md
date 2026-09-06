@@ -36,6 +36,8 @@
 | `crawl_list.py` | 목록 수집. 카테고리·정렬·페이지 크기를 인자로 받는다 |
 | `crawl_detail.py` | 상세 요강 수집. 목록에서 얻은 링크를 순회한다 |
 | `detail_queue.py` | 상세 수집 순서를 정한다. 인기 배지 → 목록 순위 → 마감일 순 |
+| `nightly.py` | 야간 배치. 목록 sweep → 신규 상세 → 링크 확인 → 적재를 한 번에 돈다 |
+| `schedule_nightly.ps1` | 야간 배치를 Windows 작업 스케줄러에 등록·해제·확인한다 |
 
 수집 결과는 `job_matching_bot/artifacts/raw/`에 쌓인다. 저장소에 올리지 않는다.
 
@@ -59,6 +61,44 @@ python -m job_matching_bot.crawling.crawl_detail --limit 1000
 목록만으로는 자격요건을 알 수 없어 상세 요강이 반드시 필요하다. 상세가 이미지로만
 되어 있는 공고는 텍스트를 뽑을 수 없으므로 `body_is_image`로 표시해 두고, 매칭에서는
 기업이 고른 기술 태그로만 판단한다.
+
+## 야간 배치
+
+매일 밤 한 번 `nightly.py`가 돈다. 목록을 끝까지 훑어 신규를 찾고, 상세를 받고,
+저장소와 인덱스를 맞춘다.
+
+```powershell
+python -m job_matching_bot.crawling.nightly                  # 오늘 몫
+python -m job_matching_bot.crawling.nightly --dry-run        # 목록만 훑고 계획만 본다
+python -m job_matching_bot.crawling.nightly --full           # 전 대분류를 강제로
+python -m job_matching_bot.crawling.nightly --max-minutes 300
+```
+
+| 요일 | 훑는 대분류 | 목록 | 상세 |
+|---|---|---|---|
+| 월~토 | IT개발·데이터, 연구·R&D, 디자인, 기획·전략 | 약 250쪽, 15분 | 신규 약 1,000건, 1시간 |
+| 일 | 운전·운송·배송을 뺀 14개 전부 | 약 1,760쪽, 2~3시간 | 신규는 시간 한도까지, 나머지는 다음 밤에 |
+
+- **사라짐 판정.** 목록에서 본 (공고, 대분류)를 저장소 `list_seen`에 남긴다. 끝까지 훑은
+  대분류에서 안 보인 공고만 "안 보였다"로 세고, 이틀 연속이면 삭제한다. 주 1회 훑는
+  대분류의 공고는 마지막 관측 뒤 15일까지 살아 있는 것으로 본다. 차단 등으로 sweep이
+  중간에 끊기면 그날은 아무것도 지우지 않는다.
+- **링크 확인.** 삭제로 넘어가기 직전인 공고는 상세 페이지를 열어 본다. 아직 열려 있으면
+  지우지 않는다. 하룻밤 상한이 있어 시간을 다 쓰지 않는다.
+- **시간 한도.** 기본 7시간. 목록과 링크 확인을 먼저 하고 남는 시간에 상세를 받는다.
+  못 받은 신규는 다음 밤에 인기 배지 → 목록 순위 → 마감 순으로 이어서 받는다.
+- 결과는 `artifacts/nightly/<날짜>.json`에, 오늘 받은 상세는 `artifacts/raw/details/<날짜>.jsonl`에,
+  목록은 `artifacts/raw/sweeps/<날짜>.json`(14일 보관)에 남는다.
+
+**스케줄 등록.** 작업 스케줄러에 매일 23:00으로 건다. 가상환경 python을 쓰고 로그는
+`artifacts/nightly/log/<날짜>.log`에 남는다. 노트북이 꺼져 있던 밤은 건너뛰고 다음 밤에 이어서 받는다.
+
+```powershell
+.\job_matching_bot\crawling\schedule_nightly.ps1 -Register     # 등록
+.\job_matching_bot\crawling\schedule_nightly.ps1 -Status       # 다음·마지막 실행 확인
+.\job_matching_bot\crawling\schedule_nightly.ps1 -RunNow       # 지금 한 번
+.\job_matching_bot\crawling\schedule_nightly.ps1 -Unregister   # 해제
+```
 
 ## 수집 이후
 
