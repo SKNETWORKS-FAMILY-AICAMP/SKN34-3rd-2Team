@@ -28,8 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from job_matching_bot.ingestion.excluded_roles import is_excluded  # noqa: E402
+from job_matching_bot.ingestion.excluded_roles import is_excluded
 
 KST = timezone(timedelta(hours=9))
 _DEADLINE_RE = re.compile(r"~\s*(\d{2})\.(\d{2})")

@@ -39,7 +39,7 @@
     python crawl_saramin.py --it --all
     python crawl_saramin_detail.py --max-minutes 180
     python crawl_saramin_detail.py --max-minutes 180        # 끊겼으면 그대로 다시
-    cd .. && python -m job_matching_bot.ingest --source SARAMIN_POC --observed crawler_poc/output/saramin_raw.json
+    python -m job_matching_bot.ingest --source SARAMIN_POC --observed job_matching_bot/artifacts/raw/saramin_raw.json
 """
 
 from __future__ import annotations
@@ -57,20 +57,18 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
-# 저장소 원본 경로 규칙을 그대로 쓰기 위해 레포 루트를 경로에 넣는다.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from job_matching_bot.ingestion.record_files import (  # noqa: E402
-    append_record,
-    latest_by_id,
-    read_records,
-)
-from saramin_http import (  # noqa: E402
+from job_matching_bot.crawling.http_session import (
     LIST_PAGE_URL,
     BlockedByTargetSiteError,
     check_response,
     navigation_headers,
     new_session,
     polite_delay,
+)
+from job_matching_bot.ingestion.record_files import (
+    append_record,
+    latest_by_id,
+    read_records,
 )
 
 BASE_URL = "https://www.saramin.co.kr"

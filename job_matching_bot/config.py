@@ -16,9 +16,10 @@ FIXTURES_DIR = PACKAGE_ROOT / "fixtures"
 ARTIFACTS_DIR = PACKAGE_ROOT / "artifacts"
 
 DEFAULT_INPUT = FIXTURES_DIR / "jobkorea_detail_first_page.json"
-# 사람인 POC 크롤러 출력. 상세는 한 건씩 이어 쓰는 JSON Lines, 목록은 JSON 배열.
-DEFAULT_SARAMIN_INPUT = REPO_ROOT / "crawler_poc" / "output" / "saramin_detail.jsonl"
-DEFAULT_SARAMIN_LIST = REPO_ROOT / "crawler_poc" / "output" / "saramin_raw.json"
+# 크롤러 출력. 상세는 한 건씩 이어 쓰는 JSON Lines, 목록은 JSON 배열.
+RAW_DIR = ARTIFACTS_DIR / "raw"
+DEFAULT_SARAMIN_INPUT = RAW_DIR / "saramin_detail.jsonl"
+DEFAULT_SARAMIN_LIST = RAW_DIR / "saramin_raw.json"
 DEFAULT_JSON_OUTPUT = ARTIFACTS_DIR / "job_coach_pipeline_test.json"
 DEFAULT_REPORT_OUTPUT = ARTIFACTS_DIR / "job_coach_pipeline_test.md"
 DEFAULT_COLLECTION_OUTPUT = ARTIFACTS_DIR / "collected_it_jobs.json"

@@ -1,6 +1,6 @@
 """사람인 수집본을 공통 `Job` 스키마로 정규화한다.
 
-입력은 `crawler_poc/crawl_saramin_detail.py`가 만든 레코드다. 상세 페이지의
+입력은 `job_matching_bot/crawling/crawl_detail.py`가 만든 레코드다. 상세 페이지의
 `핵심 정보` dl에서 경력·학력·근무형태·지역을 가져오는데, 이 값들은 표본
 15건에서 100% 채워져 있어 목록의 `condition_text`를 문자열로 쪼개는 것보다
 훨씬 안정적이다.

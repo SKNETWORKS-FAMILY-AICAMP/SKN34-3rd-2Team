@@ -4,7 +4,6 @@
 공고에 있다. 기술스택의 실제 출처는 후자다.
 """
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,8 +24,7 @@ from job_matching_bot.ingestion.saramin_tech_vocab import (
     tech_stack_codes,
 )
 
-sys.path.insert(0, str(REPO_ROOT / "crawler_poc"))
-from crawl_saramin_detail import done_record_ids, parse_detail  # noqa: E402
+from job_matching_bot.crawling.crawl_detail import done_record_ids, parse_detail
 
 # 사람인 상세 페이지의 뼈대만 흉내 낸 HTML. 핵심 정보 dl 과 해시태그 블록.
 SAMPLE_HTML = """

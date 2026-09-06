@@ -5,7 +5,7 @@
 일이라 주기가 다르기 때문이다.
 
     python -m job_matching_bot.ingest --source JOBKOREA_POC
-    python -m job_matching_bot.ingest --source SARAMIN_POC --observed crawler_poc/output/saramin_raw.json
+    python -m job_matching_bot.ingest --source SARAMIN_POC --observed job_matching_bot/artifacts/raw/saramin_raw.json
 
 `--input`을 생략하면 소스별 기본 경로(`SOURCES`)를 쓴다. `--observed`는 목록
 페이지에서 본 공고 목록이다. 증분 수집(새 공고 상세만 받음)에서는 이걸 줘야

@@ -6,7 +6,6 @@
 """
 
 import json
-import sys
 import tempfile
 import unittest
 from datetime import timedelta
@@ -19,11 +18,9 @@ from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.record_files import append_record, read_records, record_ids
 from job_matching_bot.schemas.job_record import STATUS_OPEN, STATUS_REMOVED
 
-# 크롤러는 패키지 밖(crawler_poc)에 있다. 순수 함수만 가져와 검증한다.
-sys.path.insert(0, str(REPO_ROOT / "crawler_poc"))
-from crawl_saramin import pages_for  # noqa: E402
-from crawl_saramin_detail import fresh_raw_ids, plan_targets  # noqa: E402
-from saramin_http import (  # noqa: E402
+from job_matching_bot.crawling.crawl_detail import fresh_raw_ids, plan_targets
+from job_matching_bot.crawling.crawl_list import pages_for
+from job_matching_bot.crawling.http_session import (
     CLIENT_HINTS,
     SESSION_HEADERS,
     USER_AGENT,

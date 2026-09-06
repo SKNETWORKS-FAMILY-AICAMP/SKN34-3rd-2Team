@@ -1,6 +1,6 @@
 """사람인 정규화 검증.
 
-실제 수집본(`crawler_poc/output/saramin_detail.json`)이 있으면 그것으로도
+실제 수집본(`artifacts/raw/saramin_detail.jsonl`)이 있으면 그것으로도
 확인한다. 없으면 파싱 규칙만 본다.
 """
 
@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records
-from job_matching_bot.config import AS_OF, REPO_ROOT
+from job_matching_bot.config import ARTIFACTS_DIR, AS_OF, REPO_ROOT
 from job_matching_bot.ingestion.saramin import (
     normalize_many,
     normalize_saramin,
@@ -245,7 +245,7 @@ class RealDataTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        path = REPO_ROOT / "crawler_poc" / "output" / "saramin_detail.jsonl"
+        path = ARTIFACTS_DIR / "raw" / "saramin_detail.jsonl"
         cls.records = (
             list(latest_by_id(read_records(path)).values())
         )

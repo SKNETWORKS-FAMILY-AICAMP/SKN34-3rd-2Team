@@ -45,7 +45,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from saramin_http import (
+from job_matching_bot.crawling.http_session import (
     LIST_PAGE_URL,
     BlockedByTargetSiteError,
     check_response,

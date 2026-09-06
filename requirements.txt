@@ -13,6 +13,6 @@ openai>=1.60
 # LLM 응답 스키마 검증 (설계 문서 §14)
 pydantic>=2.9
 
-# 수집 POC (crawler_poc/)
+# 수집 (job_matching_bot/crawling/)
 requests>=2.32
 beautifulsoup4>=4.12

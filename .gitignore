@@ -122,4 +122,4 @@ migrate_working_dir/
 *venv/
 
 # 크롤링 수집 결과 (수십 MB, 재생성 가능)
-crawler_poc/output/
+job_matching_bot/artifacts/raw/
