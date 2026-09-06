@@ -29,6 +29,7 @@ from typing import Any, Iterable, Iterator
 
 from job_matching_bot.config import AS_OF
 from job_matching_bot.ingestion.job_store import REQUIRED_FIELDS, _is_expired, resolve_status
+from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import (
     DEFAULT_MISSING_RUN_LIMIT,
@@ -200,6 +201,9 @@ class SqliteJobStore:
         job = record.job
         values = {name: _encode(name, getattr(job, name)) for name in JOB_FIELDS}
         values["status"] = record.status
+        # 인덱스에 올라갈 내용의 지문. indexed_embed_hash는 여기서 건드리지 않는다 —
+        # 마지막으로 올린 지문은 적재 단계(mark_indexed)만 바꾼다.
+        values["embed_hash"] = _embed_hash(job)
         values.update(
             first_seen_at=record.first_seen_at,
             last_seen_at=record.last_seen_at,
@@ -336,17 +340,45 @@ class SqliteJobStore:
         return report
 
     # ── 인덱스 추적 (적재 단계가 쓴다) ─────────────────────────
-    def mark_indexed(self, job_id: str, embed_hash: str, at: datetime) -> None:
-        self.conn.execute(
-            "UPDATE jobs SET indexed_embed_hash = ?, indexed_at = ? WHERE job_id = ?",
-            (embed_hash, at.isoformat(), job_id),
-        )
+    # embed_hash         지금 내용으로 만든 지문(쓸 때마다 갱신)
+    # indexed_embed_hash 마지막으로 인덱스에 올렸을 때의 지문
+    # 둘이 다르면 올릴 대상, 같으면 건너뛴다. 인덱스를 조회하지 않고 판정한다.
+
+    def index_state(self) -> dict[str, tuple[str | None, str | None]]:
+        """{job_id: (embed_hash, indexed_embed_hash)}. 전 행."""
+        return {
+            row["job_id"]: (row["embed_hash"], row["indexed_embed_hash"])
+            for row in self.conn.execute("SELECT job_id, embed_hash, indexed_embed_hash FROM jobs")
+        }
+
+    def mark_indexed(self, hashes: dict[str, str], at: datetime) -> None:
+        """벡터를 올린 뒤 부른다. 바로 커밋해 중간에 멈춰도 올린 만큼은 기록이 남는다."""
+        stamp = at.isoformat()
+        with self.conn:
+            self.conn.executemany(
+                "UPDATE jobs SET embed_hash = ?, indexed_embed_hash = ?, indexed_at = ? WHERE job_id = ?",
+                [(h, h, stamp, job_id) for job_id, h in hashes.items()],
+            )
 
     def clear_indexed(self, job_ids: Iterable[str]) -> None:
-        self.conn.executemany(
-            "UPDATE jobs SET indexed_embed_hash = NULL, indexed_at = NULL WHERE job_id = ?",
-            [(j,) for j in job_ids],
-        )
+        with self.conn:
+            self.conn.executemany(
+                "UPDATE jobs SET indexed_embed_hash = NULL, indexed_at = NULL WHERE job_id = ?",
+                [(j,) for j in job_ids],
+            )
+
+    def refresh_embed_hashes(self) -> int:
+        """저장된 embed_hash를 다시 계산한다. 지문 규칙이 바뀌었거나 이관 직후처럼
+        값이 비어 있을 때 한 번 돌린다. 바뀐 행 수를 돌려준다."""
+        changed: list[tuple[str, str]] = []
+        for row in self.conn.execute("SELECT * FROM jobs"):
+            job = Job(**{name: _decode(name, row[name]) for name in JOB_FIELDS})
+            fresh = _embed_hash(job)
+            if fresh != row["embed_hash"]:
+                changed.append((fresh, row["job_id"]))
+        with self.conn:
+            self.conn.executemany("UPDATE jobs SET embed_hash = ? WHERE job_id = ?", changed)
+        return len(changed)
 
     # ── 실행 기록 ─────────────────────────────────────────────
     def record_run(self, report: CollectionReport, *, started_at: datetime, finished_at: datetime,

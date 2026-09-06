@@ -17,7 +17,7 @@
 5. 본문 정제      자격요건·우대사항 구간 분리, 요구역량 추출
 6. 저장소 반영    신규·갱신·만료·삭제 판정 (증분)
 7. 품질 판정      마감 지남·재등록·요건 없음 제외
-8. 변경 확인      인덱스의 content_hash와 대조
+8. 변경 확인      저장소의 embed_hash와 indexed_embed_hash 대조 (인덱스 조회 없음)
 9. 임베딩·적재    바뀐 것만 OpenAI 호출 후 Pinecone upsert
 
 청킹 단계는 두지 않는다. 인덱싱 텍스트가 요건 구간만이라 문서 중앙값이 500자
@@ -37,7 +37,7 @@ from job_matching_bot.config import ARTIFACTS_DIR, DEFAULT_SARAMIN_INPUT
 from job_matching_bot.env import ensure_loaded
 from job_matching_bot.ingest import DEFAULT_RAW_ROOT, DEFAULT_STORE, SOURCES, ingest
 from job_matching_bot.ingestion.record_files import read_records, record_ids
-from job_matching_bot.schemas.job_record import JobRecord
+from job_matching_bot.schemas.job_record import CollectionReport
 
 DEFAULT_REPORT = ARTIFACTS_DIR / "sync_report.json"
 
@@ -63,13 +63,18 @@ def validate(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[
     return kept, stats
 
 
-def load_store_jobs(store_path: Path) -> list:
-    if not Path(store_path).exists():
-        return []
+def record_run(
+    store_path: Path, collection: CollectionReport, started: datetime, *, vectors: int | None = None, error: str | None = None
+) -> None:
+    """SQLite 저장소면 runs 표에 이번 실행을 남긴다. JSON 저장소는 건너뛴다."""
     from job_matching_bot.ingestion.job_store import open_store
 
-    store = open_store(store_path).load()
-    return [record.job for record in store.all_records()]
+    store = open_store(store_path)
+    if not hasattr(store, "record_run"):
+        return
+    store.record_run(collection, started_at=started, finished_at=datetime.now(), vectors=vectors, error=error)
+    store.save()
+    store.close()
 
 
 def main() -> int:
@@ -142,27 +147,37 @@ def main() -> int:
         print(f"  {key}: {value:,}")
 
     # 7~9. 품질 판정 · 변경 확인 · 임베딩 적재
+    vectors = 0
     if args.skip_index:
         print("\n[7-9] --skip-index: Pinecone을 건드리지 않았습니다")
     else:
         from job_matching_bot.retrieval.pinecone_index import client, ensure_index
-        from job_matching_bot.retrieval.upsert import delete_ids, plan, upsert
+        from job_matching_bot.retrieval.upsert import delete_ids, load_store, plan, upsert
 
         print("\n[7-9] 품질 판정 · 변경 확인 · 적재")
         info = ensure_index()
         index = client().Index(info["name"])
-        jobs = load_store_jobs(args.store)
-        changed, to_delete, stats = plan(jobs, index, force=False)
-        for key, value in stats.items():
-            print(f"  {key}: {value:,}")
-        if to_delete:
-            delete_ids(index, to_delete)
-            print(f"  {len(to_delete):,}건 삭제")
-        if changed:
-            upsert(changed, index)
-        total = index.describe_index_stats().get("total_vector_count", 0)
-        report["index"] = {**stats, "삭제": len(to_delete), "적재 후 벡터": total}
-        print(f"  인덱스 벡터 수: {total:,}")
+        jobs, tracker = load_store(args.store)
+        try:
+            changed, to_delete, stats = plan(jobs, index, force=False, tracker=tracker)
+            for key, value in stats.items():
+                print(f"  {key}: {value:,}")
+            if to_delete:
+                delete_ids(index, to_delete, tracker=tracker)
+                print(f"  {len(to_delete):,}건 삭제")
+            if changed:
+                vectors = upsert(changed, index, tracker=tracker)
+            total = index.describe_index_stats().get("total_vector_count", 0)
+            report["index"] = {**stats, "삭제": len(to_delete), "적재 후 벡터": total}
+            print(f"  인덱스 벡터 수: {total:,}")
+        except Exception as error:
+            if tracker is not None:
+                tracker.close()
+            record_run(args.store, collection, started, vectors=vectors, error=repr(error))
+            raise
+        if tracker is not None:
+            tracker.close()
+    record_run(args.store, collection, started, vectors=vectors)
 
     report["finished_at"] = datetime.now().isoformat(timespec="seconds")
     report["elapsed_seconds"] = round((datetime.now() - started).total_seconds(), 1)

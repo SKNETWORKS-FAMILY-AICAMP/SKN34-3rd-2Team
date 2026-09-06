@@ -119,6 +119,7 @@ python -m job_matching_bot.sync                   # 증분 적재
 python -m job_matching_bot.sync --dry-run         # 뭘 할지만 본다
 python -m job_matching_bot.sync --skip-index      # 정제까지만, 인덱스는 안 건드림
 python -m job_matching_bot.retrieval.refresh_metadata   # 메타데이터만 갱신. 임베딩 안 함
+python -m job_matching_bot.retrieval.index_state        # 저장소가 기억하는 인덱스 상태. --adopt 로 기존 벡터 등록
 ```
 
 ```

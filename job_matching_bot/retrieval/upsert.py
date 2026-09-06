@@ -5,10 +5,14 @@
     python -m job_matching_bot.retrieval.upsert --force     # 전량 다시 임베딩
     python -m job_matching_bot.retrieval.upsert --dry-run   # 올리지 않고 계획만
 
-증분이 기본이다. 문서 ID를 공고 ID로 고정하고, 인덱스에 이미 있는 벡터의
-`content_hash`와 저장소의 해시를 비교해 **달라진 것만** 임베딩한다.
+증분이 기본이다. 문서 ID를 공고 ID로 고정하고, 저장소가 기억하는 두 지문을 대조한다.
+`embed_hash`(지금 내용)와 `indexed_embed_hash`(마지막으로 올린 내용)가 다른 것만
+임베딩한다. 지문은 요건 구간과 필터 값으로만 만들어서, 마감일이나 수집 시각만 바뀐
+공고는 다시 올리지 않는다(`documents.embed_hash`). 판정에 Pinecone 조회가 없다.
+JSON 저장소(테스트용)는 추적 컬럼이 없어 인덱스 메타데이터를 받아 대조한다.
+
 임베딩은 OpenAI 호출이라 비용이 나가고(1M 토큰당 약 $0.02), 저장은 Pinecone
-무료 등급 안이다.
+무료 등급 안이다. 저장소와 인덱스가 어긋났을 때는 `retrieval.index_state`로 맞춘다.
 
 마감·삭제된 공고는 인덱스에서 지운다. 앱이 만료 공고를 추천하지 않게 하기 위해서다.
 """
@@ -16,8 +20,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +36,6 @@ from job_matching_bot.retrieval.pinecone_index import (
     index_name,
 )
 from job_matching_bot.schemas.job_posting import Job
-from job_matching_bot.schemas.job_record import JobRecord
 
 DEFAULT_STORE = ARTIFACTS_DIR / "job_store.sqlite"
 
@@ -50,14 +53,17 @@ UPSERT_PAUSE = 0.2
 DELETE_BATCH = 500
 
 
-def load_jobs(store_path: Path) -> list[Job]:
+def load_store(store_path: Path) -> tuple[list[Job], Any]:
+    """(공고 전체, 인덱스 추적 저장소). JSON 저장소는 추적 컬럼이 없어 None."""
     from job_matching_bot.ingestion.job_store import open_store
 
-    return [record.job for record in open_store(store_path).load().all_records()]
+    store = open_store(store_path).load()
+    jobs = [record.job for record in store.all_records()]
+    return jobs, (store if hasattr(store, "index_state") else None)
 
 
 def existing_hashes(index, ids: list[str]) -> dict[str, str]:
-    """인덱스에 이미 있는 벡터의 content_hash. 없는 ID는 결과에 안 들어온다."""
+    """인덱스에 이미 있는 벡터의 embed_hash. 없는 ID는 결과에 안 들어온다. JSON 저장소용 폴백."""
     found: dict[str, str] = {}
     for start in range(0, len(ids), FETCH_BATCH):
         batch = ids[start : start + FETCH_BATCH]
@@ -65,7 +71,7 @@ def existing_hashes(index, ids: list[str]) -> dict[str, str]:
         vectors = getattr(result, "vectors", None) or {}
         for vector_id, vector in vectors.items():
             meta = getattr(vector, "metadata", None) or {}
-            found[vector_id] = str(meta.get("content_hash", ""))
+            found[vector_id] = str(meta.get("embed_hash", ""))
     return found
 
 
@@ -88,28 +94,44 @@ def embed_batch(embeddings, batch: list[str], attempts: int = 6) -> list[list[fl
     raise RuntimeError("unreachable")
 
 
-def plan(jobs: list[Job], index, force: bool) -> tuple[list[Job], list[str], dict[str, int]]:
+def plan(jobs: list[Job], index, force: bool, tracker=None) -> tuple[list[Job], list[str], dict[str, int]]:
     """(올릴 공고, 지울 ID, 통계).
 
     올릴 대상은 `dedup.select`가 정한다. 마감 지난 공고와 재등록 공고를 걸러서,
     저장소에는 남기되 인덱스에는 올리지 않는다.
+
+    `tracker`(SQLite 저장소)가 있으면 그 안의 embed_hash / indexed_embed_hash만으로
+    판정한다. 없으면 인덱스에서 메타데이터를 받아 대조한다.
     """
     stats = {"저장소": len(jobs)}
     selected, select_stats = dedup.select(jobs)
     stats.update(select_stats)
+    keep = {j.job_id for j in selected}
 
-    ids = [j.job_id for j in selected]
-    known = {} if force else existing_hashes(index, ids)
-    stats["인덱스에 이미 있음"] = len(known)
+    if tracker is not None:
+        state = tracker.index_state()
+        indexed = {job_id for job_id, (_, done) in state.items() if done is not None}
 
-    changed = [j for j in selected if known.get(j.job_id) != j.content_hash]
+        def is_current(job: Job) -> bool:
+            embed, done = state.get(job.job_id, (None, None))
+            return embed is not None and done == embed
+
+        # 올린 기록이 있는데 지금은 대상이 아닌 것(마감·삭제·재등록·요건 사라짐)은 지운다.
+        to_delete = sorted(job_id for job_id in indexed if job_id not in keep)
+    else:
+        known = {} if force else existing_hashes(index, [j.job_id for j in selected])
+        indexed = set(known)
+
+        def is_current(job: Job) -> bool:
+            return known.get(job.job_id) == doc.embed_hash(job)
+
+        stale_ids = [j.job_id for j in jobs if j.job_id not in keep]
+        to_delete = list(existing_hashes(index, stale_ids)) if stale_ids else []
+
+    stats["인덱스에 이미 있음"] = len(indexed & keep)
+    changed = list(selected) if force else [j for j in selected if not is_current(j)]
     stats["올릴 것"] = len(changed)
     stats["변경 없음(건너뜀)"] = len(selected) - len(changed)
-
-    # 인덱스에 있지만 지금은 대상이 아닌 것(마감·재등록·요건 사라짐)은 지운다.
-    keep = {j.job_id for j in selected}
-    stale_ids = [j.job_id for j in jobs if j.job_id not in keep]
-    to_delete = list(existing_hashes(index, stale_ids)) if stale_ids else []
     stats["지울 것"] = len(to_delete)
     return changed, to_delete, stats
 
@@ -132,18 +154,21 @@ def upsert_batch(index, payload: list[dict], attempts: int = 5) -> None:
             delay = min(delay * 2, 30.0)
 
 
-def upsert(jobs: list[Job], index) -> int:
+def upsert(jobs: list[Job], index, tracker=None, embeddings=None) -> int:
     """작은 덩이로 나눠 임베딩하고 바로 올린다.
 
     한 덩이를 끝내고 다음으로 가므로, 중간에 멈춰도 그때까지는 인덱스에 남는다.
     문서 ID가 공고 ID라 다시 돌리면 덮어쓰기이고 중복이 생기지 않는다.
     덩이 사이에 잠깐 쉬어 분당 한도에 닿지 않게 한다.
+    `tracker`가 있으면 덩이마다 올린 지문을 저장소에 기록한다.
+    `embeddings`는 테스트가 대역을 넣는 자리다. 없으면 OpenAI를 쓴다.
     """
     import time
 
-    from langchain_openai import OpenAIEmbeddings
+    if embeddings is None:
+        from langchain_openai import OpenAIEmbeddings
 
-    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+        embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
     done = 0
     for start in range(0, len(jobs), EMBED_BATCH):
         chunk = jobs[start : start + EMBED_BATCH]
@@ -164,6 +189,8 @@ def upsert(jobs: list[Job], index) -> int:
             if offset + UPSERT_BATCH < len(payload):
                 time.sleep(UPSERT_PAUSE)
 
+        if tracker is not None:
+            tracker.mark_indexed({job.job_id: doc.embed_hash(job) for job in chunk}, at=datetime.now())
         done += len(chunk)
         print(f"  적재 {done:,}/{len(jobs):,}")
         if done < len(jobs):
@@ -171,12 +198,15 @@ def upsert(jobs: list[Job], index) -> int:
     return done
 
 
-def delete_ids(index, ids: list[str]) -> int:
+def delete_ids(index, ids: list[str], tracker=None) -> int:
     """삭제도 나눠 보낸다. 한 번에 많이 보내면 요청이 거부된다."""
     import time
 
     for start in range(0, len(ids), DELETE_BATCH):
-        index.delete(ids=ids[start : start + DELETE_BATCH])
+        batch = ids[start : start + DELETE_BATCH]
+        index.delete(ids=batch)
+        if tracker is not None:
+            tracker.clear_indexed(batch)
         if start + DELETE_BATCH < len(ids):
             time.sleep(UPSERT_PAUSE)
     return len(ids)
@@ -197,8 +227,8 @@ def main() -> int:
     print(f"인덱스 {info['name']} (차원 {info['dimension']}, {info['metric']})")
 
     index = client().Index(info["name"])
-    jobs = load_jobs(args.store)
-    changed, to_delete, stats = plan(jobs, index, args.force)
+    jobs, tracker = load_store(args.store)
+    changed, to_delete, stats = plan(jobs, index, args.force, tracker=tracker)
     if args.limit:
         changed = changed[: args.limit]
 
@@ -212,10 +242,10 @@ def main() -> int:
         return 0
 
     if to_delete:
-        delete_ids(index, to_delete)
+        delete_ids(index, to_delete, tracker=tracker)
         print(f"  {len(to_delete):,}건 삭제")
     if changed:
-        upsert(changed, index)
+        upsert(changed, index, tracker=tracker)
 
     total = index.describe_index_stats().get("total_vector_count")
     print(f"완료. 인덱스 벡터 수: {total:,}")

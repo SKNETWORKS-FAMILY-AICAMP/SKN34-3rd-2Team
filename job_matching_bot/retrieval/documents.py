@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from typing import Any
 
@@ -58,16 +60,14 @@ def regions_of(region_text: str) -> list[str]:
     return found
 
 
-def to_metadata(job: Job) -> dict[str, Any]:
-    """검색 필터와 카드 표시에 쓰는 값. Pinecone은 중첩 객체를 못 받아 평평하게 둔다."""
+def _index_fields(job: Job) -> dict[str, Any]:
+    """벡터와 함께 올라가는 검색 필터·근거 값. 이 값이 바뀌면 다시 올린다."""
     return {
         "job_id": job.job_id,
         "company": job.company,
         "title": job.title,
         "source": job.source,
         "source_url": job.source_url,
-        "status": job.status,
-        "deadline": job.deadline or "",
         # 조건 필터
         "regions": regions_of(job.region),
         "nationwide": NATIONWIDE in (job.region or ""),
@@ -81,9 +81,33 @@ def to_metadata(job: Job) -> dict[str, Any]:
         "preferred_skills": list(job.preferred_skills),
         "tech_stack": list(job.tech_stack),
         "body_is_image": job.body_is_image,
+    }
+
+
+def embed_hash(job: Job) -> str:
+    """인덱스에 올라가는 내용의 지문. 이 값이 그대로면 다시 올리지 않는다.
+
+    `content_hash`는 크롤 원본 전체의 해시라 수집 시각이나 조회수처럼 매칭과 무관한
+    값이 바뀌어도 달라진다. 그걸 기준으로 삼으면 다시 받은 공고를 전부 다시 임베딩한다.
+    여기서는 임베딩 텍스트(`index_body`)와 필터·근거 메타데이터만 본다.
+
+    마감일과 상태는 뺀다. 마감은 인덱스에서 지우는 것으로 처리하지, 다시 올리지 않는다.
+    """
+    payload = {"body": index_body(job), **_index_fields(job)}
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def to_metadata(job: Job) -> dict[str, Any]:
+    """검색 필터와 카드 표시에 쓰는 값. Pinecone은 중첩 객체를 못 받아 평평하게 둔다."""
+    return {
+        **_index_fields(job),
+        "status": job.status,
+        "deadline": job.deadline or "",
         # LLM 재정렬이 읽을 원문 일부. 전체를 넣으면 메타데이터 한도를 넘는다.
         "excerpt": index_body(job)[:_META_TEXT_LIMIT],
-        # 증분 적재: 내용이 그대로면 다시 임베딩하지 않는다.
+        # 증분 적재: 저장소의 indexed_embed_hash와 같은 값. 원본 해시는 대조용으로 남긴다.
+        "embed_hash": embed_hash(job),
         "content_hash": job.content_hash,
     }
 
