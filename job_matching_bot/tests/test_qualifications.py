@@ -22,6 +22,38 @@ BODY = """
 """
 
 
+class CareerYearsTest(unittest.TestCase):
+    """자격요건에서 최소 연차를 뽑는다. 우대 줄과 신입 언급 줄은 요구로 세지 않는다."""
+
+    def test_min_years_from_various_phrasings(self):
+        self.assertEqual(5, extract_qualifications(["- 경력 5년 이상"]).min_career_years)
+        self.assertEqual(3, extract_qualifications(["IT 서비스 기획 경력 3년 이상 10년 이하"]).min_career_years)
+        self.assertEqual(5, extract_qualifications(["자동차 전장 실무 경험 5~10년"]).min_career_years)
+        self.assertEqual(3, extract_qualifications(["ㆍ경력 : 3년"]).min_career_years)
+
+    def test_lowest_requirement_wins_across_roles(self):
+        q = extract_qualifications(["풀스택 개발 경력 5년 이상", "PM 경험 소유자 (2년 이상)"])
+        self.assertEqual(2, q.min_career_years)
+        self.assertEqual(2, len(q.evidence["career"]))
+
+    def test_years_that_are_not_requirements(self):
+        self.assertIsNone(extract_qualifications(["2026년 하반기 채용"]).min_career_years)
+        self.assertIsNone(extract_qualifications(["대졸(2년제) 이상"]).min_career_years)
+        self.assertIsNone(extract_qualifications(["경력 3년 이하"]).min_career_years)
+        self.assertIsNone(extract_qualifications(["경력 3년 이상 우대"]).min_career_years)
+
+    def test_entry_mention_suppresses_years(self):
+        q = extract_qualifications(["신입 또는 경력 2년 이상"])
+        self.assertIsNone(q.min_career_years)
+        self.assertTrue(q.mentions_entry)
+
+    def test_required_without_years(self):
+        q = extract_qualifications(["- NC 또는 MCT 가공 관련 경력자"])
+        self.assertIsNone(q.min_career_years)
+        self.assertTrue(q.career_required)
+        self.assertFalse(extract_qualifications(["경력자 우대"]).career_required)
+
+
 class ExtractQualificationsTest(unittest.TestCase):
     def test_extracts_major_certification_and_military(self):
         q = extract_qualifications(split_sections(BODY).required)

@@ -59,6 +59,16 @@ CERTIFICATIONS: tuple[str, ...] = (
 )
 _CERT_CONTEXT = re.compile(r"자격|기사|certified|opic|toeic|토익|토스|teps|jlpt|hsk|sqld|adsp", re.IGNORECASE)
 _GENERIC_GISA = re.compile(r"([가-힣A-Za-z]{2,12}(?:산업)?기사)")
+# 경력 연차. "경력 5년 이상", "3년 이상 10년 이하", "5~10년", "경력 : 3년".
+# 숫자 앞에 숫자가 없어야 하므로 "2026년"은 잡히지 않고, "2년제"·"3년차"는 뒤 글자로 거른다.
+# "경력 3년 이하"는 상한이지 요구가 아니다.
+_YEARS_MIN = re.compile(r"(?<!\d)(\d{1,2})\s*(?:~\s*\d{1,2}\s*)?년\s*(?:이상|↑)")
+_YEARS_LABELED = re.compile(
+    r"(?:경력|실무|경험)\s*:?\s*(?<!\d)(\d{1,2})\s*(?:~\s*\d{1,2}\s*)?년(?![제차])(?!\s*(?:이하|미만))"
+)
+_CAREER_REQUIRED = re.compile(r"경력자|유경험자|경력\s*필수|경력\s*보유자")
+# 이 말이 있으면 신입도 받는다는 뜻이다. 그 줄의 연차는 요구가 아니라 다른 직무의 조건이다.
+_ENTRY_MENTION = re.compile(r"신입|경력\s*무관|인턴|초보")
 _MILITARY = re.compile(r"병역|군필|군\s*복무")
 _MILITARY_DONE = re.compile(r"필|면제|마친|완료")
 
@@ -69,7 +79,15 @@ class Qualifications:
     major_terms: list[str] = field(default_factory=list)
     certifications: list[str] = field(default_factory=list)
     military_required: bool = False
-    evidence: dict[str, list[str]] = field(default_factory=lambda: {"majors": [], "certifications": [], "military": []})
+    # 자격요건이 요구하는 최소 연차. 여러 직무면 가장 낮은 값 — 문턱이 낮은 자리 기준이어야
+    # 억울한 탈락이 없다. 연차 없이 "경력자"라고만 쓰면 career_required 만 켜진다.
+    min_career_years: int | None = None
+    career_required: bool = False
+    # 요건 줄에서 신입을 언급했는가. 정규화 단계가 제목과 합쳐 판단한다.
+    mentions_entry: bool = False
+    evidence: dict[str, list[str]] = field(
+        default_factory=lambda: {"majors": [], "certifications": [], "military": [], "career": []}
+    )
 
 
 def normalize_term(text: str) -> str:
@@ -117,4 +135,19 @@ def extract_qualifications(required_lines: list[str]) -> Qualifications:
         if _MILITARY.search(line) and _MILITARY_DONE.search(line) and "무관" not in line:
             result.military_required = True
             result.evidence["military"].append(line)
+
+        if _ENTRY_MENTION.search(line):
+            result.mentions_entry = True
+        else:
+            years = [int(m.group(1)) for m in _YEARS_MIN.finditer(line)]
+            years += [int(m.group(1)) for m in _YEARS_LABELED.finditer(line)]
+            years = [y for y in years if 1 <= y <= 20]
+            if years:
+                low = min(years)
+                if result.min_career_years is None or low < result.min_career_years:
+                    result.min_career_years = low
+                result.evidence["career"].append(line)
+            elif _CAREER_REQUIRED.search(line):
+                result.career_required = True
+                result.evidence["career"].append(line)
     return result

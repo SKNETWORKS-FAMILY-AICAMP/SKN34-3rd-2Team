@@ -75,6 +75,20 @@ void main() {
       expect(hardFilter(job, none).unknown, contains('이력서 경력 근거 미입력'));
     });
 
+    test('연차 없는 경력 공고는 경력이 있으면 충족, 없으면 확인 필요', () {
+      final job = _job(careerType: 'EXPERIENCED');
+      final threeYears = LocalResumeProfile.fromContent(
+        _content(
+          experience: const [
+            ResumeExperienceItem(id: 'x', company: '회사', startDate: '2023-03', endDate: '2026-03'),
+          ],
+        ),
+      );
+      final none = LocalResumeProfile.fromContent(_content());
+      expect(hardFilter(job, threeYears).passed, contains('경력 조건 충족 (연차 미기재, 경력 보유)'));
+      expect(hardFilter(job, none).unknown, contains('경력 연수 미기재'));
+    });
+
     test('희망 지역·고용형태를 안 넣으면 탈락이 아니라 확인 필요다', () {
       final result = hardFilter(_job(), LocalResumeProfile.fromContent(_content()));
       expect(result.status, 'CHECK_REQUIRED');

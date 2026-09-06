@@ -166,6 +166,43 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual("EXPIRED", job.status)
 
 
+class BodyCareerOverrideTest(unittest.TestCase):
+    """메타는 경력무관인데 자격요건이 연차를 요구하면 본문이 이긴다. 신입 명시는 뒤집지 않는다."""
+
+    @staticmethod
+    def _record(meta: str, required: str, title: str = "백엔드 개발자 채용") -> dict:
+        return {
+            **SAMPLE,
+            "conditions": {**SAMPLE["conditions"], "경력": meta},
+            "list_item": {**SAMPLE["list_item"], "title": title},
+            "description": "자격요건\n" + required + "\n근무조건\n- 정규직",
+        }
+
+    def test_any_meta_with_body_years_becomes_experienced(self):
+        job = normalize_saramin(self._record("경력무관", "- Spring Boot 개발 경력 5년 이상"))
+        self.assertEqual(("EXPERIENCED", 5), (job.career_type, job.min_career_years))
+        self.assertEqual("body_required", job.field_provenance["career"]["method"])
+        self.assertEqual("경력무관", job.field_provenance["career"]["evidence"])
+
+    def test_any_meta_with_required_but_no_years(self):
+        job = normalize_saramin(self._record("경력무관", "- 백엔드 개발 경력자"))
+        self.assertEqual(("EXPERIENCED", None), (job.career_type, job.min_career_years))
+
+    def test_entry_mention_in_body_or_title_keeps_any(self):
+        job = normalize_saramin(self._record("경력무관", "- 신입 또는 경력 3년 이상"))
+        self.assertEqual("ANY", job.career_type)
+        job = normalize_saramin(self._record("경력무관", "- 경력 3년 이상", title="각 부문별 신입/경력 모집"))
+        self.assertEqual("ANY", job.career_type)
+
+    def test_explicit_entry_meta_is_not_overridden(self):
+        job = normalize_saramin(self._record("신입", "- 경력 5년 이상"))
+        self.assertEqual(("ENTRY", 0), (job.career_type, job.min_career_years))
+
+    def test_one_year_is_left_alone(self):
+        job = normalize_saramin(self._record("경력무관", "- 경력 1년 이상"))
+        self.assertEqual("ANY", job.career_type)
+
+
 class TechStackTest(unittest.TestCase):
     """기업이 고른 기술 태그는 본문 덤프의 숨김 분류 블록에서 나온다."""
 

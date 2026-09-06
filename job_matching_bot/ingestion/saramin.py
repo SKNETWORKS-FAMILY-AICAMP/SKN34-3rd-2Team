@@ -34,7 +34,10 @@ from job_matching_bot.config import AS_OF
 from job_matching_bot.ingestion.saramin_tech_vocab import split_tags
 from job_matching_bot.schemas.job_posting import Job
 
-PARSER_VERSION = "saramin-poc-0.1.0"
+PARSER_VERSION = "saramin-poc-0.2.0"
+
+# 제목에 이 말이 있으면 신입도 뽑는 공고다. 본문 연차로 경력직으로 바꾸지 않는다.
+_ENTRY_IN_TITLE = re.compile(r"신입|인턴|경력\s*무관")
 SOURCE = "SARAMIN_POC"
 
 def _clean(value: str) -> str:
@@ -237,6 +240,20 @@ def normalize_saramin(
 
     qualifications = extract_qualifications(split_sections(description).required)
 
+    # 메타는 "경력무관"인데 자격요건이 연차를 요구하는 공고가 60건쯤 있다. 이대로 두면
+    # 신입 이력서에 경력 5년 공고가 1위로 올라온다. 메타가 경력무관일 때만 본문으로
+    # 바로잡는다. 기업이 "신입"이라고 명시한 것은 본문 추정으로 뒤집지 않고, 제목이나
+    # 요건 어디든 신입을 언급하면 다직무 공고라 그대로 둔다. 1년 이상은 검색 필터가
+    # 이미 신입 가능으로 보고 있어 여기서만 엄격하게 하지 않는다.
+    career_method = "detail_dl"
+    entry_in_title = bool(_ENTRY_IN_TITLE.search(str(listing.get("title") or "")))
+    if career_type == "ANY" and not qualifications.mentions_entry and not entry_in_title:
+        if qualifications.min_career_years is not None and qualifications.min_career_years >= 2:
+            career_type, min_years, career_method = "EXPERIENCED", qualifications.min_career_years, "body_required"
+        elif qualifications.career_required:
+            # 연차를 지어내지 않는다. 하드 필터가 "연수 미기재"로 다룬다.
+            career_type, min_years, career_method = "EXPERIENCED", None, "body_required"
+
     raw_for_hash = json.dumps(record, ensure_ascii=False, sort_keys=True)
 
     return Job(
@@ -268,7 +285,7 @@ def normalize_saramin(
         content_hash=f"sha256:{hashlib.sha256(raw_for_hash.encode('utf-8')).hexdigest()}",
         parser_version=PARSER_VERSION,
         field_provenance={
-            "career": {"method": "detail_dl", "evidence": career_evidence},
+            "career": {"method": career_method, "evidence": career_evidence, "body": qualifications.evidence["career"]},
             "education": {"method": "detail_dl", "evidence": education_evidence},
             "employment_type": {"method": "detail_dl", "evidence": employment_evidence},
             "region": {"method": "detail_dl", "evidence": region},

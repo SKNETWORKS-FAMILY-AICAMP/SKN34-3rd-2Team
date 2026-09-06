@@ -287,7 +287,13 @@ LocalFilterResult hardFilter(CollectedJob job, LocalResumeProfile resume) {
   if (job.careerType == 'EXPERIENCED') {
     final minYears = job.minCareerYears;
     if (minYears == null) {
-      unknown.add('경력 연수 미기재');
+      // "경력자"라고만 쓰고 연차가 없는 공고. 경력이 있으면 충족, 신입은 확인 필요.
+      // hard_filter.py / jobCoach.ts 와 같은 규칙.
+      if (resume.hasCareerEvidence && resume.careerYears >= 1) {
+        passed.add('경력 조건 충족 (연차 미기재, 경력 보유)');
+      } else {
+        unknown.add('경력 연수 미기재');
+      }
     } else if (!resume.hasCareerEvidence) {
       unknown.add('이력서 경력 근거 미입력');
     } else if (resume.careerYears < minYears) {

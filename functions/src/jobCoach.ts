@@ -204,8 +204,13 @@ function hardFilter(job: CollectedJob, resume: ResumeProfile): FilterResult {
   if (job.bodyIsImage) unknown.push("공고 상세가 이미지라 요구사항 미확인");
 
   if (job.careerType === "EXPERIENCED") {
-    if (job.minCareerYears === null) unknown.push("경력 연수 미기재");
-    else if (!resume.hasCareerEvidence) unknown.push("이력서 경력 근거 미입력");
+    if (job.minCareerYears === null) {
+      // "경력자"라고만 쓰고 연차가 없는 공고. 경력이 있으면 충족, 신입은 확인 필요.
+      // hard_filter.py / local_job_matcher.dart 와 같은 규칙.
+      if (resume.hasCareerEvidence && resume.careerYears >= 1) {
+        passed.push("경력 조건 충족 (연차 미기재, 경력 보유)");
+      } else unknown.push("경력 연수 미기재");
+    } else if (!resume.hasCareerEvidence) unknown.push("이력서 경력 근거 미입력");
     else if (resume.careerYears < job.minCareerYears) {
       failed.push(`최소 경력 ${job.minCareerYears}년`);
     } else passed.push("경력 조건 충족");
