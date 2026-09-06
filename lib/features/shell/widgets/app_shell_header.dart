@@ -34,20 +34,22 @@ class AppShellHeader extends ConsumerWidget {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
+                    color: AppColors.primary,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.border),
                   ),
                   child: const Icon(
-                    Icons.school,
-                    color: AppColors.textPrimary,
+                    Icons.school_rounded,
+                    color: Colors.white,
                     size: 18,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   AppConstants.appName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ],
             ),
@@ -224,7 +226,7 @@ class _CohortMenuItem extends StatelessWidget {
       leadingIcon: SizedBox(
         width: 18,
         child: selected
-            ? const Icon(Icons.check, size: 16, color: AppColors.textPrimary)
+            ? const Icon(Icons.check, size: 16, color: AppColors.primary)
             : null,
       ),
       child: ConstrainedBox(

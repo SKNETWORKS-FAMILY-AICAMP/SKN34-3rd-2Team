@@ -23,7 +23,7 @@ class UnassignedStudentList extends StatelessWidget {
       builder: (context, candidate, _) {
         final isHover = candidate.isNotEmpty;
         return Card(
-          color: isHover ? const Color(0xFFF5F3FF) : null,
+          color: isHover ? AppColors.primaryLight : null,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -53,7 +53,7 @@ class UnassignedStudentList extends StatelessWidget {
                     '여기에 놓으면 배정 해제',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF7C3AED),
+                      color: AppColors.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -90,7 +90,7 @@ class UnassignedStudentList extends StatelessWidget {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFE9D5FF),
+                                color: AppColors.primaryLight,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -137,12 +137,12 @@ class _StudentChip extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 14,
-            backgroundColor: const Color(0xFFE9D5FF),
+            backgroundColor: AppColors.primaryLight,
             child: Text(
               name.isNotEmpty ? name[0] : '?',
               style: const TextStyle(
                 fontSize: 12,
-                color: Color(0xFF7C3AED),
+                color: AppColors.primary,
                 fontWeight: FontWeight.bold,
               ),
             ),

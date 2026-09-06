@@ -22,6 +22,8 @@ class UserModel {
     this.socialLinks = const {},
     this.jobPreferences = const JobPreferences(),
     this.birthDate,
+    this.photoUrl,
+    this.photoStoragePath,
     this.mileageBalance = 0,
     this.createdAt,
     this.updatedAt,
@@ -46,12 +48,16 @@ class UserModel {
   /// 취업 희망 조건(직무·지역·고용형태). 이력서가 아니라 프로필에 둔다.
   final JobPreferences jobPreferences;
   final String? birthDate;
+  final String? photoUrl;
+  final String? photoStoragePath;
   final int mileageBalance;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? lastLoginAt;
 
   bool get isAdmin => role.isAdmin;
+  bool get isInstructor => role.isInstructor;
+  bool get isStudent => role.isStudent;
 
   /// Firestore Document → UserModel
   factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -74,6 +80,8 @@ class UserModel {
       ),
       jobPreferences: JobPreferences.fromMap(data['jobPreferences'] as Map?),
       birthDate: data['birthDate'] as String?,
+      photoUrl: data['photoUrl'] as String?,
+      photoStoragePath: data['photoStoragePath'] as String?,
       mileageBalance: data['mileageBalance'] as int? ?? 0,
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
       updatedAt: AppDateUtils.timestampToDateTime(data['updatedAt']),
@@ -99,6 +107,9 @@ class UserModel {
       'socialLinks': socialLinks,
       'jobPreferences': jobPreferences.toMap(),
       if (birthDate != null) 'birthDate': birthDate,
+      if (photoUrl != null && photoUrl!.isNotEmpty) 'photoUrl': photoUrl,
+      if (photoStoragePath != null && photoStoragePath!.isNotEmpty)
+        'photoStoragePath': photoStoragePath,
       'mileageBalance': mileageBalance,
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -112,6 +123,8 @@ class UserModel {
     JobPreferences? jobPreferences,
     String? birthDate,
     String? personalEmail,
+    String? photoUrl,
+    String? photoStoragePath,
     bool? mustChangePassword,
     DateTime? lastLoginAt,
   }) {
@@ -131,6 +144,8 @@ class UserModel {
       socialLinks: socialLinks ?? this.socialLinks,
       jobPreferences: jobPreferences ?? this.jobPreferences,
       birthDate: birthDate ?? this.birthDate,
+      photoUrl: photoUrl ?? this.photoUrl,
+      photoStoragePath: photoStoragePath ?? this.photoStoragePath,
       mileageBalance: mileageBalance,
       createdAt: createdAt,
       updatedAt: updatedAt,

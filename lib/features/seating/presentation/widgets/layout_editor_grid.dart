@@ -112,10 +112,10 @@ class LayoutEditorGrid extends StatelessWidget {
           width: _cellW,
           height: _cellH,
           decoration: BoxDecoration(
-            color: hover ? const Color(0xFFF5F3FF) : const Color(0xFFFAFAFA),
+            color: hover ? AppColors.primaryLight : const Color(0xFFFAFAFA),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: hover ? const Color(0xFF7C3AED) : const Color(0xFFE2E8F0),
+              color: hover ? AppColors.primary : const Color(0xFFE2E8F0),
               width: hover ? 2 : 1,
             ),
           ),

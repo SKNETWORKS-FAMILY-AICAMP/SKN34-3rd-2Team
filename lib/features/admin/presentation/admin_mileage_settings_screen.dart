@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/mileage_constants.dart';
-import '../../../core/constants/record_types.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../shared/models/mileage_models.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -11,7 +10,7 @@ import '../../../shared/providers/mileage_providers.dart';
 import '../../mileage/theme/mileage_theme.dart';
 import 'widgets/admin_page_layout.dart';
 
-/// 관리자 — 마일리지 기수 설정 (한도 · 자동 적립)
+/// 관리자 — 마일리지 기수 설정 (카테고리 한도)
 class AdminMileageSettingsScreen extends ConsumerStatefulWidget {
   const AdminMileageSettingsScreen({super.key});
 
@@ -25,9 +24,6 @@ class _AdminMileageSettingsScreenState
   final _gifticonLimit = TextEditingController();
   final _bookLimit = TextEditingController();
   final _courseLimit = TextEditingController();
-  final _certAccrual = TextEditingController();
-  final _studyAccrual = TextEditingController();
-  final _blogAccrual = TextEditingController();
 
   bool _loaded = false;
   bool _saving = false;
@@ -37,9 +33,6 @@ class _AdminMileageSettingsScreenState
     _gifticonLimit.dispose();
     _bookLimit.dispose();
     _courseLimit.dispose();
-    _certAccrual.dispose();
-    _studyAccrual.dispose();
-    _blogAccrual.dispose();
     super.dispose();
   }
 
@@ -51,9 +44,6 @@ class _AdminMileageSettingsScreenState
     _bookLimit.text = settings.limitFor(MileageCategories.book).toString();
     _courseLimit.text =
         settings.limitFor(MileageCategories.onlineCourse).toString();
-    _certAccrual.text = settings.accrualFor(RecordTypes.certification).toString();
-    _studyAccrual.text = settings.accrualFor(RecordTypes.study).toString();
-    _blogAccrual.text = settings.accrualFor(RecordTypes.blog).toString();
   }
 
   int _parseInt(TextEditingController c, int fallback) =>
@@ -72,11 +62,7 @@ class _AdminMileageSettingsScreenState
           MileageCategories.book: _parseInt(_bookLimit, 100000),
           MileageCategories.onlineCourse: _parseInt(_courseLimit, 200000),
         },
-        accrualRules: {
-          RecordTypes.certification: _parseInt(_certAccrual, 5000),
-          RecordTypes.study: _parseInt(_studyAccrual, 3000),
-          RecordTypes.blog: _parseInt(_blogAccrual, 2000),
-        },
+        accrualRules: const {},
       );
 
       await ref.read(mileageRepositoryProvider).saveMileageSettings(
@@ -147,20 +133,14 @@ class _AdminMileageSettingsScreenState
                     ),
                   ],
                 ),
-                AdminFormSection(
-                  title: '기록실 승인 시 자동 적립 (M)',
+                const AdminFormSection(
+                  title: '기록실 미션 적립',
                   children: [
-                    _LimitField(
-                      label: '자격증 (${RecordTypes.labels[RecordTypes.certification]})',
-                      controller: _certAccrual,
-                    ),
-                    _LimitField(
-                      label: '스터디 (${RecordTypes.labels[RecordTypes.study]})',
-                      controller: _studyAccrual,
-                    ),
-                    _LimitField(
-                      label: '블로그 (${RecordTypes.labels[RecordTypes.blog]})',
-                      controller: _blogAccrual,
+                    Text(
+                      '승인 시 건당 고정 적립은 사용하지 않습니다.\n'
+                      '학습인증·퀴즈·자격증·스터디·블로그는 노션 마일리지 제도 규칙으로 '
+                      '자동 정산됩니다.',
+                      style: TextStyle(fontSize: 13, height: 1.4),
                     ),
                   ],
                 ),

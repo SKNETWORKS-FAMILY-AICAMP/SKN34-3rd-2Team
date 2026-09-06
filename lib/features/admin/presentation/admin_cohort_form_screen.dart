@@ -1,6 +1,8 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/cohort_status.dart';
 import '../../../core/routing/route_paths.dart';
@@ -10,6 +12,9 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/cohort_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../auth/providers/auth_providers.dart';
+import '../../curriculum/data/curriculum_repository.dart';
+import '../../curriculum/providers/curriculum_providers.dart';
 import 'widgets/admin_page_layout.dart';
 
 /// 관리자 — 기수 생성 / 수정
@@ -38,6 +43,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
   CohortModel? _existing;
   bool _loaded = false;
   bool _isSaving = false;
+  bool _isUploadingPdf = false;
 
   @override
   void dispose() {
@@ -46,6 +52,122 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
     _descriptionController.dispose();
     _classroomController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAndUploadCurriculumPdf() async {
+    final cohortId = widget.cohortId;
+    final uid = ref.read(sessionUidProvider).value;
+    if (cohortId == null || uid == null) return;
+
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (picked.isEmpty || !mounted) return;
+
+    final file = picked.first;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    if (bytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('파일을 읽을 수 없습니다.')),
+      );
+      return;
+    }
+    if (bytes.length > kCurriculumPdfMaxBytes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF는 20MB 이하만 업로드할 수 있습니다.')),
+      );
+      return;
+    }
+
+    setState(() => _isUploadingPdf = true);
+    try {
+      final repo = ref.read(curriculumRepositoryProvider);
+      final url = await repo.uploadPdf(
+        cohortId: cohortId,
+        fileName: file.name,
+        bytes: bytes,
+      );
+      await repo.saveFullPdf(
+        cohortId: cohortId,
+        pdfUrl: url,
+        fileName: file.name,
+        updatedBy: uid,
+      );
+      ref.invalidate(curriculumMetaForCohortProvider(cohortId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('커리큘럼 PDF가 등록되었습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF 업로드 실패: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPdf = false);
+    }
+  }
+
+  Future<void> _clearCurriculumPdf() async {
+    final cohortId = widget.cohortId;
+    final uid = ref.read(sessionUidProvider).value;
+    if (cohortId == null || uid == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('커리큘럼 PDF 삭제'),
+        content: const Text('등록된 PDF를 삭제할까요? 학생 대시보드에서도 더 이상 보이지 않습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isUploadingPdf = true);
+    try {
+      await ref.read(curriculumRepositoryProvider).clearFullPdf(
+            cohortId: cohortId,
+            updatedBy: uid,
+          );
+      ref.invalidate(curriculumMetaForCohortProvider(cohortId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('커리큘럼 PDF가 삭제되었습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제 실패: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPdf = false);
+    }
+  }
+
+  Future<void> _openCurriculumPdf(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF를 열 수 없습니다.')),
+      );
+    }
   }
 
   void _load(CohortModel c) {
@@ -229,7 +351,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -342,6 +464,25 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     color: AppColors.textSecondary,
                   ),
                 ),
+                if (widget.isEditing) ...[
+                  const SizedBox(height: 28),
+                  _CurriculumPdfSection(
+                    cohortId: widget.cohortId!,
+                    isBusy: _isUploadingPdf,
+                    onUpload: _pickAndUploadCurriculumPdf,
+                    onClear: _clearCurriculumPdf,
+                    onOpen: _openCurriculumPdf,
+                  ),
+                ] else ...[
+                  const SizedBox(height: 28),
+                  const Text(
+                    '커리큘럼 PDF는 기수 생성 후 수정 화면에서 등록할 수 있습니다.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 32),
                 if (_isSaving)
                   const Center(child: CircularProgressIndicator())
@@ -358,6 +499,106 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CurriculumPdfSection extends ConsumerWidget {
+  const _CurriculumPdfSection({
+    required this.cohortId,
+    required this.isBusy,
+    required this.onUpload,
+    required this.onClear,
+    required this.onOpen,
+  });
+
+  final String cohortId;
+  final bool isBusy;
+  final VoidCallback onUpload;
+  final VoidCallback onClear;
+  final void Function(String url) onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final metaAsync = ref.watch(curriculumMetaForCohortProvider(cohortId));
+
+    return AdminFormSection(
+      title: '커리큘럼 PDF',
+      children: [
+        const Text(
+          '이 기수 학생 대시보드의 「PDF 보기」 버튼으로 열립니다.',
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 12),
+        metaAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+          error: (e, _) => Text('불러오기 실패: $e'),
+          data: (meta) {
+            final hasPdf = meta?.hasFullPdf == true;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (hasPdf) ...[
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.picture_as_pdf,
+                      color: AppColors.error,
+                    ),
+                    title: Text(
+                      meta!.fullPdfFileName ?? '커리큘럼 PDF',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text('등록됨 · 학생에게 공개'),
+                    trailing: IconButton(
+                      tooltip: '열기',
+                      onPressed: () => onOpen(meta.fullPdfUrl!),
+                      icon: const Icon(Icons.open_in_new),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ] else
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      '아직 등록된 PDF가 없습니다.',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ),
+                if (isBusy)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: onUpload,
+                        icon: Icon(
+                          hasPdf ? Icons.swap_horiz : Icons.upload_file,
+                          size: 18,
+                        ),
+                        label: Text(hasPdf ? 'PDF 교체' : 'PDF 등록'),
+                      ),
+                      if (hasPdf)
+                        OutlinedButton.icon(
+                          onPressed: onClear,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('삭제'),
+                        ),
+                    ],
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }

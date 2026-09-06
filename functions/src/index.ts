@@ -9,8 +9,13 @@ export {
   syncDiscordNoticesNow,
 } from "./discord";
 export {googleFormWebhook} from "./googleForm";
+export {
+  createInstructorAccount,
+  updateInstructorAccount,
+  resetInstructorPassword,
+  setInstructorActiveStatus,
+} from "./instructors";
 export {getQualExamSchedules} from "./qualExamSchd";
-export {parseCurriculumPdf} from "./curriculumPdf";
 export {publishScheduledNotices, publishScheduledNoticesNow} from "./scheduledNotices";
 export {
   submitPurchaseRequest,
@@ -19,8 +24,17 @@ export {
   expireMileage,
   expireMileageNow,
 } from "./mileage";
-import {grantMileageForSubmission} from "./mileage";
 export {analyzeResumeAndMatch} from "./jobCoach";
+export {settleMissionsOnApproval} from "./missions";
+export {
+  getAssessmentForTake,
+  submitAssessment,
+  getAssessmentReview,
+  adjustAssessmentScores,
+  generateAssessmentQuestions,
+} from "./assessments";
+export {getCurriculumYoutubeRecommendations} from "./youtubeRecommendations";
+import {settleMissionsOnApproval} from "./missions";
 
 const EMAIL_DOMAIN = "playdata.co.kr";
 
@@ -657,17 +671,18 @@ export const reviewSubmission = onCall(
     });
 
     if (status === "approved" && !submissionData.mileageGranted) {
-      const userId = submissionData.userId as string;
-      const submissionType = submissionData.type as string;
-      const title = (submissionData.title as string) ?? submissionType;
-      await grantMileageForSubmission(
+      const settled = await settleMissionsOnApproval({
         cohortId,
         submissionId,
-        submissionType,
-        userId,
-        title,
-        request.auth.uid,
-      );
+        submission: submissionData,
+        reviewedBy: request.auth.uid,
+      });
+      return {
+        message: settled.grantedTotal > 0
+          ? `승인되었습니다. 미션 마일리지 ${settled.grantedTotal.toLocaleString()}M이 적립되었습니다.`
+          : "승인되었습니다.",
+        grantedTotal: settled.grantedTotal,
+      };
     }
 
     return {message: `제출물이 ${status === "approved" ? "승인" : "반려"}되었습니다.`};

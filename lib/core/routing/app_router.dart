@@ -2,16 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/curriculum/presentation/admin_curriculum_day_form_screen.dart';
-import '../../features/curriculum/presentation/admin_curriculum_screen.dart';
-import '../../features/curriculum/presentation/admin_curriculum_week_form_screen.dart';
-import '../../features/curriculum/presentation/curriculum_day_screen.dart';
-import '../../features/curriculum/presentation/curriculum_screen.dart';
-import '../../features/curriculum/presentation/curriculum_week_screen.dart';
+import '../../features/admin/presentation/admin_alert_popup_form_screen.dart';
+import '../../features/admin/presentation/admin_assessments_screen.dart';
+import '../../features/admin/presentation/admin_assessment_detail_screen.dart';
+import '../../features/assessments/presentation/assessments_screen.dart';
+import '../../features/assessments/presentation/assessment_take_screen.dart';
+import '../../features/assessments/presentation/assessment_result_screen.dart';
+import '../../features/instructor/presentation/instructor_assessments_screen.dart';
+import '../../features/instructor/presentation/instructor_assessment_form_screen.dart';
+import '../../features/instructor/presentation/instructor_assessment_detail_screen.dart';
+import '../../features/instructor/presentation/instructor_assessment_submission_screen.dart';
+import '../../features/instructor/presentation/instructor_curriculum_screen.dart';
+import '../../features/admin/presentation/admin_attendance_screen.dart';
 import '../../features/admin/presentation/admin_cohort_form_screen.dart';
 import '../../features/admin/presentation/admin_cohorts_screen.dart';
 import '../../features/admin/presentation/admin_inflearn_package_form_screen.dart';
 import '../../features/admin/presentation/admin_form_tasks_screen.dart';
+import '../../features/admin/presentation/admin_instructor_create_screen.dart';
+import '../../features/admin/presentation/admin_instructors_screen.dart';
 import '../../features/admin/presentation/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/admin_board_screen.dart';
 import '../../features/admin/presentation/admin_notice_form_screen.dart';
@@ -28,6 +36,9 @@ import '../../features/admin/presentation/admin_mileage_settings_screen.dart';
 import '../../features/admin/presentation/admin_purchase_requests_screen.dart';
 import '../../features/admin/presentation/admin_mileage_adjust_screen.dart';
 import '../../features/admin/shell/admin_shell_screen.dart';
+import '../../features/instructor/presentation/instructor_attendance_screen.dart';
+import '../../features/instructor/presentation/instructor_board_screen.dart';
+import '../../features/instructor/shell/instructor_shell_screen.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/providers/auth_providers.dart';
@@ -41,6 +52,8 @@ import '../../features/mileage/presentation/mileage_cart_screen.dart';
 import '../../features/my_page/presentation/my_page_screen.dart';
 import '../../features/records/presentation/record_blog_form_screen.dart';
 import '../../features/records/presentation/record_cert_form_screen.dart';
+import '../../features/records/presentation/record_precourse_quiz_form_screen.dart';
+import '../../features/records/presentation/record_study_cert_form_screen.dart';
 import '../../features/records/presentation/record_study_form_screen.dart';
 import '../../features/records/presentation/record_type_select_screen.dart';
 import '../../features/records/presentation/records_screen.dart';
@@ -64,23 +77,37 @@ class _RouterRefresh extends ChangeNotifier {
 
 bool _isAdminRoute(String location) => location.startsWith('/admin');
 
+bool _isInstructorRoute(String location) => location.startsWith('/instructor');
+
 String? _adminRedirectForStudentRoute(String location) {
   return switch (location) {
     RoutePaths.dashboard => RoutePaths.admin,
     RoutePaths.records || RoutePaths.recordsCreate ||
     RoutePaths.recordsCreateCert || RoutePaths.recordsCreateStudy ||
-    RoutePaths.recordsCreateBlog =>
+    RoutePaths.recordsCreateBlog || RoutePaths.recordsCreateStudyCert ||
+    RoutePaths.recordsCreatePrecourseQuiz =>
       RoutePaths.adminRecords,
     RoutePaths.resume => RoutePaths.adminResumes,
     RoutePaths.board => RoutePaths.adminBoard,
     RoutePaths.studyRoom => RoutePaths.adminStudyRoom,
-    RoutePaths.curriculum => RoutePaths.adminCurriculum,
     RoutePaths.forms => RoutePaths.adminFormTasks,
     RoutePaths.seating => RoutePaths.adminSeating,
     RoutePaths.myPage => RoutePaths.adminMyPage,
     RoutePaths.mileage => RoutePaths.adminMileage,
+    RoutePaths.assessments => RoutePaths.adminAssessments,
     RoutePaths.adminStudents => RoutePaths.adminStudents,
     RoutePaths.adminFormTasks => RoutePaths.adminFormTasks,
+    _ => null,
+  };
+}
+
+String? _instructorRedirectForStudentRoute(String location) {
+  return switch (location) {
+    RoutePaths.dashboard => RoutePaths.instructor,
+    RoutePaths.resume => RoutePaths.instructorResumes,
+    RoutePaths.board => RoutePaths.instructorBoard,
+    RoutePaths.myPage => RoutePaths.instructorMyPage,
+    RoutePaths.assessments => RoutePaths.instructorAssessments,
     _ => null,
   };
 }
@@ -106,6 +133,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == RoutePaths.changePassword;
       final location = state.matchedLocation;
       final isAdminRoute = _isAdminRoute(location);
+      final isInstructorRoute = _isInstructorRoute(location);
       final isResumeEdit = location.startsWith('/resume/') &&
           location.endsWith('/edit');
 
@@ -120,7 +148,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (user != null && user.mustChangePassword) {
           return RoutePaths.changePassword;
         }
-        return user?.isAdmin == true ? RoutePaths.admin : RoutePaths.dashboard;
+        if (user != null) return RoutePaths.homeFor(user.role);
+        return null;
       }
 
       final user = currentUser.value;
@@ -129,18 +158,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       if (user != null && !user.mustChangePassword && isChangingPassword) {
-        return user.isAdmin ? RoutePaths.admin : RoutePaths.dashboard;
+        return RoutePaths.homeFor(user.role);
       }
 
       if (currentUser.isLoading) return null;
 
       if (user != null) {
         if (user.isAdmin) {
+          if (isInstructorRoute) return RoutePaths.adminInstructors;
           if (!isAdminRoute && !isChangingPassword && !isResumeEdit) {
             final adminPath = _adminRedirectForStudentRoute(location);
             if (adminPath != null) return adminPath;
           }
-        } else if (isAdminRoute) {
+        } else if (user.isInstructor) {
+          if (isAdminRoute) return RoutePaths.instructor;
+          if (!isInstructorRoute && !isChangingPassword && !isResumeEdit) {
+            final instructorPath =
+                _instructorRedirectForStudentRoute(location);
+            if (instructorPath != null) return instructorPath;
+            return RoutePaths.instructor;
+          }
+        } else if (isAdminRoute || isInstructorRoute) {
           return RoutePaths.dashboard;
         }
       }
@@ -166,6 +204,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
         ),
       ),
+      GoRoute(
+        path: '/assessments/:assessmentId/take',
+        builder: (_, state) => AssessmentTakeScreen(
+          assessmentId: state.pathParameters['assessmentId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/assessments/:assessmentId/result',
+        builder: (_, state) => AssessmentResultScreen(
+          assessmentId: state.pathParameters['assessmentId']!,
+        ),
+      ),
       ShellRoute(
         builder: (context, state, child) => MainShellScreen(child: child),
         routes: [
@@ -186,30 +236,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (_, _) => const NoTransitionPage(
               child: StudyRoomScreen(),
             ),
-          ),
-          GoRoute(
-            path: RoutePaths.curriculum,
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: CurriculumScreen(),
-            ),
-            routes: [
-              GoRoute(
-                path: 'day/:dayId',
-                pageBuilder: (_, state) => NoTransitionPage(
-                  child: CurriculumDayScreen(
-                    dayId: state.pathParameters['dayId']!,
-                  ),
-                ),
-              ),
-              GoRoute(
-                path: 'week/:weekId',
-                pageBuilder: (_, state) => NoTransitionPage(
-                  child: CurriculumWeekScreen(
-                    weekId: state.pathParameters['weekId']!,
-                  ),
-                ),
-              ),
-            ],
           ),
           GoRoute(
             path: RoutePaths.board,
@@ -240,6 +266,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const RecordBlogFormScreen(),
           ),
           GoRoute(
+            path: RoutePaths.recordsCreateStudyCert,
+            builder: (_, _) => const RecordStudyCertFormScreen(),
+          ),
+          GoRoute(
+            path: RoutePaths.recordsCreatePrecourseQuiz,
+            builder: (_, _) => const RecordPrecourseQuizFormScreen(),
+          ),
+          GoRoute(
             path: RoutePaths.mileage,
             pageBuilder: (_, _) => const NoTransitionPage(
               child: MileageScreen(),
@@ -256,6 +290,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ],
               ),
             ],
+          ),
+          GoRoute(
+            path: RoutePaths.assessments,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AssessmentsScreen(),
+            ),
           ),
           GoRoute(
             path: RoutePaths.forms,
@@ -325,6 +365,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ),
               ),
               GoRoute(
+                path: 'alert-popups/create',
+                builder: (_, _) => const AdminAlertPopupFormScreen(),
+              ),
+              GoRoute(
+                path: 'alert-popups/:popupId/edit',
+                builder: (_, state) => AdminAlertPopupFormScreen(
+                  popupId: state.pathParameters['popupId'],
+                ),
+              ),
+              GoRoute(
                 path: ':noticeId/edit',
                 builder: (_, state) => AdminNoticeFormScreen(
                   noticeId: state.pathParameters['noticeId'],
@@ -373,6 +423,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+          GoRoute(
+            path: RoutePaths.adminAttendance,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AdminAttendanceScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RoutePaths.adminInstructors,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AdminInstructorsScreen(),
+            ),
+            routes: [
+              GoRoute(
+                path: 'create',
+                builder: (_, _) => const AdminInstructorCreateScreen(),
               ),
             ],
           ),
@@ -427,26 +495,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
-            path: RoutePaths.adminCurriculum,
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: AdminCurriculumScreen(),
-            ),
-            routes: [
-              GoRoute(
-                path: 'day/:dayId/edit',
-                builder: (_, state) => AdminCurriculumDayFormScreen(
-                  dayId: state.pathParameters['dayId']!,
-                ),
-              ),
-              GoRoute(
-                path: 'week/:weekId/edit',
-                builder: (_, state) => AdminCurriculumWeekFormScreen(
-                  weekId: state.pathParameters['weekId']!,
-                ),
-              ),
-            ],
-          ),
-          GoRoute(
             path: RoutePaths.adminMyPage,
             pageBuilder: (_, _) => const NoTransitionPage(
               child: MyPageScreen(),
@@ -495,6 +543,113 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ),
               ),
             ],
+          ),
+          GoRoute(
+            path: RoutePaths.adminAssessments,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AdminAssessmentsScreen(),
+            ),
+            routes: [
+              GoRoute(
+                path: ':assessmentId',
+                builder: (_, state) => AdminAssessmentDetailScreen(
+                  assessmentId: state.pathParameters['assessmentId']!,
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'submissions/:submissionId',
+                    builder: (_, state) =>
+                        InstructorAssessmentSubmissionScreen(
+                      assessmentId: state.pathParameters['assessmentId']!,
+                      submissionId: state.pathParameters['submissionId']!,
+                      canEditScores: false,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+      ShellRoute(
+        builder: (context, state, child) =>
+            InstructorShellScreen(child: child),
+        routes: [
+          GoRoute(
+            path: RoutePaths.instructor,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: InstructorAttendanceScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RoutePaths.instructorResumes,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: ResumeScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RoutePaths.instructorBoard,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: InstructorBoardScreen(),
+            ),
+            routes: [
+              GoRoute(
+                path: 'create',
+                builder: (_, _) => const AdminNoticeFormScreen(),
+              ),
+              GoRoute(
+                path: ':noticeId/edit',
+                builder: (_, state) => AdminNoticeFormScreen(
+                  noticeId: state.pathParameters['noticeId'],
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: RoutePaths.instructorAssessments,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: InstructorAssessmentsScreen(),
+            ),
+            routes: [
+              GoRoute(
+                path: 'create',
+                builder: (_, _) => const InstructorAssessmentFormScreen(),
+              ),
+              GoRoute(
+                path: ':assessmentId',
+                builder: (_, state) => InstructorAssessmentDetailScreen(
+                  assessmentId: state.pathParameters['assessmentId']!,
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    builder: (_, state) => InstructorAssessmentFormScreen(
+                      assessmentId: state.pathParameters['assessmentId'],
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'submissions/:submissionId',
+                    builder: (_, state) =>
+                        InstructorAssessmentSubmissionScreen(
+                      assessmentId: state.pathParameters['assessmentId']!,
+                      submissionId: state.pathParameters['submissionId']!,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          GoRoute(
+            path: RoutePaths.instructorCurriculum,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: InstructorCurriculumScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RoutePaths.instructorMyPage,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: MyPageScreen(),
+            ),
           ),
         ],
       ),

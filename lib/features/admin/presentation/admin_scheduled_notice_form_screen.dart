@@ -162,11 +162,11 @@ class _AdminScheduledNoticeFormScreenState
     scheduled.whenData(_loadScheduled);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         title: Text(
           _isEdit ? '예약 수정' : '예약 공지 등록',

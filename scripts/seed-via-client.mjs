@@ -15,6 +15,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCd6amu1653Fc071OYeI_Fjfi6hMQvNih8",
@@ -40,6 +41,12 @@ const ACCOUNTS = [
     password: "Playdata123!",
     displayName: "학생",
     role: "student",
+  },
+  {
+    email: "instructor@playdata.co.kr",
+    password: "Playdata123!",
+    displayName: "PLAYDATA 강사",
+    role: "instructor",
   },
 ];
 
@@ -90,7 +97,7 @@ async function ensureUser({ email, password, displayName, role }) {
 async function seed() {
   console.log("\n🚀 계정 시드 시작 (샘플 데이터 없음)\n");
 
-  for (const account of ACCOUNTS) {
+  for (const account of ACCOUNTS.filter((a) => a.role !== "instructor")) {
     console.log(`\n👤 ${account.role}:`);
     await ensureUser(account);
   }
@@ -115,8 +122,32 @@ async function seed() {
   });
   console.log("✓ cohorts/cohort_35");
 
+  const instructor = ACCOUNTS.find((a) => a.role === "instructor");
+  if (instructor) {
+    try {
+      const functions = getFunctions(app, "asia-northeast3");
+      const createInstructor = httpsCallable(functions, "createInstructorAccount");
+      await createInstructor({
+        displayName: instructor.displayName,
+        email: instructor.email,
+        password: instructor.password,
+        cohortId: COHORT_ID,
+        cohortName: COHORT_NAME,
+        mustChangePassword: false,
+      });
+      console.log("✓ instructor via Cloud Function");
+    } catch (e) {
+      console.log(
+        "↻ instructor Cloud Function 호출 실패 — client write로 재시도:",
+        e.code ?? e.message,
+      );
+      await ensureUser(instructor);
+    }
+  }
+
   console.log("\n✅ 시드 완료!");
   console.log("관리자: admin@playdata.co.kr / Playdata123!");
+  console.log("강사:   instructor@playdata.co.kr / Playdata123!");
   console.log("학생:   student@playdata.co.kr / Playdata123!\n");
 }
 

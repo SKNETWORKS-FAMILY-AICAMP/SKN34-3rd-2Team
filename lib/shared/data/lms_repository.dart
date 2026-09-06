@@ -3,10 +3,14 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../../core/constants/attendance_status.dart';
 import '../../core/constants/firestore_paths.dart';
 import '../../core/errors/app_exception.dart';
 import '../models/assessment_model.dart';
+import '../models/alert_popup_model.dart';
+import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/notice_model.dart';
@@ -221,6 +225,114 @@ class LmsRepository {
 
   Future<void> deleteScheduledNotice(String cohortId, String scheduledId) async {
     await cohortSub(cohortId, 'scheduledNotices').doc(scheduledId).delete();
+  }
+
+  // ── Alert Popups (로그인 알림) ──
+
+  List<AlertPopupModel> _alertPopupsFromSnapshot(
+    QuerySnapshot<Map<String, dynamic>> snapshot, {
+    required bool activeOnly,
+  }) {
+    final list = <AlertPopupModel>[];
+    for (final doc in snapshot.docs) {
+      try {
+        final popup = AlertPopupModel.fromFirestore(doc);
+        if (!activeOnly || popup.isActive) list.add(popup);
+      } catch (_) {}
+    }
+    list.sort((a, b) {
+      final byOrder = a.sortOrder.compareTo(b.sortOrder);
+      if (byOrder != 0) return byOrder;
+      final aAt = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bAt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bAt.compareTo(aAt);
+    });
+    return list;
+  }
+
+  Stream<List<AlertPopupModel>> watchAlertPopups(String cohortId) {
+    return cohortSub(cohortId, 'alertPopups').snapshots().map(
+          (s) => _alertPopupsFromSnapshot(s, activeOnly: false),
+        );
+  }
+
+  Stream<List<AlertPopupModel>> watchActiveAlertPopups(String cohortId) {
+    return cohortSub(cohortId, 'alertPopups').snapshots().map(
+          (s) => _alertPopupsFromSnapshot(s, activeOnly: true),
+        );
+  }
+
+  Future<String> createAlertPopup({
+    required String cohortId,
+    required AlertPopupModel popup,
+    required String authorId,
+    required String authorName,
+  }) async {
+    final ref = await cohortSub(cohortId, 'alertPopups').add(
+      popup.toFirestore(
+        authorId: authorId,
+        authorName: authorName,
+        isCreate: true,
+      ),
+    );
+    return ref.id;
+  }
+
+  Future<void> updateAlertPopup({
+    required String cohortId,
+    required AlertPopupModel popup,
+    required String authorId,
+    required String authorName,
+  }) async {
+    await cohortSub(cohortId, 'alertPopups').doc(popup.id).update(
+          popup.toFirestore(authorId: authorId, authorName: authorName),
+        );
+  }
+
+  Future<void> toggleAlertPopupActive({
+    required String cohortId,
+    required String popupId,
+    required bool isActive,
+  }) async {
+    await cohortSub(cohortId, 'alertPopups').doc(popupId).update({
+      'isActive': isActive,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteAlertPopup(String cohortId, String popupId) async {
+    await cohortSub(cohortId, 'alertPopups').doc(popupId).delete();
+  }
+
+  CollectionReference<Map<String, dynamic>> _alertPopupDismissals(String uid) {
+    return _firestore
+        .collection(FirestorePaths.users)
+        .doc(uid)
+        .collection('alertPopupDismissals');
+  }
+
+  Stream<Map<String, String>> watchAlertPopupDismissals(String uid) {
+    return _alertPopupDismissals(uid).snapshots().map((snapshot) {
+      final map = <String, String>{};
+      for (final doc in snapshot.docs) {
+        final dateKey = doc.data()['dateKey'] as String?;
+        if (dateKey != null && dateKey.isNotEmpty) {
+          map[doc.id] = dateKey;
+        }
+      }
+      return map;
+    });
+  }
+
+  Future<void> dismissAlertPopupToday({
+    required String uid,
+    required String popupId,
+    required String dateKey,
+  }) async {
+    await _alertPopupDismissals(uid).doc(popupId).set({
+      'dateKey': dateKey,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ── Submissions ──
@@ -554,6 +666,136 @@ class LmsRepository {
   ) =>
       watchUserAttendances(cohortId, userId);
 
+  Stream<List<AttendanceModel>> watchAttendancesByDate(
+    String cohortId,
+    String dateKey,
+  ) {
+    return cohortSub(cohortId, 'attendances')
+        .where('dateKey', isEqualTo: dateKey)
+        .snapshots()
+        .map((s) {
+      final byUser = <String, AttendanceModel>{};
+      for (final doc in s.docs) {
+        final model = AttendanceModel.fromFirestore(doc);
+        if (model.userId.isEmpty) continue;
+        final prev = byUser[model.userId];
+        if (prev == null || model.dayStatus != null) {
+          byUser[model.userId] = model;
+        }
+      }
+      return byUser.values.toList();
+    });
+  }
+
+  Future<int> seedDemoAttendances({
+    required String cohortId,
+    required String dateKey,
+    required List<UserModel> students,
+  }) async {
+    if (students.isEmpty) return 0;
+    final col = cohortSub(cohortId, 'attendances');
+    final existing = await col.where('dateKey', isEqualTo: dateKey).get();
+    final existingByUser = <String, Map<String, dynamic>>{};
+    for (final doc in existing.docs) {
+      final data = doc.data();
+      final uid = data['userId'] as String? ?? '';
+      if (uid.isNotEmpty) existingByUser[uid] = data;
+    }
+
+    final writes = <Map<String, dynamic>>[];
+    for (final student in students) {
+      final prev = existingByUser[student.uid];
+      final source = prev?['statusSource'] as String?;
+      if (source == 'form' || source == 'manual') continue;
+
+      final hash = student.uid.hashCode.abs() + dateKey.hashCode.abs();
+      final missing = hash % 17 == 0;
+      final checkInTime =
+          missing ? null : _formatHm(8 * 60 + 48 + (hash % 18));
+      final checkOutTime =
+          missing ? null : _formatHm(17 * 60 + 50 + (hash % 20));
+
+      writes.add({
+        'userId': student.uid,
+        'userDisplayName': student.displayName,
+        'dateKey': dateKey,
+        'type': 'status',
+        'status': missing
+            ? AttendanceStatus.absent
+            : AttendanceStatus.present,
+        'statusSource': 'demo',
+        'checkInTime': checkInTime,
+        'checkOutTime': checkOutTime,
+        'checkInSource': 'demo',
+        'timestamp': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    var written = 0;
+    const chunkSize = 400;
+    for (var i = 0; i < writes.length; i += chunkSize) {
+      final batch = _firestore.batch();
+      final slice = writes.sublist(
+        i,
+        i + chunkSize > writes.length ? writes.length : i + chunkSize,
+      );
+      for (final data in slice) {
+        final uid = data['userId'] as String;
+        batch.set(
+          col.doc('${uid}_$dateKey'),
+          data,
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
+      written += slice.length;
+    }
+    return written;
+  }
+
+  static String _formatHm(int totalMinutes) {
+    final h = totalMinutes ~/ 60;
+    final m = totalMinutes % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+  }
+
+  Future<bool> ensureDailyAttendanceFormNotice({
+    required String cohortId,
+    required String authorId,
+    required String authorName,
+  }) async {
+    final existing = await cohortSub(cohortId, 'scheduledNotices')
+        .where('presetKey', isEqualTo: AttendanceForm.dailyNoticePresetKey)
+        .limit(1)
+        .get();
+    if (existing.docs.isNotEmpty) return false;
+
+    final scheduled = ScheduledNoticeModel(
+      id: '',
+      title: AttendanceForm.dailyNoticeTitle,
+      content: AttendanceForm.dailyNoticeContent,
+      authorName: authorName,
+      isFavorite: true,
+      repeatType: ScheduleRepeatType.daily,
+      publishTime: '08:30',
+    );
+    final nextAt = computeNextPublishAt(
+      repeatType: scheduled.repeatType,
+      publishTime: scheduled.publishTime,
+    );
+    await cohortSub(cohortId, 'scheduledNotices').add({
+      ...scheduled.toFirestore(
+        authorId: authorId,
+        authorName: authorName,
+        nextPublishAt: nextAt,
+        isCreate: true,
+      ),
+      'presetKey': AttendanceForm.dailyNoticePresetKey,
+    });
+    return true;
+  }
+
   Future<void> upsertAttendanceStatus({
     required String cohortId,
     required String userId,
@@ -569,6 +811,7 @@ class LmsRepository {
         'dateKey': dateKey,
         'status': status,
         'type': 'status',
+        'statusSource': 'manual',
         'timestamp': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       },
@@ -585,6 +828,64 @@ class LmsRepository {
     await cohortSub(cohortId, 'attendances').doc(docId).delete();
   }
 
+  Stream<Set<String>> watchRollCallConfirmed(String cohortId, String dateKey) {
+    return cohortSub(cohortId, 'rollCalls').doc(dateKey).snapshots().map((doc) {
+      final raw = doc.data()?['confirmedUserIds'];
+      if (raw is! List) return <String>{};
+      return raw.map((e) => e.toString()).toSet();
+    });
+  }
+
+  Stream<Set<String>> watchRollCallHeld(String cohortId, String dateKey) {
+    return cohortSub(cohortId, 'rollCalls').doc(dateKey).snapshots().map((doc) {
+      final raw = doc.data()?['heldUserIds'];
+      if (raw is! List) return <String>{};
+      return raw.map((e) => e.toString()).toSet();
+    });
+  }
+
+  Future<void> setRollCallConfirmed({
+    required String cohortId,
+    required String dateKey,
+    required String userId,
+    required bool confirmed,
+    required String updatedBy,
+  }) async {
+    await cohortSub(cohortId, 'rollCalls').doc(dateKey).set(
+      {
+        'dateKey': dateKey,
+        'confirmedUserIds': confirmed
+            ? FieldValue.arrayUnion([userId])
+            : FieldValue.arrayRemove([userId]),
+        if (confirmed) 'heldUserIds': FieldValue.arrayRemove([userId]),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': updatedBy,
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> setRollCallHeld({
+    required String cohortId,
+    required String dateKey,
+    required String userId,
+    required bool held,
+    required String updatedBy,
+  }) async {
+    await cohortSub(cohortId, 'rollCalls').doc(dateKey).set(
+      {
+        'dateKey': dateKey,
+        'heldUserIds': held
+            ? FieldValue.arrayUnion([userId])
+            : FieldValue.arrayRemove([userId]),
+        if (held) 'confirmedUserIds': FieldValue.arrayRemove([userId]),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': updatedBy,
+      },
+      SetOptions(merge: true),
+    );
+  }
+
   Stream<List<UserModel>> watchCohortStudents(String cohortId) {
     return _firestore
         .collection(FirestorePaths.users)
@@ -593,6 +894,18 @@ class LmsRepository {
         .where('isActive', isEqualTo: true)
         .snapshots()
         .map((s) => s.docs.map(UserModel.fromFirestore).toList());
+  }
+
+  Stream<List<UserModel>> watchInstructors() {
+    return _firestore
+        .collection(FirestorePaths.users)
+        .where('role', isEqualTo: 'instructor')
+        .snapshots()
+        .map((s) {
+      final list = s.docs.map(UserModel.fromFirestore).toList();
+      list.sort((a, b) => a.displayName.compareTo(b.displayName));
+      return list;
+    });
   }
 
   Future<void> recordAttendance({
@@ -732,7 +1045,76 @@ class LmsRepository {
     await cohortSub(cohortId, 'inflearnPackages').doc(packageId).delete();
   }
 
-  // ── Assessments (성취도 평가) — deprecated, 유지 중 ──
+  // ── YouTube Recommendations (학습실 관심사 추천) ──
+
+  Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return cohortSub(cohortId, 'youtubeRecommendations')
+        .orderBy('sortOrder')
+        .snapshots()
+        .map(
+          (s) => s.docs.map(YoutubeRecommendationModel.fromFirestore).toList(),
+        );
+  }
+
+  Stream<List<YoutubeRecommendationModel>> watchPublishedYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return watchYoutubeRecommendations(cohortId).map(
+      (list) => list.where((v) => v.isPublished).toList(),
+    );
+  }
+
+  Future<String> createYoutubeRecommendation({
+    required String cohortId,
+    required YoutubeRecommendationModel video,
+  }) async {
+    final ref = cohortSub(cohortId, 'youtubeRecommendations').doc();
+    await ref.set(video.toFirestore(isCreate: true));
+    return ref.id;
+  }
+
+  Future<void> updateYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+    required Map<String, dynamic> updates,
+  }) async {
+    await cohortSub(cohortId, 'youtubeRecommendations').doc(videoId).update({
+      ...updates,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+  }) async {
+    await cohortSub(cohortId, 'youtubeRecommendations').doc(videoId).delete();
+  }
+
+  /// 추천 클릭/오픈 이벤트 (향후 ML용 로그)
+  Future<void> logRecommendationEvent({
+    required String cohortId,
+    required String userId,
+    required String videoDocId,
+    required String youtubeVideoId,
+    required List<String> userSkills,
+    required List<String> matchedTags,
+    String action = 'open',
+  }) async {
+    await cohortSub(cohortId, 'recommendationEvents').add({
+      'userId': userId,
+      'videoDocId': videoDocId,
+      'youtubeVideoId': youtubeVideoId,
+      'userSkills': userSkills,
+      'matchedTags': matchedTags,
+      'action': action,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ── Assessments (성취도 평가 — 인앱 퀴즈) ──
 
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {
     return cohortSub(cohortId, 'assessments')
@@ -742,11 +1124,25 @@ class LmsRepository {
   }
 
   Stream<List<AssessmentModel>> watchPublishedAssessments(String cohortId) {
+    // published 단일 필터만 사용 (복합 인덱스 불필요). 정렬은 클라이언트.
     return cohortSub(cohortId, 'assessments')
         .where('published', isEqualTo: true)
-        .orderBy('startAt', descending: true)
         .snapshots()
-        .map((s) => s.docs.map(AssessmentModel.fromFirestore).toList());
+        .map((s) {
+      final list = s.docs.map(AssessmentModel.fromFirestore).toList()
+        ..sort((a, b) => b.startAt.compareTo(a.startAt));
+      return list;
+    });
+  }
+
+  Stream<AssessmentModel?> watchAssessment(
+    String cohortId,
+    String assessmentId,
+  ) {
+    return cohortSub(cohortId, 'assessments')
+        .doc(assessmentId)
+        .snapshots()
+        .map((s) => s.exists ? AssessmentModel.fromFirestore(s) : null);
   }
 
   Future<String> createAssessment({
@@ -771,6 +1167,16 @@ class LmsRepository {
     if (normalized['endAt'] is DateTime) {
       normalized['endAt'] = Timestamp.fromDate(normalized['endAt'] as DateTime);
     }
+    if (normalized['curriculumSource'] is AssessmentCurriculumSource) {
+      normalized['curriculumSource'] =
+          (normalized['curriculumSource'] as AssessmentCurriculumSource)
+              .toMap();
+    }
+    if (normalized['notionSource'] is AssessmentCurriculumSource) {
+      normalized['curriculumSource'] =
+          (normalized['notionSource'] as AssessmentCurriculumSource).toMap();
+      normalized.remove('notionSource');
+    }
     await cohortSub(cohortId, 'assessments').doc(assessmentId).update({
       ...normalized,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -780,11 +1186,70 @@ class LmsRepository {
   Future<void> publishAssessment({
     required String cohortId,
     required String assessmentId,
+    bool published = true,
   }) async {
     await cohortSub(cohortId, 'assessments').doc(assessmentId).update({
-      'published': true,
+      'published': published,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> deleteAssessment({
+    required String cohortId,
+    required String assessmentId,
+  }) async {
+    final questions = await cohortSub(cohortId, 'assessments')
+        .doc(assessmentId)
+        .collection('questions')
+        .get();
+    final batch = _firestore.batch();
+    for (final doc in questions.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(cohortSub(cohortId, 'assessments').doc(assessmentId));
+    await batch.commit();
+  }
+
+  Stream<List<AssessmentQuestionModel>> watchAssessmentQuestions(
+    String cohortId,
+    String assessmentId,
+  ) {
+    return cohortSub(cohortId, 'assessments')
+        .doc(assessmentId)
+        .collection('questions')
+        .orderBy('order')
+        .snapshots()
+        .map((s) => s.docs.map(AssessmentQuestionModel.fromFirestore).toList());
+  }
+
+  Future<void> replaceAssessmentQuestions({
+    required String cohortId,
+    required String assessmentId,
+    required List<AssessmentQuestionModel> questions,
+  }) async {
+    final col = cohortSub(cohortId, 'assessments')
+        .doc(assessmentId)
+        .collection('questions');
+    final existing = await col.get();
+    final batch = _firestore.batch();
+    for (final doc in existing.docs) {
+      batch.delete(doc.reference);
+    }
+    var maxScore = 0;
+    for (var i = 0; i < questions.length; i++) {
+      final q = questions[i].copyWith(order: i);
+      final ref = q.id.isEmpty || q.id.startsWith('draft_')
+          ? col.doc()
+          : col.doc(q.id);
+      batch.set(ref, q.copyWith(id: ref.id, order: i).toFirestore());
+      maxScore += q.points;
+    }
+    batch.update(cohortSub(cohortId, 'assessments').doc(assessmentId), {
+      'questionCount': questions.length,
+      'maxScore': maxScore,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
   }
 
   Stream<List<AssessmentSubmissionModel>> watchMyAssessmentSubmissions(
@@ -807,25 +1272,66 @@ class LmsRepository {
         .map((s) => s.docs.map(AssessmentSubmissionModel.fromFirestore).toList());
   }
 
-  Future<void> submitAssessmentAnswer({
+  Stream<AssessmentSubmissionModel?> watchAssessmentSubmission(
+    String cohortId,
+    String submissionId,
+  ) {
+    return cohortSub(cohortId, 'assessmentSubmissions')
+        .doc(submissionId)
+        .snapshots()
+        .map(
+          (s) => s.exists ? AssessmentSubmissionModel.fromFirestore(s) : null,
+        );
+  }
+
+  // ── Curriculum Sheets (CSV) ──
+
+  Stream<List<CurriculumSheetModel>> watchCurriculumSheets(String cohortId) {
+    return cohortSub(cohortId, 'curriculumSheets')
+        .orderBy('uploadedAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(CurriculumSheetModel.fromFirestore).toList());
+  }
+
+  Stream<CurriculumSheetModel?> watchLatestCurriculumSheet(String cohortId) {
+    return cohortSub(cohortId, 'curriculumSheets')
+        .orderBy('uploadedAt', descending: true)
+        .limit(1)
+        .snapshots()
+        .map(
+          (s) => s.docs.isEmpty
+              ? null
+              : CurriculumSheetModel.fromFirestore(s.docs.first),
+        );
+  }
+
+  Stream<CurriculumSheetModel?> watchCurriculumSheet(
+    String cohortId,
+    String sheetId,
+  ) {
+    return cohortSub(cohortId, 'curriculumSheets')
+        .doc(sheetId)
+        .snapshots()
+        .map((s) => s.exists ? CurriculumSheetModel.fromFirestore(s) : null);
+  }
+
+  Future<String> saveCurriculumSheet({
     required String cohortId,
-    required String assessmentId,
-    required String userId,
-    required String userDisplayName,
-    required String answerFileUrl,
-    required String answerFileName,
+    required CurriculumSheetModel sheet,
+    String? replaceSheetId,
   }) async {
-    await cohortSub(cohortId, 'assessmentSubmissions')
-        .doc('${assessmentId}_$userId')
-        .set({
-          'assessmentId': assessmentId,
-          'userId': userId,
-          'userDisplayName': userDisplayName,
-          'completed': true,
-          'answerFileUrl': answerFileUrl,
-          'answerFileName': answerFileName,
-          'submittedAt': FieldValue.serverTimestamp(),
-        });
+    final ref = replaceSheetId != null
+        ? cohortSub(cohortId, 'curriculumSheets').doc(replaceSheetId)
+        : cohortSub(cohortId, 'curriculumSheets').doc();
+    await ref.set(sheet.toFirestore());
+    return ref.id;
+  }
+
+  Future<void> deleteCurriculumSheet({
+    required String cohortId,
+    required String sheetId,
+  }) async {
+    await cohortSub(cohortId, 'curriculumSheets').doc(sheetId).delete();
   }
 
   // ── Form Tasks (Google Form) ──
@@ -949,6 +1455,8 @@ class LmsRepository {
     String? birthDate,
     String? personalEmail,
     JobPreferences? jobPreferences,
+    String? photoUrl,
+    String? photoStoragePath,
   }) async {
     final updates = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
@@ -958,6 +1466,8 @@ class LmsRepository {
     if (skills != null) updates['skills'] = skills;
     if (socialLinks != null) updates['socialLinks'] = socialLinks;
     if (birthDate != null) updates['birthDate'] = birthDate;
+    if (photoUrl != null) updates['photoUrl'] = photoUrl;
+    if (photoStoragePath != null) updates['photoStoragePath'] = photoStoragePath;
     if (personalEmail != null) {
       updates['personalEmail'] = personalEmail.trim().toLowerCase();
     }

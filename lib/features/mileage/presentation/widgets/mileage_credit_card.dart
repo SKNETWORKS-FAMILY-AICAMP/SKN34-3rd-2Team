@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../theme/mileage_theme.dart';
 
 /// ISO 7810 ID-1 신용카드 비율
@@ -222,7 +223,7 @@ class _CardFace extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: [
                 MileageColors.cardGradientStart,
-                Color(0xFF4C1D95),
+                AppColors.sidebar,
                 MileageColors.cardGradientEnd,
               ],
               stops: [0.0, 0.45, 1.0],

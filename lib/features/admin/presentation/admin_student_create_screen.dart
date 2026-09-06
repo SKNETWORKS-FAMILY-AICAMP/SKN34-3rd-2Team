@@ -168,7 +168,7 @@ class _AdminStudentCreateScreenState
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 6),

@@ -6,6 +6,7 @@ import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/models/alert_popup_model.dart';
 import '../../../shared/models/notice_model.dart';
 import '../../../shared/models/scheduled_notice_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -28,7 +29,7 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this)
+    _tabController = TabController(length: 3, vsync: this)
       ..addListener(() => setState(() {}));
   }
 
@@ -36,6 +37,23 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  String get _createLabel => switch (_tabController.index) {
+        0 => '공지 작성',
+        1 => '예약 등록',
+        _ => '알림 팝업',
+      };
+
+  void _onCreate() {
+    switch (_tabController.index) {
+      case 0:
+        context.push(RoutePaths.adminBoardNoticeCreate);
+      case 1:
+        context.push(RoutePaths.adminBoardScheduledCreate);
+      default:
+        context.push(RoutePaths.adminBoardAlertPopupCreate);
+    }
   }
 
   @override
@@ -65,7 +83,7 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
                       ),
                       SizedBox(height: 4),
                       Text(
-                        '공지 작성, 즐겨찾기, 예약 게시를 관리합니다.',
+                        '공지 · 예약 게시 · 로그인 알림 팝업을 관리합니다.',
                         style: TextStyle(
                           fontSize: 13,
                           color: AppColors.textSecondary,
@@ -75,25 +93,17 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: () {
-                    if (_tabController.index == 0) {
-                      context.push(RoutePaths.adminBoardNoticeCreate);
-                    } else {
-                      context.push(RoutePaths.adminBoardScheduledCreate);
-                    }
-                  },
+                  onPressed: _onCreate,
                   style: BoardUi.primaryButtonStyle(),
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(
-                    _tabController.index == 0 ? '공지 작성' : '예약 등록',
-                  ),
+                  label: Text(_createLabel),
                 ),
               ],
             ),
           ),
           BoardTabBar(
             controller: _tabController,
-            tabs: const ['공지 관리', '예약 공지'],
+            tabs: const ['공지 관리', '예약 공지', '알림 팝업'],
           ),
           Expanded(
             child: TabBarView(
@@ -101,6 +111,7 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
               children: const [
                 _NoticeManageTab(),
                 _ScheduledNoticeTab(),
+                _AlertPopupTab(),
               ],
             ),
           ),
@@ -571,3 +582,197 @@ class _ScheduledRow extends ConsumerWidget {
         .deleteScheduledNotice(cohortId, item.id);
   }
 }
+
+class _AlertPopupTab extends ConsumerWidget {
+  const _AlertPopupTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final popups = ref.watch(alertPopupsAdminProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(alertPopupsAdminProvider),
+      child: popups.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ErrorView(message: e.toString()),
+        data: (list) {
+          if (list.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const SizedBox(height: 80),
+                const Center(
+                  child: Text(
+                    '등록된 알림 팝업이 없습니다.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        context.push(RoutePaths.adminBoardAlertPopupCreate),
+                    icon: const Icon(Icons.add),
+                    label: const Text('알림 팝업 등록'),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            itemCount: list.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (_, i) {
+              return _AlertPopupCard(item: list[i]);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AlertPopupCard extends ConsumerWidget {
+  const _AlertPopupCard({required this.item});
+
+  final AlertPopupModel item;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: item.isActive
+                              ? BoardUi.activeBadgeBg
+                              : AppColors.surfaceVariant,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          item.isActive ? '활성' : '비활성',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: item.isActive
+                                ? BoardUi.activeBadgeText
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '순서 ${item.sortOrder} · ${item.timeWindowLabel}'
+                    '${item.linkUrl != null && item.linkUrl!.isNotEmpty ? ' · 링크' : ''}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textHint,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: item.isActive,
+              onChanged: (v) => _toggleActive(ref, v),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'edit') {
+                  context.push(
+                    RoutePaths.adminBoardAlertPopupEditPath(item.id),
+                  );
+                } else if (value == 'delete') {
+                  await _confirmDelete(context, ref);
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit', child: Text('수정')),
+                PopupMenuItem(value: 'delete', child: Text('삭제')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleActive(WidgetRef ref, bool isActive) async {
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (cohortId == null) return;
+    await ref.read(lmsRepositoryProvider).toggleAlertPopupActive(
+          cohortId: cohortId,
+          popupId: item.id,
+          isActive: isActive,
+        );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('알림 팝업 삭제'),
+        content: Text('「${item.title}」 알림을 삭제할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (cohortId == null) return;
+    await ref.read(lmsRepositoryProvider).deleteAlertPopup(cohortId, item.id);
+  }
+}
+

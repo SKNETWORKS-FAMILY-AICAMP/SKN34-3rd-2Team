@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 
-/// 마일리지 화면 전용 보라 accent
+import '../../../core/theme/app_colors.dart';
+
+/// 마일리지 화면 전용 accent (AppColors 기반)
 abstract final class MileageColors {
-  static const primary = Color(0xFF6B21A8);
-  static const primaryDark = Color(0xFF4C1D95);
-  static const primaryLight = Color(0xFF9333EA);
-  static const cardGradientStart = Color(0xFF5B21B6);
-  static const cardGradientEnd = Color(0xFF312E81);
-  static const chipBg = Color(0xFFF3E8FF);
+  static const primary = AppColors.primary;
+  static const primaryDark = AppColors.primaryDark;
+  static const primaryLight = AppColors.primary;
+  static const cardGradientStart = AppColors.primaryDark;
+  static const cardGradientEnd = AppColors.sidebar;
+  static const chipBg = AppColors.primaryLight;
   static const infoBanner = Color(0xFFEFF6FF);
   static const infoBannerBorder = Color(0xFFBFDBFE);
 
   static const gifticonTag = Color(0xFFEA580C);
   static const bookTag = Color(0xFF16A34A);
-  static const courseTag = Color(0xFF7C3AED);
+  static const courseTag = AppColors.primary;
 
   static Color categoryTagColor(String category) => switch (category) {
         'gifticon' => gifticonTag,
@@ -23,12 +25,12 @@ abstract final class MileageColors {
       };
 
   static Color statusColor(String status) => switch (status) {
-        'approved' => const Color(0xFF16A34A),
-        'pending' => const Color(0xFF2563EB),
-        'modify_requested' => const Color(0xFFD97706),
-        'rejected' => const Color(0xFFDC2626),
-        'cancelled' => const Color(0xFF6B7280),
-        _ => const Color(0xFF6B7280),
+        'approved' => AppColors.success,
+        'pending' => AppColors.primary,
+        'modify_requested' => AppColors.warning,
+        'rejected' => AppColors.error,
+        'cancelled' => AppColors.textSecondary,
+        _ => AppColors.textSecondary,
       };
 }
 
@@ -48,7 +50,7 @@ ButtonStyle mileagePrimaryButtonStyle({double? minHeight}) {
     minimumSize: Size(0, minHeight ?? MileageLayout.buttonHeight),
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
     textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
 }
 
@@ -58,7 +60,7 @@ ButtonStyle mileageOutlinedButtonStyle({double? minHeight}) {
     minimumSize: Size(0, minHeight ?? MileageLayout.buttonHeight),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
 }
 

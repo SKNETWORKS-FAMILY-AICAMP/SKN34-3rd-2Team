@@ -101,10 +101,10 @@ class SeatingScreen extends ConsumerWidget {
                             margin: const EdgeInsets.only(bottom: 16),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF5F3FF),
+                              color: AppColors.primaryLight,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: const Color(0xFF7C3AED),
+                                color: AppColors.primary,
                               ),
                             ),
                             child: Text(
@@ -112,7 +112,7 @@ class SeatingScreen extends ConsumerWidget {
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF5B21B6),
+                                color: AppColors.primaryDark,
                               ),
                             ),
                           ),

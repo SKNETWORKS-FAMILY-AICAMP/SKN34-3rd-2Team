@@ -10,6 +10,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../study_room/presentation/widgets/inflearn_package_card.dart';
 import '../../study_room/presentation/widgets/study_room_layout.dart';
+import 'widgets/admin_youtube_recommendation_panel.dart';
 
 /// 관리자 학습실 — 인프런 강의 패키지 관리
 class AdminStudyRoomScreen extends ConsumerStatefulWidget {
@@ -86,7 +87,10 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
         if (user == null) return const SizedBox.shrink();
 
         return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(inflearnPackagesProvider),
+          onRefresh: () async {
+            ref.invalidate(inflearnPackagesProvider);
+            ref.invalidate(youtubeRecommendationsProvider);
+          },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             child: studyRoomContentWrapper(
@@ -109,11 +113,21 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                         onPressed: () =>
                             context.push(RoutePaths.adminStudyRoomCreate),
                         icon: const Icon(Icons.add, size: 18),
-                        label: const Text('패키지 등록'),
+                        label: const Text('패키지 등록'                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
+                  const AdminYoutubeRecommendationPanel(),
+                  const SizedBox(height: 28),
+                  const Text(
+                    '인프런 패키지',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   StudyRoomSearchBar(
                     controller: _searchController,
                     hintText: '패키지·교과목 검색',

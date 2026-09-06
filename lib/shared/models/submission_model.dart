@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/record_types.dart';
 import '../../core/utils/date_utils.dart';
 
-/// 블로그/스터디/자격증 제출 + 승인 워크플로우
+/// 기록실 제출 + 승인 워크플로우
 class SubmissionModel {
   const SubmissionModel({
     required this.id,
@@ -21,6 +21,12 @@ class SubmissionModel {
     this.weekNumber,
     this.weekLabel,
     this.link,
+    this.quizScore,
+    this.learningDate,
+    this.learningContent,
+    this.isTeamStudy,
+    this.mileageGranted = false,
+    this.mileageAmount = 0,
   });
 
   final String id;
@@ -38,6 +44,12 @@ class SubmissionModel {
   final int? weekNumber;
   final String? weekLabel;
   final String? link;
+  final int? quizScore;
+  final DateTime? learningDate;
+  final String? learningContent;
+  final bool? isTeamStudy;
+  final bool mileageGranted;
+  final int mileageAmount;
 
   bool get isApproved => status == 'approved';
   bool get isPending => status == 'pending';
@@ -65,6 +77,12 @@ class SubmissionModel {
       weekNumber: data['weekNumber'] as int?,
       weekLabel: data['weekLabel'] as String?,
       link: data['link'] as String?,
+      quizScore: (data['quizScore'] as num?)?.toInt(),
+      learningDate: AppDateUtils.timestampToDateTime(data['learningDate']),
+      learningContent: data['learningContent'] as String?,
+      isTeamStudy: data['isTeamStudy'] as bool?,
+      mileageGranted: data['mileageGranted'] == true,
+      mileageAmount: (data['mileageAmount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -82,6 +100,12 @@ class SubmissionModel {
         if (weekNumber != null) 'weekNumber': weekNumber,
         if (weekLabel != null) 'weekLabel': weekLabel,
         if (link != null) 'link': link,
+        if (quizScore != null) 'quizScore': quizScore,
+        if (learningDate != null)
+          'learningDate': Timestamp.fromDate(learningDate!),
+        if (learningContent != null && learningContent!.isNotEmpty)
+          'learningContent': learningContent,
+        if (isTeamStudy != null) 'isTeamStudy': isTeamStudy,
       };
 
   String get statusLabel => switch (status) {

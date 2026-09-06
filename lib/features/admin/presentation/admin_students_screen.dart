@@ -174,13 +174,13 @@ class _StudentList extends StatelessWidget {
                 leading: CircleAvatar(
                   backgroundColor: isInactive
                       ? const Color(0xFFE5E7EB)
-                      : const Color(0xFFE9D5FF),
+                      : AppColors.primaryLight,
                   child: Text(
                     s.displayName.isNotEmpty ? s.displayName[0] : '?',
                     style: TextStyle(
                       color: isInactive
                           ? AppColors.textSecondary
-                          : const Color(0xFF7C3AED),
+                          : AppColors.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

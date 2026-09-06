@@ -135,13 +135,13 @@ class RecordPageHeader extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 16,
-                backgroundColor: const Color(0xFFE9D5FF),
+                backgroundColor: AppColors.primaryLight,
                 child: Text(
                   initial,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF7C3AED),
+                    color: AppColors.primary,
                   ),
                 ),
               ),
@@ -196,6 +196,13 @@ class RecordFormPanel extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,8 +211,8 @@ class RecordFormPanel extends StatelessWidget {
             title,
             style: const TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E3A5F),
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 20),
@@ -232,20 +239,20 @@ class RecordInfoBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3E8FF),
+        color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, size: 18, color: Color(0xFF7C3AED)),
+          const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
               style: const TextStyle(
                 fontSize: 13,
-                color: Color(0xFF5B21B6),
+                color: AppColors.primaryDark,
                 height: 1.45,
               ),
             ),
@@ -293,6 +300,10 @@ class RecordFormActions extends StatelessWidget {
             style: FilledButton.styleFrom(
               minimumSize: const Size(88, 40),
               backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: submitting
                 ? const SizedBox(

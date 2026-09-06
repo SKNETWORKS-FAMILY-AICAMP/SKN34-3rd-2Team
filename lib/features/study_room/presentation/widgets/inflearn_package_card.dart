@@ -7,7 +7,7 @@ import '../../../../shared/models/inflearn_package_model.dart';
 Color inflearnTypeBadgeColor(InflearnPackageType type) {
   return switch (type) {
     InflearnPackageType.review => const Color(0xFF2563EB),
-    InflearnPackageType.preview => const Color(0xFF7C3AED),
+    InflearnPackageType.preview => AppColors.primary,
     InflearnPackageType.bonus => const Color(0xFF059669),
   };
 }
@@ -112,7 +112,7 @@ class _Header extends StatelessWidget {
             ),
             _Badge(
               label: package.subject,
-              color: const Color(0xFF1E3A5F),
+              color: AppColors.textPrimary,
             ),
             if (!package.isPublished && showDraft)
               const _Badge(label: '임시저장', color: AppColors.textSecondary),
@@ -132,7 +132,7 @@ class _Header extends StatelessWidget {
           style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1E3A5F),
+            color: AppColors.textPrimary,
           ),
         ),
         const SizedBox(height: 4),

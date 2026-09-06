@@ -1,8 +1,12 @@
 import 'dart:async';
 
+import '../../core/constants/attendance_status.dart';
 import '../../core/constants/cohort_status.dart';
 import '../models/assessment_model.dart';
+import '../models/alert_popup_model.dart';
+import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/notice_model.dart';
@@ -31,8 +35,12 @@ class DemoLmsRepository {
       StreamController<List<AssessmentModel>>.broadcast();
   final _inflearnPackageController =
       StreamController<List<InflearnPackageModel>>.broadcast();
+  final _youtubeRecommendationController =
+      StreamController<List<YoutubeRecommendationModel>>.broadcast();
   final _assessmentSubmissionController =
       StreamController<List<AssessmentSubmissionModel>>.broadcast();
+  final _curriculumSheetController =
+      StreamController<List<CurriculumSheetModel>>.broadcast();
 
   late List<TodoModel> _todos;
   late List<PostModel> _posts;
@@ -42,10 +50,14 @@ class DemoLmsRepository {
   late List<AttendanceModel> _attendances;
   late List<MileageTransactionModel> _mileageTx;
   late List<AssessmentModel> _assessments;
-  late List<InflearnPackageModel> _inflearnPackages;
+  late Map<String, List<AssessmentQuestionModel>> _assessmentQuestions;
   late List<AssessmentSubmissionModel> _assessmentSubmissions;
+  late List<InflearnPackageModel> _inflearnPackages;
+  late List<YoutubeRecommendationModel> _youtubeRecommendations;
+  late List<CurriculumSheetModel> _curriculumSheets;
   late List<FormTaskModel> _formTasks;
   final Map<String, List<FormResponseModel>> _formResponses = {};
+  late List<AlertPopupModel> _alertPopups;
 
   void _seed() {
     _todos = [];
@@ -60,25 +72,66 @@ class DemoLmsRepository {
         id: 'a1',
         title: '34기 2차 성취도평가',
         tags: const ['데이터 분석', '머신러닝/딥러닝'],
-        questionCount: 25,
-        maxScore: 100,
+        questionCount: 2,
+        maxScore: 10,
         startAt: DateTime(2026, 7, 1),
-        endAt: DateTime(2026, 8, 15),
+        endAt: DateTime(2026, 12, 31),
         published: true,
         createdAt: DateTime(2026, 6, 20),
+        thumbnailUrl: null,
       ),
       AssessmentModel(
         id: 'a2',
         title: '34기 1차 성취도평가',
         tags: const ['Python', '기초'],
-        questionCount: 25,
-        maxScore: 100,
+        questionCount: 2,
+        maxScore: 10,
         startAt: DateTime(2026, 5, 1),
         endAt: DateTime(2026, 6, 30),
         published: true,
         createdAt: DateTime(2026, 4, 20),
       ),
     ];
+    _assessmentQuestions = {
+      'a1': [
+        const AssessmentQuestionModel(
+          id: 'q1',
+          order: 0,
+          type: AssessmentQuestionType.multipleChoice,
+          prompt: '과적합(overfitting)을 줄이는 방법으로 적절한 것은?',
+          points: 5,
+          choices: ['학습 데이터를 줄인다', '정규화를 사용한다', '에폭을 무한히 늘린다', '검증셋을 제거한다'],
+          correctIndex: 1,
+        ),
+        const AssessmentQuestionModel(
+          id: 'q2',
+          order: 1,
+          type: AssessmentQuestionType.shortAnswer,
+          prompt: '지도학습에서 정답 레이블을 영어 한 단어로 쓰면?',
+          points: 5,
+          acceptedAnswers: ['label', 'labels'],
+        ),
+      ],
+      'a2': [
+        const AssessmentQuestionModel(
+          id: 'q1',
+          order: 0,
+          type: AssessmentQuestionType.multipleChoice,
+          prompt: 'Python에서 리스트를 만드는 기호는?',
+          points: 5,
+          choices: ['()', '[]', '{}', '<>'],
+          correctIndex: 1,
+        ),
+        const AssessmentQuestionModel(
+          id: 'q2',
+          order: 1,
+          type: AssessmentQuestionType.shortAnswer,
+          prompt: 'None 타입을 나타내는 키워드는?',
+          points: 5,
+          acceptedAnswers: ['None'],
+        ),
+      ],
+    };
     _inflearnPackages = [
       InflearnPackageModel(
         id: 'pkg1',
@@ -153,16 +206,122 @@ class DemoLmsRepository {
         ],
       ),
     ];
+    _youtubeRecommendations = [
+      YoutubeRecommendationModel(
+        id: 'yt1',
+        title: 'Flutter 입문 — 30분 핵심 정리',
+        youtubeUrl: 'https://www.youtube.com/watch?v=VPvVD8t02U8',
+        videoId: 'VPvVD8t02U8',
+        tags: const ['Flutter', 'Dart'],
+        description: 'Flutter 위젯·상태관리 입문 영상',
+        isPublished: true,
+        sortOrder: 1,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+      YoutubeRecommendationModel(
+        id: 'yt2',
+        title: 'Python 기초 — 변수와 자료형',
+        youtubeUrl: 'https://www.youtube.com/watch?v=kqtD5dpn9C8',
+        videoId: 'kqtD5dpn9C8',
+        tags: const ['Python', 'Django', 'FastAPI'],
+        description: '파이썬 문법 기초',
+        isPublished: true,
+        sortOrder: 2,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+      YoutubeRecommendationModel(
+        id: 'yt3',
+        title: 'SQL 입문 — SELECT부터 JOIN까지',
+        youtubeUrl: 'https://www.youtube.com/watch?v=HXV3zeQKqGY',
+        videoId: 'HXV3zeQKqGY',
+        tags: const ['SQL', 'MySQL', 'PostgreSQL'],
+        description: 'SQL 기초 쿼리',
+        isPublished: true,
+        sortOrder: 3,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+      YoutubeRecommendationModel(
+        id: 'yt4',
+        title: 'Docker 컨테이너 개념 한눈에',
+        youtubeUrl: 'https://www.youtube.com/watch?v=fqMOX6JJhGo',
+        videoId: 'fqMOX6JJhGo',
+        tags: const ['Docker', 'CI/CD', 'AWS'],
+        description: 'Docker 입문',
+        isPublished: true,
+        sortOrder: 4,
+        createdAt: DateTime(2026, 7, 1),
+      ),
+    ];
     _assessmentSubmissions = [
       AssessmentSubmissionModel(
         id: 'a1_${DemoAccounts.studentUid}',
         assessmentId: 'a1',
         userId: DemoAccounts.studentUid,
         userDisplayName: DemoAccounts.student.displayName,
-        completed: true,
+        answers: {
+          'q1': const AssessmentAnswerEntry(
+            value: 1,
+            autoScore: 5,
+            finalScore: 5,
+            isCorrect: true,
+          ),
+          'q2': const AssessmentAnswerEntry(
+            value: 'label',
+            autoScore: 5,
+            finalScore: 5,
+            isCorrect: true,
+          ),
+        },
+        autoTotalScore: 10,
+        totalScore: 10,
         submittedAt: DateTime(2026, 8, 10),
       ),
     ];
+    _curriculumSheets = [
+      CurriculumSheetModel(
+        id: 'cs1',
+        title: '34기 커리큘럼',
+        fileName: 'curriculum_34.csv',
+        uploadedBy: DemoAccounts.instructorUid,
+        uploadedByName: DemoAccounts.instructor.displayName,
+        uploadedAt: DateTime(2026, 6, 1),
+        rows: const [
+          CurriculumRowModel(
+            dayIndex: 1,
+            dateLabel: '2026년 6월 16일 화요일',
+            subject: '프로그래밍과 데이터 기초',
+            topic: 'Python',
+            detail: '변수, 자료형, 조건문, 반복문',
+            order: 0,
+          ),
+          CurriculumRowModel(
+            dayIndex: 2,
+            dateLabel: '2026년 6월 17일 수요일',
+            subject: '프로그래밍과 데이터 기초',
+            topic: 'Python',
+            detail: '함수, 모듈, 파일 I/O',
+            order: 1,
+          ),
+          CurriculumRowModel(
+            dayIndex: 8,
+            dateLabel: '2026년 6월 25일 목요일',
+            subject: '프로그래밍과 데이터 기초',
+            topic: 'Database',
+            detail: 'SQL 기초, JOIN',
+            order: 2,
+          ),
+          CurriculumRowModel(
+            dayIndex: 11,
+            dateLabel: '2026년 6월 30일 화요일',
+            subject: '프로그래밍과 데이터 기초',
+            topic: 'Web Crawling',
+            detail: 'requests, BeautifulSoup',
+            order: 3,
+          ),
+        ],
+      ),
+    ];
+    _alertPopups = [];
     _formTasks = [
       FormTaskModel(
         id: 'form1',
@@ -190,8 +349,15 @@ class DemoLmsRepository {
     if (!_inflearnPackageController.isClosed) {
       _inflearnPackageController.add(List.from(_inflearnPackages));
     }
+    if (!_youtubeRecommendationController.isClosed) {
+      _youtubeRecommendationController
+          .add(List.from(_youtubeRecommendations));
+    }
     if (!_assessmentSubmissionController.isClosed) {
       _assessmentSubmissionController.add(List.from(_assessmentSubmissions));
+    }
+    if (!_curriculumSheetController.isClosed) {
+      _curriculumSheetController.add(List.from(_curriculumSheets));
     }
   }
 
@@ -257,6 +423,78 @@ class DemoLmsRepository {
 
   Stream<List<NoticeModel>> watchNotices(String cohortId) async* {
     yield _notices;
+  }
+
+  Stream<List<AlertPopupModel>> watchAlertPopups(String cohortId) async* {
+    yield List.of(_alertPopups);
+  }
+
+  Stream<List<AlertPopupModel>> watchActiveAlertPopups(String cohortId) async* {
+    yield _alertPopups.where((p) => p.isActive).toList();
+  }
+
+  Future<String> createAlertPopup({
+    required String cohortId,
+    required AlertPopupModel popup,
+    required String authorId,
+    required String authorName,
+  }) async {
+    final id = 'ap${_alertPopups.length}';
+    _alertPopups.add(
+      popup.copyWith(
+        id: id,
+        authorId: authorId,
+        authorName: authorName,
+        createdAt: DateTime.now(),
+      ),
+    );
+    return id;
+  }
+
+  Future<void> updateAlertPopup({
+    required String cohortId,
+    required AlertPopupModel popup,
+    required String authorId,
+    required String authorName,
+  }) async {
+    final i = _alertPopups.indexWhere((p) => p.id == popup.id);
+    if (i < 0) return;
+    _alertPopups[i] = popup.copyWith(
+      authorId: authorId,
+      authorName: authorName,
+      updatedAt: DateTime.now(),
+      clearStartTime: popup.startTime == null,
+      clearEndTime: popup.endTime == null,
+    );
+  }
+
+  Future<void> toggleAlertPopupActive({
+    required String cohortId,
+    required String popupId,
+    required bool isActive,
+  }) async {
+    final i = _alertPopups.indexWhere((p) => p.id == popupId);
+    if (i < 0) return;
+    _alertPopups[i] = _alertPopups[i].copyWith(isActive: isActive);
+  }
+
+  Future<void> deleteAlertPopup(String cohortId, String popupId) async {
+    _alertPopups.removeWhere((p) => p.id == popupId);
+  }
+
+  final Map<String, Map<String, String>> _alertPopupDismissals = {};
+
+  Stream<Map<String, String>> watchAlertPopupDismissals(String uid) async* {
+    yield Map.of(_alertPopupDismissals[uid] ?? const {});
+  }
+
+  Future<void> dismissAlertPopupToday({
+    required String uid,
+    required String popupId,
+    required String dateKey,
+  }) async {
+    final map = _alertPopupDismissals.putIfAbsent(uid, () => {});
+    map[popupId] = dateKey;
   }
 
   Future<String> createNotice({
@@ -346,6 +584,12 @@ class DemoLmsRepository {
       weekNumber: s.weekNumber,
       weekLabel: s.weekLabel,
       link: s.link,
+      quizScore: s.quizScore,
+      learningDate: s.learningDate,
+      learningContent: s.learningContent,
+      isTeamStudy: s.isTeamStudy,
+      mileageGranted: status == 'approved' ? true : s.mileageGranted,
+      mileageAmount: s.mileageAmount,
     );
     _emit();
   }
@@ -550,6 +794,127 @@ class DemoLmsRepository {
     ];
   }
 
+  Stream<List<UserModel>> watchInstructors() async* {
+    yield [DemoAccounts.instructor];
+  }
+
+  Stream<List<AttendanceModel>> watchAttendancesByDate(
+    String cohortId,
+    String dateKey,
+  ) async* {
+    yield _attendances.where((a) => a.dateKey == dateKey).toList();
+  }
+
+  final Map<String, Set<String>> _rollCallConfirmed = {};
+  final Map<String, Set<String>> _rollCallHeld = {};
+
+  String _rollCallKey(String cohortId, String dateKey) => '$cohortId|$dateKey';
+
+  Stream<Set<String>> watchRollCallConfirmed(
+    String cohortId,
+    String dateKey,
+  ) async* {
+    yield Set.of(_rollCallConfirmed[_rollCallKey(cohortId, dateKey)] ?? const {});
+  }
+
+  Stream<Set<String>> watchRollCallHeld(
+    String cohortId,
+    String dateKey,
+  ) async* {
+    yield Set.of(_rollCallHeld[_rollCallKey(cohortId, dateKey)] ?? const {});
+  }
+
+  Future<void> setRollCallConfirmed({
+    required String cohortId,
+    required String dateKey,
+    required String userId,
+    required bool confirmed,
+    required String updatedBy,
+  }) async {
+    final key = _rollCallKey(cohortId, dateKey);
+    final set = _rollCallConfirmed.putIfAbsent(key, () => <String>{});
+    final held = _rollCallHeld.putIfAbsent(key, () => <String>{});
+    if (confirmed) {
+      set.add(userId);
+      held.remove(userId);
+    } else {
+      set.remove(userId);
+    }
+  }
+
+  Future<void> setRollCallHeld({
+    required String cohortId,
+    required String dateKey,
+    required String userId,
+    required bool held,
+    required String updatedBy,
+  }) async {
+    final key = _rollCallKey(cohortId, dateKey);
+    final heldSet = _rollCallHeld.putIfAbsent(key, () => <String>{});
+    final confirmed = _rollCallConfirmed.putIfAbsent(key, () => <String>{});
+    if (held) {
+      heldSet.add(userId);
+      confirmed.remove(userId);
+    } else {
+      heldSet.remove(userId);
+    }
+  }
+
+  Future<int> seedDemoAttendances({
+    required String cohortId,
+    required String dateKey,
+    required List<UserModel> students,
+  }) async {
+    var written = 0;
+    for (final student in students) {
+      final i = _attendances.indexWhere(
+        (a) => a.userId == student.uid && a.dateKey == dateKey,
+      );
+      final source = i >= 0 ? _attendances[i].statusSource : null;
+      if (source == 'form' || source == 'manual') continue;
+
+      final hash = student.uid.hashCode.abs() + dateKey.hashCode.abs();
+      final missing = hash % 17 == 0;
+      final inMin = 8 * 60 + 48 + (hash % 18);
+      final outMin = 17 * 60 + 50 + (hash % 20);
+      final model = AttendanceModel(
+        id: '${student.uid}_$dateKey',
+        userId: student.uid,
+        type: 'status',
+        dateKey: dateKey,
+        status: missing ? AttendanceStatus.absent : AttendanceStatus.present,
+        userDisplayName: student.displayName,
+        timestamp: DateTime.now(),
+        checkInTime: missing
+            ? null
+            : '${(inMin ~/ 60).toString().padLeft(2, '0')}:${(inMin % 60).toString().padLeft(2, '0')}',
+        checkOutTime: missing
+            ? null
+            : '${(outMin ~/ 60).toString().padLeft(2, '0')}:${(outMin % 60).toString().padLeft(2, '0')}',
+        statusSource: 'demo',
+      );
+      if (i >= 0) {
+        _attendances[i] = model;
+      } else {
+        _attendances.add(model);
+      }
+      written++;
+    }
+    return written;
+  }
+
+  bool _dailyAttendanceNoticeEnsured = false;
+
+  Future<bool> ensureDailyAttendanceFormNotice({
+    required String cohortId,
+    required String authorId,
+    required String authorName,
+  }) async {
+    if (_dailyAttendanceNoticeEnsured) return false;
+    _dailyAttendanceNoticeEnsured = true;
+    return true;
+  }
+
   Future<void> upsertAttendanceStatus({
     required String cohortId,
     required String userId,
@@ -570,6 +935,13 @@ class DemoLmsRepository {
         status: status,
         userDisplayName: userDisplayName,
         timestamp: DateTime.now(),
+        statusSource: 'manual',
+        checkInTime: cur.checkInTime,
+        checkOutTime: cur.checkOutTime,
+        formAttendanceType: cur.formAttendanceType,
+        officialLeaveUsed: cur.officialLeaveUsed,
+        officialLeaveType: cur.officialLeaveType,
+        officialLeaveOther: cur.officialLeaveOther,
       );
     } else {
       _attendances.insert(
@@ -582,6 +954,7 @@ class DemoLmsRepository {
           status: status,
           userDisplayName: userDisplayName,
           timestamp: DateTime.now(),
+          statusSource: 'manual',
         ),
       );
     }
@@ -724,6 +1097,89 @@ class DemoLmsRepository {
     _emit();
   }
 
+  Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return _youtubeRecommendationController.stream;
+  }
+
+  Stream<List<YoutubeRecommendationModel>> watchPublishedYoutubeRecommendations(
+    String cohortId,
+  ) {
+    return watchYoutubeRecommendations(cohortId).map(
+      (list) => list.where((v) => v.isPublished).toList(),
+    );
+  }
+
+  Future<String> createYoutubeRecommendation({
+    required String cohortId,
+    required YoutubeRecommendationModel video,
+  }) async {
+    final id = 'yt${_youtubeRecommendations.length + 1}';
+    _youtubeRecommendations.add(
+      YoutubeRecommendationModel(
+        id: id,
+        title: video.title,
+        youtubeUrl: video.youtubeUrl,
+        videoId: video.effectiveVideoId,
+        thumbnailUrl: video.effectiveThumbnailUrl,
+        description: video.description,
+        tags: video.tags,
+        isPublished: video.isPublished,
+        sortOrder: video.sortOrder,
+        createdAt: DateTime.now(),
+      ),
+    );
+    _emit();
+    return id;
+  }
+
+  Future<void> updateYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+    required Map<String, dynamic> updates,
+  }) async {
+    final i = _youtubeRecommendations.indexWhere((v) => v.id == videoId);
+    if (i < 0) return;
+    final cur = _youtubeRecommendations[i];
+    final nextUrl = updates['youtubeUrl'] as String? ?? cur.youtubeUrl;
+    _youtubeRecommendations[i] = cur.copyWith(
+      title: updates['title'] as String? ?? cur.title,
+      youtubeUrl: nextUrl,
+      videoId: updates['videoId'] as String? ??
+          extractYoutubeVideoId(nextUrl) ??
+          cur.videoId,
+      thumbnailUrl: updates['thumbnailUrl'] as String? ?? cur.thumbnailUrl,
+      description: updates['description'] as String? ?? cur.description,
+      tags: updates['tags'] != null
+          ? List<String>.from(updates['tags'] as List)
+          : cur.tags,
+      isPublished: updates['isPublished'] as bool? ?? cur.isPublished,
+      sortOrder: (updates['sortOrder'] as num?)?.toInt() ?? cur.sortOrder,
+    );
+    _emit();
+  }
+
+  Future<void> deleteYoutubeRecommendation({
+    required String cohortId,
+    required String videoId,
+  }) async {
+    _youtubeRecommendations.removeWhere((v) => v.id == videoId);
+    _emit();
+  }
+
+  Future<void> logRecommendationEvent({
+    required String cohortId,
+    required String userId,
+    required String videoDocId,
+    required String youtubeVideoId,
+    required List<String> userSkills,
+    required List<String> matchedTags,
+    String action = 'open',
+  }) async {
+    // demo: no-op
+  }
+
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {
     return _assessmentController.stream;
   }
@@ -733,27 +1189,26 @@ class DemoLmsRepository {
         .map((list) => list.where((a) => a.published).toList());
   }
 
+  Stream<AssessmentModel?> watchAssessment(
+    String cohortId,
+    String assessmentId,
+  ) async* {
+    yield _assessments.where((a) => a.id == assessmentId).firstOrNull;
+    yield* _assessmentController.stream.map(
+      (list) => list.where((a) => a.id == assessmentId).firstOrNull,
+    );
+  }
+
   Future<String> createAssessment({
     required String cohortId,
     required AssessmentModel assessment,
   }) async {
-    final id = 'a${_assessments.length}';
+    final id = 'a${_assessments.length + 1}';
     _assessments.insert(
       0,
-      AssessmentModel(
-        id: id,
-        title: assessment.title,
-        tags: assessment.tags,
-        questionCount: assessment.questionCount,
-        maxScore: assessment.maxScore,
-        startAt: assessment.startAt,
-        endAt: assessment.endAt,
-        problemFileUrl: assessment.problemFileUrl,
-        problemFileName: assessment.problemFileName,
-        published: assessment.published,
-        createdAt: DateTime.now(),
-      ),
+      assessment.copyWith(id: id, createdAt: DateTime.now()),
     );
+    _assessmentQuestions[id] = [];
     _emit();
     return id;
   }
@@ -766,19 +1221,19 @@ class DemoLmsRepository {
     final i = _assessments.indexWhere((a) => a.id == assessmentId);
     if (i < 0) return;
     final a = _assessments[i];
-    _assessments[i] = AssessmentModel(
-      id: a.id,
+    _assessments[i] = a.copyWith(
       title: updates['title'] as String? ?? a.title,
-      tags: updates['tags'] as List<String>? ?? a.tags,
+      tags: updates['tags'] != null
+          ? List<String>.from(updates['tags'] as List)
+          : a.tags,
       questionCount: updates['questionCount'] as int? ?? a.questionCount,
       maxScore: updates['maxScore'] as int? ?? a.maxScore,
       startAt: updates['startAt'] as DateTime? ?? a.startAt,
       endAt: updates['endAt'] as DateTime? ?? a.endAt,
-      problemFileUrl: updates['problemFileUrl'] as String? ?? a.problemFileUrl,
-      problemFileName:
-          updates['problemFileName'] as String? ?? a.problemFileName,
+      thumbnailUrl: updates['thumbnailUrl'] as String? ?? a.thumbnailUrl,
+      thumbnailPath: updates['thumbnailPath'] as String? ?? a.thumbnailPath,
       published: updates['published'] as bool? ?? a.published,
-      createdAt: a.createdAt,
+      updatedAt: DateTime.now(),
     );
     _emit();
   }
@@ -786,11 +1241,59 @@ class DemoLmsRepository {
   Future<void> publishAssessment({
     required String cohortId,
     required String assessmentId,
+    bool published = true,
   }) async {
     await updateAssessment(
       cohortId: cohortId,
       assessmentId: assessmentId,
-      updates: {'published': true},
+      updates: {'published': published},
+    );
+  }
+
+  Future<void> deleteAssessment({
+    required String cohortId,
+    required String assessmentId,
+  }) async {
+    _assessments.removeWhere((a) => a.id == assessmentId);
+    _assessmentQuestions.remove(assessmentId);
+    _assessmentSubmissions
+        .removeWhere((s) => s.assessmentId == assessmentId);
+    _emit();
+  }
+
+  Stream<List<AssessmentQuestionModel>> watchAssessmentQuestions(
+    String cohortId,
+    String assessmentId,
+  ) async* {
+    yield List.of(_assessmentQuestions[assessmentId] ?? const []);
+    yield* _assessmentController.stream.map(
+      (_) => List.of(_assessmentQuestions[assessmentId] ?? const []),
+    );
+  }
+
+  Future<void> replaceAssessmentQuestions({
+    required String cohortId,
+    required String assessmentId,
+    required List<AssessmentQuestionModel> questions,
+  }) async {
+    final normalized = <AssessmentQuestionModel>[];
+    var maxScore = 0;
+    for (var i = 0; i < questions.length; i++) {
+      final id = questions[i].id.isEmpty || questions[i].id.startsWith('draft_')
+          ? 'q${i + 1}'
+          : questions[i].id;
+      final q = questions[i].copyWith(id: id, order: i);
+      normalized.add(q);
+      maxScore += q.points;
+    }
+    _assessmentQuestions[assessmentId] = normalized;
+    await updateAssessment(
+      cohortId: cohortId,
+      assessmentId: assessmentId,
+      updates: {
+        'questionCount': normalized.length,
+        'maxScore': maxScore,
+      },
     );
   }
 
@@ -810,28 +1313,173 @@ class DemoLmsRepository {
         .map((list) => list.where((s) => s.assessmentId == assessmentId).toList());
   }
 
-  Future<void> submitAssessmentAnswer({
-    required String cohortId,
+  Stream<AssessmentSubmissionModel?> watchAssessmentSubmission(
+    String cohortId,
+    String submissionId,
+  ) async* {
+    yield _assessmentSubmissions.where((s) => s.id == submissionId).firstOrNull;
+    yield* _assessmentSubmissionController.stream.map(
+      (list) => list.where((s) => s.id == submissionId).firstOrNull,
+    );
+  }
+
+  /// Demo: 로컬 채점 제출
+  Future<Map<String, dynamic>> demoSubmitAssessment({
     required String assessmentId,
     required String userId,
     required String userDisplayName,
-    required String answerFileUrl,
-    required String answerFileName,
+    required Map<String, dynamic> answers,
   }) async {
     final id = '${assessmentId}_$userId';
-    _assessmentSubmissions.removeWhere((s) => s.id == id);
+    if (_assessmentSubmissions.any((s) => s.id == id)) {
+      throw StateError('이미 응시한 평가입니다.');
+    }
+    final questions = _assessmentQuestions[assessmentId] ?? [];
+    final graded = <String, AssessmentAnswerEntry>{};
+    var total = 0;
+    for (final q in questions) {
+      final raw = answers[q.id];
+      var score = 0;
+      var correct = false;
+      if (q.type == AssessmentQuestionType.multipleChoice) {
+        final selected = raw is int ? raw : int.tryParse('$raw');
+        correct = selected != null && selected == q.correctIndex;
+        score = correct ? q.points : 0;
+      } else {
+        final norm = '$raw'.trim().toLowerCase();
+        correct = q.acceptedAnswers
+            .any((a) => a.trim().toLowerCase() == norm);
+        score = correct ? q.points : 0;
+      }
+      graded[q.id] = AssessmentAnswerEntry(
+        value: raw,
+        autoScore: score,
+        finalScore: score,
+        isCorrect: correct,
+      );
+      total += score;
+    }
     _assessmentSubmissions.add(
       AssessmentSubmissionModel(
         id: id,
         assessmentId: assessmentId,
         userId: userId,
         userDisplayName: userDisplayName,
-        completed: true,
-        answerFileUrl: answerFileUrl,
-        answerFileName: answerFileName,
+        answers: graded,
+        autoTotalScore: total,
+        totalScore: total,
         submittedAt: DateTime.now(),
       ),
     );
+    _emit();
+    return {
+      'totalScore': total,
+      'autoTotalScore': total,
+      'submissionId': id,
+    };
+  }
+
+  Future<Map<String, dynamic>> demoAdjustScores({
+    required String submissionId,
+    required List<Map<String, dynamic>> adjustments,
+    required String by,
+    String? byName,
+    String? note,
+  }) async {
+    final i = _assessmentSubmissions.indexWhere((s) => s.id == submissionId);
+    if (i < 0) throw StateError('제출 없음');
+    final s = _assessmentSubmissions[i];
+    final answers = Map<String, AssessmentAnswerEntry>.from(s.answers);
+    final history = [...s.scoreAdjustments];
+    for (final adj in adjustments) {
+      final qid = adj['questionId'] as String?;
+      if (qid == null || answers[qid] == null) continue;
+      final previous = answers[qid]!.finalScore;
+      final next = (adj['finalScore'] as num).toInt().clamp(0, 9999);
+      if (previous == next) continue;
+      answers[qid] = AssessmentAnswerEntry(
+        value: answers[qid]!.value,
+        autoScore: answers[qid]!.autoScore,
+        finalScore: next,
+        isCorrect: next > 0,
+      );
+      history.add(
+        AssessmentScoreAdjustment(
+          questionId: qid,
+          previous: previous,
+          next: next,
+          by: by,
+          byName: byName,
+          at: DateTime.now(),
+          note: note,
+        ),
+      );
+    }
+    final total =
+        answers.values.fold<int>(0, (sum, e) => sum + e.finalScore);
+    _assessmentSubmissions[i] = AssessmentSubmissionModel(
+      id: s.id,
+      assessmentId: s.assessmentId,
+      userId: s.userId,
+      userDisplayName: s.userDisplayName,
+      answers: answers,
+      autoTotalScore: s.autoTotalScore,
+      totalScore: total,
+      status: s.status,
+      submittedAt: s.submittedAt,
+      scoreAdjustments: history,
+    );
+    _emit();
+    return {'totalScore': total, 'submissionId': submissionId};
+  }
+
+  Stream<List<CurriculumSheetModel>> watchCurriculumSheets(String cohortId) {
+    return _curriculumSheetController.stream;
+  }
+
+  Stream<CurriculumSheetModel?> watchLatestCurriculumSheet(String cohortId) {
+    return _curriculumSheetController.stream.map(
+      (list) => list.isEmpty ? null : list.first,
+    );
+  }
+
+  Stream<CurriculumSheetModel?> watchCurriculumSheet(
+    String cohortId,
+    String sheetId,
+  ) {
+    return _curriculumSheetController.stream.map(
+      (list) => list.where((s) => s.id == sheetId).firstOrNull,
+    );
+  }
+
+  Future<String> saveCurriculumSheet({
+    required String cohortId,
+    required CurriculumSheetModel sheet,
+    String? replaceSheetId,
+  }) async {
+    final id = replaceSheetId ?? 'cs${_curriculumSheets.length + 1}';
+    final saved = CurriculumSheetModel(
+      id: id,
+      title: sheet.title,
+      fileName: sheet.fileName,
+      rows: sheet.rows,
+      uploadedBy: sheet.uploadedBy,
+      uploadedByName: sheet.uploadedByName,
+      uploadedAt: DateTime.now(),
+      storagePath: sheet.storagePath,
+      source: sheet.source,
+    );
+    _curriculumSheets.removeWhere((s) => s.id == id);
+    _curriculumSheets.insert(0, saved);
+    _emit();
+    return id;
+  }
+
+  Future<void> deleteCurriculumSheet({
+    required String cohortId,
+    required String sheetId,
+  }) async {
+    _curriculumSheets.removeWhere((s) => s.id == sheetId);
     _emit();
   }
 
@@ -852,6 +1500,8 @@ class DemoLmsRepository {
     Map<String, String>? socialLinks,
     String? birthDate,
     String? personalEmail,
+    String? photoUrl,
+    String? photoStoragePath,
   }) async {
     final session = DemoSession.instance;
     if (session.currentUser?.uid != uid) return;
@@ -862,6 +1512,8 @@ class DemoLmsRepository {
         socialLinks: socialLinks,
         birthDate: birthDate,
         personalEmail: personalEmail,
+        photoUrl: photoUrl,
+        photoStoragePath: photoStoragePath,
       ),
     );
   }

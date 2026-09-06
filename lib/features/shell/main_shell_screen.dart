@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,42 +7,182 @@ import 'package:go_router/go_router.dart';
 import '../../core/routing/route_paths.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/user_model.dart';
+import '../../shared/providers/profile_photo_providers.dart';
+import '../../shared/widgets/app_side_rail.dart';
+import '../../shared/widgets/profile_avatar.dart';
+import '../../shared/widgets/profile_nav_chip.dart';
 import '../auth/providers/auth_providers.dart';
+import 'widgets/alert_popup_host.dart';
 import 'widgets/app_shell_header.dart';
 
-/// 메인 Shell — Drawer(전체 메뉴)
+/// 메인 Shell — 와이드: 좌측 아이콘+텍스트 레일 / 좁은 화면: Drawer
 class MainShellScreen extends ConsumerWidget {
   const MainShellScreen({super.key, required this.child});
 
   final Widget child;
 
+  static const _railBreakpoint = 900.0;
+
+  static const _navItems = [
+    AppSideRailItem(
+      icon: Icons.dashboard_rounded,
+      label: '대시보드',
+      path: RoutePaths.dashboard,
+    ),
+    AppSideRailItem(
+      icon: Icons.description_rounded,
+      label: '이력서 관리',
+      path: RoutePaths.resume,
+    ),
+    AppSideRailItem(
+      icon: Icons.menu_book_rounded,
+      label: '학습실',
+      path: RoutePaths.studyRoom,
+    ),
+    AppSideRailItem(
+      icon: Icons.forum_rounded,
+      label: '게시판',
+      path: RoutePaths.board,
+    ),
+    AppSideRailItem(
+      icon: Icons.event_seat_rounded,
+      label: '자리 배치',
+      path: RoutePaths.seating,
+    ),
+    AppSideRailItem(
+      icon: Icons.ballot_outlined,
+      label: '설문 · 제출',
+      path: RoutePaths.forms,
+    ),
+    AppSideRailItem(
+      icon: Icons.workspace_premium_outlined,
+      label: '자격 시험 일정',
+      path: RoutePaths.qualExams,
+    ),
+    AppSideRailItem(
+      icon: Icons.history_rounded,
+      label: '기록실',
+      path: RoutePaths.records,
+    ),
+    AppSideRailItem(
+      icon: Icons.card_giftcard_rounded,
+      label: '마일리지',
+      path: RoutePaths.mileage,
+    ),
+    AppSideRailItem(
+      icon: Icons.quiz_outlined,
+      label: '성취도평가',
+      path: RoutePaths.assessments,
+    ),
+  ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentUser = ref.watch(currentUserProvider);
     final user = currentUser.value;
+    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
+    final location = GoRouterState.of(context).matchedLocation;
+    final preview = ref.watch(profilePhotoPreviewProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const AppShellHeader(),
+        automaticallyImplyLeading: !wide,
         actions: [
           if (user != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: CircleAvatar(
-                backgroundColor: AppColors.primaryLight,
-                child: Text(
-                  user.displayName.isNotEmpty ? user.displayName[0] : '?',
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: ProfileNavChip(
+                  user: user,
+                  style: ProfileNavChipStyle.appBar,
+                  onTap: () => context.go(RoutePaths.myPage),
                 ),
               ),
             ),
         ],
       ),
-      drawer: _AppDrawer(user: user),
-      body: child,
+      drawer: wide ? null : _AppDrawer(user: user),
+      body: Row(
+        children: [
+          if (wide)
+            AppSideRail(
+              items: _navItems,
+              location: location,
+              onNavigate: (path) => context.go(path),
+              onLogout: () => ref.read(authRepositoryProvider).signOut(),
+              profile: user == null
+                  ? null
+                  : _RailProfileTile(
+                      user: user,
+                      previewBytes: preview,
+                      onTap: () => context.go(RoutePaths.myPage),
+                    ),
+            ),
+          Expanded(child: AlertPopupHost(child: child)),
+        ],
+      ),
+    );
+  }
+}
+
+class _RailProfileTile extends StatelessWidget {
+  const _RailProfileTile({
+    required this.user,
+    required this.onTap,
+    this.previewBytes,
+  });
+
+  final UserModel user;
+  final VoidCallback onTap;
+  final Uint8List? previewBytes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    width: 1.5,
+                  ),
+                ),
+                child: ProfileAvatar(
+                  radius: 14,
+                  userId: user.uid,
+                  photoUrl: user.photoUrl,
+                  photoStoragePath: user.photoStoragePath,
+                  previewBytes: previewBytes,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  user.displayName.isNotEmpty ? user.displayName : '마이페이지',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -53,75 +195,68 @@ class _AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final menuItems = [
-      _DrawerItem(Icons.dashboard, '대시보드', RoutePaths.dashboard),
-      _DrawerItem(Icons.description, '이력서 관리', RoutePaths.resume),
-      _DrawerItem(Icons.menu_book, '학습실', RoutePaths.studyRoom),
-      _DrawerItem(Icons.school_outlined, '커리큘럼', RoutePaths.curriculum),
-      _DrawerItem(Icons.forum, '게시판', RoutePaths.board),
-      _DrawerItem(Icons.event_seat, '자리 배치', RoutePaths.seating),
-      _DrawerItem(Icons.ballot_outlined, '설문 · 제출', RoutePaths.forms),
-      _DrawerItem(Icons.workspace_premium_outlined, '자격 시험 일정', RoutePaths.qualExams),
-      _DrawerItem(Icons.history, '기록실', RoutePaths.records),
-      _DrawerItem(Icons.card_giftcard, '마일리지', RoutePaths.mileage),
-      _DrawerItem(Icons.person, '마이페이지', RoutePaths.myPage),
+      ...MainShellScreen._navItems,
+      const AppSideRailItem(
+        icon: Icons.person_rounded,
+        label: '마이페이지',
+        path: RoutePaths.myPage,
+      ),
     ];
-
-    final displayName = user?.displayName ?? '';
-    final initial = displayName.isNotEmpty ? displayName[0] : '?';
 
     return Drawer(
       child: Column(
         children: [
-          UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(
-                bottom: BorderSide(color: AppColors.border),
+          SafeArea(
+            bottom: false,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(bottom: BorderSide(color: AppColors.border)),
               ),
-            ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: AppColors.primaryLight,
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 24,
-                ),
-              ),
-            ),
-            accountName: Text(
-              displayName.isNotEmpty ? '$displayName님' : '게스트',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            accountEmail: Text(
-              user?.cohortName ?? user?.email ?? '',
-              style: const TextStyle(color: AppColors.textSecondary),
+              child: user != null
+                  ? ProfileNavChip(
+                      user: user!,
+                      style: ProfileNavChipStyle.drawer,
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.go(RoutePaths.myPage);
+                      },
+                    )
+                  : const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('게스트'),
+                    ),
             ),
           ),
           Expanded(
             child: ListView(
-              padding: EdgeInsets.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               children: menuItems.map((item) {
                 final isSelected =
                     GoRouterState.of(context).matchedLocation == item.path;
                 return ListTile(
                   leading: Icon(
                     item.icon,
-                    color: isSelected ? AppColors.primary : null,
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
                   ),
                   title: Text(
                     item.label,
                     style: TextStyle(
-                      color: isSelected ? AppColors.primary : null,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
                       fontWeight: isSelected ? FontWeight.w600 : null,
                     ),
                   ),
                   selected: isSelected,
-                  selectedTileColor: AppColors.primaryLight.withValues(alpha: 0.5),
+                  selectedTileColor: AppColors.primaryLight,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   onTap: () {
                     Navigator.pop(context);
                     context.go(item.path);
@@ -133,7 +268,10 @@ class _AppDrawer extends ConsumerWidget {
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: AppColors.error),
-            title: const Text('로그아웃', style: TextStyle(color: AppColors.error)),
+            title: const Text(
+              '로그아웃',
+              style: TextStyle(color: AppColors.error),
+            ),
             onTap: () async {
               Navigator.pop(context);
               await ref.read(authRepositoryProvider).signOut();
@@ -144,11 +282,4 @@ class _AppDrawer extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _DrawerItem {
-  const _DrawerItem(this.icon, this.label, this.path);
-  final IconData icon;
-  final String label;
-  final String path;
 }

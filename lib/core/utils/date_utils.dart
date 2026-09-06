@@ -3,8 +3,12 @@ import 'package:intl/intl.dart';
 
 /// Firestore Timestamp ↔ DateTime 변환 및 날짜 키 유틸
 abstract final class AppDateUtils {
-  static String toDateKey(DateTime date) =>
-      DateFormat('yyyy-MM-dd').format(date);
+  static String toDateKey(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
 
   static DateTime fromDateKey(String dateKey) =>
       DateFormat('yyyy-MM-dd').parse(dateKey);

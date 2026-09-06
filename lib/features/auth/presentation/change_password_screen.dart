@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/role.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/auth_providers.dart';
@@ -16,6 +17,7 @@ class ChangePasswordScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider).value;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('비밀번호 변경'),
         centerTitle: true,
@@ -25,14 +27,24 @@ class ChangePasswordScreen extends ConsumerWidget {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 380),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 24,
-                  ),
-                  child: Column(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 28,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: AppColors.shadow,
+                      blurRadius: 32,
+                      offset: Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(
@@ -66,21 +78,20 @@ class ChangePasswordScreen extends ConsumerWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('비밀번호가 변경되었습니다.')),
                           );
-                          final isAdmin = user?.isAdmin ?? false;
-                          context.go(
-                            isAdmin ? RoutePaths.admin : RoutePaths.dashboard,
+                          final home = RoutePaths.homeFor(
+                            user?.role ?? UserRole.student,
                           );
+                          context.go(home);
                         },
                         onSkip: () {
-                          final isAdmin = user?.isAdmin ?? false;
-                          context.go(
-                            isAdmin ? RoutePaths.admin : RoutePaths.dashboard,
+                          final home = RoutePaths.homeFor(
+                            user?.role ?? UserRole.student,
                           );
+                          context.go(home);
                         },
                       ),
                     ],
                   ),
-                ),
               ),
             ),
           ),

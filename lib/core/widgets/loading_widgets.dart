@@ -164,7 +164,7 @@ class InlineErrorCard extends StatelessWidget {
                 onPressed: onRetry,
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  foregroundColor: AppColors.textPrimary,
+                  foregroundColor: AppColors.primary,
                 ),
                 child: const Text('다시 시도', style: TextStyle(fontSize: 12)),
               ),

@@ -10,8 +10,11 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/submission_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../shared/providers/mission_providers.dart';
+import 'widgets/mission_guidance_panel.dart';
 import 'widgets/record_page_layout.dart';
 import 'widgets/record_status_badge.dart';
+import 'widgets/submission_detail_sheet.dart';
 
 /// 기록실 — 제출 목록 + 관리자 승인
 class RecordsScreen extends ConsumerStatefulWidget {
@@ -152,26 +155,39 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
               error: (e, _) => ErrorView(message: e.toString()),
               data: (list) {
                 final filtered = _filter(list);
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: Text(
-                      isAdmin ? '제출된 기록이 없습니다' : '아직 제출한 기록이 없습니다',
-                      style: const TextStyle(color: AppColors.textSecondary),
-                    ),
-                  );
-                }
                 return RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(mySubmissionsProvider);
                     ref.invalidate(allSubmissionsProvider);
+                    ref.invalidate(missionProgressProvider);
                   },
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) => _SubmissionCard(
-                      submission: filtered[i],
-                      isAdmin: isAdmin,
-                    ),
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(0, 0, 14, 24),
+                    children: [
+                      if (!isAdmin) const MissionGuidancePanel(),
+                      if (filtered.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 48),
+                          child: Center(
+                            child: Text(
+                              isAdmin
+                                  ? '제출된 기록이 없습니다'
+                                  : '아직 제출한 기록이 없습니다',
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ...filtered.map(
+                          (s) => _SubmissionCard(
+                            submission: s,
+                            isAdmin: isAdmin,
+                          ),
+                        ),
+                    ],
                   ),
                 );
               },
@@ -239,6 +255,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
           );
       ref.invalidate(allSubmissionsProvider);
       ref.invalidate(mySubmissionsProvider);
+      ref.invalidate(missionProgressProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -251,99 +268,149 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
     }
   }
 
+  Future<void> _openDetail() async {
+    final action = await showSubmissionDetailSheet(
+      context: context,
+      submission: widget.submission,
+      isAdmin: widget.isAdmin,
+    );
+    if (!mounted) return;
+    if (action == 'approved') {
+      await _review('approved');
+    } else if (action == 'rejected') {
+      await _review('rejected');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.submission;
     final subtitle = _subtitleOf(s);
+    final metaParts = <String>[
+      if (widget.isAdmin) s.userDisplayName,
+      if (subtitle != null) subtitle,
+      if (s.submittedAt != null)
+        '제출 ${AppDateUtils.formatDateTime(s.submittedAt!)}',
+    ];
+    final hasFiles = s.fileUrls.isNotEmpty;
+    final hasLink = s.link != null && s.link!.isNotEmpty;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         side: const BorderSide(color: AppColors.border),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(6),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _openDetail,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceVariant,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      s.typeLabel,
+                      style: const TextStyle(fontSize: 11, height: 1.2),
+                    ),
                   ),
-                  child: Text(
-                    s.typeLabel,
-                    style: const TextStyle(fontSize: 11),
-                  ),
+                  if (hasFiles || hasLink) ...[
+                    const SizedBox(width: 6),
+                    Icon(
+                      hasFiles ? Icons.attach_file : Icons.link,
+                      size: 14,
+                      color: AppColors.textHint,
+                    ),
+                    Text(
+                      hasFiles ? '${s.fileUrls.length}' : '',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textHint,
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  RecordStatusBadge(status: s.status),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                s.title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.25,
                 ),
-                const Spacer(),
-                RecordStatusBadge(status: s.status),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              s.title,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-            if (widget.isAdmin)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  s.userDisplayName,
+              ),
+              if (metaParts.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  metaParts.join(' · '),
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
+                    height: 1.3,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-            if (s.submittedAt != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '제출 ${AppDateUtils.formatDateTime(s.submittedAt!)}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textHint,
-                  ),
-                ),
-              ),
-            if (widget.isAdmin && s.isPending) ...[
-              const SizedBox(height: 12),
+              ],
+              const SizedBox(height: 6),
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  OutlinedButton(
-                    onPressed: _busy ? null : () => _review('rejected'),
-                    child: const Text('반려'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _busy ? null : () => _review('approved'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.success,
+                  TextButton(
+                    onPressed: _openDetail,
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      foregroundColor: AppColors.primary,
+                      textStyle: const TextStyle(fontSize: 12),
                     ),
-                    child: const Text('승인'),
+                    child: const Text('상세 보기'),
                   ),
+                  const Spacer(),
+                  if (widget.isAdmin && s.isPending) ...[
+                    OutlinedButton(
+                      onPressed: _busy ? null : () => _review('rejected'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        minimumSize: const Size(0, 32),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(fontSize: 13),
+                      ),
+                      child: const Text('반려'),
+                    ),
+                    const SizedBox(width: 6),
+                    FilledButton(
+                      onPressed: _busy ? null : () => _review('approved'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        visualDensity: VisualDensity.compact,
+                        minimumSize: const Size(0, 32),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(fontSize: 13),
+                      ),
+                      child: const Text('승인'),
+                    ),
+                  ],
                 ],
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -354,10 +421,23 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
       return s.certType;
     }
     if (s.type == RecordTypes.study && s.startAt != null && s.endAt != null) {
-      return '${AppDateUtils.formatDisplay(s.startAt!)} ~ ${AppDateUtils.formatDisplay(s.endAt!)}';
+      final team = s.isTeamStudy == true ? '팀 · ' : '';
+      return '$team${AppDateUtils.formatDisplay(s.startAt!)} ~ ${AppDateUtils.formatDisplay(s.endAt!)}';
     }
     if (s.type == RecordTypes.blog) {
       return s.weekLabel ?? s.link;
+    }
+    if (s.type == RecordTypes.studyCert) {
+      final date = s.learningDate != null
+          ? AppDateUtils.formatDisplay(s.learningDate!)
+          : null;
+      return [date, s.learningContent].whereType<String>().join(' · ');
+    }
+    if (s.type == RecordTypes.precourseQuiz && s.quizScore != null) {
+      return '점수 ${s.quizScore}점';
+    }
+    if (s.isApproved && s.mileageAmount > 0) {
+      return '적립 ${s.mileageAmount}M';
     }
     return null;
   }
