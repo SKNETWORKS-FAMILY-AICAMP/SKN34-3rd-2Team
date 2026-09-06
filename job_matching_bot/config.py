@@ -36,10 +36,6 @@ DEFAULT_DART_OUTPUT = (
     / "collected_jobs.g.dart"
 )
 
-# cover_letter_rag 인덱서(`python -m scripts.index_jobs --data-dir ...`)가 읽는
-# 정적 공고 JSON 디렉터리. 서버 코드를 건드리지 않고 수집 공고를 임베딩 검색에 올린다.
-DEFAULT_RAG_JOBS_OUTPUT = ARTIFACTS_DIR / "cover_letter_rag_jobs"
-
 # 웹용 가상 이력서. 시드 스크립트와 앱의 "목업 채우기" 메뉴가 같은 원본을 쓴다.
 DEFAULT_RESUME_MOCKS_INPUT = REPO_ROOT / "scripts" / "resume_mocks.json"
 DEFAULT_RESUME_MOCKS_DART_OUTPUT = DEFAULT_DART_OUTPUT.parent / "resume_mocks.g.dart"

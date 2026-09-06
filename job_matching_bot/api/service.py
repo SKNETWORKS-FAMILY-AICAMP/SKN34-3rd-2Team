@@ -43,7 +43,7 @@ class SearchUnavailable(RuntimeError):
 
 
 def _build_generator(prompt, schema):
-    """`cover_letter_rag/app/service.py`와 같은 방식. 프롬프트 | 구조화 출력."""
+    """프롬프트 | 구조화 출력. 첨삭 모듈과 같은 방식으로 맞춘다."""
     from langchain_openai import ChatOpenAI
 
     import os

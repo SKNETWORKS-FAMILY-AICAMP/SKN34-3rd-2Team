@@ -14,7 +14,6 @@ from job_matching_bot.config import (
     DEFAULT_DART_OUTPUT,
     DEFAULT_INPUT,
     DEFAULT_JSON_OUTPUT,
-    DEFAULT_RAG_JOBS_OUTPUT,
     DEFAULT_REPORT_OUTPUT,
     DEFAULT_RESUME_MOCKS_DART_OUTPUT,
 )
@@ -43,12 +42,6 @@ def main() -> int:
         help="Flutter '목업 이력서 채우기' 메뉴가 읽는 생성 파일 경로",
     )
     parser.add_argument(
-        "--rag-jobs-output",
-        type=Path,
-        default=DEFAULT_RAG_JOBS_OUTPUT,
-        help="cover_letter_rag 인덱서가 읽는 정적 공고 JSON 디렉터리",
-    )
-    parser.add_argument(
         "--store",
         type=Path,
         default=DEFAULT_STORE,
@@ -67,7 +60,6 @@ def main() -> int:
         dart_output=args.dart_output,
         resume_mocks_output=args.resume_mocks_output,
         store_path=None if args.no_store else args.store,
-        rag_jobs_output=args.rag_jobs_output,
     )
     print(f"AI Job Coach Pipeline: {result['test_status']}")
     print(
@@ -84,7 +76,6 @@ def main() -> int:
     print(f"COLLECTED JOBS: {args.collection_output.resolve()}")
     print(f"FLUTTER DATA:  {args.dart_output.resolve()}")
     print(f"RESUME MOCKS:  {args.resume_mocks_output.resolve()}")
-    print(f"RAG JOBS:      {args.rag_jobs_output.resolve()}")
     return 0 if result["test_status"] == "PASS" else 1
 
 

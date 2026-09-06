@@ -1,6 +1,6 @@
 import '../../../../shared/models/resume_content.dart';
 
-/// 이력서를 cover_letter_rag 서버에 보낼 평문으로 바꾼다.
+/// 이력서를 추천 서버에 보낼 평문으로 바꾼다.
 ///
 /// 서버는 모델이 돌려준 인용문이 이 평문 안에 **연속해서** 존재할 때만
 /// 근거로 인정한다. 따라서 사용자가 입력한 문장은 다듬지 않고 그대로 넣고,
@@ -105,7 +105,7 @@ String buildResumeText(ResumeContent content) {
   return buffer.toString().trim();
 }
 
-/// 자기소개서 항목만 모아 평문으로 만든다. 첨삭 API의 `draft_text`로 쓴다.
+/// 자기소개서 항목만 모아 평문으로 만든다.
 String buildSelfIntroductionText(ResumeContent content) {
   final buffer = StringBuffer();
   for (final key in ResumeSelfIntroLabels.keys) {
@@ -116,34 +116,6 @@ String buildSelfIntroductionText(ResumeContent content) {
     final subtitle = section.subtitle.trim();
     buffer.writeln(subtitle.isEmpty ? '($label)' : '($label) $subtitle');
     buffer.writeln(section.body.trim());
-  }
-  return buffer.toString().trim();
-}
-
-/// 첨삭 API에 넘길 초안. 자기소개서가 없으면 핵심역량, 그것도 없으면 이력서
-/// 전체를 초안으로 삼아 서버가 문장 단위 보완점을 짚을 수 있게 한다.
-String buildAnalysisDraftText(ResumeContent content) {
-  final intro = buildSelfIntroductionText(content);
-  if (intro.isNotEmpty) return intro;
-  final competencies = content.coreCompetencies.text.trim();
-  if (competencies.isNotEmpty) return competencies;
-  return buildResumeText(content);
-}
-
-/// 맞춤 공고 추천의 임베딩 검색 질의. 기술스택 목록은 키워드 점수가 이미 다루므로
-/// 문장으로 쓰인 프로젝트 경험과 자기소개서만 넣어 의미 유사도를 본다.
-String buildEmbeddingQueryText(ResumeContent content) {
-  final buffer = StringBuffer();
-  final projects = _projectLines(content).toList();
-  if (projects.isNotEmpty) {
-    buffer.writeln('[프로젝트 경험]');
-    projects.forEach(buffer.writeln);
-  }
-  final intro = buildSelfIntroductionText(content);
-  if (intro.isNotEmpty) {
-    if (buffer.isNotEmpty) buffer.writeln();
-    buffer.writeln('[자기소개서]');
-    buffer.writeln(intro);
   }
   return buffer.toString().trim();
 }

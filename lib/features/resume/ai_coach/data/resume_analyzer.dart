@@ -1,16 +1,6 @@
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../models/resume_readiness.dart';
-import 'cover_letter_rag_client.dart';
-
-/// 분석 결과가 어디에서 왔는지.
-enum ResumeAnalysisSource {
-  /// 앱 안에서 규칙으로만 계산한 결과.
-  local,
-
-  /// cover_letter_rag 서버가 이력서 원문 근거를 대조해 돌려준 결과.
-  rag,
-}
 
 /// 분석 소견 한 줄. [quote]가 있으면 이력서 원문에서 그대로 가져온 근거다.
 class ResumeAnalysisItem {
@@ -20,136 +10,19 @@ class ResumeAnalysisItem {
   final String? quote;
 }
 
-/// 분석 맥락으로 쓰인 공고. 추천 순위가 아니라 검색 관련도 순서다.
-class ResumeAnalysisRelatedJob {
-  const ResumeAnalysisRelatedJob({
-    required this.company,
-    required this.title,
-    required this.summary,
-  });
-
-  final String company;
-  final String title;
-  final String summary;
-}
-
-/// 특정 공고와 비교하기 전에, 이력서 자체를 분석한 결과.
+/// 이력서 자체를 규칙으로 점검한 결과. AI가 문장을 고쳐 주지 않고 보완할 지점만 짚는다.
+///
+/// 공고에 맞춘 첨삭은 팀원의 첨삭 모듈(S32-17)이 맡는다. 여기엔 그 연결이 없다.
 class ResumeAnalysis {
   const ResumeAnalysis({
     required this.strengths,
     required this.improvements,
     required this.nextSteps,
-    this.source = ResumeAnalysisSource.local,
-    this.confirmationQuestions = const [],
-    this.relatedJobs = const [],
-    this.warnings = const [],
-    this.notice = '',
-    this.fallbackReason,
   });
 
   final List<ResumeAnalysisItem> strengths;
   final List<ResumeAnalysisItem> improvements;
   final List<String> nextSteps;
-  final ResumeAnalysisSource source;
-
-  /// 이력서에 없다고 단정하는 대신 사용자에게 되묻는 질문.
-  final List<String> confirmationQuestions;
-
-  /// 서버가 시장 요구사항 참고용으로 검색한 공고.
-  final List<ResumeAnalysisRelatedJob> relatedJobs;
-
-  /// 서버가 근거 검증 중 제거한 항목 안내.
-  final List<String> warnings;
-  final String notice;
-
-  /// 서버 분석에 실패해 규칙 기반 결과로 대체했을 때의 이유.
-  final String? fallbackReason;
-
-  bool get isFromRag => source == ResumeAnalysisSource.rag;
-
-  ResumeAnalysis withFallbackReason(String reason) => ResumeAnalysis(
-    strengths: strengths,
-    improvements: improvements,
-    nextSteps: nextSteps,
-    source: source,
-    confirmationQuestions: confirmationQuestions,
-    relatedJobs: relatedJobs,
-    warnings: warnings,
-    notice: notice,
-    fallbackReason: reason,
-  );
-
-  /// cover_letter_rag 첨삭 응답을 이력서 분석 형태로 옮긴다.
-  ///
-  /// - 충족·부분 충족 요구사항 → 강점 (서버가 원문 대조를 끝낸 인용문 포함)
-  /// - 미충족 요구사항, 초안 보완점 → 보완 필요
-  /// - 확인 필요 요구사항 → 확인 질문 (서버가 이미 질문 목록에 넣어 준다)
-  /// - 다음 단계는 규칙 기반 결과를 그대로 쓴다. 서버는 문장을 대신 고친
-  ///   `revised_draft`도 돌려주지만, 이 화면은 대필하지 않는다는 원칙을 지키기
-  ///   위해 쓰지 않는다.
-  factory ResumeAnalysis.fromRag({
-    required ResumeAnalysis local,
-    required List<RagJobSearchResult> jobs,
-    required RagReviewResponse review,
-  }) {
-    final strengths = <ResumeAnalysisItem>[];
-    final improvements = <ResumeAnalysisItem>[];
-
-    for (final requirement in review.requirements) {
-      final label = '${requirement.requirement} (${requirement.requirementType})';
-      if (requirement.isMet) {
-        if (requirement.resumeEvidence.isEmpty) continue;
-        final first = requirement.resumeEvidence.first;
-        final suffix = requirement.status == '부분 충족' ? ' — 부분 충족' : '';
-        strengths.add(
-          ResumeAnalysisItem(
-            '$label: ${first.explanation}$suffix',
-            quote: first.resumeQuote,
-          ),
-        );
-      } else if (requirement.isNotMet) {
-        final gap = (requirement.gap ?? '').trim();
-        improvements.add(
-          ResumeAnalysisItem(
-            gap.isEmpty ? '$label: 이력서에서 근거를 찾지 못했습니다.' : '$label: $gap',
-          ),
-        );
-      }
-    }
-
-    for (final improvement in review.improvements) {
-      improvements.add(
-        ResumeAnalysisItem(
-          '${improvement.issue}: ${improvement.suggestion}',
-          quote: improvement.groundedResumeQuote,
-        ),
-      );
-    }
-
-    // 서버가 짚지 못하는 구조적 공백(빈 필수 항목 등)은 규칙 기반 결과로 보강한다.
-    final seen = improvements.map((e) => e.text).toSet();
-    for (final item in local.improvements) {
-      if (seen.add(item.text)) improvements.add(item);
-    }
-
-    return ResumeAnalysis(
-      strengths: strengths,
-      improvements: improvements,
-      nextSteps: local.nextSteps,
-      source: ResumeAnalysisSource.rag,
-      confirmationQuestions: review.confirmationQuestions,
-      relatedJobs: [
-        for (final job in jobs)
-          ResumeAnalysisRelatedJob(
-            company: job.company,
-            title: job.title,
-            summary: job.summary,
-          ),
-      ],
-      warnings: review.groundingWarnings,
-      notice: review.notice,
-    );
-  }
 }
 
 /// 이력서를 규칙 기반으로 분석한다.

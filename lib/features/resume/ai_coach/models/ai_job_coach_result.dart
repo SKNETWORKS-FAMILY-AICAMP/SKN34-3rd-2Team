@@ -206,7 +206,7 @@ class JobRecommendation {
     }
   }
 
-  /// cover_letter_rag 임베딩 검색에서 이 공고가 나온 순위. 검색에 안 잡히면 null.
+  /// 예전 임베딩 재정렬 경로의 순위. 지금은 쓰지 않으며 항상 null.
   final int? embeddingRank;
 
   /// 키워드 순위와 임베딩 순위를 RRF로 합친 값. 재정렬 전에는 null.

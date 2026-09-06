@@ -83,9 +83,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     return false;
   }
 
-  /// 이력서 분석. cover_letter_rag 서버가 설정돼 있으면 서버 근거 기반 분석을,
-  /// 아니면 앱 안의 규칙 기반 분석을 보여준다. 서버 실패 시에도 규칙 기반
-  /// 결과로 대체하고 그 이유를 함께 표시한다.
+  /// 이력서 분석. 앱 안의 규칙으로 필수 항목과 근거 유무를 점검한다.
   Future<void> _analyzeResumeOnly() async {
     if (!_guard(AiCoachFeature.resumeAnalysis)) return;
     setState(() {
@@ -263,9 +261,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                 ],
                 if (_result case final result?) ...[
                   const SizedBox(height: 18),
-                  // 기술 근거·이력서 피드백·학습 추천 섹션은 cover_letter_rag
-                  // 기반 첨삭으로 대체할 예정이라 제거했다. 데이터는 Functions
-                  // 응답에 그대로 남아 있다.
+                  // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
                   _RecommendationSection(result: result),
                   const SizedBox(height: 20),
                 ],
@@ -1214,23 +1210,12 @@ class _ResumeAnalysisSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = analysis.isFromRag
-        ? '이력서 원문 인용을 근거로 시장 공고와 비교했습니다. '
-              'AI가 문장을 대신 고치지 않고 보완할 지점만 알려줍니다.'
-        : 'AI가 문장을 대신 고치지 않고 보완할 지점만 알려줍니다.';
     return _Section(
       title: '이력서 분석',
-      subtitle: subtitle,
+      subtitle: 'AI가 문장을 대신 고치지 않고 보완할 지점만 알려줍니다.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (analysis.fallbackReason case final reason?) ...[
-            _NoteText(
-              '서버 분석 대신 규칙 기반 결과를 표시합니다: $reason',
-              color: AppColors.warning,
-            ),
-            const SizedBox(height: 10),
-          ],
           if (analysis.strengths.isNotEmpty) ...[
             const _AnalysisLabel('강점', AppColors.success),
             for (final item in analysis.strengths) _AnalysisBullet(item),
@@ -1241,30 +1226,9 @@ class _ResumeAnalysisSection extends StatelessWidget {
             for (final item in analysis.improvements) _AnalysisBullet(item),
             const SizedBox(height: 10),
           ],
-          if (analysis.confirmationQuestions.isNotEmpty) ...[
-            const _AnalysisLabel('확인 질문', AppColors.info),
-            for (final item in analysis.confirmationQuestions)
-              _BulletText(item),
-            const SizedBox(height: 10),
-          ],
           if (analysis.nextSteps.isNotEmpty) ...[
             const _AnalysisLabel('다음 단계', AppColors.primary),
             for (final item in analysis.nextSteps) _BulletText(item),
-          ],
-          if (analysis.relatedJobs.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            const _AnalysisLabel('비교에 참고한 공고', AppColors.textSecondary),
-            for (final job in analysis.relatedJobs)
-              _BulletText('${job.company} · ${job.title}'),
-          ],
-          if (analysis.warnings.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            for (final warning in analysis.warnings)
-              _NoteText(warning, color: AppColors.textHint),
-          ],
-          if (analysis.notice.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _NoteText(analysis.notice, color: AppColors.textHint),
           ],
         ],
       ),
@@ -1311,21 +1275,6 @@ class _AnalysisBullet extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _NoteText extends StatelessWidget {
-  const _NoteText(this.text, {required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(fontSize: 10, height: 1.35, color: color),
     );
   }
 }

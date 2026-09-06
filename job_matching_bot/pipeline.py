@@ -18,7 +18,6 @@ from typing import Any
 
 from job_matching_bot.coach.skill_gap import analyze_skill_evidence
 from job_matching_bot.config import AS_OF, DEFAULT_RESUME_MOCKS_INPUT
-from job_matching_bot.exporters.cover_letter_rag_jobs import write_rag_jobs
 from job_matching_bot.exporters.dart import build_dart_module
 from job_matching_bot.exporters.resume_mocks_dart import build_resume_mocks_module
 from job_matching_bot.ingestion.collection import deduplicate, to_collection_record
@@ -148,7 +147,6 @@ def run_pipeline(
     dart_output: Path | None = None,
     resume_mocks_output: Path | None = None,
     store_path: Path | None = None,
-    rag_jobs_output: Path | None = None,
 ) -> dict[str, Any]:
     """입력 파일을 읽어 분석하고 산출물을 저장한다.
 
@@ -169,9 +167,6 @@ def run_pipeline(
         dart_path = Path(dart_output)
         dart_path.parent.mkdir(parents=True, exist_ok=True)
         dart_path.write_text(build_dart_module(result["collected_jobs"]), encoding="utf-8")
-    if rag_jobs_output is not None:
-        # cover_letter_rag 임베딩 검색용. 같은 수집 결과에서 만들어 세 곳이 갈라지지 않게 한다.
-        write_rag_jobs(result["collected_jobs"], Path(rag_jobs_output))
     if resume_mocks_output is not None and DEFAULT_RESUME_MOCKS_INPUT.exists():
         # 공고 데이터와 같은 이유로 생성한다: 시드 스크립트가 쓰는 JSON이 단일 출처다.
         mocks = json.loads(DEFAULT_RESUME_MOCKS_INPUT.read_text(encoding="utf-8"))
