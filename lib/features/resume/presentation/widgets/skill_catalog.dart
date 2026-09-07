@@ -1,10 +1,13 @@
-import '../../ai_coach/data/generated/collected_jobs.g.dart';
+import '../../ai_coach/data/generated/job_skill_names.g.dart';
 
 /// 기술스택 태그 후보.
 ///
 /// 부트캠프 수료생이 자주 적는 기술을 손으로 고른 기본 목록에, 수집한 채용공고가
 /// 실제로 요구하는 기술을 합친다. 공고 쪽 이름이 들어가야 태그를 고르는 것만으로
-/// 키워드 매칭에 잡히는 표기를 쓰게 된다.
+/// 공고에 쓰인 표기를 쓰게 된다.
+///
+/// 공고 쪽 이름은 `job_skill_names.g.dart`에서 온다. 예전에는 앱이 공고 8.4MB를
+/// 안고 있으면서 거기서 뽑았는데, 공고가 서버로 옮겨 가면서 이름만 남겼다.
 abstract final class SkillCatalog {
   static const baseSkills = <String>[
     // 언어
@@ -42,11 +45,7 @@ abstract final class SkillCatalog {
     }
 
     baseSkills.forEach(add);
-    for (final job in collectedJobs) {
-      job.requiredSkills.forEach(add);
-      job.preferredSkills.forEach(add);
-      job.techStack.forEach(add);
-    }
+    jobSkillNames.forEach(add);
     final names = byKey.values.toList();
     // 기본 목록은 손으로 정한 순서를 지키고, 공고에서 온 것은 그 뒤에 이름순으로 둔다.
     final baseKeys = baseSkills.map((s) => s.toLowerCase()).toSet();

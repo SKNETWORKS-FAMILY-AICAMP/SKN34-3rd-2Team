@@ -25,6 +25,7 @@ from typing import Any
 from job_matching_bot.api import prompts, schemas
 from job_matching_bot.matching.hard_filter import hard_filter
 from job_matching_bot.retrieval import search as retrieval
+from job_matching_bot.retrieval import store_search
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.resume import ResumeProfile
 
@@ -39,6 +40,10 @@ MAX_PER_COMPANY = 2
 JOB_EXCERPT_CHARS = 1200
 # LLM 추론 강도. 대조 작업이라 낮춰도 근거 품질이 유지되고 응답이 크게 빨라진다.
 REASONING_EFFORT = "low"
+
+
+class StoreUnavailable(RuntimeError):
+    """공고 저장소 파일이 없다. 팀원은 공유 파일을 받아야 한다."""
 
 
 class SearchUnavailable(RuntimeError):
@@ -352,3 +357,143 @@ def _limit_per_company(rows) -> list[schemas.Recommendation]:
 
 def _deduplicate(items: list[str]) -> list[str]:
     return list(dict.fromkeys(item for item in items if item))
+
+
+# ── 공고 찾아보기 챗봇 ───────────────────────────────────
+class ChatService:
+    """말로 조건을 받아 저장소에서 공고를 찾는다.
+
+    추천과 다른 점이 둘이다. 첫째, 이력서가 아니라 **사용자가 말한 조건**으로 찾으므로
+    벡터가 필요 없다. 둘째, Pinecone이 아니라 저장소를 보므로 IT 밖 공고도 답할 수 있다.
+
+    LLM은 한 번만 부른다. 말을 조건으로 바꾸는 데만 쓰고, 답 문장은 실제 결과로 조립한다.
+    두 번 부르면 말맛은 좋아지겠지만 몇 초가 더 걸린다.
+
+    대화를 서버에 저장하지 않는다. 직전 조건을 응답에 실어 보내고 앱이 되돌려준다.
+    """
+
+    def __init__(self, generator=None, store_path: Path | None = None):
+        self._generator = generator
+        self._store_path = store_path
+
+    @property
+    def generator(self):
+        if self._generator is None:
+            self._generator = _build_generator(prompts.CHAT_PROMPT, schemas.ChatTurnOut)
+        return self._generator
+
+    @property
+    def store_path(self) -> Path:
+        if self._store_path is None:
+            from job_matching_bot.ingest import DEFAULT_STORE
+
+            self._store_path = DEFAULT_STORE
+        return self._store_path
+
+    def chat(self, request: schemas.JobChatRequest) -> schemas.JobChatResponse:
+        if not self.store_path.exists():
+            raise StoreUnavailable("공고 저장소가 없습니다. 공유 파일을 먼저 받아 주세요.")
+
+        previous = request.filters or schemas.ChatFilters()
+        turn = self.generator(
+            {
+                "previous": previous.model_dump_json(),
+                "message": request.message,
+            }
+        )
+
+        if turn.off_topic:
+            return schemas.JobChatResponse(
+                reply="공고 찾기를 도와드릴게요. 직무나 지역을 말씀해 주세요. 예: 서울 백엔드 신입",
+                filters=previous,
+                total=0,
+            )
+
+        filters = _to_job_filters(turn.filters)
+        if filters.is_empty:
+            return schemas.JobChatResponse(
+                reply=turn.understood or "어떤 일을 찾으시는지 알려 주세요. 예: 데이터 분석 신입",
+                filters=turn.filters,
+                total=0,
+            )
+
+        result = store_search.search(self.store_path, filters, limit=request.top_k)
+        return schemas.JobChatResponse(
+            reply=self._reply(turn.understood, filters, result),
+            filters=turn.filters,
+            jobs=[
+                schemas.JobChatJob(
+                    job_id=hit.job_id,
+                    company=hit.company,
+                    title=hit.title,
+                    source_url=hit.source_url,
+                    region=hit.region,
+                    career=hit.career_label,
+                    employment_type=hit.employment_type,
+                    deadline=hit.deadline,
+                    tech_stack=hit.tech_stack,
+                )
+                for hit in result.jobs
+            ],
+            total=result.total,
+            suggestions=_suggestions(filters, result),
+        )
+
+    @staticmethod
+    def _reply(understood: str, filters, result) -> str:
+        """실제 결과로 답을 만든다. 건수를 모르는 채로 LLM이 쓰면 틀린 말을 하게 된다."""
+        condition = filters.summary()
+        if result.total == 0:
+            return (
+                f"{condition} 조건으로는 열려 있는 공고를 찾지 못했어요. "
+                "조건을 하나 빼거나 지역을 넓혀 보시겠어요?"
+            )
+        head = understood.strip() or f"{condition} 조건으로 찾았어요."
+        # 제목·태그에 직접 맞은 건수를 따로 말한다. 본문에 말이 스친 범용 공고까지
+        # 뭉뚱그려 세면 실제보다 훨씬 많아 보인다.
+        if result.strong and result.strong < result.total:
+            counted = f"{result.total}건 중 직무가 맞는 건 {result.strong}건이에요"
+        else:
+            counted = f"{result.total}건" + ("이 넘어요" if result.scanned_cap else "이에요")
+        shown = len(result.jobs)
+        tail = f" 관련도 순으로 {shown}건 보여드릴게요." if result.total > shown else ""
+        return f"{head}" + "\n" + f"{condition} · {counted}.{tail}"
+
+
+def _to_job_filters(filters: schemas.ChatFilters):
+    return store_search.JobFilters(
+        roles=filters.roles,
+        skills=filters.skills,
+        regions=filters.regions,
+        career=filters.career,
+        employment_types=filters.employment_types,
+        deadline_within_days=filters.deadline_within_days,
+        keywords=filters.keywords,
+    )
+
+
+def _suggestions(filters, result) -> list[str]:
+    """다음에 좁힐 거리. 사용자가 그대로 눌러 보낼 수 있는 말로 준다.
+
+    이미 건 조건은 다시 권하지 않는다. 결과가 없으면 넓히는 쪽을 권한다.
+    """
+    if result.total == 0:
+        wider = []
+        if filters.regions:
+            wider.append("지역 상관없이")
+        if filters.career != "무관":
+            wider.append("경력 상관없이")
+        if filters.deadline_within_days:
+            wider.append("마감 상관없이")
+        return wider[:3]
+
+    narrower = []
+    if not filters.regions:
+        narrower.append("서울만")
+    if filters.career == "무관":
+        narrower.append("신입만")
+    if not filters.deadline_within_days:
+        narrower.append("마감 임박한 것만")
+    if not filters.employment_types:
+        narrower.append("정규직만")
+    return narrower[:3]

@@ -24,7 +24,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from job_matching_bot.api import schemas
-from job_matching_bot.api.service import RecommendService, SearchUnavailable
+from job_matching_bot.api.service import (
+    ChatService,
+    RecommendService,
+    SearchUnavailable,
+    StoreUnavailable,
+)
 from job_matching_bot.env import ensure_loaded
 from job_matching_bot.retrieval.pinecone_index import client, index_name
 
@@ -52,6 +57,7 @@ if _origins or _origin_regex:
     )
 
 _service = RecommendService()
+_chat = ChatService()
 
 
 @app.get("/health", response_model=schemas.HealthResponse)
@@ -74,4 +80,13 @@ def recommend(request: schemas.RecommendRequest) -> schemas.RecommendResponse:
         return _service.recommend(request)
     except SearchUnavailable as error:
         # 검색이나 조건 판정이 실패하면 추천하지 않는다. 근거 없는 목록을 보여 주지 않는다.
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/api/v1/jobs/chat", response_model=schemas.JobChatResponse)
+def chat(request: schemas.JobChatRequest) -> schemas.JobChatResponse:
+    """말로 공고를 찾는다. 앱은 직전 응답의 `filters`를 그대로 실어 보내 대화를 잇는다."""
+    try:
+        return _chat.chat(request)
+    except StoreUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error

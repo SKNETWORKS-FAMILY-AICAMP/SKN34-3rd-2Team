@@ -14,11 +14,9 @@ import 'job_resume_review_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
-import '../data/job_search.dart';
 import '../data/resume_analysis_repository.dart';
 import '../data/resume_analyzer.dart';
 import '../models/ai_job_coach_result.dart';
-import '../models/collected_job.dart';
 import '../models/resume_readiness.dart';
 
 class AiJobCoachPanel extends ConsumerStatefulWidget {
@@ -52,12 +50,22 @@ class AiJobCoachPanel extends ConsumerStatefulWidget {
 
 /// 챗봇 대화 한 줄.
 class _ChatMessage {
-  const _ChatMessage.user(this.text) : isUser = true, jobs = const [];
-  const _ChatMessage.bot(this.text, {this.jobs = const []}) : isUser = false;
+  const _ChatMessage.user(this.text)
+      : isUser = true,
+        jobs = const [],
+        suggestions = const [];
+  const _ChatMessage.bot(
+    this.text, {
+    this.jobs = const [],
+    this.suggestions = const [],
+  }) : isUser = false;
 
   final String text;
   final bool isUser;
-  final List<CollectedJob> jobs;
+  final List<JobChatJob> jobs;
+
+  /// 다음에 좁힐 거리. 누르면 그대로 질문이 된다.
+  final List<String> suggestions;
 }
 
 class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
@@ -128,9 +136,14 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   final TextEditingController _chatController = TextEditingController();
   final List<_ChatMessage> _messages = [
     const _ChatMessage.bot(
-      '어떤 채용공고를 찾아드릴까요? "백엔드 신입", "서울 AI 엔지니어"처럼 물어보세요.',
+      '어떤 채용공고를 찾아드릴까요? "서울 백엔드 신입"처럼 말씀하시면 됩니다.',
+      suggestions: ['서울 백엔드 신입', '데이터 분석 신입', '마감 임박한 공고'],
     ),
   ];
+
+  /// 직전 검색 조건. 서버가 대화를 저장하지 않으므로 앱이 들고 이어 보낸다.
+  JobChatFilters? _chatFilters;
+  bool _chatBusy = false;
   AiJobCoachResult? _result;
   ResumeAnalysis? _resumeAnalysis;
   bool _chatMode = false;
@@ -190,26 +203,52 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     });
   }
 
-  void _sendChatMessage() {
-    final text = _chatController.text.trim();
-    if (text.isEmpty) return;
-    final result = searchJobs(text);
+  /// 말로 공고를 찾는다. 서버가 조건을 해석하고 저장소에서 찾아 준다.
+  ///
+  /// 앱에 박힌 공고 파일을 쓰지 않으므로 밤마다 모은 새 공고가 바로 나온다.
+  Future<void> _sendChatMessage([String? preset]) async {
+    final text = (preset ?? _chatController.text).trim();
+    if (text.isEmpty || _chatBusy) return;
+
+    final client = ref.read(jobRecommendApiClientProvider);
     setState(() {
       _messages.add(_ChatMessage.user(text));
-      _messages.add(
-        result.jobs.isEmpty
-            ? _ChatMessage.bot(
-                '조건에 맞는 IT 공고를 찾지 못했습니다.\n'
-                '검색 조건: ${result.query.summary}',
-              )
-            : _ChatMessage.bot(
-                '${result.jobs.length}건을 찾았습니다.\n'
-                '검색 조건: ${result.query.summary}',
-                jobs: result.jobs,
-              ),
-      );
       _chatController.clear();
+      _chatBusy = true;
     });
+
+    if (client == null) {
+      setState(() {
+        _chatBusy = false;
+        _messages.add(
+          const _ChatMessage.bot('공고 검색 서버 주소가 비어 있어 찾을 수 없습니다.'),
+        );
+      });
+      return;
+    }
+
+    try {
+      final result = await client.chat(message: text, filters: _chatFilters);
+      if (!mounted) return;
+      setState(() {
+        _chatFilters = result.filters;
+        _messages.add(
+          _ChatMessage.bot(
+            result.reply,
+            jobs: result.jobs,
+            suggestions: result.suggestions,
+          ),
+        );
+      });
+    } on JobRecommendApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _messages.add(_ChatMessage.bot(error.message)));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _messages.add(_ChatMessage.bot('공고를 찾지 못했습니다: $error')));
+    } finally {
+      if (mounted) setState(() => _chatBusy = false);
+    }
   }
 
   Future<void> _run() async {
@@ -267,6 +306,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                 messages: _messages,
                 controller: _chatController,
                 onSend: _sendChatMessage,
+                onSuggestion: _sendChatMessage,
+                busy: _chatBusy,
               ),
             )
           else
@@ -1403,11 +1444,17 @@ class _ChatView extends StatelessWidget {
     required this.messages,
     required this.controller,
     required this.onSend,
+    required this.onSuggestion,
+    required this.busy,
   });
 
   final List<_ChatMessage> messages;
   final TextEditingController controller;
   final VoidCallback onSend;
+  final ValueChanged<String> onSuggestion;
+
+  /// 서버 응답을 기다리는 중. 그동안 같은 질문을 다시 보내지 못하게 한다.
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -1417,10 +1464,34 @@ class _ChatView extends StatelessWidget {
           child: ListView.builder(
             padding: const EdgeInsets.all(14),
             itemCount: messages.length,
-            itemBuilder: (context, index) =>
-                _ChatBubble(message: messages[index]),
+            itemBuilder: (context, index) => _ChatBubble(
+              message: messages[index],
+              // 제안은 마지막 답에서만 누를 수 있다. 지나간 답의 제안을 누르면 그때가
+              // 아니라 지금 조건에 붙어 엉뚱한 결과가 나온다.
+              onSuggestion:
+                  index == messages.length - 1 && !busy ? onSuggestion : null,
+            ),
           ),
         ),
+        if (busy)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  '공고를 찾는 중…',
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
         Container(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           decoration: const BoxDecoration(
@@ -1441,13 +1512,13 @@ class _ChatView extends StatelessWidget {
                       vertical: 10,
                     ),
                   ),
-                  onSubmitted: (_) => onSend(),
+                  onSubmitted: busy ? null : (_) => onSend(),
                 ),
               ),
               const SizedBox(width: 6),
               IconButton(
                 tooltip: '검색',
-                onPressed: onSend,
+                onPressed: busy ? null : onSend,
                 icon: const Icon(Icons.send, size: 18),
               ),
             ],
@@ -1459,9 +1530,10 @@ class _ChatView extends StatelessWidget {
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message});
+  const _ChatBubble({required this.message, this.onSuggestion});
 
   final _ChatMessage message;
+  final ValueChanged<String>? onSuggestion;
 
   @override
   Widget build(BuildContext context) {
@@ -1488,6 +1560,25 @@ class _ChatBubble extends StatelessWidget {
               const SizedBox(height: 8),
               _ChatJobCard(job: job),
             ],
+            if (message.suggestions.isNotEmpty && onSuggestion != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final suggestion in message.suggestions)
+                    ActionChip(
+                      label: Text(
+                        suggestion,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      onPressed: () => onSuggestion!(suggestion),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1498,7 +1589,7 @@ class _ChatBubble extends StatelessWidget {
 class _ChatJobCard extends StatelessWidget {
   const _ChatJobCard({required this.job});
 
-  final CollectedJob job;
+  final JobChatJob job;
 
   Future<void> _open() async {
     final uri = Uri.tryParse(job.sourceUrl);
@@ -1509,7 +1600,7 @@ class _ChatJobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final skills = [...job.requiredSkills, ...job.preferredSkills];
+    final skills = job.techStack;
     final hasLink = job.sourceUrl.startsWith('http');
     return InkWell(
       onTap: hasLink ? _open : null,
@@ -1532,12 +1623,17 @@ class _ChatJobCard extends StatelessWidget {
             ),
             const SizedBox(height: 3),
             Text(
-              '${job.company} · ${job.region} · ${job.careerLabel}',
+              '${job.company} · ${job.region} · ${job.career}',
               style: const TextStyle(
                 fontSize: 10.5,
                 color: AppColors.textSecondary,
               ),
             ),
+            if (job.deadline case final deadline?)
+              Text(
+                '마감 $deadline',
+                style: const TextStyle(fontSize: 10, color: AppColors.textHint),
+              ),
             if (skills.isNotEmpty) ...[
               const SizedBox(height: 5),
               Text(

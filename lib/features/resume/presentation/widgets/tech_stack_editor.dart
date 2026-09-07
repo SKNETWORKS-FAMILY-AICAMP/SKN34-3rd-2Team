@@ -27,11 +27,13 @@ class TechStackEditor extends StatefulWidget {
 }
 
 class _TechStackEditorState extends State<TechStackEditor> {
-  static const _suggestionLimit = 40;
+  /// 한 페이지에 보여줄 후보 수. 187개를 한 번에 펼치면 화면이 길어져 고르기 어렵다.
+  static const _pageSize = 40;
 
   final TextEditingController _search = TextEditingController();
   String _query = '';
   String? _activeId;
+  int _page = 0;
 
   @override
   void dispose() {
@@ -85,11 +87,15 @@ class _TechStackEditorState extends State<TechStackEditor> {
           (item) => item!.id == _activeId,
           orElse: () => null,
         );
-    final suggestions = SkillCatalog.search(_query).take(_suggestionLimit).toList();
+    // 검색 결과 전체를 페이지로 나눈다. 검색어가 바뀌면 첫 페이지로 돌아간다.
+    final matches = SkillCatalog.search(_query).toList();
+    final pageCount = matches.isEmpty ? 1 : (matches.length / _pageSize).ceil();
+    final page = _page.clamp(0, pageCount - 1);
+    final suggestions = matches.skip(page * _pageSize).take(_pageSize).toList();
     final trimmedQuery = _query.trim();
     final canAddCustom = trimmedQuery.isNotEmpty &&
         !_has(trimmedQuery) &&
-        !suggestions.any((s) => SkillCatalog.sameSkill(s, trimmedQuery));
+        !matches.any((s) => SkillCatalog.sameSkill(s, trimmedQuery));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,15 +144,20 @@ class _TechStackEditorState extends State<TechStackEditor> {
                     icon: const Icon(Icons.close, size: 18),
                     onPressed: () => setState(() {
                       _query = '';
+                      _page = 0;
                       _search.clear();
                     }),
                   ),
             isDense: true,
           ),
-          onChanged: (value) => setState(() => _query = value),
+          onChanged: (value) => setState(() {
+            _query = value;
+            _page = 0;
+          }),
           onSubmitted: (value) {
             if (value.trim().isEmpty) return;
-            final match = suggestions.isNotEmpty ? suggestions.first : value;
+            // 지금 보이는 페이지가 아니라 검색 결과 전체에서 가장 가까운 것을 고른다.
+            final match = matches.isNotEmpty ? matches.first : value;
             _add(SkillCatalog.sameSkill(match, value) ? match : value);
           },
         ),
@@ -184,12 +195,34 @@ class _TechStackEditorState extends State<TechStackEditor> {
               ),
           ],
         ),
-        if (_query.isEmpty && SkillCatalog.all.length > _suggestionLimit)
+        if (matches.length > _pageSize)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              '후보 ${SkillCatalog.all.length}개 중 $_suggestionLimit개를 보여줍니다. 검색하면 더 찾을 수 있습니다.',
-              style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+            child: Row(
+              children: [
+                TextButton.icon(
+                  onPressed: page > 0 ? () => setState(() => _page = page - 1) : null,
+                  icon: const Icon(Icons.chevron_left, size: 18),
+                  label: const Text('이전'),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${page + 1} / $pageCount 페이지 · 전체 ${matches.length}개',
+                  style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+                ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: page < pageCount - 1
+                      ? () => setState(() => _page = page + 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_right, size: 18),
+                  label: const Text('다음'),
+                  // 아이콘을 글자 뒤에 두려고 방향을 뒤집는다.
+                  iconAlignment: IconAlignment.end,
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ],
             ),
           ),
       ],

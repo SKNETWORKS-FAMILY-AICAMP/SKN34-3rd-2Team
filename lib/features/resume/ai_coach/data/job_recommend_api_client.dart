@@ -148,6 +148,151 @@ class JobRecommendResponse {
   }
 }
 
+/// 대화에서 뽑아낸 검색 조건.
+///
+/// 서버가 대화를 저장하지 않는다. 응답으로 받은 조건을 앱이 들고 있다가 다음 질문에
+/// 그대로 실어 보내야 "서울만" 같은 말이 앞말을 이어받는다.
+class JobChatFilters {
+  const JobChatFilters({
+    this.roles = const [],
+    this.skills = const [],
+    this.regions = const [],
+    this.career = '무관',
+    this.employmentTypes = const [],
+    this.deadlineWithinDays,
+    this.keywords = const [],
+  });
+
+  final List<String> roles;
+  final List<String> skills;
+  final List<String> regions;
+  final String career;
+  final List<String> employmentTypes;
+  final int? deadlineWithinDays;
+  final List<String> keywords;
+
+  bool get isEmpty =>
+      roles.isEmpty &&
+      skills.isEmpty &&
+      regions.isEmpty &&
+      career == '무관' &&
+      employmentTypes.isEmpty &&
+      deadlineWithinDays == null &&
+      keywords.isEmpty;
+
+  /// 무엇으로 걸렀는지 사용자에게 그대로 보여주기 위한 요약.
+  String get summary {
+    final parts = [
+      ...roles,
+      ...skills,
+      ...regions,
+      ...employmentTypes,
+      if (career != '무관') career,
+      if (deadlineWithinDays != null) '$deadlineWithinDays일 내 마감',
+      ...keywords,
+    ];
+    return parts.isEmpty ? '조건 없음' : parts.join(' · ');
+  }
+
+  Map<String, dynamic> toJson() => {
+        'roles': roles,
+        'skills': skills,
+        'regions': regions,
+        'career': career,
+        'employment_types': employmentTypes,
+        'deadline_within_days': deadlineWithinDays,
+        'keywords': keywords,
+      };
+
+  static List<String> _strings(dynamic value) =>
+      value is List ? value.whereType<String>().toList() : const [];
+
+  factory JobChatFilters.fromMap(Map<String, dynamic> map) => JobChatFilters(
+        roles: _strings(map['roles']),
+        skills: _strings(map['skills']),
+        regions: _strings(map['regions']),
+        career: map['career'] as String? ?? '무관',
+        employmentTypes: _strings(map['employment_types']),
+        deadlineWithinDays: (map['deadline_within_days'] as num?)?.toInt(),
+        keywords: _strings(map['keywords']),
+      );
+}
+
+/// 챗봇이 찾아 준 공고 한 건. 저장소에서 온 것이라 앱에 박힌 파일보다 최신이다.
+class JobChatJob {
+  const JobChatJob({
+    required this.jobId,
+    required this.company,
+    required this.title,
+    required this.sourceUrl,
+    required this.region,
+    required this.career,
+    required this.employmentType,
+    this.deadline,
+    this.techStack = const [],
+  });
+
+  final String jobId;
+  final String company;
+  final String title;
+  final String sourceUrl;
+  final String region;
+  final String career;
+  final String employmentType;
+  final String? deadline;
+  final List<String> techStack;
+
+  factory JobChatJob.fromMap(Map<String, dynamic> map) => JobChatJob(
+        jobId: map['job_id'] as String? ?? '',
+        company: map['company'] as String? ?? '',
+        title: map['title'] as String? ?? '',
+        sourceUrl: map['source_url'] as String? ?? '',
+        region: map['region'] as String? ?? '미기재',
+        career: map['career'] as String? ?? '미기재',
+        employmentType: map['employment_type'] as String? ?? '미기재',
+        deadline: map['deadline'] as String?,
+        techStack: JobChatFilters._strings(map['tech_stack']),
+      );
+}
+
+class JobChatResponse {
+  const JobChatResponse({
+    required this.reply,
+    required this.filters,
+    required this.jobs,
+    required this.total,
+    required this.suggestions,
+  });
+
+  final String reply;
+  final JobChatFilters filters;
+  final List<JobChatJob> jobs;
+
+  /// 조건에 맞는 전체 건수. `jobs`는 그중 일부다.
+  final int total;
+
+  /// 다음에 좁힐 거리. 사용자가 그대로 눌러 보낼 수 있는 말이다.
+  final List<String> suggestions;
+
+  factory JobChatResponse.fromMap(Map<String, dynamic> map) {
+    final items = map['jobs'];
+    return JobChatResponse(
+      reply: map['reply'] as String? ?? '',
+      filters: JobChatFilters.fromMap(
+        Map<String, dynamic>.from(map['filters'] as Map? ?? const {}),
+      ),
+      jobs: items is List
+          ? items
+              .whereType<Map>()
+              .map((e) => JobChatJob.fromMap(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      total: (map['total'] as num?)?.toInt() ?? 0,
+      suggestions: JobChatFilters._strings(map['suggestions']),
+    );
+  }
+}
+
 class JobRecommendApiClient {
   JobRecommendApiClient({String? baseUrl, http.Client? client})
       : _baseUrl = (baseUrl ?? JobRecommendApiConfig.baseUrl)
@@ -164,6 +309,20 @@ class JobRecommendApiClient {
     return JobRecommendResponse.fromMap(
       await _post('/api/v1/jobs/recommend', request.toJson()),
     );
+  }
+
+  /// 말로 공고를 찾는다. 직전 조건을 함께 보내야 대화가 이어진다.
+  Future<JobChatResponse> chat({
+    required String message,
+    JobChatFilters? filters,
+    int topK = 5,
+  }) async {
+    final decoded = await _post('/api/v1/jobs/chat', {
+      'message': message,
+      'filters': filters?.toJson(),
+      'top_k': topK,
+    });
+    return JobChatResponse.fromMap(decoded);
   }
 
   Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {

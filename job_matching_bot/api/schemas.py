@@ -130,6 +130,66 @@ class RecommendResponse(StrictModel):
     )
 
 
+# ── 공고 찾아보기 챗봇 ──────────────────────────────────
+
+class ChatFilters(StrictModel):
+    """대화에서 뽑아낸 검색 조건.
+
+    앱이 응답으로 받은 그대로 다음 요청에 실어 보낸다. 그래야 "서울만"처럼 앞말을
+    이어받는 말이 통한다. 서버는 대화를 저장하지 않는다.
+    """
+
+    roles: list[str] = Field(default_factory=list, description="직무. 백엔드, 데이터분석")
+    skills: list[str] = Field(default_factory=list, description="기술. Python, React")
+    regions: list[str] = Field(default_factory=list, description="지역. 서울, 경기")
+    career: Literal["신입", "경력", "무관"] = "무관"
+    employment_types: list[str] = Field(default_factory=list, description="정규직, 인턴")
+    deadline_within_days: int | None = Field(
+        default=None, description="마감 임박만 볼 때의 날짜 수. 아니면 null"
+    )
+    keywords: list[str] = Field(default_factory=list, description="위에 안 들어가는 말")
+
+
+class ChatTurnOut(StrictModel):
+    """LLM ①: 사용자의 말과 직전 조건을 합쳐 새 조건을 만든다."""
+
+    filters: ChatFilters
+    understood: str = Field(description="무엇으로 찾을지 사용자에게 확인시키는 한 문장")
+    off_topic: bool = Field(
+        default=False, description="공고 찾기와 무관한 말이면 true"
+    )
+
+
+class JobChatRequest(StrictModel):
+    message: str = Field(min_length=1, max_length=500)
+    filters: ChatFilters | None = Field(
+        default=None, description="직전 응답의 filters. 첫 질문이면 비운다"
+    )
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class JobChatJob(StrictModel):
+    job_id: str
+    company: str
+    title: str
+    source_url: str
+    region: str
+    career: str
+    employment_type: str
+    deadline: str | None = None
+    tech_stack: list[str] = Field(default_factory=list)
+
+
+class JobChatResponse(StrictModel):
+    reply: str
+    filters: ChatFilters
+    jobs: list[JobChatJob] = Field(default_factory=list)
+    total: int = Field(description="조건에 맞는 전체 건수. jobs는 그중 일부")
+    suggestions: list[str] = Field(
+        default_factory=list, description="다음에 더 좁힐 거리. 그대로 눌러 보낼 수 있는 말"
+    )
+
+
 class HealthResponse(StrictModel):
     status: Literal["ok"] = "ok"
     index_name: str
