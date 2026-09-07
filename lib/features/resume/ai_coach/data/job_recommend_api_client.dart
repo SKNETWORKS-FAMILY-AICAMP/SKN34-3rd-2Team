@@ -258,6 +258,7 @@ class JobChatJob {
 class JobChatResponse {
   const JobChatResponse({
     required this.mode,
+    required this.resumeScope,
     required this.reply,
     required this.filters,
     required this.jobs,
@@ -270,6 +271,9 @@ class JobChatResponse {
   /// 답을 어떻게 보여줄지가 달라진다. 검색은 목록이 본문이고, 질문은 글이 본문이며
   /// 공고 목록은 근거로 붙는 것이다.
   final String mode;
+
+  /// mode가 '추천'일 때 이력서의 어디를 근거로 삼을지. 전체 / 프로젝트 / 기술스택.
+  final String resumeScope;
 
   final String reply;
   final JobChatFilters filters;
@@ -285,6 +289,7 @@ class JobChatResponse {
     final items = map['jobs'];
     return JobChatResponse(
       mode: map['mode'] as String? ?? '검색',
+      resumeScope: map['resume_scope'] as String? ?? '전체',
       reply: map['reply'] as String? ?? '',
       filters: JobChatFilters.fromMap(
         Map<String, dynamic>.from(map['filters'] as Map? ?? const {}),

@@ -54,12 +54,14 @@ class _ChatMessage {
       : isUser = true,
         jobs = const [],
         suggestions = const [],
+        recommendations = const [],
         mode = '검색';
   const _ChatMessage.bot(
     this.text, {
     this.jobs = const [],
     this.suggestions = const [],
     this.mode = '검색',
+    this.recommendations = const [],
   }) : isUser = false;
 
   final String text;
@@ -70,6 +72,9 @@ class _ChatMessage {
 
   /// 질문에 답한 경우 이 목록은 **답의 근거**다. 찾아 준 결과가 아니다.
   final List<JobChatJob> jobs;
+
+  /// 이력서를 읽고 고른 공고. 조건 검색 결과와 달리 적합도와 근거가 붙는다.
+  final List<JobRecommendation> recommendations;
 
   /// 다음에 좁힐 거리. 누르면 그대로 질문이 된다.
   final List<String> suggestions;
@@ -162,6 +167,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// 돼?"처럼 짧은 말이 어느 공고 이야기인지 흐려지지 않는다.
   JobChatJob? _askingAbout;
   bool _chatBusy = false;
+
+  /// 기다리는 동안 보여줄 말. 추천은 11초쯤 걸리므로 무엇을 하는 중인지 밝힌다.
+  String? _chatBusyLabel;
   AiJobCoachResult? _result;
   ResumeAnalysis? _resumeAnalysis;
   bool _chatMode = false;
@@ -221,19 +229,122 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     });
   }
 
-  /// 챗봇에서 "내 이력서로 맞는 공고"를 물었을 때 실제 추천으로 넘어간다.
+  /// 챗봇에서 "내 이력서로 맞는 공고"를 물으면 **바로 추천을 돌려 대화창에 답한다.**
   ///
-  /// 챗봇은 이력서를 받지 않는다. 이력서를 읽고 근거를 대는 일은 추천이 하므로,
-  /// 여기서 흉내 내지 않고 그쪽으로 넘긴다. 화면도 추천 결과가 보이는 쪽으로 바꾼다.
-  Future<void> _handOffToRecommend() async {
+  /// 서버 챗봇은 이력서를 받지 않는다. 하지만 앱은 들고 있으므로 앱이 돌리면 된다.
+  /// 버튼을 한 번 더 누르게 하면 "골라 드릴게요"라는 말만 오가고 답이 안 나온다.
+  ///
+  /// 결과는 `_result`에도 넣는다. 근거 전체(이력서 문장 ↔ 공고 문장)는 코치 화면이
+  /// 보여주므로, 대화에서 "자세한 근거 보기"로 그쪽으로 넘어갈 수 있어야 한다.
+  Future<void> _recommendInChat([String scope = '전체']) async {
     final blocked = _readiness.blockedReason(AiCoachFeature.jobRecommendation);
     if (blocked != null) {
       // 이력서가 덜 찼을 때만 이렇게 답한다. 이때는 "채워 주세요"가 사실이다.
       setState(() => _messages.add(_ChatMessage.bot(blocked)));
       return;
     }
-    setState(() => _chatMode = false);
-    await _run();
+
+    final requestedContent = _scopedResume(scope);
+    final missing = _emptyScopeReason(scope, requestedContent);
+    if (missing != null) {
+      setState(() => _messages.add(_ChatMessage.bot(missing)));
+      return;
+    }
+
+    setState(() {
+      _chatBusy = true;
+      _chatBusyLabel = switch (scope) {
+        '프로젝트' => '프로젝트 경험을 읽고 공고를 고르는 중…',
+        '기술스택' => '기술스택을 읽고 공고를 고르는 중…',
+        _ => '이력서를 읽고 공고를 고르는 중…',
+      };
+    });
+    try {
+      final result = await ref
+          .read(aiJobCoachRepositoryProvider)
+          .analyzeAndMatch(
+            draftContent: requestedContent,
+            preferences: _preferences,
+          );
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _messages.add(
+          _ChatMessage.bot(
+            _recommendSummary(result.recommendations, scope),
+            mode: '추천',
+            recommendations: result.recommendations.take(3).toList(),
+          ),
+        );
+      });
+    } on JobRecommendApiException catch (error) {
+      if (mounted) setState(() => _messages.add(_ChatMessage.bot(error.message)));
+    } catch (error) {
+      if (mounted) {
+        setState(() => _messages.add(_ChatMessage.bot('공고를 고르지 못했습니다: $error')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _chatBusy = false;
+          _chatBusyLabel = null;
+        });
+      }
+    }
+  }
+
+  /// 추천에 보낼 이력서. 범위를 좁혀도 **조건 판정에 쓰는 것은 남긴다.**
+  ///
+  /// 경력·학력·자격증을 지우면 연차가 0이 되어 하드 필터가 달라진다. 좁히는 것은
+  /// 뜻을 뽑는 재료(프로젝트·기술스택·자기소개)이지 조건이 아니다.
+  ResumeContent _scopedResume(String scope) {
+    final content = widget.draftContent;
+    return switch (scope) {
+      '프로젝트' => content.copyWith(
+          techStack: const [],
+          awards: const [],
+          trainingExperience: const [],
+          otherActivities: const [],
+          coreCompetencies: const ResumeCoreCompetencies(),
+          selfIntroduction: const ResumeSelfIntroduction(),
+        ),
+      '기술스택' => content.copyWith(
+          projects: const [],
+          awards: const [],
+          trainingExperience: const [],
+          otherActivities: const [],
+          coreCompetencies: const ResumeCoreCompetencies(),
+          selfIntroduction: const ResumeSelfIntroduction(),
+        ),
+      _ => content,
+    };
+  }
+
+  /// 좁힌 곳이 비어 있으면 추천이 근거 없이 돈다. 먼저 알린다.
+  static String? _emptyScopeReason(String scope, ResumeContent content) {
+    if (scope == '프로젝트' && content.projects.isEmpty) {
+      return '이력서에 프로젝트가 아직 없어요. 하나 적어 주시면 그걸 기준으로 찾아드릴게요.';
+    }
+    if (scope == '기술스택' && content.techStack.isEmpty) {
+      return '이력서에 기술스택이 아직 없어요. 쓸 줄 아는 기술을 넣어 주시면 그걸 기준으로 찾아드릴게요.';
+    }
+    return null;
+  }
+
+  /// 몇 건을 골랐고 그중 몇 건이 잘 맞는지. 등급은 서버가 매긴 그대로 센다.
+  static String _recommendSummary(List<JobRecommendation> found, String scope) {
+    final source = switch (scope) {
+      '프로젝트' => '프로젝트 경험',
+      '기술스택' => '기술스택',
+      _ => '이력서',
+    };
+    if (found.isEmpty) {
+      return '$source을 읽었지만 조건에 맞는 공고를 찾지 못했어요.\n'
+          '희망 지역이나 고용형태를 넓혀 보시겠어요?';
+    }
+    final high = found.where((job) => job.grade == '높음').length;
+    final counted = high > 0 ? ' 그중 잘 맞는 건 $high건이에요.' : '';
+    return '$source을 읽고 ${found.length}건을 골랐어요.$counted';
   }
 
   /// 공고 하나를 놓고 묻기 시작한다. 그만둘 때까지 모든 말이 이 공고로 간다.
@@ -296,6 +407,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           ),
         );
       });
+      // 이력서로 골라 달라는 말이었다. 말만 하고 끝내지 않고 바로 돌린다.
+      if (result.mode == '추천') {
+        await _recommendInChat(result.resumeScope);
+      }
     } on JobRecommendApiException catch (error) {
       if (!mounted) return;
       setState(() => _messages.add(_ChatMessage.bot(error.message)));
@@ -359,7 +474,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           if (_chatMode)
             Expanded(
               child: _ChatView(
-                onRecommend: _handOffToRecommend,
+                onOpenDetail: () => setState(() => _chatMode = false),
                 askingAbout: _askingAbout,
                 onStopAsking: () => setState(() => _askingAbout = null),
                 onAskAbout: _askAbout,
@@ -368,6 +483,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                 onSend: _sendChatMessage,
                 onSuggestion: _sendChatMessage,
                 busy: _chatBusy,
+                busyLabel: _chatBusyLabel,
               ),
             )
           else
@@ -1509,7 +1625,8 @@ class _ChatView extends StatelessWidget {
     required this.askingAbout,
     required this.onStopAsking,
     required this.onAskAbout,
-    required this.onRecommend,
+    required this.onOpenDetail,
+    this.busyLabel,
   });
 
   final List<_ChatMessage> messages;
@@ -1525,8 +1642,11 @@ class _ChatView extends StatelessWidget {
   final VoidCallback onStopAsking;
   final ValueChanged<JobChatJob> onAskAbout;
 
-  /// 이력서로 골라 달라는 말을 받았을 때 추천으로 넘어간다.
-  final VoidCallback onRecommend;
+  /// 근거 전체를 보러 코치 화면으로 넘어간다.
+  final VoidCallback onOpenDetail;
+
+  /// 무엇을 기다리는 중인지. 비어 있으면 기본 문구를 쓴다.
+  final String? busyLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1541,8 +1661,7 @@ class _ChatView extends StatelessWidget {
               onAskAbout: busy ? null : onAskAbout,
               // 넘어가기는 마지막 답에서만. 지나간 답의 버튼을 누르면 그때 물어본
               // 것이 아니라 지금 이력서로 돌아 혼란스럽다.
-              onRecommend:
-                  index == messages.length - 1 && !busy ? onRecommend : null,
+              onOpenDetail: busy ? null : onOpenDetail,
               // 제안은 마지막 답에서만 누를 수 있다. 지나간 답의 제안을 누르면 그때가
               // 아니라 지금 조건에 붙어 엉뚱한 결과가 나온다.
               onSuggestion:
@@ -1551,20 +1670,23 @@ class _ChatView extends StatelessWidget {
           ),
         ),
         if (busy)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 12,
                   height: 12,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Text(
-                  '답을 찾는 중…',
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  busyLabel ?? '답을 찾는 중…',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -1639,13 +1761,13 @@ class _ChatBubble extends StatelessWidget {
     required this.message,
     this.onSuggestion,
     this.onAskAbout,
-    this.onRecommend,
+    this.onOpenDetail,
   });
 
   final _ChatMessage message;
   final ValueChanged<String>? onSuggestion;
   final ValueChanged<JobChatJob>? onAskAbout;
-  final VoidCallback? onRecommend;
+  final VoidCallback? onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -1668,19 +1790,26 @@ class _ChatBubble extends StatelessWidget {
               message.text,
               style: const TextStyle(fontSize: 12, height: 1.5),
             ),
-            // 이력서로 골라 달라는 말. 챗봇이 흉내 내지 않고 추천으로 넘긴다.
-            if (message.mode == '추천' && onRecommend != null) ...[
+            // 이력서를 읽고 고른 공고. 적합도와 근거가 붙는다.
+            for (final job in message.recommendations) ...[
               const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: onRecommend,
-                icon: const Icon(Icons.track_changes_outlined, size: 15),
-                label: const Text(
-                  '이력서로 공고 추천받기',
-                  style: TextStyle(fontSize: 11.5),
-                ),
-                style: FilledButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              _ChatRecommendCard(job: job),
+            ],
+            if (message.recommendations.isNotEmpty && onOpenDetail != null) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: onOpenDetail,
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    '근거 전체 보기 →',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF7C3AED),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1725,6 +1854,123 @@ class _ChatBubble extends StatelessWidget {
     );
   }
 }
+
+/// 이력서를 읽고 고른 공고 한 건. 조건 검색 카드와 달리 **왜 맞는지**를 함께 보여준다.
+class _ChatRecommendCard extends StatelessWidget {
+  const _ChatRecommendCard({required this.job});
+
+  final JobRecommendation job;
+
+  Future<void> _open() async {
+    final uri = Uri.tryParse(job.sourceUrl);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Color get _gradeColor => switch (job.grade) {
+        '높음' => const Color(0xFF7C3AED),
+        '보통' => AppColors.textSecondary,
+        _ => AppColors.textHint,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLink = job.sourceUrl.startsWith('http');
+    // 근거 한 줄. 주장(claim)만 보여주고, 인용 원문은 코치 화면에 있다.
+    final reason = job.reasons.isNotEmpty
+        ? job.reasons.first.claim
+        : job.evidence.join(' · ');
+    return InkWell(
+      onTap: hasLink ? _open : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: _gradeColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    job.grade.isEmpty ? '판단 없음' : job.grade,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _gradeColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    job.company,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              job.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            if (job.region.isNotEmpty || job.careerText.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                [job.region, job.careerText].where((v) => v.isNotEmpty).join(' · '),
+                style: const TextStyle(fontSize: 10, color: AppColors.textHint),
+              ),
+            ],
+            // 왜 맞는지 한 줄. 전체 근거는 코치 화면에 있다.
+            if (reason.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(
+                reason,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  height: 1.4,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+            if (hasLink) ...[
+              const SizedBox(height: 5),
+              const Text(
+                '공고 보기 →',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 class _ChatJobCard extends StatelessWidget {
   const _ChatJobCard({required this.job, this.onAsk});

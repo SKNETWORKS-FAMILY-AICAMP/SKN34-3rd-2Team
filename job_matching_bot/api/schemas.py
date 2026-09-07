@@ -184,6 +184,13 @@ class ChatTurnOut(StrictModel):
         default=False,
         description="공고를 세어서 답할 질문이면 true. 조언을 구하는 말이면 false",
     )
+    resume_scope: Literal["전체", "프로젝트", "기술스택"] = Field(
+        default="전체",
+        description=(
+            "추천일 때 이력서의 어디를 근거로 삼을지. 사용자가 콕 집어 말했을 때만 "
+            "좁힌다. '프로젝트 경험 보고' → 프로젝트, '기술스택으로' → 기술스택"
+        ),
+    )
     requirement_query: str = Field(
         default="",
         description=(
@@ -231,6 +238,10 @@ class JobChatJob(StrictModel):
 class JobChatResponse(StrictModel):
     mode: Literal["검색", "질문", "공고", "추천", "안내"] = Field(
         default="검색", description="앱이 답을 어떻게 보여 줄지 정하는 데 쓴다"
+    )
+    resume_scope: Literal["전체", "프로젝트", "기술스택"] = Field(
+        default="전체",
+        description="mode가 추천일 때 이력서의 어디를 근거로 삼을지. 앱이 그만큼만 보낸다",
     )
     reply: str
     filters: ChatFilters
