@@ -657,6 +657,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                               resumeId: widget.resumeId,
                               draftContent: _content,
                               hasUnsavedChanges: _dirty || _isSaving,
+                              onSaveRequested: isAdmin
+                                  ? null
+                                  : () async {
+                                      await _save(resume: resume);
+                                      return !_dirty;
+                                    },
                               onResumeChanged: isAdmin ? null : (content) => setState(() {
                                 _content = content;
                                 _dirty = false;

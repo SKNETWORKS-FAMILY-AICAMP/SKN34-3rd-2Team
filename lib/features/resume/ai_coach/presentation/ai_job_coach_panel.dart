@@ -30,6 +30,7 @@ class AiJobCoachPanel extends ConsumerStatefulWidget {
     required this.onClose,
     this.hasUnsavedChanges = false,
     this.onResumeChanged,
+    this.onSaveRequested,
   });
 
   final String resumeId;
@@ -38,6 +39,12 @@ class AiJobCoachPanel extends ConsumerStatefulWidget {
   final VoidCallback onClose;
   final bool hasUnsavedChanges;
   final ValueChanged<ResumeContent>? onResumeChanged;
+
+  /// 이력서를 저장한다. 저장에 성공하면 true.
+  ///
+  /// 첨삭은 서버가 Firestore의 저장본을 읽고 그 자리에 고쳐 쓰므로, 저장 안 된 초안으로는
+  /// 시작할 수 없다. 사용자가 저장 버튼을 따로 누르게 하는 대신 여기서 대신 저장한다.
+  final Future<bool> Function()? onSaveRequested;
 
   @override
   ConsumerState<AiJobCoachPanel> createState() => _AiJobCoachPanelState();
@@ -54,11 +61,44 @@ class _ChatMessage {
 }
 
 class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
-  Future<void> _reviewJob(JobRecommendation job) async {
-    if (widget.hasUnsavedChanges) {
+  /// 저장 안 된 변경이 있으면 사용자에게 묻고 대신 저장한다. 이어가도 되면 true.
+  Future<bool> _saveBeforeReview() async {
+    final save = widget.onSaveRequested;
+    if (save == null) {
       setState(() => _error = '이력서를 먼저 저장한 뒤 다시 추천하고 첨삭해 주세요.');
-      return;
+      return false;
     }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('이력서 저장'),
+        content: const Text(
+          '첨삭은 저장된 이력서를 기준으로 합니다. 지금 저장하고 첨삭을 시작할까요?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('저장하고 첨삭'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return false;
+    if (!await save()) {
+      if (mounted) setState(() => _error = '이력서 저장에 실패해 첨삭을 시작하지 못했습니다.');
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _reviewJob(JobRecommendation job) async {
+    // 저장하는 동안 사용자가 패널을 닫을 수 있다. 그러면 대화창을 띄우지 않는다.
+    if (widget.hasUnsavedChanges && !await _saveBeforeReview()) return;
+    if (!mounted) return;
     final cohort = ref.read(effectiveCohortIdProvider);
     final user = ref.read(firebaseAuthProvider).currentUser;
     if (cohort == null || user == null) {
