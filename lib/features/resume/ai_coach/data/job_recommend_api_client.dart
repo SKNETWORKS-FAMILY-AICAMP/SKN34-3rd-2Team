@@ -148,6 +148,92 @@ class JobRecommendResponse {
   }
 }
 
+/// `POST /api/v1/jobs/feedback` 결과의 한 항목.
+///
+/// 공고가 원하는 것 하나와, 그것이 이력서에서 확인되는지를 원문 인용으로 보여 준다.
+class JobFeedbackPoint {
+  const JobFeedbackPoint({
+    required this.kind,
+    required this.topic,
+    required this.jobQuote,
+    required this.status,
+    required this.resumeQuote,
+    required this.advice,
+  });
+
+  /// 인재상 · 요구역량 · 주요업무 · 우대사항.
+  final String kind;
+  final String topic;
+
+  /// 공고 원문에 그대로 있는 문장.
+  final String jobQuote;
+
+  /// '드러남' 또는 '확인 안 됨'. 확인 안 됨은 경험이 없다는 뜻이 아니다.
+  final String status;
+
+  /// 드러남일 때만 채워진다. 이력서 원문에 그대로 있는 문장.
+  final String resumeQuote;
+  final String advice;
+
+  bool get isShown => status == '드러남';
+
+  factory JobFeedbackPoint.fromMap(Map<String, dynamic> map) => JobFeedbackPoint(
+        kind: map['kind'] as String? ?? '',
+        topic: map['topic'] as String? ?? '',
+        jobQuote: map['job_quote'] as String? ?? '',
+        status: map['status'] as String? ?? '확인 안 됨',
+        resumeQuote: map['resume_quote'] as String? ?? '',
+        advice: map['advice'] as String? ?? '',
+      );
+}
+
+/// 고른 공고 하나를 기준으로 받은 이력서 피드백. 이력서를 저장하거나 고치지 않는다.
+class JobFeedbackResponse {
+  const JobFeedbackResponse({
+    required this.jobId,
+    required this.company,
+    required this.title,
+    required this.sourceUrl,
+    required this.wanted,
+    required this.points,
+    required this.warnings,
+    required this.notice,
+  });
+
+  final String jobId;
+  final String company;
+  final String title;
+  final String sourceUrl;
+
+  /// 이 공고가 원하는 사람. 공고에 적힌 범위 안에서만 쓰인다.
+  final String wanted;
+  final List<JobFeedbackPoint> points;
+  final List<String> warnings;
+  final String notice;
+
+  List<JobFeedbackPoint> get shown => points.where((p) => p.isShown).toList();
+  List<JobFeedbackPoint> get missing => points.where((p) => !p.isShown).toList();
+
+  factory JobFeedbackResponse.fromMap(Map<String, dynamic> map) {
+    final items = map['points'];
+    return JobFeedbackResponse(
+      jobId: map['job_id'] as String? ?? '',
+      company: map['company'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      sourceUrl: map['source_url'] as String? ?? '',
+      wanted: map['wanted'] as String? ?? '',
+      points: items is List
+          ? items
+              .whereType<Map>()
+              .map((e) => JobFeedbackPoint.fromMap(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      warnings: (map['warnings'] as List?)?.whereType<String>().toList() ?? const [],
+      notice: map['notice'] as String? ?? '',
+    );
+  }
+}
+
 class JobRecommendApiClient {
   JobRecommendApiClient({String? baseUrl, http.Client? client})
       : _baseUrl = (baseUrl ?? JobRecommendApiConfig.baseUrl)
@@ -161,14 +247,20 @@ class JobRecommendApiClient {
   String get baseUrl => _baseUrl;
 
   Future<JobRecommendResponse> recommend(JobRecommendRequest request) async {
-    final uri = Uri.parse('$_baseUrl/api/v1/jobs/recommend');
+    return JobRecommendResponse.fromMap(
+      await _post('/api/v1/jobs/recommend', request.toJson()),
+    );
+  }
+
+  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+    final uri = Uri.parse('$_baseUrl$path');
     final http.Response response;
     try {
       response = await _client
           .post(
             uri,
             headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode(request.toJson()),
+            body: jsonEncode(body),
           )
           .timeout(JobRecommendApiConfig.timeout);
     } on http.ClientException catch (error) {
@@ -192,8 +284,9 @@ class JobRecommendApiClient {
     if (response.statusCode != 200) {
       final detail = _detail(response);
       final message = switch (response.statusCode) {
+        404 => '서버 저장소에서 이 공고를 찾지 못했습니다: $detail',
         503 => '추천 서버가 검색을 수행하지 못했습니다: $detail',
-        422 => '추천 서버가 요청을 거부했습니다(입력 형식): $detail',
+        422 => '요청을 처리하지 못했습니다: $detail',
         _ => '추천 서버 오류(HTTP ${response.statusCode}): $detail',
       };
       throw JobRecommendApiException(message, statusCode: response.statusCode);
@@ -203,7 +296,22 @@ class JobRecommendApiClient {
     if (decoded is! Map) {
       throw const JobRecommendApiException('추천 서버 응답 형식이 올바르지 않습니다.');
     }
-    return JobRecommendResponse.fromMap(Map<String, dynamic>.from(decoded));
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  /// 고른 공고 하나로 이력서 피드백을 받는다.
+  ///
+  /// 서버가 공고 원문을 저장소에서 읽으므로 앱은 공고 id만 보낸다. 이력서는 저장 전
+  /// 초안이어도 된다. 서버가 이력서를 저장하거나 고치지 않는다.
+  Future<JobFeedbackResponse> feedback({
+    required String jobId,
+    required String resumeText,
+  }) async {
+    final decoded = await _post('/api/v1/jobs/feedback', {
+      'job_id': jobId,
+      'resume_text': resumeText,
+    });
+    return JobFeedbackResponse.fromMap(decoded);
   }
 
   static String _detail(http.Response response) {

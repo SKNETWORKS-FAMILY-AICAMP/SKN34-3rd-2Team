@@ -24,7 +24,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from job_matching_bot.api import schemas
-from job_matching_bot.api.service import RecommendService, SearchUnavailable
+from job_matching_bot.api.service import (
+    FeedbackService,
+    JobNotFound,
+    JobTextUnavailable,
+    RecommendService,
+    SearchUnavailable,
+)
 from job_matching_bot.env import ensure_loaded
 from job_matching_bot.retrieval.pinecone_index import client, index_name
 
@@ -52,6 +58,7 @@ if _origins or _origin_regex:
     )
 
 _service = RecommendService()
+_feedback = FeedbackService()
 
 
 @app.get("/health", response_model=schemas.HealthResponse)
@@ -75,3 +82,20 @@ def recommend(request: schemas.RecommendRequest) -> schemas.RecommendResponse:
     except SearchUnavailable as error:
         # 검색이나 조건 판정이 실패하면 추천하지 않는다. 근거 없는 목록을 보여 주지 않는다.
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/api/v1/jobs/feedback", response_model=schemas.JobFeedbackResponse)
+def job_feedback(request: schemas.JobFeedbackRequest) -> schemas.JobFeedbackResponse:
+    """고른 공고 하나를 기준으로 이력서에 피드백을 준다.
+
+    읽기만 하므로 저장 전 초안으로도 받을 수 있다. 이력서를 저장하거나 고치지 않는다.
+    """
+    try:
+        return _feedback.feedback(request)
+    except JobNotFound as error:
+        raise HTTPException(status_code=404, detail="저장소에 없는 공고입니다.") from error
+    except JobTextUnavailable as error:
+        raise HTTPException(
+            status_code=422,
+            detail="이 공고는 상세가 이미지뿐이라 대조할 글이 없습니다.",
+        ) from error

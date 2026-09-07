@@ -42,6 +42,14 @@ class SearchUnavailable(RuntimeError):
     """벡터 검색이나 하드 필터가 실패했다. 추천을 내보내지 않는다."""
 
 
+class JobNotFound(LookupError):
+    """저장소에 없는 공고다."""
+
+
+class JobTextUnavailable(RuntimeError):
+    """본문이 이미지뿐이거나 비어 있어 대조할 글이 없다."""
+
+
 def _build_generator(prompt, schema):
     """프롬프트 | 구조화 출력. 첨삭 모듈과 같은 방식으로 맞춘다."""
     from langchain_openai import ChatOpenAI
@@ -276,6 +284,89 @@ class RecommendService:
 
 
 _WHITESPACE = re.compile(r"\s+")
+
+
+class FeedbackService:
+    """공고 하나를 기준으로 이력서에 피드백을 준다.
+
+    추천과 달리 벡터 검색을 쓰지 않는다. 공고를 이미 골랐으니 찾을 것이 없고,
+    공고 원문 전체를 저장소에서 읽어 이력서와 바로 대조한다.
+
+    이력서를 저장하거나 고치지 않는다. 그래서 저장 전 초안으로도 받을 수 있다.
+    """
+
+    def __init__(self, generator=None, store_path=None) -> None:
+        self._generator = generator
+        self._store_path = store_path
+
+    def _generate(self, values: dict[str, str]) -> schemas.JobFeedbackOut:
+        if self._generator is None:
+            self._generator = _build_generator(prompts.FEEDBACK_PROMPT, schemas.JobFeedbackOut)
+        return self._generator(values)
+
+    def _load_job(self, job_id: str) -> Job:
+        from job_matching_bot.ingest import DEFAULT_STORE
+        from job_matching_bot.ingestion.job_store import open_store
+
+        store = open_store(self._store_path or DEFAULT_STORE).load()
+        try:
+            record = store.get(job_id) if hasattr(store, "get") else None
+            if record is None:
+                raise JobNotFound(job_id)
+            return record.job
+        finally:
+            if hasattr(store, "close"):
+                store.close()
+
+    def feedback(self, request: schemas.JobFeedbackRequest) -> schemas.JobFeedbackResponse:
+        job = self._load_job(request.job_id)
+        if job.body_is_image or not (job.description or "").strip():
+            raise JobTextUnavailable(request.job_id)
+
+        generated = self._generate(
+            {
+                "company": job.company,
+                "title": job.title,
+                "job_text": job.description,
+                "resume_text": request.resume_text,
+            }
+        )
+        points, warnings = _verify_points(generated.points, job.description, request.resume_text)
+        if job.status != "OPEN":
+            warnings.append("이 공고는 지금 진행 중이 아닙니다. 참고용으로만 보세요.")
+        return schemas.JobFeedbackResponse(
+            job_id=job.job_id,
+            company=job.company,
+            title=job.title,
+            source_url=job.source_url,
+            wanted=generated.wanted,
+            points=points,
+            warnings=warnings,
+        )
+
+
+def _verify_points(
+    points: list[schemas.FeedbackPoint], job_text: str, resume_text: str
+) -> tuple[list[schemas.FeedbackPoint], list[str]]:
+    """지어낸 인용을 걸러낸다.
+
+    공고 인용이 원문에 없으면 그 항목을 통째로 버린다. 공고가 요구하지 않은 것을
+    요구한다고 말하는 셈이라 남길 수 없다. 이력서 인용만 틀렸으면 항목은 남기되
+    "확인 안 됨"으로 낮춘다. 요구 자체는 사실이기 때문이다.
+    """
+    kept: list[schemas.FeedbackPoint] = []
+    warnings: list[str] = []
+    for point in points:
+        if not _quote_in(point.job_quote, job_text):
+            warnings.append(f"공고에 없는 인용을 제거했습니다: {point.job_quote[:40]}")
+            continue
+        if point.status == "드러남" and not _quote_in(point.resume_quote, resume_text):
+            warnings.append(f"이력서에 없는 인용을 제거했습니다: {point.resume_quote[:40]}")
+            point = point.model_copy(update={"status": "확인 안 됨", "resume_quote": ""})
+        elif point.status != "드러남":
+            point = point.model_copy(update={"resume_quote": ""})
+        kept.append(point)
+    return kept, warnings
 
 
 def _normalize_quote(text: str) -> str:

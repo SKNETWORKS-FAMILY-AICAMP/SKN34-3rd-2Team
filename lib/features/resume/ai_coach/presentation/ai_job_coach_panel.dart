@@ -10,6 +10,7 @@ import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../data/resume_review_api_client.dart';
+import 'job_feedback_dialog.dart';
 import 'job_resume_review_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
@@ -17,6 +18,7 @@ import '../data/job_recommend_api_client.dart';
 import '../data/job_search.dart';
 import '../data/resume_analysis_repository.dart';
 import '../data/resume_analyzer.dart';
+import '../data/resume_text_builder.dart';
 import '../models/ai_job_coach_result.dart';
 import '../models/collected_job.dart';
 import '../models/resume_readiness.dart';
@@ -93,6 +95,23 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return false;
     }
     return true;
+  }
+
+  /// 저장 없이 받는 피드백. 서버가 이력서를 읽기만 하므로 초안 그대로 보낼 수 있다.
+  Future<void> _feedbackJob(JobRecommendation job) async {
+    final client = ref.read(jobRecommendApiClientProvider);
+    if (client == null) {
+      setState(() => _error = '추천 서버 주소가 비어 있어 피드백을 받을 수 없습니다.');
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (_) => JobFeedbackDialog(
+        client: client,
+        jobId: job.jobId,
+        resumeText: buildResumeText(widget.draftContent),
+      ),
+    );
   }
 
   Future<void> _reviewJob(JobRecommendation job) async {
@@ -352,7 +371,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                   const SizedBox(height: 18),
                   // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
                   _RecommendationSection(result: result,
-                    onReview: widget.onResumeChanged == null ? null : _reviewJob),
+                    onReview: widget.onResumeChanged == null ? null : _reviewJob,
+                    onFeedback: _feedbackJob),
                   const SizedBox(height: 20),
                 ],
               ],
@@ -517,10 +537,11 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _RecommendationSection extends StatelessWidget {
-  const _RecommendationSection({required this.result, this.onReview});
+  const _RecommendationSection({required this.result, this.onReview, this.onFeedback});
 
   final AiJobCoachResult result;
   final ValueChanged<JobRecommendation>? onReview;
+  final ValueChanged<JobRecommendation>? onFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -548,6 +569,7 @@ class _RecommendationSection extends StatelessWidget {
                 index: index + 1,
                 item: result.recommendations[index],
                 onReview: onReview,
+                onFeedback: onFeedback,
               ),
             ),
         ],
@@ -557,11 +579,17 @@ class _RecommendationSection extends StatelessWidget {
 }
 
 class _RecommendationCard extends StatefulWidget {
-  const _RecommendationCard({required this.index, required this.item, this.onReview});
+  const _RecommendationCard({
+    required this.index,
+    required this.item,
+    this.onReview,
+    this.onFeedback,
+  });
 
   final int index;
   final JobRecommendation item;
   final ValueChanged<JobRecommendation>? onReview;
+  final ValueChanged<JobRecommendation>? onFeedback;
 
   @override
   State<_RecommendationCard> createState() => _RecommendationCardState();
@@ -718,6 +746,16 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                         size: 13,
                         color: AppColors.textHint,
                       ),
+                    ),
+                  if (item.isFromServer && widget.onFeedback != null)
+                    TextButton(
+                      onPressed: () => widget.onFeedback!(item),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('피드백', style: TextStyle(fontSize: 11)),
                     ),
                   if (item.isFromServer && widget.onReview != null)
                     TextButton(onPressed: () => widget.onReview!(item),
