@@ -1,17 +1,19 @@
 import argparse
 import hashlib
 import json
+import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Callable, Literal, TypeVar
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pinecone import Pinecone, ServerlessSpec
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.config import BASE_DIR, get_settings
+from app.config import BASE_DIR, Settings, get_settings
 from app.saramin import SaraminJob, SaraminJobSearchResponse
 
 
@@ -117,22 +119,183 @@ def index_documents(
     embeddings: Embeddings | None = None,
     persist_directory: Path | None = None,
     collection_name: str | None = None,
+    settings: Settings | None = None,
+    pinecone_index: Any | None = None,
 ) -> int:
-    settings = get_settings()
+    settings = settings or get_settings()
     chunks = split_job_documents(documents)
     embedding_function = embeddings or OpenAIEmbeddings(
         model=settings.openai_embedding_model,
         api_key=settings.openai_api_key,
     )
+    if (
+        settings.vector_store_provider == "chroma"
+        or persist_directory is not None
+        or collection_name is not None
+    ):
+        return _index_chroma(
+            chunks,
+            embedding_function,
+            persist_directory or settings.chroma_persist_directory,
+            collection_name or settings.chroma_collection_name,
+        )
+
+    index = pinecone_index or _prepare_pinecone_index(settings)
+    return _index_pinecone(chunks, embedding_function, index, settings)
+
+
+def _index_chroma(
+    chunks: list[Document],
+    embeddings: Embeddings,
+    persist_directory: Path,
+    collection_name: str,
+) -> int:
     vector_store = Chroma(
-        collection_name=collection_name or settings.chroma_collection_name,
-        embedding_function=embedding_function,
-        persist_directory=str(persist_directory or settings.chroma_persist_directory),
+        collection_name=collection_name,
+        embedding_function=embeddings,
+        persist_directory=str(persist_directory),
         collection_metadata={"hnsw:space": "cosine"},
     )
     ids = [_chunk_id(chunk, index) for index, chunk in enumerate(chunks)]
     vector_store.add_documents(chunks, ids=ids)
     return len(chunks)
+
+
+def _prepare_pinecone_index(settings: Settings) -> Any:
+    if not settings.pinecone_api_key:
+        raise ValueError("PINECONE_API_KEY is required for Pinecone indexing")
+    client = Pinecone(api_key=settings.pinecone_api_key)
+    names = set(client.list_indexes().names())
+    if settings.pinecone_index_name not in names:
+        client.create_index(
+            name=settings.pinecone_index_name,
+            dimension=settings.pinecone_dimension,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud=settings.pinecone_cloud,
+                region=settings.pinecone_region,
+            ),
+        )
+    description = client.describe_index(settings.pinecone_index_name)
+    dimension = int(_value(description, "dimension", 0))
+    metric = str(_value(description, "metric", ""))
+    if dimension != settings.pinecone_dimension or metric != "cosine":
+        raise ValueError(
+            "Pinecone index configuration mismatch: "
+            f"expected dimension={settings.pinecone_dimension}, metric=cosine; "
+            f"actual dimension={dimension}, metric={metric}"
+        )
+    if settings.pinecone_index_host:
+        return client.Index(host=settings.pinecone_index_host)
+    return client.Index(settings.pinecone_index_name)
+
+
+def _index_pinecone(
+    chunks: list[Document],
+    embeddings: Embeddings,
+    index: Any,
+    settings: Settings,
+    *,
+    batch_size: int = 96,
+) -> int:
+    prepared = _prepare_chunks(chunks)
+    chunks_by_job: dict[str, list[Document]] = {}
+    for chunk in prepared:
+        chunks_by_job.setdefault(str(chunk.metadata["job_id"]), []).append(chunk)
+
+    for job_batch in _batched(sorted(chunks_by_job), 50):
+        document_batch = [
+            chunk for job_id in job_batch for chunk in chunks_by_job[job_id]
+        ]
+        payloads: list[list[dict[str, Any]]] = []
+        for chunk_batch in _batched(document_batch, batch_size):
+            vectors = embeddings.embed_documents(
+                [chunk.page_content for chunk in chunk_batch]
+            )
+            if any(len(vector) != settings.pinecone_dimension for vector in vectors):
+                raise ValueError(
+                    "Embedding dimension does not match PINECONE_DIMENSION "
+                    f"({settings.pinecone_dimension})"
+                )
+            payloads.append(
+                [
+                    {
+                        "id": _chunk_id(chunk, int(chunk.metadata["chunk_index"])),
+                        "values": vector,
+                        "metadata": _pinecone_metadata(chunk),
+                    }
+                    for chunk, vector in zip(chunk_batch, vectors, strict=True)
+                ]
+            )
+
+        # Embed first so an embedding failure cannot remove a valid existing job.
+        _with_retry(
+            lambda job_batch=job_batch: index.delete(
+                namespace=settings.pinecone_namespace,
+                filter={"job_id": {"$in": job_batch}},
+            )
+        )
+        for payload in payloads:
+            _with_retry(
+                lambda payload=payload: index.upsert(
+                    vectors=payload,
+                    namespace=settings.pinecone_namespace,
+                )
+            )
+    return len(prepared)
+
+
+def _prepare_chunks(chunks: list[Document]) -> list[Document]:
+    counters: dict[str, int] = {}
+    prepared: list[Document] = []
+    for chunk in chunks:
+        job_id = str(chunk.metadata["job_id"])
+        chunk_index = counters.get(job_id, 0)
+        counters[job_id] = chunk_index + 1
+        metadata = {
+            **chunk.metadata,
+            "job_id": job_id,
+            "chunk_index": chunk_index,
+            "chunk_text": chunk.page_content,
+            "status": str(chunk.metadata.get("status", "OPEN")).upper(),
+        }
+        prepared.append(Document(page_content=chunk.page_content, metadata=metadata))
+    return prepared
+
+
+def _pinecone_metadata(document: Document) -> dict[str, Any]:
+    allowed = (str, int, float, bool)
+    metadata: dict[str, Any] = {}
+    for key, value in document.metadata.items():
+        if isinstance(value, allowed):
+            metadata[key] = value
+        elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+            metadata[key] = value
+    return metadata
+
+
+T = TypeVar("T")
+
+
+def _batched(items: list[T], size: int) -> list[list[T]]:
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _with_retry(operation: Callable[[], T], attempts: int = 5) -> T:
+    for attempt in range(attempts):
+        try:
+            return operation()
+        except Exception:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2**attempt)
+    raise RuntimeError("unreachable")
+
+
+def _value(value: Any, name: str, default: Any = None) -> Any:
+    if isinstance(value, dict):
+        return value.get(name, default)
+    return getattr(value, name, default)
 
 
 def _load_enrichments(enrichment_directory: Path) -> dict[str, JobEnrichment]:
@@ -183,13 +346,13 @@ def _chunk_id(document: Document, index: int) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Index Saramin-shaped static job postings into local Chroma"
+        description="Index Saramin-shaped static job postings into the configured vector store"
     )
     parser.add_argument("--data-dir", type=Path, default=BASE_DIR / "data" / "jobs")
     parser.add_argument(
         "--validate-only",
         action="store_true",
-        help="Load and chunk documents without embedding or writing Chroma",
+        help="Load and chunk documents without embedding or writing the vector store",
     )
     args = parser.parse_args()
 

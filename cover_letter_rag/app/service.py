@@ -4,6 +4,7 @@ from collections.abc import Callable
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
+from app.technology import technology_in_text
 from app.models import (
     JobComparisonRequest,
     JobComparisonResponse,
@@ -314,7 +315,7 @@ def _to_recommendation_result(
     request: JobRecommendationRequest,
 ) -> JobRecommendationResult:
     job_text = " ".join([job.title, *job.job_sectors, *job.tech_tags, *job.chunks]).casefold()
-    matched = [skill for skill in profile.skills if skill.name.casefold() in job_text]
+    matched = [skill for skill in profile.skills if technology_in_text(skill.name, job_text)]
     reasons = []
     if matched:
         reasons.append("이력서에 직접 근거가 있는 기술과 공고 키워드가 일치합니다: " + ", ".join(skill.name for skill in matched))

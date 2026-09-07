@@ -17,6 +17,8 @@ dependencies = [
   "langchain-openai>=1.4.1,<2",
   "langchain-chroma>=1.0,<2",
   "chromadb>=1.0,<2",
+  "pinecone>=9,<11",
+  "firebase-admin>=7,<8",
   "pydantic-settings>=2.7,<3",
   "python-dotenv>=1.0,<2",
 ]
@@ -34,4 +36,3 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-

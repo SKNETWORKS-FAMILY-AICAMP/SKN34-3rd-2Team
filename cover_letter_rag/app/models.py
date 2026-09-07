@@ -226,6 +226,112 @@ class ReviewResponse(ReviewGeneration):
     notice: str = "이 결과는 근거 기반 첨삭이며 합격 가능성 판단이나 지원자 점수가 아닙니다."
 
 
+class ConfirmationAnswer(StrictModel):
+    question_id: str | None = None
+    field_path: str = Field(min_length=1, max_length=300)
+    question: str = Field(min_length=1, max_length=1000)
+    answer: str = Field(min_length=1, max_length=3000)
+
+
+class SentenceReview(StrictModel):
+    field_path: str
+    original_quote: str
+    reason: str
+    suggested_revision: str | None = None
+    evidence_quotes: list[str] = Field(default_factory=list)
+    confirmation_question: str | None = None
+    status: Literal['unchanged', 'formatting', 'improved', 'needs_confirmation'] = 'needs_confirmation'
+    evidence_sources: list[str] = Field(default_factory=list)
+    edit_type: Literal['none', 'spelling', 'tone', 'clarity', 'content'] = 'content'
+    validation_issues: list[str] = Field(default_factory=list)
+
+
+class FirestoreResumeReviewRequest(StrictModel):
+    selected_job_id: str | None = Field(default=None, min_length=1, max_length=200)
+    expected_job_hash: str | None = None
+    request_id: str = Field(default_factory=lambda: __import__('uuid').uuid4().hex, pattern=r'^[A-Za-z0-9_-]{1,100}$')
+    previous_review_id: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{1,100}$')
+    expected_input_hash: str | None = None
+    cohort_id: str = Field(min_length=1, max_length=200)
+    resume_id: str = Field(min_length=1, max_length=200)
+    job_posting_text: str | None = Field(default=None, max_length=50_000)
+    review_focus: str | None = Field(default=None, max_length=2_000)
+    answers: list[ConfirmationAnswer] = Field(default_factory=list, max_length=10)
+
+    @field_validator("cohort_id", "resume_id")
+    @classmethod
+    def reject_blank_id(cls, value: str) -> str:
+        if not value.strip() or '/' in value or value.strip() in {'.', '..'}:
+            raise ValueError("identifier must not be blank")
+        return value.strip()
+
+    @field_validator("job_posting_text", "review_focus")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        normalized = value.strip() if value else ""
+        return normalized or None
+
+
+class ResumeSectionReview(StrictModel):
+    section_key: str
+    strengths: list[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
+    resume_quotes: list[str] = Field(default_factory=list)
+    suggested_revision: str | None = None
+    confirmation_questions: list[str] = Field(default_factory=list)
+
+
+class Diagnostic(StrictModel):
+    criterion: Literal['aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit']
+    status: Literal['issue', 'clear', 'not_evaluated']
+    field_paths: list[str] = Field(default_factory=list)
+    reason: str
+
+
+class StarCheck(StrictModel):
+    field_path: str
+    missing: list[Literal['situation', 'task', 'action', 'result']] = Field(default_factory=list)
+    reason: str
+
+
+class ReviewQuestion(StrictModel):
+    question_id: str = ''
+    field_path: str
+    topic: Literal['situation', 'task', 'action', 'result', 'scope', 'other']
+    question: str
+    reason: str
+    priority: int = Field(default=2, ge=1, le=3)
+
+
+class ResumeReviewGeneration(StrictModel):
+    summary: str
+    section_reviews: list[ResumeSectionReview]
+    confirmation_questions: list[str] = Field(default_factory=list)
+    sentence_reviews: list[SentenceReview] = Field(default_factory=list)
+    diagnostics: list[Diagnostic] = Field(default_factory=list)
+    star_checks: list[StarCheck] = Field(default_factory=list)
+    questions: list[ReviewQuestion] = Field(default_factory=list)
+
+
+class FirestoreResumeReviewResponse(ResumeReviewGeneration):
+    job_source: dict = Field(default_factory=dict)
+    review_id: str
+    cohort_id: str
+    resume_id: str
+    grounding_warnings: list[str] = Field(default_factory=list)
+    input_fields: dict[str, str] = Field(default_factory=dict)
+    input_hash: str = ""
+    excluded_fields: list[str] = Field(default_factory=list)
+    confirmed_answers: list[ConfirmationAnswer] = Field(default_factory=list)
+    item_refs: dict[str, str] = Field(default_factory=dict)
+    changes: dict[str, list[str]] = Field(default_factory=dict)
+    telemetry: dict = Field(default_factory=dict)
+    notice: str = (
+        "원본 이력서는 변경하지 않았습니다. 확인된 이력서 근거만 사용한 첨삭이며 "
+        "합격 가능성이나 지원자 점수가 아닙니다."
+    )
+
+
 class JobComparisonResponse(StrictModel):
     job: JobSearchResult
     requirements: list[RequirementComparison]
@@ -239,4 +345,4 @@ class HealthResponse(StrictModel):
     status: Literal["ok"] = "ok"
     model: str
     index_ready: bool
-    firebase_auth: Literal["planned"] = "planned"
+    firebase_auth: Literal["configured", "not_configured"] = "not_configured"

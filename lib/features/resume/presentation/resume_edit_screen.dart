@@ -656,6 +656,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                           ? AiJobCoachPanel(
                               resumeId: widget.resumeId,
                               draftContent: _content,
+                              hasUnsavedChanges: _dirty || _isSaving,
+                              onResumeChanged: isAdmin ? null : (content) => setState(() {
+                                _content = content;
+                                _dirty = false;
+                              }),
                               isSidebar: wide,
                               onClose: () => setState(() => _showAiCoach = false),
                             )

@@ -8,7 +8,7 @@ from scripts.index_jobs import index_documents, split_job_documents
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Normalize a Saramin crawl JSONL and index IT postings into Chroma"
+        description="Normalize a Saramin crawl JSONL and index IT postings into the configured vector store"
     )
     parser.add_argument(
         "--input",
@@ -21,7 +21,7 @@ def main() -> None:
     parser.add_argument(
         "--validate-only",
         action="store_true",
-        help="Normalize and chunk without calling the embedding API or writing Chroma",
+        help="Normalize and chunk without calling the embedding API or writing the vector store",
     )
     args = parser.parse_args()
 
