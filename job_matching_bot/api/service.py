@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from job_matching_bot.api import prompts, schemas
@@ -36,6 +37,8 @@ RERANK_TOP_K = 6
 MAX_PER_COMPANY = 2
 # 재정렬에 넘길 공고 본문 길이. 메타데이터 excerpt와 같게 두어 자르지 않는다.
 JOB_EXCERPT_CHARS = 1200
+# LLM 추론 강도. 대조 작업이라 낮춰도 근거 품질이 유지되고 응답이 크게 빨라진다.
+REASONING_EFFORT = "low"
 
 
 class SearchUnavailable(RuntimeError):
@@ -51,13 +54,20 @@ class JobTextUnavailable(RuntimeError):
 
 
 def _build_generator(prompt, schema):
-    """프롬프트 | 구조화 출력. 첨삭 모듈과 같은 방식으로 맞춘다."""
-    from langchain_openai import ChatOpenAI
+    """프롬프트 | 구조화 출력. 첨삭 모듈과 같은 방식으로 맞춘다.
 
+    추론 강도를 낮게 둔다. 이 단계들은 새로운 것을 궁리하는 일이 아니라 두 글을 대조해
+    인용을 찾아내는 일이라, 깊게 생각하게 해도 결과가 나아지지 않고 시간만 는다.
+    실측(공고 6건 재정렬): 기본 33.8초 / low 17.9초 / none 9.4초, 근거 개수는 11개로 같았다.
+    `OPENAI_REASONING_EFFORT`로 바꿀 수 있다.
+    """
     import os
+
+    from langchain_openai import ChatOpenAI
 
     model = ChatOpenAI(
         model=os.environ.get("OPENAI_MODEL", "gpt-5.6-luna"),
+        reasoning_effort=os.environ.get("OPENAI_REASONING_EFFORT", REASONING_EFFORT),
         max_retries=2,
     )
     return (prompt | model.with_structured_output(schema, method="json_schema")).invoke
@@ -146,30 +156,53 @@ class RecommendService:
         )
 
     # ── ④ 재정렬 ─────────────────────────────────────
+    @staticmethod
+    def _job_payload(job: Job) -> dict[str, str]:
+        return {
+            "job_id": job.job_id,
+            "company": job.company,
+            "title": job.title,
+            "conditions": f"{job.region} · {job.career_type} · {job.employment_type} · {job.education}",
+            "body": job.description[:JOB_EXCERPT_CHARS],
+        }
+
     def rerank(
         self, resume_text: str, candidates: list[tuple[retrieval.Hit, Job, dict]], warnings: list[str]
     ) -> tuple[dict[str, schemas.JobFit], bool]:
-        payload = [
-            {
-                "job_id": job.job_id,
-                "company": job.company,
-                "title": job.title,
-                "conditions": f"{job.region} · {job.career_type} · {job.employment_type} · {job.education}",
-                "body": job.description[:JOB_EXCERPT_CHARS],
-            }
-            for _, job, _ in candidates
-        ]
-        try:
-            out = self.reranker(
+        """공고를 한 건씩 **동시에** 판정한다.
+
+        예전에는 6건을 한 프롬프트에 넣어 한 번 불렀다. 모델이 순서대로 처리하므로
+        시간이 건수에 비례해 늘었다(실측 28.8초, 1건만이면 9.3초). 나눠서 동시에 부르면
+        가장 느린 한 건만큼만 기다린다. 판정은 공고마다 독립이라 나눠도 결과가 달라지지 않는다.
+
+        한 건이 실패해도 나머지는 살린다. 전부 실패했을 때만 검색 순서로 물러난다.
+        """
+        if not candidates:
+            return {}, False
+
+        def judge(job: Job) -> schemas.RerankOut:
+            return self.reranker(
                 {
                     "resume_text": resume_text,
-                    "jobs": json.dumps(payload, ensure_ascii=False, indent=2),
+                    "jobs": json.dumps([self._job_payload(job)], ensure_ascii=False, indent=2),
                 }
             )
-            return {fit.job_id: fit for fit in out.results}, True
-        except Exception as error:
-            warnings.append(f"AI 분석에 실패해 검색 순서로 표시합니다: {type(error).__name__}")
-            return {}, False
+
+        fits: dict[str, schemas.JobFit] = {}
+        failures: list[str] = []
+        with ThreadPoolExecutor(max_workers=len(candidates)) as pool:
+            futures = {pool.submit(judge, job): job for _, job, _ in candidates}
+            for future in as_completed(futures):
+                job = futures[future]
+                try:
+                    for fit in future.result().results:
+                        fits[fit.job_id] = fit
+                except Exception as error:
+                    failures.append(f"{job.job_id}({type(error).__name__})")
+
+        if failures:
+            warnings.append(f"일부 공고를 분석하지 못해 검색 순서로 표시합니다: {', '.join(failures)}")
+        return fits, bool(fits)
 
     # ── ⑤ 근거 검증 ──────────────────────────────────
     @staticmethod
