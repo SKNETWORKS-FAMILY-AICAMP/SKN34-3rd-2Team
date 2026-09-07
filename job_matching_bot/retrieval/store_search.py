@@ -84,6 +84,28 @@ class SearchResult:
     strong: int         # 그중 제목·태그에 직접 맞은 건수
 
 
+# 공고 한 건을 만드는 데 필요한 컬럼. 조건 검색과 의미 검색이 같은 것을 읽는다.
+_HIT_COLUMNS = (
+    "job_id, company, title, source_url, region, career_type, min_career_years, "
+    "employment_type, deadline, tech_stack"
+)
+
+
+def _to_hit(row, relevance: int) -> JobHit:
+    return JobHit(
+        job_id=row["job_id"],
+        company=row["company"] or "",
+        title=row["title"] or "",
+        source_url=row["source_url"] or "",
+        region=row["region"] or "미기재",
+        career_label=_career_label(row["career_type"] or "", row["min_career_years"]),
+        employment_type=row["employment_type"] or "미기재",
+        deadline=(row["deadline"] or None),
+        tech_stack=json.loads(row["tech_stack"] or "[]"),
+        relevance=relevance,
+    )
+
+
 def _career_label(career_type: str, min_years: int | None) -> str:
     if career_type == "ENTRY":
         return "신입"
@@ -172,8 +194,7 @@ def search(
             case_params.extend([f"%{term}%"] * 2)
 
     sql = (
-        f"SELECT job_id, company, title, source_url, region, career_type, min_career_years, "
-        f"employment_type, deadline, tech_stack, {relevance} AS relevance FROM jobs WHERE "
+        f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance FROM jobs WHERE "
         + " AND ".join(where)
         # 관련도가 같으면 태그를 적게 단 공고를 먼저. 직무 태그를 열 개씩 달아 둔
         # "전 직군 공개채용"은 무엇을 물어도 걸리므로, 그 일에 특화된 공고에 자리를 내준다.
@@ -188,24 +209,41 @@ def search(
     finally:
         connection.close()
 
-    jobs = [
-        JobHit(
-            job_id=row["job_id"],
-            company=row["company"] or "",
-            title=row["title"] or "",
-            source_url=row["source_url"] or "",
-            region=row["region"] or "미기재",
-            career_label=_career_label(row["career_type"] or "", row["min_career_years"]),
-            employment_type=row["employment_type"] or "미기재",
-            deadline=(row["deadline"] or None),
-            tech_stack=json.loads(row["tech_stack"] or "[]"),
-            relevance=int(row["relevance"] or 0),
-        )
-        for row in rows[:limit]
-    ]
+    jobs = [_to_hit(row, int(row["relevance"] or 0)) for row in rows[:limit]]
     return SearchResult(
         jobs=jobs,
         total=len(rows),
         scanned_cap=len(rows) >= SCAN_LIMIT,
         strong=sum(1 for row in rows if int(row["relevance"] or 0) >= 2),
     )
+
+
+def by_ids(
+    store_path: Path, job_ids: list[str], as_of: datetime | None = None
+) -> list[JobHit]:
+    """job_id 목록을 **준 순서 그대로** 꺼낸다. 벡터 검색이 매긴 순서가 곧 관련도다.
+
+    마감했거나 내려간 공고는 뺀다. 인덱스는 밤에 한 번 갱신되므로 낮 동안 마감된 것이
+    남아 있을 수 있다. 저장소가 먼저 안다.
+    """
+    if not job_ids:
+        return []
+    as_of = as_of or datetime.now(KST)
+    today = as_of.date().isoformat()
+
+    placeholders = ", ".join("?" for _ in job_ids)
+    sql = (
+        f"SELECT {_HIT_COLUMNS} FROM jobs WHERE job_id IN ({placeholders}) "
+        "AND status = 'OPEN' AND (deadline IS NULL OR substr(deadline, 1, 10) >= ?)"
+    )
+    connection = sqlite3.connect(f"{Path(store_path).resolve().as_uri()}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = connection.execute(sql, [*job_ids, today]).fetchall()
+    finally:
+        connection.close()
+
+    found = {row["job_id"]: row for row in rows}
+    # relevance는 0으로 둔다. 이 목록의 순서는 글자가 어디에 있었는지가 아니라 뜻이
+    # 얼마나 가까운지로 매겨졌으므로, 조건 검색의 점수와 섞어 쓸 수 없다.
+    return [_to_hit(found[job_id], 0) for job_id in job_ids if job_id in found]

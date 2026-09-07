@@ -379,11 +379,21 @@ class ChatService:
     """
 
     def __init__(self, generator=None, store_path: Path | None = None,
-                 adviser=None, job_asker=None):
+                 adviser=None, job_asker=None, finder=None):
         self._generator = generator
         self._store_path = store_path
         self._adviser = adviser
         self._job_asker = job_asker
+        self._finder = finder
+
+    @property
+    def finder(self):
+        """뜻으로 찾는 함수. 인덱스를 실제로 부르므로 테스트에서는 갈아끼운다."""
+        if self._finder is None:
+            from job_matching_bot.retrieval import search as retrieval
+
+            self._finder = retrieval.search
+        return self._finder
 
     @property
     def generator(self):
@@ -446,7 +456,10 @@ class ChatService:
         if turn.intent == "질문":
             return self._advise(request, turn, filters)
 
-        if filters.is_empty:
+        # 조건이 하나도 안 잡혔다고 바로 되묻지 않는다. "돈 다루는 일"처럼 조건으로
+        # 옮길 말이 없는 경우가 있고, 그때는 뜻으로 찾으면 된다. 되묻는 것은 뜻으로
+        # 찾을 문장마저 없을 때다.
+        if filters.is_empty and not turn.requirement_query:
             return schemas.JobChatResponse(
                 mode="안내",
                 reply=turn.understood or "어떤 일을 찾으시는지 알려 주세요. 예: 데이터 분석 신입",
@@ -454,14 +467,73 @@ class ChatService:
                 total=0,
             )
 
-        result = store_search.search(self.store_path, filters, limit=request.top_k)
+        result = (
+            store_search.SearchResult(jobs=[], total=0, scanned_cap=False, strong=0)
+            if filters.is_empty
+            else store_search.search(self.store_path, filters, limit=request.top_k)
+        )
+
+        # 조건으로 못 찾았으면 뜻으로 찾는다. 사용자가 말한 직무·기술이 공고에 그대로
+        # 적히는 말이 아닐 때(예: "돈 다루는 일") 여기서만 답이 나온다.
+        by_meaning = False
+        if turn.requirement_query and self._needs_meaning(filters, result):
+            found = self._by_meaning(turn.requirement_query, filters, request.top_k)
+            if found:
+                result = store_search.SearchResult(
+                    jobs=found, total=len(found), scanned_cap=False, strong=0
+                )
+                by_meaning = True
+
         return schemas.JobChatResponse(
-            reply=self._reply(turn.understood, filters, result),
+            reply=self._reply(turn.understood, filters, result, by_meaning),
             filters=turn.filters,
             jobs=[_to_chat_job(hit) for hit in result.jobs],
             total=result.total,
             suggestions=_suggestions(filters, result),
         )
+
+    @staticmethod
+    def _needs_meaning(filters, result) -> bool:
+        """조건 검색이 실패했나. 실패에 두 가지가 있다.
+
+        하나는 0건이고, 하나는 **제목·태그에 하나도 안 걸린 것**이다. 후자는 본문에
+        말이 스친 범용 공고("전 직군 공개채용")만 걸린 경우라, 건수는 많아도 물어본
+        일과 상관이 없다.
+
+        조건이 아예 안 잡힌 경우도 실패다. "돈 다루는 일"은 조건으로 옮길 말이 없어
+        LLM이 비워 둔다. 그때는 뜻으로 찾는 수밖에 없다.
+
+        다만 지역·경력만 걸었으면(찾을 말이 없으면) 조건 조회가 정확하므로 뜻으로 찾지
+        않는다. 이걸 빼먹으면 "서울만" 같은 말에도 매번 벡터를 부르게 된다.
+        """
+        if filters.is_empty:
+            return True
+        if not (filters.roles or filters.skills or filters.keywords):
+            return False
+        return result.total == 0 or result.strong == 0
+
+    def _by_meaning(self, query: str, filters, top_k: int) -> list:
+        """뜻이 가까운 공고. 인덱스에서 찾아 저장소에서 다시 읽는다.
+
+        여기서 실패해도 대화를 끊지 않는다. 조건 검색 결과가 이미 있고, 없으면 없다고
+        답하면 된다. 인덱스가 안 붙었다고 챗봇 전체가 멈출 이유가 없다.
+        """
+        from job_matching_bot.retrieval import search as retrieval
+
+        try:
+            condition = retrieval.build_filter(
+                regions=filters.regions,
+                employment_types=filters.employment_types,
+                # 신입이라고 했을 때만 경력 하한을 건다. 나머지는 걸지 않는다.
+                career_years=0 if filters.career == "신입" else 5,
+            )
+            # 마감된 것이 걸러져 줄어드므로 넉넉히 가져온다.
+            hits = self.finder(query, top_k=top_k * 3, filter=condition)
+        except Exception as error:
+            print(f"[챗봇] 의미 검색 실패, 조건 결과로 답한다: {type(error).__name__}: {error}")
+            return []
+        found = store_search.by_ids(self.store_path, [hit.job_id for hit in hits])
+        return found[:top_k]
 
     def _advise(self, request, turn, filters) -> schemas.JobChatResponse:
         """채용 질문에 답한다. 조건이 잡혔으면 그 조건의 공고를 세어 근거로 준다.
@@ -528,7 +600,7 @@ class ChatService:
         return [_to_chat_job(hit) for hit in result.jobs]
 
     @staticmethod
-    def _reply(understood: str, filters, result) -> str:
+    def _reply(understood: str, filters, result, by_meaning: bool = False) -> str:
         """실제 결과로 답을 만든다. 건수를 모르는 채로 LLM이 쓰면 틀린 말을 하게 된다."""
         condition = filters.summary()
         if result.total == 0:
@@ -536,6 +608,13 @@ class ChatService:
                 f"{condition} 조건으로는 열려 있는 공고를 찾지 못했어요. "
                 "조건을 하나 빼거나 지역을 넓혀 보시겠어요?"
             )
+        if by_meaning:
+            # 어떻게 찾았는지 밝힌다. 조건에 맞는 공고를 센 것처럼 보이면 안 된다.
+            head = understood.strip() or "찾아볼게요."
+            found = f"뜻이 가까운 공고를 {len(result.jobs)}건 찾았어요."
+            if filters.is_empty:
+                return f"{head}\n말씀하신 말이 공고에 그대로 적히는 말은 아니라서, {found}"
+            return f"{head}\n{condition} 조건 그대로는 걸리는 공고가 없어서, {found}"
         head = understood.strip() or f"{condition} 조건으로 찾았어요."
         # 제목·태그에 직접 맞은 건수를 따로 말한다. 본문에 말이 스친 범용 공고까지
         # 뭉뚱그려 세면 실제보다 훨씬 많아 보인다.

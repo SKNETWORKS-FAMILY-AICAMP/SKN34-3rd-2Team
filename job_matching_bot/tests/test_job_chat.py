@@ -25,9 +25,11 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
     understood = kwargs.pop("understood", "찾아볼게요.")
     intent = kwargs.pop("intent", "검색")
     counts_jobs = kwargs.pop("counts_jobs", True)
+    requirement_query = kwargs.pop("requirement_query", "")
     return schemas.ChatTurnOut(
         intent=intent,
         counts_jobs=counts_jobs,
+        requirement_query=requirement_query,
         filters=schemas.ChatFilters(**kwargs),
         understood=understood,
     )
@@ -35,6 +37,13 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
 
 def answer(text="이렇습니다.", followups=None) -> schemas.ChatAnswerOut:
     return schemas.ChatAnswerOut(answer=text, followups=followups or [])
+
+
+class FakeHit:
+    """벡터 검색이 돌려주는 것 중 우리가 쓰는 것은 job_id뿐이다."""
+
+    def __init__(self, job_id: str):
+        self.job_id = job_id
 
 
 class ChatTestCase(unittest.TestCase):
@@ -74,7 +83,9 @@ class ChatTestCase(unittest.TestCase):
         self.seen = {}
         self.advised = {}
         self.asked = {}
+        self.found = {}
         self.calls = 0
+        self.by_meaning = getattr(self, "by_meaning", [])
 
         def generator(values):
             self.calls += 1
@@ -89,8 +100,13 @@ class ChatTestCase(unittest.TestCase):
             self.asked.update(values)
             return answered or answer()
 
+        def finder(query, top_k, filter=None):
+            self.found.update({"query": query, "top_k": top_k, "filter": filter})
+            return [FakeHit(job_id) for job_id in self.by_meaning]
+
         return ChatService(
-            generator=generator, store_path=self.path, adviser=adviser, job_asker=job_asker
+            generator=generator, store_path=self.path, adviser=adviser,
+            job_asker=job_asker, finder=finder,
         )
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
@@ -153,12 +169,106 @@ class SearchTest(ChatTestCase):
         with self.assertRaises(StoreUnavailable):
             service.chat(schemas.JobChatRequest(message="백엔드"))
 
+    def test_condition_hits_do_not_call_the_index(self):
+        """조건으로 찾았으면 벡터를 부르지 않는다. 평소 경로가 느려지면 안 된다."""
+        self.by_meaning = ["J1"]
+        response = self.ask(turn(roles=["백엔드"]))
+        self.assertEqual(8, response.total)
+        self.assertEqual({}, self.found, "인덱스를 부르지 않는다")
+
     def test_job_fields_are_ready_to_show(self):
         response = self.ask(turn(roles=["백엔드"]), top_k=1)
         job = response.jobs[0]
         self.assertTrue(job.job_id and job.company and job.title)
         self.assertEqual("신입", job.career)
         self.assertEqual("정규직", job.employment_type)
+
+
+class MeaningSearchTest(ChatTestCase):
+    """조건으로 못 찾으면 뜻으로 찾는다.
+
+    "돈 다루는 일"은 공고에 그렇게 적히지 않는다. 글자로 훑으면 0건이고, 요건 말투로
+    고쳐 쓴 문장으로 인덱스를 찾으면 회계 공고가 나온다. 실측으로 확인한 차이다
+    (유사도 0.377 → 0.773).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.by_meaning = ["J3", "J5"]
+
+    def test_no_condition_match_falls_back_to_meaning(self):
+        response = self.ask(
+            turn(keywords=["돈 다루는 일"], requirement_query="[주요업무] 전표 처리, 결산"),
+            message="돈 다루는 일 찾아줘",
+        )
+        self.assertEqual(["J3", "J5"], [job.job_id for job in response.jobs])
+        self.assertIn("뜻이 가까운", response.reply, "어떻게 찾았는지 밝힌다")
+        self.assertIn("전표 처리", self.found["query"], "요건 말투 문장으로 찾는다")
+
+    def test_weak_body_only_matches_also_fall_back(self):
+        """건수는 많은데 제목·태그에 하나도 안 걸렸으면 물어본 일과 상관없는 공고들이다."""
+        self.by_meaning = ["J2"]
+        response = self.ask(
+            turn(roles=["서버"], requirement_query="[주요업무] 서버 운영"),
+            message="서버 관련 일 찾아줘",
+        )
+        # 목록의 공고는 제목이 "백엔드 개발자"라 "서버"는 본문에만 있다(relevance 1).
+        self.assertEqual(["J2"], [job.job_id for job in response.jobs])
+
+    def test_conditions_are_carried_into_the_index_query(self):
+        """지역·고용형태는 인덱스에도 걸어야 뜻만 맞고 조건은 틀린 공고가 안 나온다."""
+        self.ask(
+            turn(keywords=["돈 다루는 일"], regions=["서울"], career="신입",
+                 requirement_query="[주요업무] 전표 처리"),
+            message="서울에서 돈 다루는 일",
+        )
+        self.assertIsNotNone(self.found["filter"])
+
+    def test_closed_jobs_from_the_index_are_dropped(self):
+        """인덱스는 밤에 한 번 갱신된다. 낮에 마감된 공고가 남아 있을 수 있다."""
+        self.by_meaning = ["J1", "없는공고", "J2"]
+        response = self.ask(
+            turn(keywords=["돈 다루는 일"], requirement_query="[주요업무] 전표 처리")
+        )
+        self.assertEqual(["J1", "J2"], [job.job_id for job in response.jobs])
+
+    def test_index_failure_does_not_break_the_conversation(self):
+        """인덱스가 안 붙었다고 챗봇이 멈출 이유가 없다."""
+
+        def broken(query, top_k, filter=None):
+            raise RuntimeError("Pinecone 연결 실패")
+
+        service = self.service(
+            turn(keywords=["돈 다루는 일"], requirement_query="[주요업무] 전표 처리")
+        )
+        service._finder = broken
+        response = service.chat(schemas.JobChatRequest(message="돈 다루는 일"))
+        self.assertEqual(0, response.total)
+        self.assertIn("찾지 못했", response.reply)
+
+    def test_no_conditions_at_all_still_searches_by_meaning(self):
+        """"돈 다루는 일"은 조건으로 옮길 말이 없다. 그렇다고 되물으면 안 된다.
+
+        조건이 비었다는 이유로 검색 전에 되묻는 바람에 의미 검색이 아예 실행되지
+        않았다. 되묻는 것은 뜻으로 찾을 문장마저 없을 때다.
+        """
+        response = self.ask(
+            turn(requirement_query="[주요업무] 전표 처리, 결산"),
+            message="돈 다루는 일 찾아줘",
+        )
+        self.assertEqual("검색", response.mode)
+        self.assertEqual(["J3", "J5"], [job.job_id for job in response.jobs])
+        self.assertIn("뜻이 가까운", response.reply)
+
+    def test_no_requirement_query_means_no_fallback(self):
+        """LLM이 문장을 안 줬으면 부를 것이 없다."""
+        self.ask(turn(keywords=["돈 다루는 일"], requirement_query=""))
+        self.assertEqual({}, self.found)
+
+    def test_region_only_search_does_not_use_meaning(self):
+        """찾을 말이 없으면 조건 조회가 정확하다. "서울만"에 벡터를 부르면 낭비다."""
+        self.ask(turn(regions=["제주"], requirement_query="[주요업무] 무엇이든"))
+        self.assertEqual({}, self.found)
 
 
 class AdviceTest(ChatTestCase):

@@ -181,6 +181,13 @@ class ChatTurnOut(StrictModel):
         default=False,
         description="공고를 세어서 답할 질문이면 true. 조언을 구하는 말이면 false",
     )
+    requirement_query: str = Field(
+        default="",
+        description=(
+            "원하는 일을 채용공고의 자격요건·주요업무 말투로 고쳐 쓴 한두 문장. "
+            "조건으로 못 찾았을 때 뜻으로 찾는 데 쓴다"
+        ),
+    )
     understood: str = Field(description="무엇으로 찾을지 사용자에게 확인시키는 한 문장")
 
 
