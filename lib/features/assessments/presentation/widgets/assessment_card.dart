@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/assessment_model.dart';
+import 'assessment_thumbnail.dart';
 
 class AssessmentStatusChip extends StatelessWidget {
   const AssessmentStatusChip({super.key, required this.label});
@@ -72,15 +73,21 @@ class AssessmentCard extends StatelessWidget {
     required this.onTap,
     this.completed = false,
     this.score,
+    this.onEdit,
+    this.onDelete,
   });
 
   final AssessmentModel assessment;
   final VoidCallback onTap;
   final bool completed;
   final int? score;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final hasMenu = onEdit != null || onDelete != null;
+
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(10),
@@ -97,32 +104,26 @@ class AssessmentCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 96,
-                    height: 72,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (assessment.thumbnailUrl != null &&
-                            assessment.thumbnailUrl!.isNotEmpty)
-                          Image.network(
-                            assessment.thumbnailUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _placeholder(),
-                          )
-                        else
-                          _placeholder(),
-                        Positioned(
-                          top: 4,
-                          left: 4,
-                          child: AssessmentStatusChip(
-                            label: assessment.statusLabel,
-                          ),
+                SizedBox(
+                  width: 96,
+                  height: 72,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      AssessmentThumbnail(
+                        url: assessment.thumbnailUrl,
+                        storagePath: assessment.thumbnailPath,
+                        width: 96,
+                        height: 72,
+                      ),
+                      Positioned(
+                        top: 4,
+                        left: 4,
+                        child: AssessmentStatusChip(
+                          label: assessment.statusLabel,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -174,14 +175,15 @@ class AssessmentCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Text(
-                            '${assessment.questionCount}문제 · ${assessment.maxScore}점',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
+                          Expanded(
+                            child: Text(
+                              '${assessment.questionCount}문제 · ${assessment.maxScore}점',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ),
-                          const Spacer(),
                           if (completed) ...[
                             if (score != null)
                               Padding(
@@ -202,19 +204,34 @@ class AssessmentCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (hasMenu)
+                  PopupMenuButton<String>(
+                    tooltip: '더보기',
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit?.call();
+                      if (value == 'delete') onDelete?.call();
+                    },
+                    itemBuilder: (context) => [
+                      if (onEdit != null)
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text('수정'),
+                        ),
+                      if (onDelete != null)
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            '삭제',
+                            style: TextStyle(color: AppColors.error),
+                          ),
+                        ),
+                    ],
+                  ),
               ],
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _placeholder() {
-    return Container(
-      color: const Color(0xFFF3F4F6),
-      alignment: Alignment.center,
-      child: const Icon(Icons.quiz_outlined, size: 28, color: AppColors.textHint),
     );
   }
 }

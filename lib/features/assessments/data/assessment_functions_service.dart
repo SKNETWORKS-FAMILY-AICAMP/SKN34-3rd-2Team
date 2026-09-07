@@ -3,6 +3,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/models/assessment_model.dart';
 
+class GenerateAssessmentResult {
+  const GenerateAssessmentResult({
+    required this.questions,
+    this.logId,
+    this.promptVersion,
+    this.model,
+    this.rowCount = 0,
+    this.targetCount,
+    this.sheetId,
+    this.dayFrom,
+    this.dayTo,
+    this.isRegen = false,
+  });
+
+  final List<AssessmentQuestionModel> questions;
+  final String? logId;
+  final String? promptVersion;
+  final String? model;
+  final int rowCount;
+
+  /// 강사가 정한 이번 평가 목표 문항 수 (가이드용)
+  final int? targetCount;
+  final String? sheetId;
+  final int? dayFrom;
+  final int? dayTo;
+  final bool isRegen;
+}
+
 /// 성취도 평가 Callable Functions
 class AssessmentFunctionsService {
   AssessmentFunctionsService({FirebaseFunctions? functions})
@@ -65,14 +93,16 @@ class AssessmentFunctionsService {
     return Map<String, dynamic>.from(result.data as Map);
   }
 
-  Future<List<AssessmentQuestionModel>> generateAssessmentQuestions({
+  Future<GenerateAssessmentResult> generateAssessmentQuestions({
     required String cohortId,
     required String sheetId,
     required int dayFrom,
     required int dayTo,
-    int mcCount = 5,
-    int saCount = 3,
+    int mcCount = 20,
+    int saCount = 5,
     String? subjectFilter,
+    String? parentLogId,
+    List<Map<String, dynamic>>? replaceOf,
   }) async {
     final result = await _functions
         .httpsCallable(
@@ -88,16 +118,45 @@ class AssessmentFunctionsService {
       'saCount': saCount,
       if (subjectFilter != null && subjectFilter.isNotEmpty)
         'subjectFilter': subjectFilter,
+      if (parentLogId != null) 'parentLogId': parentLogId,
+      if (replaceOf != null && replaceOf.isNotEmpty) 'replaceOf': replaceOf,
     });
     final data = Map<String, dynamic>.from(result.data as Map);
     final raw = data['questions'] as List? ?? [];
-    return raw.asMap().entries.map((e) {
+    final questions = raw.asMap().entries.map((e) {
       final m = Map<String, dynamic>.from(e.value as Map);
       return AssessmentQuestionModel.fromMap(
         m['id'] as String? ?? 'draft_${e.key}',
         m,
       );
     }).toList();
+    return GenerateAssessmentResult(
+      questions: questions,
+      logId: data['logId']?.toString(),
+      promptVersion: data['promptVersion']?.toString(),
+      model: data['model']?.toString(),
+      rowCount: (data['rowCount'] as num?)?.toInt() ?? 0,
+      sheetId: sheetId,
+      dayFrom: dayFrom,
+      dayTo: dayTo,
+      isRegen: data['isRegen'] == true,
+    );
+  }
+
+  Future<void> recordAiQuestionFeedback({
+    required String cohortId,
+    required String logId,
+    String? promptVersion,
+    String? assessmentId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    await _functions.httpsCallable('recordAiQuestionFeedback').call({
+      'cohortId': cohortId,
+      'logId': logId,
+      if (promptVersion != null) 'promptVersion': promptVersion,
+      if (assessmentId != null) 'assessmentId': assessmentId,
+      'items': items,
+    });
   }
 }
 

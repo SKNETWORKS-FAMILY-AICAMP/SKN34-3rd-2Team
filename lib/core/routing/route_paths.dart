@@ -54,6 +54,7 @@ abstract final class RoutePaths {
   static const adminInstructorsCreate = '/admin/instructors/create';
   static const adminAttendance = '/admin/attendance';
   static const adminAssessments = '/admin/assessments';
+  static const adminAiQuality = '/admin/ai-quality';
 
   // Instructor Shell
   static const instructor = '/instructor';

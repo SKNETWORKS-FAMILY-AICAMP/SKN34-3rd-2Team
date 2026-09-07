@@ -461,5 +461,21 @@ service cloud.firestore {
       allow read: if isActiveUser();
       allow write: if isAdmin();
     }
+
+    // ── LLMOps: AI 생성 로그 (클라이언트 write 금지, Admin SDK만) ──
+    // 확장 type: assessment_questions | wrong_answer_recommend ...
+    match /aiGenerationLogs/{logId} {
+      allow read: if isAdmin()
+        || (isInstructor() && resource.data.cohortId == getUserData().cohortId);
+      allow create, update, delete: if false;
+    }
+
+    // ── LLMOps: 문항 채택 피드백 (Callable/Admin SDK write 권장) ──
+    // outcome 확장 예정: clicked | ignored
+    match /aiQuestionFeedback/{feedbackId} {
+      allow read: if isAdmin()
+        || (isInstructor() && resource.data.cohortId == getUserData().cohortId);
+      allow create, update, delete: if false;
+    }
   }
 }

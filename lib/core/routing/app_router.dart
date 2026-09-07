@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/admin/presentation/admin_alert_popup_form_screen.dart';
+import '../../features/admin/presentation/admin_ai_quality_screen.dart';
 import '../../features/admin/presentation/admin_assessments_screen.dart';
 import '../../features/admin/presentation/admin_assessment_detail_screen.dart';
 import '../../features/assessments/presentation/assessments_screen.dart';
@@ -564,6 +565,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ],
               ),
             ],
+          ),
+          GoRoute(
+            path: RoutePaths.adminAiQuality,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AdminAiQualityScreen(),
+            ),
           ),
         ],
       ),
