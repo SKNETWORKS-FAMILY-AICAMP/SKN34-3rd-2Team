@@ -42,7 +42,9 @@ if ($Register) {
     # 따옴표 한 쌍을 벗겨 내므로, 감싸지 않으면 python 경로 앞과 로그 경로 뒤의 따옴표가
     # 사라져 리다이렉션 대상이 반쪽짜리 경로가 된다. 실제로 첫 밤 배치가 이것 때문에
     # 로그 한 줄 남기지 못하고 죽었다(작업 결과 1).
-    $command = "`"$python`" -m job_matching_bot.crawling.nightly >> `"$logDir\%DATE:~0,10%.log`" 2>&1"
+    # -u 로 출력 버퍼를 끈다. 없으면 파이썬이 8KB씩 모아 뒀다 쓰므로 한 시간짜리 배치가
+    # 끝날 때까지 로그가 0바이트다. 도는 중에 어디까지 갔는지 볼 수 없다.
+    $command = "`"$python`" -u -m job_matching_bot.crawling.nightly >> `"$logDir\%DATE:~0,10%.log`" 2>&1"
     $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$command`"" -WorkingDirectory $repoRoot
     $trigger = New-ScheduledTaskTrigger -Daily -At $At
     $settings = New-ScheduledTaskSettingsSet `
