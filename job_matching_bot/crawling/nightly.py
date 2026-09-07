@@ -16,8 +16,8 @@
                  열려 있으면 지우지 않는다. 하룻밤 건수 상한이 있다.
 5. 적재          `sync`를 부른다. 오늘 받은 상세만 넣고, 목록 관측(observed)으로 만료·삭제를
                  판정한다. sweep이 불완전하면 안 본 공고는 '모름'으로 두어 지우지 않는다.
-6. 공유          팀원이 쓸 슬림 파일을 만들어 Firebase Storage에 올린다. 피드백·첨삭은 공고
-                 원문 전체가 필요한데 그건 이 저장소에만 있다. 실패해도 배치는 성공으로 둔다.
+6. 공유          팀원이 쓸 슬림 파일을 만들어 Firebase Storage에 올린다. 첨삭은 공고 원문
+                 전체가 필요한데 그건 이 저장소에만 있다. 실패해도 배치는 성공으로 둔다.
 
 ## 주기
 
@@ -268,7 +268,7 @@ def run_sync(detail_file: Path, observed: set[str], store_path: Path, as_of: dat
 def share_store_file(store_path: Path) -> dict[str, Any]:
     """팀원이 받아 쓸 슬림 파일을 만들어 올린다.
 
-    추천은 Pinecone만 보므로 키만 있으면 되지만, 피드백·첨삭은 공고 원문 전체가 필요하고
+    추천은 Pinecone만 보므로 키만 있으면 되지만, 첨삭은 공고 원문 전체가 필요하고
     그건 이 저장소에만 있다. 매일 밤 갱신해 두면 팀원이 최신 공고로 시험할 수 있다.
     """
     from job_matching_bot.sharing import share_store

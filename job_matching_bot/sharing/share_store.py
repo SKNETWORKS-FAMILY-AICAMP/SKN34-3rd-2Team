@@ -7,9 +7,9 @@
 
 ## 왜 필요한가
 
-추천은 Pinecone만 보므로 키만 있으면 팀원도 그대로 쓴다. 그런데 **피드백과 첨삭은 공고
-원문 전체**가 필요하고, 그건 수집한 사람의 `artifacts/job_store.sqlite`에만 있다.
-Pinecone 메타데이터에는 1,200자 발췌만 들어 있어서 뒤쪽 요건을 놓친다.
+추천은 Pinecone만 보므로 키만 있으면 팀원도 그대로 쓴다. 그런데 **첨삭은 공고 원문 전체**가
+필요하고, 그건 수집한 사람의 `artifacts/job_store.sqlite`에만 있다. Pinecone 메타데이터에는
+1,200자 발췌만 들어 있어서 뒤쪽 요건을 놓친다.
 
 그래서 저장소를 통째로 주는 대신, 읽는 쪽에 필요한 컬럼만 담은 작은 파일을 만들어
 올린다. 87MB → 약 30MB, 압축하면 10MB 안팎이다.
@@ -22,7 +22,7 @@ Pinecone 메타데이터에는 1,200자 발췌만 들어 있어서 뒤쪽 요건
 - `job_tags` 표 (18만 행) — 조회 편의용 색인. 원본은 컬럼에 그대로 있다
 - 인덱스 추적 컬럼 — 수집한 사람만 쓴다
 
-읽는 쪽(첨삭·피드백)이 실제로 쓰는 값은 전부 남는다.
+읽는 쪽(첨삭)이 실제로 쓰는 값은 전부 남는다.
 
 ## 왜 Firestore가 아니라 파일인가
 
@@ -96,7 +96,7 @@ def export(source: Path, destination: Path) -> Path:
                 f"INSERT INTO share.jobs ({', '.join(all_columns)}) "
                 f"SELECT {', '.join(selected)} FROM main.jobs"
             )
-            # 첨삭·피드백은 job_id 하나로 찾는다. 상태 조회도 자주 쓴다.
+            # 첨삭은 job_id 하나로 찾는다. 상태 조회도 자주 쓴다.
             connection.execute("CREATE INDEX share.jobs_status ON jobs(status)")
         rows = connection.execute("SELECT COUNT(*) FROM share.jobs").fetchone()[0]
         connection.execute("DETACH DATABASE share")

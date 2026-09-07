@@ -130,60 +130,6 @@ class RecommendResponse(StrictModel):
     )
 
 
-# ── 공고 기준 이력서 피드백 ─────────────────────────────
-
-class JobFeedbackRequest(StrictModel):
-    """저장 전 초안으로도 받을 수 있는 피드백. 이력서를 고치지 않고 읽기만 한다."""
-
-    job_id: str = Field(min_length=1, max_length=200)
-    resume_text: str = Field(min_length=20, max_length=50_000)
-
-    @field_validator("resume_text")
-    @classmethod
-    def reject_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("resume_text must not be blank")
-        return value.strip()
-
-
-class FeedbackPoint(StrictModel):
-    kind: Literal["인재상", "요구역량", "주요업무", "우대사항"] = Field(
-        description="공고가 그것을 어디에서 말하는지"
-    )
-    topic: str = Field(description="회사가 원하는 것 한 줄. 공고의 말로 쓴다")
-    job_quote: str = Field(description="공고 원문에 연속해서 존재하는 직접 인용")
-    status: Literal["드러남", "확인 안 됨"] = Field(
-        description="이력서에서 근거를 찾았으면 드러남. 못 찾았으면 확인 안 됨"
-    )
-    resume_quote: str = Field(
-        default="", description="드러남일 때만. 이력서 원문에 연속해서 존재하는 직접 인용"
-    )
-    advice: str = Field(
-        description="이력서에 어떻게 드러내면 좋을지 한두 문장. 문장을 대신 써 주지 않는다"
-    )
-
-
-class JobFeedbackOut(StrictModel):
-    """LLM 출력."""
-
-    wanted: str = Field(description="이 공고가 원하는 사람을 한두 문장으로. 공고에 적힌 범위 안에서만")
-    points: list[FeedbackPoint] = Field(default_factory=list, max_length=8)
-
-
-class JobFeedbackResponse(StrictModel):
-    job_id: str
-    company: str
-    title: str
-    source_url: str
-    wanted: str = Field(description="이 공고가 원하는 사람")
-    points: list[FeedbackPoint] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list, description="근거 검증에서 제거한 내용")
-    notice: str = (
-        "공고에 적힌 내용과 이력서를 대조한 것이며, 합격 가능성이나 지원자 평가가 아닙니다. "
-        "이력서에 적혀 있지 않다고 경험이 없다는 뜻은 아닙니다."
-    )
-
-
 class HealthResponse(StrictModel):
     status: Literal["ok"] = "ok"
     index_name: str
