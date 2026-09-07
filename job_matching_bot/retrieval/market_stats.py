@@ -33,8 +33,9 @@ from pathlib import Path
 
 from job_matching_bot.retrieval.store_search import KST, JobFilters, conditions
 
-# 집계에 훑을 최대 행. 조건이 헐거우면 만 건이 넘는데, 그때는 표본으로도 비율이 같다.
-SCAN_LIMIT = 6000
+# 집계에 훑을 최대 행. 저장소 전체가 이보다 작으므로 보통은 전수로 센다. 상한은
+# 저장소가 훨씬 커졌을 때를 위한 안전장치다. 걸리면 "대략"이라고 밝히고 답한다.
+SCAN_LIMIT = 20000
 # 각 분포에서 보여 줄 상위 개수. 꼬리는 한두 건이라 비율이 의미 없다.
 TOP_N = 8
 # 이 안에 마감하는 것을 "임박"으로 센다.
@@ -59,6 +60,7 @@ class MarketStats:
 
     total: int
     scanned: int                                    # 실제로 센 행. total보다 작으면 표본이다
+    scope: str = "지금 열려 있는 공고 전체"           # 무엇을 센 것인가. 표 첫 줄에 적는다
     skills: list[Share] = field(default_factory=list)
     roles: list[Share] = field(default_factory=list)
     regions: list[Share] = field(default_factory=list)
@@ -73,10 +75,18 @@ class MarketStats:
         return self.scanned < self.total
 
     def to_prompt(self) -> str:
-        """LLM에 넘길 표. 답에 쓸 수 있는 숫자는 여기 있는 것뿐이라고 못박는다."""
-        lines = [f"열려 있는 공고 {self.total}건"]
+        """LLM에 넘길 표.
+
+        첫 줄에 **무엇을 센 것인지** 적는다. 이게 없으면 모델이 모수를 믿지 못해
+        표에 답이 있는데도 "전체 공고 기준이라 알 수 없다"고 물러선다. 실제로 그랬다.
+        """
+        lines = [
+            f"센 것: {self.scope}",
+            f"그 공고 수: {self.total}건",
+        ]
         if self.is_sample:
-            lines[0] += f" (그중 {self.scanned}건을 세어 본 비율)"
+            lines.append(f"(그중 최근 {self.scanned}건을 세어 낸 비율이다. 대략의 값)")
+        lines.append("아래 분포는 모두 위 공고들만 센 것이다.")
         for label, shares in (
             ("자주 요구하는 기술", self.skills),
             ("직무 분류", self.roles),
@@ -114,6 +124,7 @@ def summarize(
     as_of = as_of or datetime.now(KST)
     where, params = conditions(filters, as_of)
     clause = " AND ".join(where)
+    scope = describe(filters)
 
     connection = sqlite3.connect(f"{Path(store_path).resolve().as_uri()}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
@@ -122,7 +133,7 @@ def summarize(
             f"SELECT COUNT(*) FROM jobs WHERE {clause}", params
         ).fetchone()[0]
         if not total:
-            return MarketStats(total=0, scanned=0)
+            return MarketStats(total=0, scanned=0, scope=scope)
 
         until = _plus_days(as_of, CLOSING_DAYS)
         closing = connection.execute(
@@ -160,6 +171,7 @@ def summarize(
     return MarketStats(
         total=total,
         scanned=scanned,
+        scope=scope,
         skills=_top(skills, scanned),
         roles=_top(roles, scanned),
         regions=_top(regions, scanned, limit=6),
@@ -169,6 +181,34 @@ def summarize(
         closing_soon=closing,
         sample_titles=[(row["title"] or "").strip() for row in rows[:3] if row["title"]],
     )
+
+
+def describe(filters: JobFilters) -> str:
+    """무엇을 세는지 사람 말로. 조건이 없으면 전체다.
+
+    경력은 그대로 옮기면 안 된다. "신입"으로 거르면 신입 명시 공고와 경력무관 공고가
+    함께 걸리는데, 표에 "신입 공고"라고만 적으면 모델이 경력무관 몫까지 신입이라고
+    말하거나, 반대로 모수를 의심해 답을 접는다. 무엇이 들어갔는지 그대로 밝힌다.
+    """
+    parts = [*filters.roles, *filters.skills]
+    if filters.regions:
+        parts.append("·".join(filters.regions))
+    parts.extend(filters.employment_types)
+    parts.extend(filters.keywords)
+    if filters.deadline_within_days:
+        parts.append(f"{filters.deadline_within_days}일 안에 마감하는")
+
+    note = ""
+    if filters.career == "신입":
+        parts.append("신입이 지원할 수 있는")
+        note = " (신입 명시 공고와 경력무관 공고를 함께 센 것)"
+    elif filters.career == "경력":
+        parts.append("경력자를 뽑는")
+        note = " (경력 명시 공고와 경력무관 공고를 함께 센 것)"
+
+    if not parts:
+        return "지금 열려 있는 공고 전체"
+    return "지금 열려 있는 " + " ".join(parts) + " 공고" + note
 
 
 def _top(counter: Counter[str], scanned: int, limit: int = TOP_N) -> list[Share]:

@@ -183,16 +183,35 @@ class AdviceTest(ChatTestCase):
         self.assertLessEqual(len(response.jobs), 3)
         self.assertEqual(8, response.total)
 
-    def test_question_without_conditions_gets_no_numbers(self):
-        """"자소서 어떻게 써?"에 억지로 표를 주면 상관없는 숫자를 끌어다 쓴다."""
-        response = self.ask(turn(intent="질문"), message="자소서 어떻게 써?")
-        self.assertEqual("질문", response.mode)
-        self.assertIn("셀 수 있는 조건이 없다", self.advised["stats"])
-        self.assertEqual([], response.jobs)
-        self.assertEqual(0, response.total)
+    def test_a_countable_question_with_no_conditions_counts_everything(self):
+        """"요즘 많이 요구하는 기술이 뭐야?"에는 조건이 없다. 그래도 전체를 세면 답이 된다.
 
-    def test_advice_questions_do_not_borrow_leftover_conditions(self):
-        """직전 대화의 조건이 남아 있어도 세어서 답할 질문이 아니면 숫자를 대지 않는다.
+        조건이 없다고 세지 않았더니, 세어 달라는 질문에 "저희가 모은 공고로는 알 수
+        없어요"라고 답했다. 조건 유무는 셀지 말지의 기준이 아니다.
+        """
+        response = self.ask(
+            turn(intent="질문"), message="요즘 많이 요구하는 기술이 뭐야?"
+        )
+        self.assertEqual("질문", response.mode)
+        self.assertIn("전체", self.advised["stats"])
+        self.assertIn("Python", self.advised["stats"])
+        self.assertEqual(8, response.total)
+        self.assertTrue(response.jobs)
+
+    def test_the_table_says_what_it_counted(self):
+        """모수를 밝히지 않으면 모델이 표를 믿지 못해 "알 수 없다"고 물러선다.
+
+        실제로 "신입 공고의 기술"을 물었을 때 표에 그 분포가 들어 있는데도 "전체 공고
+        기준이라 신입 공고에서의 비율은 알 수 없다"고 답했다.
+        """
+        self.ask(turn(intent="질문", career="신입"), message="신입 공고에 자주 나오는 기술은?")
+        stats = self.advised["stats"]
+        self.assertIn("센 것:", stats)
+        self.assertIn("신입이 지원할 수 있는", stats)
+        self.assertIn("경력무관", stats, "무엇이 함께 들어갔는지 밝힌다")
+
+    def test_advice_questions_do_not_count(self):
+        """세어서 답할 물음이 아니면 조건이 남아 있어도 숫자를 대지 않는다.
 
         "서울 백엔드 신입"을 찾아본 뒤 "자소서 어떻게 써?"라고 물으면 조건은 그대로
         남아 있다. 그걸로 표를 만들면 상관없는 숫자가 답의 첫 문단을 차지한다.
@@ -201,8 +220,9 @@ class AdviceTest(ChatTestCase):
             turn(intent="질문", counts_jobs=False, roles=["백엔드"], regions=["서울"]),
             message="자소서 어떻게 써?",
         )
-        self.assertIn("셀 수 있는 조건이 없다", self.advised["stats"])
+        self.assertIn("세어 답할 것이 아니다", self.advised["stats"])
         self.assertEqual([], response.jobs)
+        self.assertEqual(0, response.total)
 
     def test_followups_become_suggestions(self):
         response = self.ask(

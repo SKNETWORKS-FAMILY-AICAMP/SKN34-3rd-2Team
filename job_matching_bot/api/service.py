@@ -470,16 +470,20 @@ class ChatService:
         후자에 표를 주면 상관없는 숫자가 답의 첫 문단을 차지한다. 조건이 남아 있느냐가
         아니라 **이번 물음이 세어서 답할 것이냐**로 가른다. 그 판정은 조건을 뽑을 때
         같이 받아 두므로 LLM을 더 부르지 않는다.
+
+        조건이 비어 있어도 센다. "요즘 많이 요구하는 기술이 뭐야?"에는 조건이 없지만
+        **전체를 세면** 답이 나온다. 조건이 없다고 세지 않았더니 세어 달라는 질문에
+        "저희가 모은 공고로는 알 수 없어요"라고 답했다.
         """
         stats = None
-        if turn.counts_jobs and not filters.is_empty:
+        if turn.counts_jobs:
             stats = market_stats.summarize(self.store_path, filters)
         grounded = bool(stats and stats.total)
 
         answer = self.adviser(
             {
                 "condition": filters.summary(),
-                "stats": stats.to_prompt() if grounded else "(셀 수 있는 조건이 없다)",
+                "stats": stats.to_prompt() if grounded else "(이 물음은 공고를 세어 답할 것이 아니다)",
                 "question": request.message,
             }
         )
