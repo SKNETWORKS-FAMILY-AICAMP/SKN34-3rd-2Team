@@ -652,8 +652,26 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         ),
                       );
 
-                      final rightPanel = _showAiCoach
-                          ? AiJobCoachPanel(
+                      // 두 패널을 갈아끼우지 않고 **숨기기만** 한다. 트리에서 빼면 AI
+                      // 코치의 대화와 좁혀 둔 검색 조건이 함께 사라져, 접었다 펴는 것만으로
+                      // 처음부터 다시 말해야 한다. 대화를 어디에도 저장하지 않는 것은
+                      // 그대로다 — 화면을 떠나면 사라진다.
+                      //
+                      // `Offstage`는 자식을 배치·그리지 않을 뿐 상태는 남긴다. AI 코치는
+                      // initState도 네트워크 호출도 없어 숨어 있는 동안 아무 일도 하지 않는다.
+                      //
+                      // 반대로 피드백 패널은 **보일 때만** 만든다. 이쪽은 Firestore 스트림을
+                      // 구독하므로 숨은 채로 남겨 두면 AI 코치를 보는 내내 없던 구독이
+                      // 열려 있게 된다. 이 패널은 남길 상태도 없다.
+                      //
+                      // `passthrough`로 지금과 같은 제약을 그대로 넘긴다(넓은 화면에서는
+                      // 높이를 채우고, 좁은 화면에서는 내용만큼만 차지한다).
+                      final rightPanel = Stack(
+                        fit: StackFit.passthrough,
+                        children: [
+                          Offstage(
+                            offstage: !_showAiCoach,
+                            child: AiJobCoachPanel(
                               resumeId: widget.resumeId,
                               draftContent: _content,
                               hasUnsavedChanges: _dirty || _isSaving,
@@ -669,13 +687,17 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                               }),
                               isSidebar: wide,
                               onClose: () => setState(() => _showAiCoach = false),
-                            )
-                          : ResumeEditFeedbackPanel(
+                            ),
+                          ),
+                          if (!_showAiCoach)
+                            ResumeEditFeedbackPanel(
                               resumeId: widget.resumeId,
                               isAdmin: isAdmin,
                               selectedSectionKey: _selectedSection,
                               isSidebar: wide,
-                            );
+                            ),
+                        ],
+                      );
 
                       if (!wide) {
                         return Column(
