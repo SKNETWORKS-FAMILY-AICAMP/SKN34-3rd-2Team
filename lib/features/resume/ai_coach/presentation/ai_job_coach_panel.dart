@@ -221,6 +221,21 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     });
   }
 
+  /// 챗봇에서 "내 이력서로 맞는 공고"를 물었을 때 실제 추천으로 넘어간다.
+  ///
+  /// 챗봇은 이력서를 받지 않는다. 이력서를 읽고 근거를 대는 일은 추천이 하므로,
+  /// 여기서 흉내 내지 않고 그쪽으로 넘긴다. 화면도 추천 결과가 보이는 쪽으로 바꾼다.
+  Future<void> _handOffToRecommend() async {
+    final blocked = _readiness.blockedReason(AiCoachFeature.jobRecommendation);
+    if (blocked != null) {
+      // 이력서가 덜 찼을 때만 이렇게 답한다. 이때는 "채워 주세요"가 사실이다.
+      setState(() => _messages.add(_ChatMessage.bot(blocked)));
+      return;
+    }
+    setState(() => _chatMode = false);
+    await _run();
+  }
+
   /// 공고 하나를 놓고 묻기 시작한다. 그만둘 때까지 모든 말이 이 공고로 간다.
   void _askAbout(JobChatJob job) {
     setState(() {
@@ -344,6 +359,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           if (_chatMode)
             Expanded(
               child: _ChatView(
+                onRecommend: _handOffToRecommend,
                 askingAbout: _askingAbout,
                 onStopAsking: () => setState(() => _askingAbout = null),
                 onAskAbout: _askAbout,
@@ -1493,6 +1509,7 @@ class _ChatView extends StatelessWidget {
     required this.askingAbout,
     required this.onStopAsking,
     required this.onAskAbout,
+    required this.onRecommend,
   });
 
   final List<_ChatMessage> messages;
@@ -1508,6 +1525,9 @@ class _ChatView extends StatelessWidget {
   final VoidCallback onStopAsking;
   final ValueChanged<JobChatJob> onAskAbout;
 
+  /// 이력서로 골라 달라는 말을 받았을 때 추천으로 넘어간다.
+  final VoidCallback onRecommend;
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1519,6 +1539,10 @@ class _ChatView extends StatelessWidget {
             itemBuilder: (context, index) => _ChatBubble(
               message: messages[index],
               onAskAbout: busy ? null : onAskAbout,
+              // 넘어가기는 마지막 답에서만. 지나간 답의 버튼을 누르면 그때 물어본
+              // 것이 아니라 지금 이력서로 돌아 혼란스럽다.
+              onRecommend:
+                  index == messages.length - 1 && !busy ? onRecommend : null,
               // 제안은 마지막 답에서만 누를 수 있다. 지나간 답의 제안을 누르면 그때가
               // 아니라 지금 조건에 붙어 엉뚱한 결과가 나온다.
               onSuggestion:
@@ -1615,11 +1639,13 @@ class _ChatBubble extends StatelessWidget {
     required this.message,
     this.onSuggestion,
     this.onAskAbout,
+    this.onRecommend,
   });
 
   final _ChatMessage message;
   final ValueChanged<String>? onSuggestion;
   final ValueChanged<JobChatJob>? onAskAbout;
+  final VoidCallback? onRecommend;
 
   @override
   Widget build(BuildContext context) {
@@ -1642,6 +1668,22 @@ class _ChatBubble extends StatelessWidget {
               message.text,
               style: const TextStyle(fontSize: 12, height: 1.5),
             ),
+            // 이력서로 골라 달라는 말. 챗봇이 흉내 내지 않고 추천으로 넘긴다.
+            if (message.mode == '추천' && onRecommend != null) ...[
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: onRecommend,
+                icon: const Icon(Icons.track_changes_outlined, size: 15),
+                label: const Text(
+                  '이력서로 공고 추천받기',
+                  style: TextStyle(fontSize: 11.5),
+                ),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ],
             // 질문에 답한 경우 목록은 찾아 준 결과가 아니라 **답의 근거**다.
             // 그렇게 적어 두지 않으면 "이게 추천인가?"로 읽힌다.
             if (message.mode == '질문' && message.jobs.isNotEmpty) ...[

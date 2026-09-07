@@ -271,6 +271,35 @@ class MeaningSearchTest(ChatTestCase):
         self.assertEqual({}, self.found)
 
 
+class RecommendHandoffTest(ChatTestCase):
+    """이력서로 골라 달라는 말은 추천이 맡는다. 챗봇은 이력서를 받지 않는다."""
+
+    def test_resume_based_ask_hands_off_instead_of_searching(self):
+        """앞 대화에 조건이 남아 있어도 그걸로 목록을 내면 안 된다.
+
+        실제로 "Python · 신입" 조건이 남은 상태에서 "내 이력서 보면 제일 잘 어울리는
+        공고가 뭐예요?"를 물었더니, 이력서가 화면 왼쪽에 멀쩡히 있는데도 "이력서를
+        먼저 올려 주세요"라고 답하면서 그 조건으로 486건을 검색해 보여 줬다.
+        """
+        previous = schemas.ChatFilters(skills=["Python"], career="신입")
+        response = self.ask(
+            turn(intent="추천", skills=["Python"], career="신입"),
+            message="지금 내 이력서 보면 제일 잘 어울리는 공고가 뭐예요?",
+            filters=previous,
+        )
+        self.assertEqual("추천", response.mode)
+        self.assertEqual([], response.jobs, "챗봇이 목록을 내지 않는다")
+        self.assertEqual(0, response.total)
+        self.assertNotIn("올려", response.reply, "이력서가 없다고 하지 않는다")
+
+    def test_previous_conditions_survive_the_handoff(self):
+        """추천을 보고 와서 "그럼 서울만"으로 이어갈 수 있어야 한다."""
+        previous = schemas.ChatFilters(roles=["백엔드"], regions=["서울"])
+        response = self.ask(turn(intent="추천"), message="나한테 맞는 공고", filters=previous)
+        self.assertEqual(["백엔드"], response.filters.roles)
+        self.assertEqual(["서울"], response.filters.regions)
+
+
 class AdviceTest(ChatTestCase):
     """채용 질문. 답은 LLM이 쓰지만 **숫자는 우리가 세어 건네준다.**"""
 

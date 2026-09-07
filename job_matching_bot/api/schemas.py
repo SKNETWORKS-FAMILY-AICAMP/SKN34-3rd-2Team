@@ -173,8 +173,11 @@ class ChatTurnOut(StrictModel):
     그 안에 직무·경력이 들어 있고, 그 조건으로 공고를 세어야 숫자로 답할 수 있다.
     """
 
-    intent: Literal["검색", "질문", "잡담"] = Field(
-        description="공고 목록을 원하면 검색, 채용에 대해 묻는 말이면 질문, 그 밖은 잡담"
+    intent: Literal["검색", "질문", "추천", "잡담"] = Field(
+        description=(
+            "공고 목록을 원하면 검색, 채용에 대해 묻는 말이면 질문, "
+            "이력서를 근거로 골라 달라는 말이면 추천, 그 밖은 잡담"
+        )
     )
     filters: ChatFilters
     counts_jobs: bool = Field(
@@ -226,7 +229,7 @@ class JobChatJob(StrictModel):
 
 
 class JobChatResponse(StrictModel):
-    mode: Literal["검색", "질문", "공고", "안내"] = Field(
+    mode: Literal["검색", "질문", "공고", "추천", "안내"] = Field(
         default="검색", description="앱이 답을 어떻게 보여 줄지 정하는 데 쓴다"
     )
     reply: str

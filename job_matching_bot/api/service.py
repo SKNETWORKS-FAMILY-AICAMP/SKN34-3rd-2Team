@@ -451,6 +451,19 @@ class ChatService:
                 suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
             )
 
+        if turn.intent == "추천":
+            # 챗봇은 이력서를 받지 않는다. 앱이 이 mode를 보고 추천으로 넘긴다.
+            # 여기서 검색을 하면 앞 대화에 남은 조건으로 엉뚱한 목록이 나간다.
+            return schemas.JobChatResponse(
+                mode="추천",
+                reply=(
+                    "이력서를 읽고 맞는 공고를 골라 드릴게요.\n"
+                    "왜 맞는지 이력서 문장과 공고 문장을 나란히 보여드립니다."
+                ),
+                filters=previous,
+                total=0,
+            )
+
         filters = _to_job_filters(turn.filters)
 
         if turn.intent == "질문":
