@@ -16,6 +16,8 @@
                  열려 있으면 지우지 않는다. 하룻밤 건수 상한이 있다.
 5. 적재          `sync`를 부른다. 오늘 받은 상세만 넣고, 목록 관측(observed)으로 만료·삭제를
                  판정한다. sweep이 불완전하면 안 본 공고는 '모름'으로 두어 지우지 않는다.
+6. 공유          팀원이 쓸 슬림 파일을 만들어 Firebase Storage에 올린다. 피드백·첨삭은 공고
+                 원문 전체가 필요한데 그건 이 저장소에만 있다. 실패해도 배치는 성공으로 둔다.
 
 ## 주기
 
@@ -263,6 +265,26 @@ def run_sync(detail_file: Path, observed: set[str], store_path: Path, as_of: dat
     return subprocess.run(command, cwd=str(REPO_ROOT)).returncode
 
 
+def share_store_file(store_path: Path) -> dict[str, Any]:
+    """팀원이 받아 쓸 슬림 파일을 만들어 올린다.
+
+    추천은 Pinecone만 보므로 키만 있으면 되지만, 피드백·첨삭은 공고 원문 전체가 필요하고
+    그건 이 저장소에만 있다. 매일 밤 갱신해 두면 팀원이 최신 공고로 시험할 수 있다.
+    """
+    from job_matching_bot.sharing import share_store
+
+    print("[공유] 슬림 파일 생성·업로드")
+    try:
+        slim = share_store.export(store_path, share_store.EXPORT_PATH)
+        archive = share_store.compress(slim)
+        share_store.upload(archive, share_store.DEFAULT_BUCKET)
+        return {"ok": True, "megabytes": round(archive.stat().st_size / 1048576, 1)}
+    except Exception as error:
+        # 인증 만료, 네트워크 끊김 등. 다음 밤에 다시 올라간다.
+        print(f"  실패(수집·적재에는 영향 없음): {type(error).__name__}: {error}")
+        return {"ok": False, "error": f"{type(error).__name__}: {error}"}
+
+
 def prune(directory: Path, keep_days: int, today: date) -> int:
     removed = 0
     cutoff = (today - timedelta(days=keep_days)).isoformat()
@@ -285,6 +307,7 @@ def main() -> int:
     parser.add_argument("--min-delay", type=float, default=3.0)
     parser.add_argument("--max-delay", type=float, default=5.0)
     parser.add_argument("--dry-run", action="store_true", help="목록만 훑고 상세·기록·적재는 하지 않는다")
+    parser.add_argument("--no-share", action="store_true", help="공유 파일을 만들지 않는다")
     args = parser.parse_args()
 
     started = time.monotonic()
@@ -382,6 +405,11 @@ def main() -> int:
     detail_file.touch(exist_ok=True)
     code = run_sync(detail_file, observed, args.store, now, NIGHTLY_DIR)
     summary["sync_exit_code"] = code
+
+    # 6. 공유 파일. 여기서 실패해도 수집·적재는 이미 끝났으므로 배치를 실패로 만들지 않는다.
+    if not args.no_share:
+        summary["share"] = share_store_file(args.store)
+
     summary["elapsed_minutes"] = round((time.monotonic() - started) / 60, 1)
     (NIGHTLY_DIR / f"{stamp}.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"완료 ({summary['elapsed_minutes']}분) · 요약 {NIGHTLY_DIR / f'{stamp}.json'}")
