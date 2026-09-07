@@ -73,7 +73,23 @@ class Reason(StrictModel):
 
 
 class JobFit(StrictModel):
+    """재정렬 결과 하나.
+
+    필드 순서가 곧 판단 순서다. 구조화 출력은 위에서부터 채워지므로, `fit`을 정하기 전에
+    **무엇과 무엇을 견줬는지 먼저 쓰게** 한다. 이 세 칸이 없을 때는 모델이 대조를 건너뛰고
+    감으로 등급을 매겨 30건 중 20건이 "높음"으로 몰렸다.
+    """
+
     job_id: str
+    job_core: str = Field(
+        description="이 공고에서 매일 쓸 주된 기술·업무. 제목과 주요업무에서 잡는다. 셋 이내, 공고의 말로"
+    )
+    resume_core: str = Field(
+        description="이력서의 주력. 실제로 만들어 본 것 기준. 셋 이내, 이력서에 적힌 말로"
+    )
+    overlap: str = Field(
+        description="위 둘이 실제로 겹치는 것. 겹치는 게 없으면 '없음'이라고 쓴다"
+    )
     fit: Literal["높음", "보통", "낮음"]
     reasons: list[Reason] = Field(
         default_factory=list,
