@@ -77,6 +77,11 @@ const _kAdminNavItems = [
     path: RoutePaths.adminAssessments,
   ),
   AppSideRailItem(
+    icon: Icons.analytics_outlined,
+    label: 'AI 품질',
+    path: RoutePaths.adminAiQuality,
+  ),
+  AppSideRailItem(
     icon: Icons.person_rounded,
     label: '마이페이지',
     path: RoutePaths.adminMyPage,

@@ -12,17 +12,21 @@ import '../../../shared/models/submission_model.dart';
 import '../../../shared/models/todo_model.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../shared/providers/mission_providers.dart';
 import '../../../shared/providers/qual_exam_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../curriculum/presentation/widgets/curriculum_dashboard_section.dart';
 import '../../curriculum/providers/curriculum_providers.dart';
 import '../../forms/presentation/form_tasks_screen.dart';
 import '../../seating/providers/seating_providers.dart';
+import '../../study_room/providers/curriculum_youtube_providers.dart';
 import 'widgets/attendance_calendar_card.dart';
 import 'widgets/dashboard_profile_header.dart';
+import 'widgets/mission_progress_dashboard_card.dart';
 import 'widgets/my_seating_dashboard_card.dart';
 import 'widgets/qual_exam_schedule_section.dart';
 import 'widgets/resume_dashboard_section.dart';
+import 'widgets/weekly_learning_recommend_section.dart';
 
 /// 대시보드 — 프로필, 출석, 이력서, 게시판, 주간학습, TODO, 승인
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -71,8 +75,6 @@ class _DashboardBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notices = ref.watch(noticesStreamProvider);
-    final weeklyTask = ref.watch(weeklyTaskProvider);
-    final userProgress = ref.watch(userProgressProvider);
     final todos = ref.watch(todosStreamProvider);
     final submissions = ref.watch(mySubmissionsProvider);
 
@@ -90,6 +92,8 @@ class _DashboardBody extends ConsumerWidget {
         ref.invalidate(publishedSeatingAssignmentProvider);
         ref.invalidate(activeAlertPopupsProvider);
         ref.invalidate(curriculumMetaProvider);
+        ref.invalidate(curriculumYoutubeRecommendationsProvider);
+        ref.invalidate(missionProgressProvider);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -97,8 +101,6 @@ class _DashboardBody extends ConsumerWidget {
           final mainColumn = _DashboardMainColumn(
             user: user,
             notices: notices,
-            weeklyTask: weeklyTask,
-            userProgress: userProgress,
           );
           final sidebar = _DashboardSidebar(
             user: user,
@@ -146,14 +148,10 @@ class _DashboardMainColumn extends StatelessWidget {
   const _DashboardMainColumn({
     required this.user,
     required this.notices,
-    required this.weeklyTask,
-    required this.userProgress,
   });
 
   final UserModel user;
   final AsyncValue<List<NoticeModel>> notices;
-  final AsyncValue<dynamic> weeklyTask;
-  final AsyncValue<dynamic> userProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -174,23 +172,13 @@ class _DashboardMainColumn extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
+        const WeeklyLearningRecommendSection(),
+        const SizedBox(height: 20),
         const ResumeDashboardSection(),
         const SizedBox(height: 20),
         const FormTasksDashboardSection(),
         const SizedBox(height: 20),
         const QualExamScheduleSection(),
-        const SizedBox(height: 20),
-        const _SectionTitle('이번 주 필수 학습'),
-        weeklyTask.when(
-          loading: () => const _ShimmerCard(),
-          error: (e, _) => Text('오류: $e'),
-          data: (task) => userProgress.when(
-            loading: () => const _ShimmerCard(),
-            error: (e, _) => Text('오류: $e'),
-            data: (progress) =>
-                _WeeklyLearningCard(task: task, progress: progress),
-          ),
-        ),
       ],
     );
   }
@@ -219,6 +207,8 @@ class _DashboardSidebar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AttendanceCalendarCard(user: user, compact: compactCalendar),
+        const SizedBox(height: 20),
+        const MissionProgressDashboardCard(compact: true),
         const SizedBox(height: 20),
         const MySeatingDashboardSection(),
         const _SectionTitle('TODO', compact: true),
@@ -343,98 +333,6 @@ class _NoticesPreview extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _WeeklyLearningCard extends StatelessWidget {
-  const _WeeklyLearningCard({this.task, this.progress});
-  final dynamic task;
-  final dynamic progress;
-
-  @override
-  Widget build(BuildContext context) {
-    if (task == null) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: Text('등록된 필수 학습이 없습니다')),
-        ),
-      );
-    }
-
-    final percent = progress?.progressPercent ?? 0.0;
-    final completed = progress?.completedCount ?? 0;
-    final total = task.totalCount;
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 16,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              SizedBox(
-                width: 64,
-                height: 64,
-                child: CircularProgressIndicator(
-                  value: percent / 100,
-                  strokeWidth: 6,
-                  color: AppColors.primary,
-                  backgroundColor: AppColors.primaryLight,
-                ),
-              ),
-              Text(
-                '${percent.toInt()}%',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _StatusBadge(
-                      label: 'D-${task.daysRemaining}',
-                      color: AppColors.badgeLate,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        task.title,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '$completed / $total 완료',
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

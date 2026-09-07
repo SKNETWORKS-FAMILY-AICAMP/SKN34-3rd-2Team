@@ -1,8 +1,15 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
+import {onInit} from "firebase-functions/v2/core";
 import {randomBytes} from "crypto";
 import * as logger from "firebase-functions/logger";
+import type {UserRecord} from "firebase-admin/auth";
 
-import {admin, auth, db, ensureInitialized, fieldValue} from "./firebase";
+import {auth, db, ensureInitialized, fieldValue} from "./firebase";
+
+// Gen2: deploy discovery 때는 실행되지 않고, 런타임 요청 전에 Admin SDK 준비
+onInit(() => {
+  ensureInitialized();
+});
 
 export {
   syncDiscordNotices,
@@ -31,6 +38,7 @@ export {
   getAssessmentReview,
   adjustAssessmentScores,
   generateAssessmentQuestions,
+  recordAiQuestionFeedback,
 } from "./assessments";
 export {getCurriculumYoutubeRecommendations} from "./youtubeRecommendations";
 import {settleMissionsOnApproval} from "./missions";
@@ -164,7 +172,7 @@ export const createStudentAccount = onCall(
 
     let email = "";
     let password = "";
-    let userRecord: admin.auth.UserRecord | null = null;
+    let userRecord: UserRecord | null = null;
 
     for (let attempt = 0; attempt < 8; attempt++) {
       email = generateRandomEmail();

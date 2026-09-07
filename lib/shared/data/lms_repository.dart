@@ -1198,15 +1198,14 @@ class LmsRepository {
     required String cohortId,
     required String assessmentId,
   }) async {
-    final questions = await cohortSub(cohortId, 'assessments')
-        .doc(assessmentId)
-        .collection('questions')
-        .get();
+    final assessmentRef =
+        cohortSub(cohortId, 'assessments').doc(assessmentId);
+    final questions = await assessmentRef.collection('questions').get();
     final batch = _firestore.batch();
     for (final doc in questions.docs) {
       batch.delete(doc.reference);
     }
-    batch.delete(cohortSub(cohortId, 'assessments').doc(assessmentId));
+    batch.delete(assessmentRef);
     await batch.commit();
   }
 

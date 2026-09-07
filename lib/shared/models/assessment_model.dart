@@ -203,6 +203,12 @@ class AssessmentQuestionModel {
     this.correctIndex,
     this.acceptedAnswers = const [],
     this.explanation,
+    this.origin = 'manual',
+    this.aiLogId,
+    this.promptVersion,
+    this.sourceDay,
+    this.sourceTopic,
+    this.aiDraftId,
   });
 
   final String id;
@@ -214,6 +220,14 @@ class AssessmentQuestionModel {
   final int? correctIndex;
   final List<String> acceptedAnswers;
   final String? explanation;
+
+  /// `ai` | `manual` — 오답→추천 확장 시 sourceTopic 조인 키
+  final String origin;
+  final String? aiLogId;
+  final String? promptVersion;
+  final int? sourceDay;
+  final String? sourceTopic;
+  final String? aiDraftId;
 
   factory AssessmentQuestionModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -244,6 +258,12 @@ class AssessmentQuestionModel {
         (data['acceptedAnswers'] as List? ?? []).map((e) => '$e'),
       ),
       explanation: data['explanation']?.toString(),
+      origin: data['origin']?.toString() == 'ai' ? 'ai' : 'manual',
+      aiLogId: data['aiLogId']?.toString(),
+      promptVersion: data['promptVersion']?.toString(),
+      sourceDay: toInt(data['sourceDay']),
+      sourceTopic: data['sourceTopic']?.toString(),
+      aiDraftId: data['aiDraftId']?.toString(),
     );
   }
 
@@ -256,6 +276,12 @@ class AssessmentQuestionModel {
         if (correctIndex != null) 'correctIndex': correctIndex,
         'acceptedAnswers': acceptedAnswers,
         if (explanation != null) 'explanation': explanation,
+        'origin': origin,
+        if (aiLogId != null) 'aiLogId': aiLogId,
+        if (promptVersion != null) 'promptVersion': promptVersion,
+        if (sourceDay != null) 'sourceDay': sourceDay,
+        if (sourceTopic != null) 'sourceTopic': sourceTopic,
+        if (aiDraftId != null) 'aiDraftId': aiDraftId,
       };
 
   /// 학생 응시용 — 정답 제거
@@ -278,6 +304,12 @@ class AssessmentQuestionModel {
     int? correctIndex,
     List<String>? acceptedAnswers,
     String? explanation,
+    String? origin,
+    String? aiLogId,
+    String? promptVersion,
+    int? sourceDay,
+    String? sourceTopic,
+    String? aiDraftId,
   }) {
     return AssessmentQuestionModel(
       id: id ?? this.id,
@@ -289,6 +321,12 @@ class AssessmentQuestionModel {
       correctIndex: correctIndex ?? this.correctIndex,
       acceptedAnswers: acceptedAnswers ?? this.acceptedAnswers,
       explanation: explanation ?? this.explanation,
+      origin: origin ?? this.origin,
+      aiLogId: aiLogId ?? this.aiLogId,
+      promptVersion: promptVersion ?? this.promptVersion,
+      sourceDay: sourceDay ?? this.sourceDay,
+      sourceTopic: sourceTopic ?? this.sourceTopic,
+      aiDraftId: aiDraftId ?? this.aiDraftId,
     );
   }
 }

@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +14,8 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/services/storage_service.dart';
 import '../../assessments/data/assessment_functions_service.dart';
 import '../../assessments/presentation/widgets/assessment_question_view.dart';
+import '../../assessments/presentation/widgets/assessment_thumbnail.dart';
+import 'widgets/assessment_ai_flow_dialogs.dart';
 
 /// 강사 — 평가 생성/수정 + 문제 편집 + 문제 생성 AI
 class InstructorAssessmentFormScreen extends ConsumerStatefulWidget {
@@ -243,17 +245,56 @@ class _InstructorAssessmentFormScreenState
         _questions.add(result.copyWith(order: _questions.length));
       }
     });
+
+    final edited = index != null ? _questions[index] : _questions.last;
+    if (edited.origin == 'ai' &&
+        edited.aiLogId != null &&
+        edited.aiDraftId != null) {
+      final cohortId = ref.read(effectiveCohortIdProvider);
+      if (cohortId != null) {
+        try {
+          await ref.read(assessmentFunctionsServiceProvider).recordAiQuestionFeedback(
+            cohortId: cohortId,
+            logId: edited.aiLogId!,
+            promptVersion: edited.promptVersion,
+            assessmentId: widget.assessmentId,
+            items: [
+              {
+                'draftId': edited.aiDraftId!,
+                'outcome': 'edited',
+                if (edited.sourceDay != null) 'sourceDay': edited.sourceDay,
+                if (edited.sourceTopic != null) 'sourceTopic': edited.sourceTopic,
+                'questionId': edited.id,
+              },
+            ],
+          );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('수정 피드백 저장에 실패했습니다. (출제는 유지됩니다)')),
+            );
+          }
+        }
+      }
+    }
   }
 
   Future<void> _openCurriculumAi() async {
-    final drafts = await showDialog<List<AssessmentQuestionModel>>(
+    final generated = await showDialog<GenerateAssessmentResult>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const _CurriculumAiDialog(),
+      builder: (ctx) => const CurriculumAiGenerateDialog(),
     );
-    if (drafts == null || drafts.isEmpty) return;
+    if (generated == null || generated.questions.isEmpty || !mounted) return;
+
+    final selected = await showDialog<List<AssessmentQuestionModel>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AssessmentAiReviewDialog(initial: generated),
+    );
+    if (selected == null || selected.isEmpty) return;
     setState(() {
-      for (final q in drafts) {
+      for (final q in selected) {
         _questions.add(q.copyWith(order: _questions.length));
       }
     });
@@ -362,37 +403,15 @@ class _InstructorAssessmentFormScreenState
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        if (_pendingThumbBytes != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.memory(
-                              _pendingThumbBytes!,
-                              width: 96,
-                              height: 54,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        else if (_thumbnailUrl != null &&
-                            _thumbnailUrl!.startsWith('http'))
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              _thumbnailUrl!,
-                              width: 96,
-                              height: 54,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        else
-                          Container(
-                            width: 96,
-                            height: 54,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF3F4F6),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.image_outlined),
-                          ),
+                        AssessmentThumbnail(
+                          url: _thumbnailUrl,
+                          storagePath: _thumbnailPath,
+                          bytes: _pendingThumbBytes,
+                          width: 96,
+                          height: 54,
+                          placeholderIcon: Icons.image_outlined,
+                          placeholderIconSize: 22,
+                        ),
                         const SizedBox(width: 12),
                         OutlinedButton.icon(
                           onPressed: _pickThumbnail,
@@ -660,11 +679,13 @@ class _QuestionEditorDialogState extends State<_QuestionEditorDialog> {
                 .map((e) => e.trim())
                 .where((e) => e.isNotEmpty)
                 .toList();
+            final initial = widget.initial;
             Navigator.pop(
               context,
               AssessmentQuestionModel(
-                id: widget.initial?.id ?? 'draft_${DateTime.now().millisecondsSinceEpoch}',
-                order: widget.initial?.order ?? 0,
+                id: initial?.id ??
+                    'draft_${DateTime.now().millisecondsSinceEpoch}',
+                order: initial?.order ?? 0,
                 type: _type,
                 prompt: _prompt.text.trim(),
                 points: int.tryParse(_points.text.trim()) ?? 4,
@@ -676,311 +697,18 @@ class _QuestionEditorDialogState extends State<_QuestionEditorDialog> {
                 explanation: _explanation.text.trim().isEmpty
                     ? null
                     : _explanation.text.trim(),
+                origin: initial?.origin ?? 'manual',
+                aiLogId: initial?.aiLogId,
+                promptVersion: initial?.promptVersion,
+                sourceDay: initial?.sourceDay,
+                sourceTopic: initial?.sourceTopic,
+                aiDraftId: initial?.aiDraftId,
               ),
             );
           },
           child: const Text('확인'),
         ),
       ],
-    );
-  }
-}
-
-class _CurriculumAiDialog extends ConsumerStatefulWidget {
-  const _CurriculumAiDialog();
-
-  @override
-  ConsumerState<_CurriculumAiDialog> createState() =>
-      _CurriculumAiDialogState();
-}
-
-class _CurriculumAiDialogState extends ConsumerState<_CurriculumAiDialog> {
-  var _generating = false;
-  String? _error;
-  late final TextEditingController _dayFromCtrl;
-  late final TextEditingController _dayToCtrl;
-  late final TextEditingController _mcCtrl;
-  late final TextEditingController _saCtrl;
-  var _rangeSeeded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _dayFromCtrl = TextEditingController(text: '1');
-    _dayToCtrl = TextEditingController(text: '7');
-    _mcCtrl = TextEditingController(text: '5');
-    _saCtrl = TextEditingController(text: '3');
-  }
-
-  @override
-  void dispose() {
-    _dayFromCtrl.dispose();
-    _dayToCtrl.dispose();
-    _mcCtrl.dispose();
-    _saCtrl.dispose();
-    super.dispose();
-  }
-
-  void _seedRangeIfNeeded(int minDay, int maxDay) {
-    if (_rangeSeeded) return;
-    _rangeSeeded = true;
-    _dayFromCtrl.text = '$minDay';
-    _dayToCtrl.text = '${(minDay + 6).clamp(minDay, maxDay)}';
-  }
-
-  Future<void> _generate() async {
-    final sheet = ref.read(latestCurriculumSheetProvider).asData?.value;
-    if (sheet == null) {
-      setState(() => _error = '먼저 커리큘럼 CSV를 등록하세요.');
-      return;
-    }
-
-    final cohortId = ref.read(effectiveCohortIdProvider);
-    if (cohortId == null) {
-      setState(() => _error = '기수 정보가 없습니다.');
-      return;
-    }
-
-    final dayFrom = int.tryParse(_dayFromCtrl.text.trim()) ?? 1;
-    final dayTo = int.tryParse(_dayToCtrl.text.trim()) ?? dayFrom;
-    final mcCount = int.tryParse(_mcCtrl.text.trim()) ?? 5;
-    final saCount = int.tryParse(_saCtrl.text.trim()) ?? 3;
-
-    setState(() {
-      _generating = true;
-      _error = null;
-    });
-
-    try {
-      final qs = await ref
-          .read(assessmentFunctionsServiceProvider)
-          .generateAssessmentQuestions(
-            cohortId: cohortId,
-            sheetId: sheet.id,
-            dayFrom: dayFrom,
-            dayTo: dayTo,
-            mcCount: mcCount,
-            saCount: saCount,
-          );
-      if (!mounted) return;
-      Navigator.pop(context, qs);
-    } catch (e) {
-      setState(() {
-        _generating = false;
-        _error = '$e';
-      });
-    }
-  }
-
-  InputDecoration _fieldDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      floatingLabelBehavior: FloatingLabelBehavior.always,
-      filled: true,
-      fillColor: const Color(0xFFF9FAFB),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sheetAsync = ref.watch(latestCurriculumSheetProvider);
-    final sheet = sheetAsync.asData?.value;
-    final minDay = sheet?.rows.isEmpty ?? true
-        ? 1
-        : sheet!.rows.map((r) => r.dayIndex).reduce((a, b) => a < b ? a : b);
-    final maxDay = sheet?.rows.isEmpty ?? true
-        ? 7
-        : sheet!.rows.map((r) => r.dayIndex).reduce((a, b) => a > b ? a : b);
-
-    if (sheet != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _seedRangeIfNeeded(minDay, maxDay);
-      });
-    }
-
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
-          child: sheetAsync.isLoading
-              ? const SizedBox(
-                  height: 160,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      '문제 생성 AI',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_error != null) ...[
-                      Text(
-                        _error!,
-                        style: const TextStyle(
-                          color: AppColors.error,
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    if (sheet == null)
-                      const Text(
-                        '등록된 커리큘럼이 없습니다.\n커리큘럼 메뉴에서 CSV를 업로드하세요.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                          height: 1.5,
-                        ),
-                      )
-                    else ...[
-                      Text(
-                        sheet.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                          height: 1.45,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${sheet.rowCount}행 · 일수 $minDay~$maxDay',
-                        style: const TextStyle(
-                          color: AppColors.textHint,
-                          fontSize: 12,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        '선택한 커리큘럼 구간을 바탕으로 문제를 생성합니다.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _dayFromCtrl,
-                              decoration: _fieldDecoration('일수 From'),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _dayToCtrl,
-                              decoration: _fieldDecoration('일수 To'),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _mcCtrl,
-                              decoration: _fieldDecoration('객관식 수'),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _saCtrl,
-                              decoration: _fieldDecoration('단답 수'),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 22),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed:
-                              _generating ? null : () => Navigator.pop(context),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.textPrimary,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          child: const Text(
-                            '취소',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed:
-                              _generating || sheet == null ? null : _generate,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 22,
-                              vertical: 14,
-                            ),
-                            shape: const StadiumBorder(),
-                          ),
-                          child: _generating
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text(
-                                  '문제 생성',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-        ),
-      ),
     );
   }
 }

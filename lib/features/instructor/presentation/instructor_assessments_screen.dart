@@ -4,8 +4,67 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../assessments/presentation/widgets/assessment_card.dart';
+
+Future<bool> confirmAndDeleteAssessment({
+  required BuildContext context,
+  required WidgetRef ref,
+  required String assessmentId,
+  required String title,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('평가 삭제'),
+      content: Text(
+        '"$title" 평가와 문항을 삭제합니다.\n이 작업은 되돌릴 수 없습니다.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.error,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('삭제'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return false;
+
+  final cohortId = ref.read(effectiveCohortIdProvider);
+  if (cohortId == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('기수 정보가 없습니다.')),
+    );
+    return false;
+  }
+
+  try {
+    await ref.read(lmsRepositoryProvider).deleteAssessment(
+          cohortId: cohortId,
+          assessmentId: assessmentId,
+        );
+    if (!context.mounted) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('평가를 삭제했습니다.')),
+    );
+    return true;
+  } catch (e) {
+    if (!context.mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('삭제 실패: $e')),
+    );
+    return false;
+  }
+}
 
 /// 강사 — 평가 목록
 class InstructorAssessmentsScreen extends ConsumerWidget {
@@ -29,25 +88,33 @@ class InstructorAssessmentsScreen extends ConsumerWidget {
           if (list.isEmpty) {
             return const Center(child: Text('아직 만든 평가가 없습니다.'));
           }
-          return Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 860),
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-                itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, i) {
-                  final a = list[i];
-                  return AssessmentCard(
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+            itemCount: list.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              final a = list[i];
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 860),
+                  child: AssessmentCard(
                     assessment: a,
                     onTap: () => context.push(
                       RoutePaths.instructorAssessmentDetailPath(a.id),
                     ),
-                  );
-                },
-              ),
-            ),
+                    onEdit: () => context.push(
+                      RoutePaths.instructorAssessmentEditPath(a.id),
+                    ),
+                    onDelete: () => confirmAndDeleteAssessment(
+                      context: context,
+                      ref: ref,
+                      assessmentId: a.id,
+                      title: a.title,
+                    ),
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
