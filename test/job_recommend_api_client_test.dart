@@ -195,4 +195,69 @@ void main() {
       );
     });
   });
+
+  group('이력서의 일부만 보고 추천', () {
+    /// "프로젝트 경험만 보고 추천해줘" 같은 요청. 서버가 읽을 글만 프로젝트로 좁힌다.
+    ResumeContent projectsOnly() => _resume().copyWith(
+      experience: const [],
+      techStack: const [],
+      coreCompetencies: const ResumeCoreCompetencies(),
+      selfIntroduction: const ResumeSelfIntroduction(),
+    );
+
+    test('읽을 글만 좁히고 조건은 이력서 원본에서 뽑는다', () {
+      final request = JobRecommendRequest.fromResume(
+        _resume(),
+        focus: projectsOnly(),
+      );
+
+      expect(request.resumeText, contains('추천 API를 개발'), reason: '프로젝트는 남는다');
+      expect(
+        request.resumeText,
+        isNot(contains('FastAPI 서비스를 운영')),
+        reason: '경력 기술까지 섞으면 "프로젝트 경험만"이 아니다',
+      );
+
+      // 조건은 좁힌 쪽이 아니라 원본에서 온다. 좁힌 것으로 뽑으면 연차가 0이 되어
+      // 하드 필터가 달라지고, 사용자가 원한 것은 "경력을 없던 셈 치자"가 아니다.
+      expect(request.careerYears, greaterThan(0));
+      expect(request.certifications, contains('정보처리기사'));
+      expect(request.majors, contains('컴퓨터공학'));
+    });
+
+    test('좁히지 않으면 지금까지와 똑같다', () {
+      final plain = JobRecommendRequest.fromResume(_resume());
+      final explicit = JobRecommendRequest.fromResume(_resume(), focus: null);
+      expect(explicit.resumeText, plain.resumeText);
+    });
+
+    test('좁힌 이력서로 필수 항목 검증을 하지 않는다', () async {
+      /// 좁힌 것을 원본 대신 넘겼더니 이력서가 멀쩡한데도 막혔다.
+      /// "맞춤 공고를 추천하려면 다음 항목을 먼저 작성해주세요: 핵심역량/강점, ..."
+      Map<String, dynamic>? sent;
+      final repository = AiJobCoachRepository(
+        apiClient: JobRecommendApiClient(
+          baseUrl: 'http://127.0.0.1:8000',
+          client: MockClient((request) async {
+            sent = jsonDecode(request.body) as Map<String, dynamic>;
+            return http.Response(
+              jsonEncode(_serverResponse()),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }),
+        ),
+      );
+
+      final result = await repository.analyzeAndMatch(
+        draftContent: _resume(),
+        focus: projectsOnly(),
+      );
+
+      expect(result.recommendations, isNotEmpty);
+      expect(sent!['resume_text'] as String, contains('추천 API를 개발'));
+      expect(sent!['resume_text'] as String, isNot(contains('FastAPI 서비스를 운영')));
+      expect(sent!['career_years'], greaterThan(0));
+    });
+  });
 }

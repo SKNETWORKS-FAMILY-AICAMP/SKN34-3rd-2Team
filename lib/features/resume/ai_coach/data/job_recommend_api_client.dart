@@ -74,14 +74,21 @@ class JobRecommendRequest {
 
   /// 이력서와 프로필의 희망 조건으로 만든다. 학력·연차·전공·자격증은
   /// `RecommendResumeProfile`이 이력서에서 뽑는다.
+  /// [focus]를 주면 **읽을 글만** 그것으로 바꾼다. 학력·연차·전공·자격증은 [content]
+  /// 그대로다.
+  ///
+  /// "프로젝트 경험만 보고 추천해줘" 같은 요청을 위한 것이다. 좁혀야 하는 것은 뜻을
+  /// 뽑는 재료이지 조건이 아니다. 조건까지 좁히면 연차가 0이 되어 하드 필터가 달라지고,
+  /// 사용자가 원한 것은 "경력을 없던 셈 치자"가 아니라 "이 부분을 기준으로 보자"다.
   factory JobRecommendRequest.fromResume(
     ResumeContent content, {
     JobPreferences preferences = const JobPreferences(),
     int topK = JobRecommendApiConfig.topK,
+    ResumeContent? focus,
   }) {
     final profile = RecommendResumeProfile.fromContent(content);
     return JobRecommendRequest(
-      resumeText: buildResumeText(content),
+      resumeText: buildResumeText(focus ?? content),
       preferredRegions: preferences.regions,
       preferredEmploymentTypes: preferences.employmentTypes,
       educationLevel: profile.educationLevel,

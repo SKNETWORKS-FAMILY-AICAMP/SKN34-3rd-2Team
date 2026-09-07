@@ -244,7 +244,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
 
-    final requestedContent = _scopedResume(scope);
+    final requestedContent = widget.draftContent;
     final missing = _emptyScopeReason(scope, requestedContent);
     if (missing != null) {
       setState(() => _messages.add(_ChatMessage.bot(missing)));
@@ -265,6 +265,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           .analyzeAndMatch(
             draftContent: requestedContent,
             preferences: _preferences,
+            // 읽을 글만 좁힌다. 검증과 조건은 이력서 원본 그대로다.
+            focus: scope == '전체' ? null : _scopedResume(scope),
           );
       if (!mounted) return;
       setState(() {
@@ -293,28 +295,34 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     }
   }
 
-  /// 추천에 보낼 이력서. 범위를 좁혀도 **조건 판정에 쓰는 것은 남긴다.**
+  /// 서버가 **읽을 글**만 남긴 이력서. 조건 판정에는 쓰지 않는다.
   ///
-  /// 경력·학력·자격증을 지우면 연차가 0이 되어 하드 필터가 달라진다. 좁히는 것은
-  /// 뜻을 뽑는 재료(프로젝트·기술스택·자기소개)이지 조건이 아니다.
+  /// 이걸 원본 대신 넘기면 필수 항목 검증에 걸린다. 실제로 그랬다 — 이력서가 멀쩡한데
+  /// "핵심역량·기술스택·자기소개서를 작성해 주세요"로 막혔다. 학력·연차·전공·자격증은
+  /// `analyzeAndMatch`가 원본에서 따로 뽑으므로 여기서 지워도 조건은 그대로다.
   ResumeContent _scopedResume(String scope) {
     final content = widget.draftContent;
+    const emptyCore = ResumeCoreCompetencies();
+    const emptyIntro = ResumeSelfIntroduction();
     return switch (scope) {
+      // 물어본 그대로 그 부분만 남긴다. 경력 기술까지 섞으면 "프로젝트 경험만"이 아니다.
       '프로젝트' => content.copyWith(
+          experience: const [],
           techStack: const [],
           awards: const [],
           trainingExperience: const [],
           otherActivities: const [],
-          coreCompetencies: const ResumeCoreCompetencies(),
-          selfIntroduction: const ResumeSelfIntroduction(),
+          coreCompetencies: emptyCore,
+          selfIntroduction: emptyIntro,
         ),
       '기술스택' => content.copyWith(
+          experience: const [],
           projects: const [],
           awards: const [],
           trainingExperience: const [],
           otherActivities: const [],
-          coreCompetencies: const ResumeCoreCompetencies(),
-          selfIntroduction: const ResumeSelfIntroduction(),
+          coreCompetencies: emptyCore,
+          selfIntroduction: emptyIntro,
         ),
       _ => content,
     };
