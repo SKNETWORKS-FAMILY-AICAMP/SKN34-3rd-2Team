@@ -1,6 +1,6 @@
 """OpenAI 호출 어댑터.
 
-CLOVA와 달리 **structured output(JSON 스키마 강제)을 지원**한다.
+**structured output(JSON 스키마 강제)을 지원**한다.
 `client.chat.completions.parse()`에 Pydantic 모델을 넘기면 SDK가 스키마로
 변환하고, 응답을 그 타입으로 되돌려준다. 모델이 형식을 틀릴 여지가 없어서
 `requirement_extractor`의 재시도 루프는 안전망으로만 남는다.

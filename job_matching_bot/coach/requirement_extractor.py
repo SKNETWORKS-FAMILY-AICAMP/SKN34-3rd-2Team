@@ -13,8 +13,7 @@
 ## 공급자 교체
 
 모델은 `complete(system, user, schema) -> (text, usage)` 하나만 구현하면 된다.
-기본은 OpenAI(`openai_client.OpenAIChatModel`)이고, CLOVA Studio
-(`clova_client.ClovaChatModel`)도 같은 인터페이스로 붙어 있다.
+모델은 OpenAI(`openai_client.OpenAIChatModel`)를 쓴다.
 검증·근거대조·캐시·재시도는 여기 있어서 공급자를 바꿔도 그대로 쓴다.
 
 ## 설계 문서 §14가 요구하는 것을 지킨다
@@ -22,7 +21,7 @@
 - 출력을 JSON Schema(Pydantic)로 검증한다
 - 공급자가 스키마 강제를 지원하면(OpenAI) 넘겨서 형식을 고정한다. 그래도 받은
   결과는 여기서 한 번 더 검증한다 — 강제됐다는 주장을 그대로 믿지 않는다
-- 지원하지 않으면(CLOVA) 프롬프트로 JSON을 요청하고 직접 검증한다. 실패하면
+- 지원하지 않는 공급자로 바꾸면 프롬프트로 JSON을 요청하고 직접 검증한다. 실패하면
   §14대로 "제한된 횟수만 재시도하고, 계속 실패하면 규칙 기반 결과로 전환"한다
   (전환은 `skill_source`가 처리)
 - 각 항목에 **근거 문장**(`evidence`)을 함께 남긴다
@@ -93,7 +92,7 @@ class ChatModel(Protocol):
     """공급자 어댑터가 만족해야 하는 최소 인터페이스.
 
     `supports_schema`가 True면 `schema`를 넘겨 형식을 강제할 수 있다.
-    False인 공급자(CLOVA 등)는 schema를 무시하고, 검증은 추출기가 담당한다.
+    False인 공급자는 schema를 무시하고, 검증은 추출기가 담당한다.
     """
 
     provider: str
@@ -327,6 +326,6 @@ class RequirementExtractor:
 
 def is_configured() -> bool:
     """모델을 부를 수 있는 상태인지. 없으면 규칙 기반으로 폴백해야 한다."""
-    from job_matching_bot.coach import clova_client, openai_client
+    from job_matching_bot.coach import openai_client
 
-    return openai_client.is_configured() or clova_client.is_configured()
+    return openai_client.is_configured()

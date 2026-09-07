@@ -4,7 +4,7 @@
 재시도, 근거 없는 결과 제거, 프롬프트 주입 방어, 캐시, 재현 메타데이터 — 가
 동작하는지 본다.
 
-스키마 강제를 지원하지 않는 공급자(CLOVA)에서는 모델이 형식을 틀릴 수 있다.
+스키마 강제를 지원하지 않는 공급자에서는 모델이 형식을 틀릴 수 있다.
 그 경우를 재현하는 테스트가 핵심이고, 지원하는 공급자(OpenAI)에서도 받은
 결과를 한 번 더 검증하는지 확인한다.
 """
@@ -372,61 +372,6 @@ class OpenAIClientTest(unittest.TestCase):
         with self.assertRaises(RuntimeError) as ctx:
             OpenAIChatModel(client=_Client()).complete("SYS", "USER")
         self.assertIn("거절", str(ctx.exception))
-
-
-class ClovaClientTest(unittest.TestCase):
-    def test_uses_clova_openai_compatible_endpoint(self):
-        from job_matching_bot.coach import clova_client
-
-        self.assertEqual(
-            "https://clovastudio.stream.ntruss.com/v1/openai", clova_client.BASE_URL
-        )
-        self.assertEqual("HCX-005", clova_client.DEFAULT_MODEL)
-
-    def test_missing_key_raises_a_clear_error(self):
-        from job_matching_bot.coach.clova_client import ClovaChatModel
-
-        with mock.patch.dict(os.environ, {}, clear=True):
-            model = ClovaChatModel(api_key="")
-            with self.assertRaises(RuntimeError) as ctx:
-                _ = model.client
-        self.assertIn("CLOVA_API_KEY", str(ctx.exception))
-
-    def test_complete_sends_system_and_user_messages(self):
-        from job_matching_bot.coach.clova_client import ClovaChatModel
-
-        class _Msg:
-            content = '{"job_role":"","career_level":"UNKNOWN","skills":[]}'
-
-        class _Choice:
-            message = _Msg()
-
-        class _Resp:
-            choices = [_Choice()]
-            usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5})()
-
-        captured = {}
-
-        class _Completions:
-            def create(self, **kwargs):
-                captured.update(kwargs)
-                return _Resp()
-
-        class _Chat:
-            completions = _Completions()
-
-        class _Client:
-            chat = _Chat()
-
-        text, usage = ClovaChatModel(client=_Client()).complete("SYS", "USER")
-        self.assertEqual("HCX-005", captured["model"])
-        self.assertEqual("system", captured["messages"][0]["role"])
-        self.assertEqual("USER", captured["messages"][1]["content"])
-        # CLOVA가 지원하지 않는 필드는 보내지 않는다.
-        self.assertNotIn("frequency_penalty", captured)
-        self.assertNotIn("presence_penalty", captured)
-        self.assertNotIn("response_format", captured)
-        self.assertEqual(10, usage["input_tokens"])
 
 
 class SkillSourceFallbackTest(unittest.TestCase):
