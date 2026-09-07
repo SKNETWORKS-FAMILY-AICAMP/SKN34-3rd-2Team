@@ -191,6 +191,13 @@ class ChatTurnOut(StrictModel):
             "좁힌다. '프로젝트 경험 보고' → 프로젝트, '기술스택으로' → 기술스택"
         ),
     )
+    unavailable: Literal["", "급여", "복지", "합격 가능성", "회사 평판"] = Field(
+        default="",
+        description=(
+            "우리가 가지고 있지 않은 정보로 찾거나 줄 세워 달라는 요청이면 그것. "
+            "아니면 빈 문자열"
+        ),
+    )
     requirement_query: str = Field(
         default="",
         description=(

@@ -26,10 +26,12 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
     intent = kwargs.pop("intent", "검색")
     counts_jobs = kwargs.pop("counts_jobs", True)
     requirement_query = kwargs.pop("requirement_query", "")
+    unavailable = kwargs.pop("unavailable", "")
     return schemas.ChatTurnOut(
         intent=intent,
         counts_jobs=counts_jobs,
         requirement_query=requirement_query,
+        unavailable=unavailable,
         filters=schemas.ChatFilters(**kwargs),
         understood=understood,
     )
@@ -269,6 +271,35 @@ class MeaningSearchTest(ChatTestCase):
         """찾을 말이 없으면 조건 조회가 정확하다. "서울만"에 벡터를 부르면 낭비다."""
         self.ask(turn(regions=["제주"], requirement_query="[주요업무] 무엇이든"))
         self.assertEqual({}, self.found)
+
+
+class UnavailableTest(ChatTestCase):
+    """모으지 않는 것으로 찾아 달라고 하면 없다고 말한다.
+
+    실측: 오늘 받은 공고 696건 중 631건(90%)이 급여를 "면접 후 결정"으로 적었다.
+    숫자가 있는 65건도 대부분 최저임금 안내다. 급여로 정렬하면 정작 많이 주는 곳이
+    빠지고 순서가 거꾸로 나온다.
+    """
+
+    def test_pay_is_not_something_we_can_sort_by(self):
+        response = self.ask(turn(unavailable="급여"), message="급여 제일 높은공고")
+        self.assertEqual("안내", response.mode)
+        self.assertEqual([], response.jobs)
+        self.assertIn("면접 후 결정", response.reply, "왜 못 하는지 밝힌다")
+        self.assertNotIn(
+            "조건을 하나 빼거나", response.reply, "빼면 찾을 수 있다는 뜻이 되면 안 된다"
+        )
+        self.assertTrue(response.suggestions, "할 수 있는 것을 권한다")
+
+    def test_it_does_not_search_with_a_condition_we_cannot_meet(self):
+        """조건으로 넣으면 0건이 나오고 "지역을 넓혀 보라"는 엉뚱한 안내가 나간다."""
+        self.ask(turn(unavailable="급여", keywords=["급여 높은"]))
+        self.assertEqual({}, self.found, "인덱스도 부르지 않는다")
+
+    def test_chance_of_passing_is_unknowable(self):
+        response = self.ask(turn(unavailable="합격 가능성"), message="붙을 만한 데 있어?")
+        self.assertEqual("안내", response.mode)
+        self.assertIn("알 수 없어요", response.reply)
 
 
 class RecommendHandoffTest(ChatTestCase):

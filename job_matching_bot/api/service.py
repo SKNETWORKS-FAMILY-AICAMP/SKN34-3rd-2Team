@@ -438,6 +438,9 @@ class ChatService:
             }
         )
 
+        if turn.unavailable:
+            return self._unavailable(turn.unavailable, previous)
+
         if turn.intent == "잡담":
             return schemas.JobChatResponse(
                 mode="안내",
@@ -505,6 +508,21 @@ class ChatService:
             jobs=[_to_chat_job(hit) for hit in result.jobs],
             total=result.total,
             suggestions=_suggestions(filters, result),
+        )
+
+    @staticmethod
+    def _unavailable(kind: str, previous) -> schemas.JobChatResponse:
+        """모으지 않는 것으로 찾아 달라고 했다. 없다고 말하고 할 수 있는 것을 권한다.
+
+        "조건을 빼 보라"고 하면 안 된다. 빼면 찾을 수 있다는 뜻인데 그렇지 않다.
+        왜 없는지도 밝힌다. 그래야 사용자가 다른 데서 찾아본다.
+        """
+        return schemas.JobChatResponse(
+            mode="안내",
+            reply=_UNAVAILABLE[kind],
+            filters=previous,
+            total=0,
+            suggestions=_UNAVAILABLE_NEXT[kind],
         )
 
     @staticmethod
@@ -640,6 +658,36 @@ class ChatService:
         shown = len(result.jobs)
         tail = f" 관련도 순으로 {shown}건 보여드릴게요." if result.total > shown else ""
         return f"{head}" + "\n" + f"{condition} · {counted}.{tail}"
+
+
+# 모으지 않는 것들. 왜 못 하는지까지 말한다. 실측에 근거한 숫자를 그대로 쓴다.
+_UNAVAILABLE = {
+    "급여": (
+        "급여로는 줄을 세울 수 없어요. 공고 10건 중 9건이 급여를 \u201c면접 후 결정\u201d으로 "
+        "적어 두거든요. 남은 1건도 대부분 최저임금 안내라, 급여로 정렬하면 정작 많이 주는 "
+        "곳이 빠지고 순서가 거꾸로 나옵니다.\n"
+        "대신 직무·지역·경력으로 좁혀 드릴 수 있어요. 급여는 공고를 열어 확인하시는 게 정확합니다."
+    ),
+    "복지": (
+        "복지로 줄을 세우지는 못해요. 공고마다 적는 방식이 달라 비교할 수 있는 값이 아니거든요.\n"
+        "찾으시는 조건(재택, 유연근무 같은)을 말씀해 주시면 그 말이 적힌 공고를 찾아 드릴게요."
+    ),
+    "합격 가능성": (
+        "합격 가능성이나 경쟁률은 알 수 없어요. 지원자 수는 공개되지 않습니다.\n"
+        "대신 이력서를 읽고 어느 공고가 요건에 가까운지는 골라 드릴 수 있어요."
+    ),
+    "회사 평판": (
+        "회사 분위기나 평판은 저희가 가지고 있지 않아요. 채용공고에 적힌 것만 봅니다.\n"
+        "직무·지역·경력으로 찾아 드리고, 고른 공고에 무엇이 적혀 있는지는 자세히 알려 드릴게요."
+    ),
+}
+
+_UNAVAILABLE_NEXT = {
+    "급여": ["서울 신입 공고 보여줘", "대기업 공고만"],
+    "복지": ["재택 되는 공고", "정규직만"],
+    "합격 가능성": ["내 이력서로 추천해줘", "신입도 되는 공고"],
+    "회사 평판": ["대기업 공고만", "서울 공고 보여줘"],
+}
 
 
 def _to_chat_job(hit) -> schemas.JobChatJob:
