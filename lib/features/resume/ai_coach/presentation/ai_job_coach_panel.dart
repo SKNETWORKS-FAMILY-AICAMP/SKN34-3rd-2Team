@@ -7,6 +7,10 @@ import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
+import '../../../../shared/providers/firebase_providers.dart';
+import '../../../../shared/providers/cohort_providers.dart';
+import '../data/resume_review_api_client.dart';
+import 'job_resume_review_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
@@ -24,12 +28,16 @@ class AiJobCoachPanel extends ConsumerStatefulWidget {
     required this.draftContent,
     required this.isSidebar,
     required this.onClose,
+    this.hasUnsavedChanges = false,
+    this.onResumeChanged,
   });
 
   final String resumeId;
   final ResumeContent draftContent;
   final bool isSidebar;
   final VoidCallback onClose;
+  final bool hasUnsavedChanges;
+  final ValueChanged<ResumeContent>? onResumeChanged;
 
   @override
   ConsumerState<AiJobCoachPanel> createState() => _AiJobCoachPanelState();
@@ -46,6 +54,37 @@ class _ChatMessage {
 }
 
 class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
+  Future<void> _reviewJob(JobRecommendation job) async {
+    if (widget.hasUnsavedChanges) {
+      setState(() => _error = '이력서를 먼저 저장한 뒤 다시 추천하고 첨삭해 주세요.');
+      return;
+    }
+    final cohort = ref.read(effectiveCohortIdProvider);
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (cohort == null || user == null) {
+      setState(() => _error = '첨삭에는 실제 Firebase 로그인이 필요합니다.');
+      return;
+    }
+    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    try {
+      await showDialog<void>(context: context, barrierDismissible: false,
+        builder: (_) => JobResumeReviewDialog(client: client, cohortId: cohort,
+          resumeId: widget.resumeId, jobId: job.jobId, draft: widget.draftContent,
+          onChanged: (content) {
+            widget.onResumeChanged?.call(content);
+            if (mounted) setState(() { _result = null; _resumeAnalysis = null; });
+          }));
+    } finally { client.close(); }
+  }
+
+  @override
+  void didUpdateWidget(covariant AiJobCoachPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!sameResumeContent(widget.draftContent, oldWidget.draftContent.toMap())) {
+      _result = null;
+      _resumeAnalysis = null;
+    }
+  }
   final TextEditingController _chatController = TextEditingController();
   final List<_ChatMessage> _messages = [
     const _ChatMessage.bot(
@@ -135,6 +174,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
 
   Future<void> _run() async {
     if (!_guard(AiCoachFeature.jobRecommendation)) return;
+    final requestedContent = widget.draftContent;
     setState(() {
       _resumeAnalysis = null;
       _loading = true;
@@ -144,10 +184,19 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       final result = await ref
           .read(aiJobCoachRepositoryProvider)
           .analyzeAndMatch(
-            draftContent: widget.draftContent,
+            draftContent: requestedContent,
             preferences: _preferences,
           );
-      if (mounted) setState(() => _result = result);
+      if (mounted) {
+        setState(() {
+          if (sameResumeContent(widget.draftContent, requestedContent.toMap())) {
+            _result = result;
+          } else {
+            _result = null;
+            _error = '추천 중 이력서가 변경됐습니다. 저장 후 다시 추천해 주세요.';
+          }
+        });
+      }
     } on JobRecommendApiException catch (error) {
       // 서버가 없거나 실패하면 추천하지 않는다. 이유를 그대로 보여 준다.
       if (mounted) setState(() => _error = error.message);
@@ -262,7 +311,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                 if (_result case final result?) ...[
                   const SizedBox(height: 18),
                   // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
-                  _RecommendationSection(result: result),
+                  _RecommendationSection(result: result,
+                    onReview: widget.onResumeChanged == null ? null : _reviewJob),
                   const SizedBox(height: 20),
                 ],
               ],
@@ -427,9 +477,10 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _RecommendationSection extends StatelessWidget {
-  const _RecommendationSection({required this.result});
+  const _RecommendationSection({required this.result, this.onReview});
 
   final AiJobCoachResult result;
+  final ValueChanged<JobRecommendation>? onReview;
 
   @override
   Widget build(BuildContext context) {
@@ -456,6 +507,7 @@ class _RecommendationSection extends StatelessWidget {
               child: _RecommendationCard(
                 index: index + 1,
                 item: result.recommendations[index],
+                onReview: onReview,
               ),
             ),
         ],
@@ -465,10 +517,11 @@ class _RecommendationSection extends StatelessWidget {
 }
 
 class _RecommendationCard extends StatefulWidget {
-  const _RecommendationCard({required this.index, required this.item});
+  const _RecommendationCard({required this.index, required this.item, this.onReview});
 
   final int index;
   final JobRecommendation item;
+  final ValueChanged<JobRecommendation>? onReview;
 
   @override
   State<_RecommendationCard> createState() => _RecommendationCardState();
@@ -626,6 +679,9 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                         color: AppColors.textHint,
                       ),
                     ),
+                  if (item.isFromServer && widget.onReview != null)
+                    TextButton(onPressed: () => widget.onReview!(item),
+                      child: const Text('공고 맞춤 첨삭')),
                 ],
               ),
             ],
