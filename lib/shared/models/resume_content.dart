@@ -28,6 +28,14 @@ class ResumeContent {
 
   factory ResumeContent.empty() => const ResumeContent();
 
+  /// 맞춤 공고 점수를 계산할 수 있는 직무 관련 근거가 있는지 여부.
+  /// 기본정보만 입력된 상태는 매칭 가능한 이력서로 보지 않는다.
+  bool get hasMatchingEvidence =>
+      coreCompetencies.isFilled ||
+      experience.any((item) => item.isFilled) ||
+      techStack.any((item) => item.isFilled) ||
+      projects.any((item) => item.isFilled);
+
   factory ResumeContent.fromMap(Map<String, dynamic>? map) {
     if (map == null || map.isEmpty) return ResumeContent.empty();
     return ResumeContent(

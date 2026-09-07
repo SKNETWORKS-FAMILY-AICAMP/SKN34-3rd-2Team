@@ -1,0 +1,68 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../shared/models/job_preferences.dart';
+import '../../../../shared/models/resume_content.dart';
+import '../models/ai_job_coach_result.dart';
+import '../models/resume_readiness.dart';
+import 'job_recommend_api_client.dart';
+
+/// 맞춤 공고 추천.
+///
+/// 추천 서버(`job_matching_bot` API)에 이력서 평문과 희망 조건을 보내면 벡터 검색 →
+/// 하드 필터 → LLM 재정렬 → 근거 검증을 거친 공고를 근거 인용과 함께 돌려준다.
+/// 서버가 없으면 추천하지 않는다. 앱 안에서 태그만 보고 추측하던 규칙 기반 추천은
+/// 근거가 약해 없앴다. 실패 이유는 예외 메시지로 화면에 그대로 보인다.
+class AiJobCoachRepository {
+  AiJobCoachRepository({required this._apiClient});
+
+  final JobRecommendApiClient? _apiClient;
+
+  Future<AiJobCoachResult> analyzeAndMatch({
+    required ResumeContent draftContent,
+    JobPreferences preferences = const JobPreferences(),
+  }) async {
+    // 필수 항목이 비면 서버에 보내기 전에 막는다. 이유는 화면이 그대로 보여 준다.
+    final readiness = ResumeReadiness.of(draftContent);
+    if (!readiness.canRecommendJobs) {
+      throw StateError(
+        readiness.blockedReason(AiCoachFeature.jobRecommendation)!,
+      );
+    }
+
+    final api = _apiClient;
+    if (api == null) {
+      throw const JobRecommendApiException(
+        '추천 서버 주소가 비어 있습니다. --dart-define=JOB_RECOMMEND_API_URL=... 로 지정하세요.',
+      );
+    }
+
+    final response = await api.recommend(
+      JobRecommendRequest.fromResume(draftContent, preferences: preferences),
+    );
+    return AiJobCoachResult(
+      testMode: false,
+      notice: response.reranked
+          ? response.notice
+          : '${response.notice} · LLM 재정렬 없이 검색 순서대로 표시했습니다.',
+      recommendations: response.recommendations,
+      selectedJob: null,
+      skillJudgements: const [],
+      resumeFeedback: const [],
+      learningRecommendations: const [],
+      analysisId: '',
+      fromServer: true,
+      searchQuery: response.searchQuery,
+      profileSummary: response.profileSummary,
+      warnings: response.warnings,
+    );
+  }
+}
+
+/// 추천 서버 클라이언트. 주소가 비어 있으면 null이고 추천 버튼은 안내 오류를 낸다.
+final jobRecommendApiClientProvider = Provider<JobRecommendApiClient?>((ref) {
+  return JobRecommendApiConfig.isConfigured ? JobRecommendApiClient() : null;
+});
+
+final aiJobCoachRepositoryProvider = Provider<AiJobCoachRepository>((ref) {
+  return AiJobCoachRepository(apiClient: ref.watch(jobRecommendApiClientProvider));
+});

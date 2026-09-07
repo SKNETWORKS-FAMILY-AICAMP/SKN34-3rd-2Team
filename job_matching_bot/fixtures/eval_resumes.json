@@ -1,0 +1,74 @@
+{
+  "personas": {
+    "AI/데이터 수료생": {
+      "resume_text": "[교육]\n- SK네트웍스 Family AI 캠프 (2025.09 ~ 2026.03)\n  Python, 머신러닝, 딥러닝, LLM 파인튜닝, RAG 파이프라인을 학습했습니다.\n[프로젝트 경험]\n- 채용공고 추천 RAG 서비스 (2026.01 ~ 2026.03)\n  역할: AI 엔지니어\n  기술: Python, LangChain, OpenAI API, Pinecone, FastAPI\n  공고 본문을 임베딩해 벡터 DB에 적재하고, 검색된 후보를 LLM으로 재정렬하는 파이프라인을 만들었습니다.\n  인용 검증 단계를 붙여 근거 없는 답변을 걸러냈습니다.\n- 이미지 분류 모델 개발 (2025.11 ~ 2025.12)\n  기술: PyTorch, scikit-learn\n  ResNet을 전이학습해 분류 정확도를 89%까지 올렸습니다.\n[자기소개서]\n(지원동기) LLM을 실제 서비스에 붙이는 일을 하고 싶습니다.",
+      "preferred_regions": [
+        "서울",
+        "경기"
+      ],
+      "preferred_employment_types": [
+        "정규직"
+      ],
+      "education_level": "대졸",
+      "career_years": 0
+    },
+    "백엔드 수료생": {
+      "resume_text": "[프로젝트 경험]\n- 커머스 주문 API 개발 (2026.01 ~ 2026.03)\n  역할: 백엔드 개발\n  기술: Java, Spring Boot, JPA, MySQL, Docker\n  주문·결제 REST API를 설계하고 구현했습니다. JPA 쿼리를 튜닝해 조회 응답 시간을 줄였습니다.\n  Docker로 로컬 개발 환경을 구성하고 GitHub Actions로 빌드를 자동화했습니다.\n- LMS 출결 관리 서비스 (2025.10 ~ 2025.12)\n  기술: Spring Boot, MySQL, Redis\n  출결 데이터를 집계하는 배치를 만들고 Redis로 조회를 캐싱했습니다.\n[자기소개서]\n(지원동기) 트래픽을 견디는 서버를 만드는 일에 관심이 있습니다.",
+      "preferred_regions": [
+        "서울",
+        "경기"
+      ],
+      "preferred_employment_types": [
+        "정규직"
+      ],
+      "education_level": "대졸",
+      "career_years": 0
+    },
+    "프론트엔드 수료생": {
+      "resume_text": "[프로젝트 경험]\n- 커머스 웹 프론트엔드 (2026.01 ~ 2026.03)\n  역할: 프론트엔드 개발\n  기술: React, TypeScript, Next.js, Tailwind CSS\n  상품 목록과 장바구니 화면을 구현했습니다. React Query로 서버 상태를 관리하고 렌더링 최적화로 초기 로딩을 줄였습니다.\n- 대시보드 UI 개발 (2025.11 ~ 2025.12)\n  기술: React, Recharts, Zustand\n  실시간 지표를 차트로 그리는 대시보드를 만들었습니다.\n[자기소개서]\n(지원동기) 사용자가 빠르다고 느끼는 화면을 만들고 싶습니다.",
+      "preferred_regions": [
+        "서울"
+      ],
+      "preferred_employment_types": [
+        "정규직"
+      ],
+      "education_level": "대졸",
+      "career_years": 0
+    },
+    "데이터 엔지니어 수료생": {
+      "resume_text": "[프로젝트 경험]\n- 로그 수집 파이프라인 구축 (2026.01 ~ 2026.03)\n  역할: 데이터 엔지니어\n  기술: Python, Apache Airflow, Kafka, PostgreSQL, AWS S3\n  Kafka로 이벤트 로그를 수집하고 Airflow DAG으로 일별 적재를 자동화했습니다.\n  SQL 쿼리를 튜닝해 집계 배치 시간을 절반으로 줄였습니다.\n- 공공데이터 ETL (2025.11 ~ 2025.12)\n  기술: Python, pandas, MySQL\n  공공 API를 수집해 정제한 뒤 적재하는 ETL을 만들었습니다.\n[자기소개서]\n(지원동기) 데이터가 새지 않게 흐르는 구조를 만들고 싶습니다.",
+      "preferred_regions": [
+        "서울",
+        "경기"
+      ],
+      "preferred_employment_types": [
+        "정규직"
+      ],
+      "education_level": "대졸",
+      "career_years": 0
+    },
+    "백엔드 경력 3년": {
+      "resume_text": "[경력사항]\n- (주)테크커머스 백엔드 개발자 (2023.03 ~ 2026.02)\n  Java, Spring Boot 기반 주문 시스템을 개발하고 운영했습니다.\n  MSA로 전환하면서 Kafka 기반 이벤트 처리를 도입했습니다.\n  AWS EKS에 배포하고 Datadog으로 모니터링 체계를 구축했습니다.\n  일 300만 건 트래픽을 처리하는 API의 응답 지연을 개선했습니다.\n[자기소개서]\n(지원동기) 대규모 트래픽 설계 경험을 더 쌓고 싶습니다.",
+      "preferred_regions": [
+        "서울"
+      ],
+      "preferred_employment_types": [
+        "정규직"
+      ],
+      "education_level": "대졸",
+      "career_years": 3
+    },
+    "앱 개발 수료생": {
+      "resume_text": "[프로젝트 경험]\n- 부트캠프 LMS 모바일 앱 (2026.01 ~ 2026.03)\n  역할: 앱 개발\n  기술: Flutter, Dart, Firebase, Riverpod\n  출결과 과제 화면을 구현하고 Firebase Auth로 로그인을 붙였습니다.\n  Riverpod으로 상태를 관리하고 Firestore와 실시간 동기화했습니다.\n- 러닝 기록 앱 (2025.11 ~ 2025.12)\n  기술: Flutter, SQLite\n  GPS 경로를 기록하고 로컬 DB에 저장하는 앱을 만들었습니다.\n[자기소개서]\n(지원동기) 손에 잡히는 앱을 만드는 일이 좋습니다.",
+      "preferred_regions": [
+        "서울",
+        "경기"
+      ],
+      "preferred_employment_types": [
+        "정규직"
+      ],
+      "education_level": "대졸",
+      "career_years": 0
+    }
+  }
+}

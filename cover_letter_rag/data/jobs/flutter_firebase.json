@@ -1,0 +1,41 @@
+{
+  "jobs": {
+    "count": 1,
+    "start": 0,
+    "total": "1",
+    "job": [
+      {
+        "url": "https://example.invalid/saramin/jobs/90000003",
+        "active": 1,
+        "company": {
+          "detail": {
+            "href": "https://example.invalid/saramin/companies/learning-wave",
+            "name": "러닝웨이브"
+          }
+        },
+        "position": {
+          "title": "Flutter LMS 개발자",
+          "industry": {"code": "305", "name": "포털·인터넷·컨텐츠"},
+          "location": {"code": "101000", "name": "서울 > 서울전체"},
+          "job-type": {"code": "2", "name": "계약직"},
+          "job-mid-code": {"code": "2", "name": "IT개발·데이터"},
+          "job-code": {"code": "86,220,222", "name": "앱개발,Flutter,Git"},
+          "experience-level": {"code": 1, "min": 0, "max": 0, "name": "신입"},
+          "required-education-level": {"code": "0", "name": "학력무관"}
+        },
+        "keyword": "Flutter,Dart,Firebase,Firestore,LMS,Git",
+        "salary": {"code": "0", "name": "회사내규에 따름"},
+        "id": "90000003",
+        "posting-timestamp": "1788217200",
+        "posting-date": "2026-09-01T09:00:00+0900",
+        "modification-timestamp": "1788217200",
+        "opening-timestamp": "1788217200",
+        "expiration-timestamp": "1798661999",
+        "expiration-date": "2026-12-31T23:59:59+0900",
+        "close-type": {"code": "1", "name": "접수마감일"},
+        "read-cnt": "0",
+        "apply-cnt": "0"
+      }
+    ]
+  }
+}

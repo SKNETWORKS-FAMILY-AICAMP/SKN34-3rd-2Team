@@ -1,0 +1,631 @@
+[
+  {
+    "job_id": "49902837",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902837?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "㈜제니엘",
+      "title": "[광주광역시남구장애인복지관](사회복지사)육아휴직대체 채용 공고",
+      "conditions": [
+        "경력1년↑",
+        "학력무관",
+        "전남광주 남구",
+        "계약직",
+        "팀원"
+      ],
+      "keywords": "사회복지, 장애인복지",
+      "posted_at": "21 분 전 등록",
+      "deadline": "~09/16 (수)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902837?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "[광주광역시남구장애인복지관](사회복지사)육아휴직대체 채용 공고",
+        "description": "㈜제니엘에서 계약직 경력 채용을 진행합니다. 근무지는 전남광주 남구 월산로 33 (월산동, 남구장애인복지관)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-09-16T18:00",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력",
+        "educationRequirements": "학력무관",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "㈜제니엘"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "전남광주 남구 월산로 33 (월산동, 남구장애인복지관) "
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49902837"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902837"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중견기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "※ 본 채용공고는\n`휴직 대체인력` 채용 건\n으로 고용노동부 인재채움뱅크 지원사업으로 제작되었으며,\n합격 후\n채용시,\n`광주광역시남구장애인복지관\n소속`\n으로 근무하게 됩니다.\n고용노동부 인재채움뱅크 운영기관 (주)제니엘"
+      }
+    ]
+  },
+  {
+    "job_id": "49902818",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902818?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "커리어넷",
+      "title": "[국립중앙의료원] 2026-337호 전산행정 휴직대체(공공의료정보운영팀) 채용",
+      "conditions": [
+        "경력무관",
+        "학력무관",
+        "서울 중구",
+        "계약직"
+      ],
+      "keywords": "시스템운영, 취업포털, 정보보안",
+      "posted_at": "22 분 전 등록",
+      "deadline": "~09/16 (수)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902818?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "[국립중앙의료원] 2026-337호 전산행정 휴직대체(공공의료정보운영팀) 채용",
+        "description": "커리어넷에서 계약직 경력무관 채용을 진행합니다. 근무지는 서울 중구 을지로 245 (을지로6가, 국립중앙의료원)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-09-16T23:50",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력무관",
+        "educationRequirements": "학력무관",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "커리어넷"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 중구 을지로 245 (을지로6가, 국립중앙의료원) 국립중앙의료원"
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49902818"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902818"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중소기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "※ 본 채용공고는 `휴직 대체인력` 채용 건으로\n고용노동부 인재채움뱅크 지원사업으로 제작\n되었으며,\n합격 후 채용시,\n국립중앙의료원 소속\n으로 근무하게 됩니다.\n※ 첨부파일에 안내사항 일체를 숙지하고 지원하여 주시기 바랍니다."
+      }
+    ]
+  },
+  {
+    "job_id": "49902406",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902406?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "커리어넷",
+      "title": "[국립중앙의료원] 제2026-340호 계약직 연구원(치매정책지획팀)-채용 공고",
+      "conditions": [
+        "경력무관",
+        "학력무관",
+        "서울 중구",
+        "계약직"
+      ],
+      "keywords": "취업포털, 연구기획",
+      "posted_at": "54 분 전 등록",
+      "deadline": "~09/16 (수)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902406?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "[국립중앙의료원] 제2026-340호 계약직 연구원(치매정책지획팀)-채용 공고",
+        "description": "커리어넷에서 계약직 경력무관 채용을 진행합니다. 근무지는 서울 중구 을지로 245 (을지로6가, 국립중앙의료원)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-09-16T23:50",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력무관",
+        "educationRequirements": "학력무관",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "커리어넷"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 중구 을지로 245 (을지로6가, 국립중앙의료원) 국립중앙의료원"
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49902406"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902406"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중소기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "※ 본 채용공고는 `휴직 대체인력` 채용 건으로\n고용노동부 인재채움뱅크 지원사업으로 제작\n되었으며,\n합격 후 채용 시,\n국립중앙의료원 소속\n으로 근무하게 됩니다.\n※ 첨부파일에 안내사항 일체를 숙지하고 지원하여 주시기 바랍니다."
+      }
+    ]
+  },
+  {
+    "job_id": "49901892",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901892?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "㈜스카우트플랜",
+      "title": "바이오/헬스케어 분야 헤드헌터 초빙 (신입/경력)",
+      "conditions": [
+        "경력무관",
+        "대졸↑",
+        "서울 강남구",
+        "프리랜서"
+      ],
+      "keywords": "거래처관리, 서치펌, 헤드헌팅, 장비영업, 제약영업, 건강식품연구, 의료기기연구, 가맹점관리, 거래선개발관리, 가맹영업, 납품영업, 생명공학, 제약·바이오R&D",
+      "posted_at": "55 분 전 등록",
+      "deadline": "~10/31 (토)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901892?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "바이오/헬스케어 분야 헤드헌터 초빙 (신입/경력)",
+        "description": "㈜스카우트플랜에서  경력무관 채용을 진행합니다. 근무지는 서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-10-31T23:59",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력무관",
+        "educationRequirements": "대졸 이상",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "㈜스카우트플랜"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩) ."
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49901892"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901892"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중소기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "㈜스카우트플랜\n바이오/헬스케어 분야 헤드헌터\n스카우트플랜과 함께 성장할 예비 헤드헌터를 기다립니다.\n[ 주요업무]\n° 고객사 발굴 및 r관계관리\n°\n인재 추천 프로세스\n[지원 자격]\n°\n4년대졸 이상\n°\n헤드헌터 경력 무관\n°\n해당 산업분야의\n기업에서 총경력 5년 이상\n°\n고객지향적 비즈니스 마인드\n°\n스스로 목표를 세우고 실행할 수 있는 분\n°\n일에 대한 프로의식\n°\n커뮤니케이션 능력 우수\n[근무조건 및 급여]\n°\n근무 형태: 프리랜서\n°\n근무 시간: 자율 근무제\n°\n급여 제도: 인센티브제 (성과급)\n[전형절차 및 지원방법]\n°\n전형절차 :\n서류 전형 -- > 면접 전형 (대면)--> 최종 합격\n°\n지원방법 :\n잡코리아온라인 지원 또는 직접지원 (apply@scoutplan.co.kr)\n°\n기타사항 : 서류전형 합격자에 한해 개별 연락드립니다."
+      }
+    ]
+  },
+  {
+    "job_id": "49901919",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901919?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "㈜스카우트플랜",
+      "title": "전기/전자/반도체 분야 헤드헌터 초빙 (신입/경력)",
+      "conditions": [
+        "경력무관",
+        "대졸↑",
+        "서울 강남구",
+        "프리랜서"
+      ],
+      "keywords": "PCB, 서치펌, 헤드헌팅, 회로설계, 정보통신, 디스플레이, PCB, 펌웨어, 제어·설계",
+      "posted_at": "55 분 전 등록",
+      "deadline": "~10/31 (토)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901919?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "전기/전자/반도체 분야 헤드헌터 초빙 (신입/경력)",
+        "description": "㈜스카우트플랜에서  경력무관 채용을 진행합니다. 근무지는 서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-10-31T23:59",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력무관",
+        "educationRequirements": "대졸 이상",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "㈜스카우트플랜"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩) "
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49901919"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901919"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중소기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "㈜스카우트플랜\n전기/전자/반도체 분야 헤드헌터\n(신입/경력)\n스카우트플랜과 함께 성장할 예비 헤드헌터를 기다립니다.\n[ 주요업무]\n° 고객사 발굴 및 관계관리\n°\n인재 추천 프로세스\n[지원 자격]\n°\n4년대졸 이상\n°\n헤드헌터 경력 무관\n°\n해당 산업분야의\n기업에서 총경력 5년 이상\n°\n고객지향적 비즈니스 마인드\n°\n스스로 목표를 세우고 실행할 수 있는 분\n°\n일에 대한 프로의식\n°\n커뮤니케이션 능력 우수\n[근무조건 및 급여]\n°\n근무 형태: 프리랜서\n°\n근무 시간: 자율 근무제\n°\n급여 제도: 인센티브제 (성과급)\n[전형절차 및 지원방법]\n°\n전형절차 :\n서류 전형 -- > 면접 전형 (대면)--> 최종 합격\n°\n지원방법 :\n잡코리아온라인 지원 또는 직접지원 (apply@scoutplan.co.kr)\n°\n기타사항 : 서류전형 합격자에 한해 개별 연락드립니다."
+      }
+    ]
+  },
+  {
+    "job_id": "49901941",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901941?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "㈜스카우트플랜",
+      "title": "IT분야 헤드헌터 초빙 (신입/경력)",
+      "conditions": [
+        "경력무관",
+        "대졸↑",
+        "서울 강남구",
+        "프리랜서"
+      ],
+      "keywords": "서치펌, 솔루션영업, 헤드헌팅, PL, 시스템영업, 제안·컨설팅, PM, 기술영업, 하드웨어영업, 네트워크영업, 서비스기획",
+      "posted_at": "55 분 전 등록",
+      "deadline": "~10/31 (토)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901941?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "IT분야 헤드헌터 초빙 (신입/경력)",
+        "description": "㈜스카우트플랜에서  경력무관 채용을 진행합니다. 근무지는 서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-10-31T23:59",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력무관",
+        "educationRequirements": "대졸 이상",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "㈜스카우트플랜"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩) "
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49901941"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901941"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중소기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "㈜스카우트플랜\nIT분야, 헤드헌터 모집\n(신입/경력)\n스카우트플랜과 함께 성장할 예비 헤드헌터를 기다립니다.\n[ 주요업무]\n° 고객사 발굴 및 관계관리\n°\n인재 추천 프로세스\n[지원 자격]\n°\n4년대졸 이상\n°\n헤드헌터 경력 무관\n°\n해당 산업분야의\n기업에서 총경력 5년 이상\n°\n고객지향적 비즈니스 마인드\n°\n스스로 목표를 세우고 실행할 수 있는 분\n°\n일에 대한 프로의식\n°\n커뮤니케이션 능력 우수\n[근무조건 및 급여]\n°\n근무 형태: 프리랜서\n°\n근무 시간: 자율 근무제\n°\n급여 제도: 인센티브제 (성과급)\n[전형절차 및 지원방법]\n°\n전형절차 :\n서류 전형 -- > 면접 전형 (대면)--> 최종 합격\n°\n지원방법 :\n잡코리아온라인 지원 또는 직접지원 (apply@scoutplan.co.kr)\n°\n기타사항 : 서류전형 합격자에 한해 개별 연락드립니다."
+      }
+    ]
+  },
+  {
+    "job_id": "49901979",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901979?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "㈜스카우트플랜",
+      "title": "인재 스카우터,  헤드헌터 초빙 (신입/경력)",
+      "conditions": [
+        "경력무관",
+        "대졸↑",
+        "서울 강남구",
+        "프리랜서"
+      ],
+      "keywords": "제약영업, 서치펌, 헤드헌팅, 전략기획, 시장조사, 의료기기영업, 장비영업, 제약영업, 장비영업, 거래처관리, 브랜드기획, 데이터분석, 식품영업, 국내영업, 시장분석",
+      "posted_at": "55 분 전 등록",
+      "deadline": "~10/31 (토)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901979?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "인재 스카우터,  헤드헌터 초빙 (신입/경력)",
+        "description": "㈜스카우트플랜에서  경력무관 채용을 진행합니다. 근무지는 서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-10-31T23:59",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력무관",
+        "educationRequirements": "대졸 이상",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "㈜스카우트플랜"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩) "
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49901979"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49901979"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중소기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "㈜스카우트플랜\n인재스카우터, 헤드헌터 (신입/경력)\n스카우트플랜에서 프로 헤드헌터로 성장할  인재를 기다립니다.\n[ 주요업무]\n° 고객사 발굴 및 관계관리\n°\n인재 추천 프로세스\n[지원 자격]\n°\n4년대졸 이상\n°\n헤드헌터 경력 무관\n°\n해당 산업분야의\n기업에서 총경력 5년 이상(신입에 해당)\n°\n고객지향적 비즈니스 마인드\n°\n스스로 목표를 세우고 실행할 수 있는 분\n°\n일에 대한 프로의식\n°\n커뮤니케이션 능력 우수\n[우대사항]\n°\n인사(HR)/ 리쿠르팅 경험자\n° B2B / B2C 영업 경험자\n[근무조건 및 급여]\n°\n근무 형태: 프리랜서\n°\n근무 시간: 유연 근무제\n°\n급여 제도: 인센티브제 (성과급)\n[전형절차 및 지원방법]\n°\n전형절차 :\n서류 전형 -- > 면접 전형 (대면)--> 최종 합격\n°\n지원방법 :\n잡코리아온라인 지원 또는 직접지원 (apply@scoutplan.co.kr)\n°\n기타사항 : 서류전형 합격자에 한해 개별 연락드립니다."
+      }
+    ]
+  },
+  {
+    "job_id": "49902009",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902009?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "㈜스카우트플랜",
+      "title": "역량있는 헤드헌터 초빙 (신입/경력)",
+      "conditions": [
+        "경력무관",
+        "대졸↑",
+        "서울 강남구",
+        "프리랜서"
+      ],
+      "keywords": "서치펌, 헤드헌팅, 스카우트, 신사업기획, 인재관리, 사업기획, 인재컨설팅, 조직문화, 면접·채용, 평가·보상, 전략기획, 재무기획, 경영기획, 교육기획, 인재발굴",
+      "posted_at": "55 분 전 등록",
+      "deadline": "~10/31 (토)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902009?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "역량있는 헤드헌터 초빙 (신입/경력)",
+        "description": "㈜스카우트플랜에서  경력무관 채용을 진행합니다. 근무지는 서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-10-31T23:59",
+        "employmentType": "CONTRACTOR",
+        "experienceRequirements": "경력무관",
+        "educationRequirements": "대졸 이상",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "㈜스카우트플랜"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 강남구 테헤란로 311 (역삼동, 아남타워빌딩) "
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49902009"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902009"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "중소기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "㈜스카우트플랜\n역량을 있는 헤드헌터 초빙\n(신입/경력)\n스카우트플랜과 함께 성장할 인재를 기다립니다.\n[ 주요업무]\n° 고객사 발굴 및 네트워크 구축\n°\n인재 추천 프로세스\n[지원 자격]\n°\n4년대졸 이상\n°\n헤드헌터 경력 무관\n°\n해당 산업분야의\n기업에서 총경력 5년 이상\n°\n고객지향적 비즈니스 마인드\n°\n스스로 목표를 세우고 실행할 수 있는 분\n°\n일에 대한 프로의식\n°\n커뮤니케이션 능력 우수\n[우대사항]\n°\n인사(HR)/ 리쿠르팅 경험자\n° B2B / B2C 영업 경험자\n[근무조건 및 급여]\n°\n근무 형태: 프리랜서\n°\n근무 시간: 자율 근무제\n°\n급여 제도: 인센티브제 (성과급)\n[전형절차 및 지원방법]\n°\n전형절차 :\n서류 전형 -- > 면접 전형 (대면)--> 최종 합격\n°\n지원방법 :\n잡코리아온라인 지원 또는 직접지원 (apply@scoutplan.co.kr)\n°\n기타사항 : 서류전형 합격자에 한해 개별 연락드립니다."
+      }
+    ]
+  },
+  {
+    "job_id": "49902323",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902323?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "현대글로비스㈜",
+      "title": "2026년 하반기 신입채용 - Applied AI Engineering",
+      "conditions": [
+        "신입",
+        "대졸↑",
+        "서울 성동구"
+      ],
+      "keywords": "포워딩, 공급관리, 물류영업, 항공무역, 부품공급, 해상무역, 물류센터, 자동차선영업, 통상지원, 매출관리, 소방·방재, 사업관리, 정보보안, 패키징개발, 자동차선운항, 원가관리",
+      "posted_at": "56 분 전 등록",
+      "deadline": "~09/13 (일)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902323?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "2026년 하반기 신입채용 - Applied AI Engineering",
+        "description": "현대글로비스㈜\t에서  신입 채용을 진행합니다. 근무지는 서울 성동구 왕십리로 83-21 (성수동1가, 아크로서울포레스트)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-09-13T00:00",
+        "employmentType": "FULL_TIME",
+        "experienceRequirements": "신입",
+        "educationRequirements": "대졸 이상",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "현대글로비스㈜\t"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 성동구 왕십리로 83-21 (성수동1가, 아크로서울포레스트) "
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49902323"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902323"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "대기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "현대글로비스㈜\n2026년 하반기 신입채용\n- Applied AI Engineering\n모집부문\nIT\n직무명\nㆍ\nApplied AI Engineering\n근무지\nㆍ본사\n※ 직무별 상세 내용 : 당사 채용 홈페이지에 첨부된 [직무소개서] 참고\n모집대상\nㆍ학/석사 학위를 기 취득하였거나 '27년 2월 이내 졸업 예정이신 분\nㆍ\n해외여행에 결격 사유가 없는 분(남성의 경우 병역필 또는 면제자)\nㆍ공인영어성적\n(TOEIC/TOEIC Speaking/\nOPIc 등) 보유자\n※ 영미권 대학 졸업자는 공인영어성적 불필\n기타사항\nㆍ접수기간 :\n2026년 09월 01(화) ~ 2026년 09월 13(일) 00:00\nㆍ접수방법 :\n당사 채용 홈페이지 입사지원\nㆍ자세한 상세요강은 반드시 채용 홈페이지에서 직접 확인해 주시기 바랍니다.\n기업 채용 홈페이지 바로가기 click"
+      }
+    ]
+  },
+  {
+    "job_id": "49902097",
+    "source_url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902097?rPageCode=AM&logpath=2&sc=413",
+    "list_item": {
+      "company": "현대글로비스㈜",
+      "title": "2026년 하반기 신입채용 - 구매",
+      "conditions": [
+        "신입",
+        "대졸↑",
+        "서울 성동구"
+      ],
+      "keywords": "포워딩, 공급관리, 물류영업, 항공무역, 부품공급, 해상무역, 물류센터, 자동차선영업, 통상지원, 매출관리, 소방·방재, 사업관리, 정보보안, 패키징개발, 자동차선운항, 원가관리",
+      "posted_at": "56 분 전 등록",
+      "deadline": "~09/13 (일)",
+      "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902097?rPageCode=AM&logpath=2&sc=413"
+    },
+    "json_ld": [
+      {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "2026년 하반기 신입채용 - 구매",
+        "description": "현대글로비스㈜\t에서  신입 채용을 진행합니다. 근무지는 서울 성동구 왕십리로 83-21 (성수동1가, 아크로서울포레스트)이며, 자세한 조건은 공고를 통해 확인할 수 있습니다.",
+        "datePosted": "2026-09-01",
+        "validThrough": "2026-09-13T00:00",
+        "employmentType": "FULL_TIME",
+        "experienceRequirements": "신입",
+        "educationRequirements": "대졸 이상",
+        "directApply": true,
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": "현대글로비스㈜\t"
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "서울 성동구 왕십리로 83-21 (성수동1가, 아크로서울포레스트) "
+          }
+        },
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": "JobKorea",
+          "value": "49902097"
+        },
+        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/49902097"
+      }
+    ],
+    "query_data": {
+      "CORP_INFO": {
+        "info": {
+          "companyTypeName": "대기업"
+        }
+      }
+    },
+    "description_blocks": [
+      {
+        "description_type": "DESCRIPTION",
+        "status": 200,
+        "text": "현대글로비스㈜\n2026년 하반기 신입채용 - 구매\n모집부문\n지원\n직무명\nㆍ구매\n근무지\nㆍ본사\n※ 직무별 상세 내용 : 당사 채용 홈페이지에 첨부된 [직무소개서] 참고\n모집대상\nㆍ학/석사 학위를 기 취득하였거나 '27년 2월 이내 졸업 예정이신 분\nㆍ\n해외여행에 결격 사유가 없는 분(남성의 경우 병역필 또는 면제자)\nㆍ공인영어성적\n(TOEIC/TOEIC Speaking/\nOPIc 등) 보유자\n※ 영미권 대학 졸업자는 공인영어성적 불필\n기타사항\nㆍ접수기간 :\n2026년 09월 01(화) ~ 2026년 09월 13(일) 00:00\nㆍ접수방법 :\n당사 채용 홈페이지 입사지원\nㆍ자세한 상세요강은 반드시 채용 홈페이지에서 직접 확인해 주시기 바랍니다.\n기업 채용 홈페이지 바로가기 click"
+      }
+    ]
+  }
+]

@@ -10,7 +10,9 @@
     "seed:users": "node seed-test-users.mjs",
     "seed:students": "node seed-students-bulk.mjs",
     "setup:production": "node setup-production.mjs",
-    "clear:sample": "node clear-sample-data.mjs"
+    "clear:sample": "node clear-sample-data.mjs",
+    "seed:resumes": "node seed-resume-mocks.mjs",
+    "clear:resumes": "node seed-resume-mocks.mjs --clear"
   },
   "dependencies": {
     "firebase": "^12.18.0",

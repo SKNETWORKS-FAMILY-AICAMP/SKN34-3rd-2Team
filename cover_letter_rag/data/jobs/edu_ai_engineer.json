@@ -1,0 +1,41 @@
+{
+  "jobs": {
+    "count": 1,
+    "start": 0,
+    "total": "1",
+    "job": [
+      {
+        "url": "https://example.invalid/saramin/jobs/90000002",
+        "active": 1,
+        "company": {
+          "detail": {
+            "href": "https://example.invalid/saramin/companies/edubridge",
+            "name": "에듀브릿지"
+          }
+        },
+        "position": {
+          "title": "교육 AI 서비스 엔지니어",
+          "industry": {"code": "305", "name": "포털·인터넷·컨텐츠"},
+          "location": {"code": "102190", "name": "경기 > 성남시 분당구"},
+          "job-type": {"code": "1", "name": "정규직"},
+          "job-mid-code": {"code": "2", "name": "IT개발·데이터"},
+          "job-code": {"code": "108,109,131,181,272", "name": "딥러닝,머신러닝,챗봇,AI(인공지능),Python"},
+          "experience-level": {"code": 1, "min": 0, "max": 0, "name": "신입"},
+          "required-education-level": {"code": "8", "name": "대학교졸업(4년)이상"}
+        },
+        "keyword": "Python,LLM,RAG,LangChain,Chroma,VectorDB",
+        "salary": {"code": "0", "name": "회사내규에 따름"},
+        "id": "90000002",
+        "posting-timestamp": "1788217200",
+        "posting-date": "2026-09-01T09:00:00+0900",
+        "modification-timestamp": "1788217200",
+        "opening-timestamp": "1788217200",
+        "expiration-timestamp": "1798661999",
+        "expiration-date": "2026-12-31T23:59:59+0900",
+        "close-type": {"code": "1", "name": "접수마감일"},
+        "read-cnt": "0",
+        "apply-cnt": "0"
+      }
+    ]
+  }
+}
