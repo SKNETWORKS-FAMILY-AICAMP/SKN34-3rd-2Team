@@ -53,15 +53,22 @@ class _ChatMessage {
   const _ChatMessage.user(this.text)
       : isUser = true,
         jobs = const [],
-        suggestions = const [];
+        suggestions = const [],
+        mode = '검색';
   const _ChatMessage.bot(
     this.text, {
     this.jobs = const [],
     this.suggestions = const [],
+    this.mode = '검색',
   }) : isUser = false;
 
   final String text;
   final bool isUser;
+
+  /// 서버가 어떤 갈래로 답했는지. 답이 목록인지 글인지가 달라진다.
+  final String mode;
+
+  /// 질문에 답한 경우 이 목록은 **답의 근거**다. 찾아 준 결과가 아니다.
   final List<JobChatJob> jobs;
 
   /// 다음에 좁힐 거리. 누르면 그대로 질문이 된다.
@@ -136,13 +143,24 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   final TextEditingController _chatController = TextEditingController();
   final List<_ChatMessage> _messages = [
     const _ChatMessage.bot(
-      '어떤 채용공고를 찾아드릴까요? "서울 백엔드 신입"처럼 말씀하시면 됩니다.',
-      suggestions: ['서울 백엔드 신입', '데이터 분석 신입', '마감 임박한 공고'],
+      '채용에 대해 물어보세요. 공고를 찾아드리고, 궁금한 것에도 답해드려요.\n'
+      '답은 지금 열려 있는 공고를 직접 세어 드립니다.',
+      suggestions: [
+        '서울 백엔드 신입',
+        '백엔드 신입은 뭘 준비해야 해?',
+        '요즘 많이 요구하는 기술이 뭐야?',
+      ],
     ),
   ];
 
   /// 직전 검색 조건. 서버가 대화를 저장하지 않으므로 앱이 들고 이어 보낸다.
   JobChatFilters? _chatFilters;
+
+  /// 공고 하나를 놓고 묻는 중이면 그 공고. 비어 있으면 평소 대화다.
+  ///
+  /// 이걸 들고 있는 동안의 말은 전부 이 공고에 대한 물음으로 간다. 그래야 "신입도
+  /// 돼?"처럼 짧은 말이 어느 공고 이야기인지 흐려지지 않는다.
+  JobChatJob? _askingAbout;
   bool _chatBusy = false;
   AiJobCoachResult? _result;
   ResumeAnalysis? _resumeAnalysis;
@@ -203,7 +221,25 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     });
   }
 
-  /// 말로 공고를 찾는다. 서버가 조건을 해석하고 저장소에서 찾아 준다.
+  /// 공고 하나를 놓고 묻기 시작한다. 그만둘 때까지 모든 말이 이 공고로 간다.
+  void _askAbout(JobChatJob job) {
+    setState(() {
+      _askingAbout = job;
+      _messages.add(
+        _ChatMessage.bot(
+          '"${job.title}" 공고에 대해 물어보세요. 공고에 적힌 것만 근거로 답해드려요.',
+          mode: '공고',
+          suggestions: const [
+            '자격요건이 뭐야?',
+            '신입도 지원할 수 있어?',
+            '어떤 일을 하는 자리야?',
+          ],
+        ),
+      );
+    });
+  }
+
+  /// 채용에 대해 묻고 답을 받는다. 서버가 조건 해석·검색·집계를 모두 한다.
   ///
   /// 앱에 박힌 공고 파일을 쓰지 않으므로 밤마다 모은 새 공고가 바로 나온다.
   Future<void> _sendChatMessage([String? preset]) async {
@@ -228,7 +264,11 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     }
 
     try {
-      final result = await client.chat(message: text, filters: _chatFilters);
+      final result = await client.chat(
+        message: text,
+        filters: _chatFilters,
+        jobId: _askingAbout?.jobId,
+      );
       if (!mounted) return;
       setState(() {
         _chatFilters = result.filters;
@@ -237,6 +277,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             result.reply,
             jobs: result.jobs,
             suggestions: result.suggestions,
+            mode: result.mode,
           ),
         );
       });
@@ -303,6 +344,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           if (_chatMode)
             Expanded(
               child: _ChatView(
+                askingAbout: _askingAbout,
+                onStopAsking: () => setState(() => _askingAbout = null),
+                onAskAbout: _askAbout,
                 messages: _messages,
                 controller: _chatController,
                 onSend: _sendChatMessage,
@@ -1446,6 +1490,9 @@ class _ChatView extends StatelessWidget {
     required this.onSend,
     required this.onSuggestion,
     required this.busy,
+    required this.askingAbout,
+    required this.onStopAsking,
+    required this.onAskAbout,
   });
 
   final List<_ChatMessage> messages;
@@ -1455,6 +1502,11 @@ class _ChatView extends StatelessWidget {
 
   /// 서버 응답을 기다리는 중. 그동안 같은 질문을 다시 보내지 못하게 한다.
   final bool busy;
+
+  /// 공고 하나를 놓고 묻는 중이면 그 공고. 무엇에 대해 묻는 중인지 늘 보여야 한다.
+  final JobChatJob? askingAbout;
+  final VoidCallback onStopAsking;
+  final ValueChanged<JobChatJob> onAskAbout;
 
   @override
   Widget build(BuildContext context) {
@@ -1466,6 +1518,7 @@ class _ChatView extends StatelessWidget {
             itemCount: messages.length,
             itemBuilder: (context, index) => _ChatBubble(
               message: messages[index],
+              onAskAbout: busy ? null : onAskAbout,
               // 제안은 마지막 답에서만 누를 수 있다. 지나간 답의 제안을 누르면 그때가
               // 아니라 지금 조건에 붙어 엉뚱한 결과가 나온다.
               onSuggestion:
@@ -1486,8 +1539,34 @@ class _ChatView extends StatelessWidget {
                 ),
                 SizedBox(width: 8),
                 Text(
-                  '공고를 찾는 중…',
+                  '답을 찾는 중…',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        // 무엇에 대해 묻는 중인지. 이게 없으면 짧은 말이 어디로 가는지 알 수 없다.
+        if (askingAbout case final job?)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+            color: AppColors.primaryLight.withValues(alpha: 0.4),
+            child: Row(
+              children: [
+                const Icon(Icons.help_outline, size: 14, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '"${job.title}"에 대해 묻는 중',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppColors.primary),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '그만 묻기',
+                  onPressed: onStopAsking,
+                  icon: const Icon(Icons.close, size: 14),
+                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
@@ -1503,11 +1582,13 @@ class _ChatView extends StatelessWidget {
                 child: TextField(
                   controller: controller,
                   style: const TextStyle(fontSize: 12),
-                  decoration: const InputDecoration(
-                    hintText: '예: 백엔드 신입 공고 찾아줘',
-                    hintStyle: TextStyle(fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: askingAbout == null
+                        ? '공고를 찾거나, 채용에 대해 물어보세요'
+                        : '이 공고에 대해 물어보세요',
+                    hintStyle: const TextStyle(fontSize: 12),
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
+                    contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 10,
                     ),
@@ -1517,7 +1598,7 @@ class _ChatView extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               IconButton(
-                tooltip: '검색',
+                tooltip: '보내기',
                 onPressed: busy ? null : onSend,
                 icon: const Icon(Icons.send, size: 18),
               ),
@@ -1530,10 +1611,15 @@ class _ChatView extends StatelessWidget {
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message, this.onSuggestion});
+  const _ChatBubble({
+    required this.message,
+    this.onSuggestion,
+    this.onAskAbout,
+  });
 
   final _ChatMessage message;
   final ValueChanged<String>? onSuggestion;
+  final ValueChanged<JobChatJob>? onAskAbout;
 
   @override
   Widget build(BuildContext context) {
@@ -1556,9 +1642,21 @@ class _ChatBubble extends StatelessWidget {
               message.text,
               style: const TextStyle(fontSize: 12, height: 1.5),
             ),
+            // 질문에 답한 경우 목록은 찾아 준 결과가 아니라 **답의 근거**다.
+            // 그렇게 적어 두지 않으면 "이게 추천인가?"로 읽힌다.
+            if (message.mode == '질문' && message.jobs.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                '이 숫자를 센 공고들이에요',
+                style: TextStyle(fontSize: 10.5, color: AppColors.textHint),
+              ),
+            ],
             for (final job in message.jobs) ...[
               const SizedBox(height: 8),
-              _ChatJobCard(job: job),
+              _ChatJobCard(
+                job: job,
+                onAsk: onAskAbout == null ? null : () => onAskAbout!(job),
+              ),
             ],
             if (message.suggestions.isNotEmpty && onSuggestion != null) ...[
               const SizedBox(height: 8),
@@ -1587,9 +1685,12 @@ class _ChatBubble extends StatelessWidget {
 }
 
 class _ChatJobCard extends StatelessWidget {
-  const _ChatJobCard({required this.job});
+  const _ChatJobCard({required this.job, this.onAsk});
 
   final JobChatJob job;
+
+  /// 이 공고를 놓고 물어보기. 목록에서 바로 이어 물을 수 있어야 한다.
+  final VoidCallback? onAsk;
 
   Future<void> _open() async {
     final uri = Uri.tryParse(job.sourceUrl);
@@ -1644,17 +1745,37 @@ class _ChatJobCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (hasLink) ...[
-              const SizedBox(height: 5),
-              const Text(
-                '공고 보기 →',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF7C3AED),
-                ),
-              ),
-            ],
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                if (hasLink)
+                  const Text(
+                    '공고 보기 →',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF7C3AED),
+                    ),
+                  ),
+                const Spacer(),
+                if (onAsk != null)
+                  InkWell(
+                    onTap: onAsk,
+                    borderRadius: BorderRadius.circular(4),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Text(
+                        '이 공고 물어보기',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),

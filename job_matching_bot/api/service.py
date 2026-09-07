@@ -25,7 +25,7 @@ from typing import Any
 from job_matching_bot.api import prompts, schemas
 from job_matching_bot.matching.hard_filter import hard_filter
 from job_matching_bot.retrieval import search as retrieval
-from job_matching_bot.retrieval import store_search
+from job_matching_bot.retrieval import market_stats, store_search
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.resume import ResumeProfile
 
@@ -361,26 +361,47 @@ def _deduplicate(items: list[str]) -> list[str]:
 
 # ── 공고 찾아보기 챗봇 ───────────────────────────────────
 class ChatService:
-    """말로 조건을 받아 저장소에서 공고를 찾는다.
+    """말을 받아 세 갈래로 답한다.
+
+        검색   "서울 백엔드 신입 찾아줘"   → 저장소 조회, 목록
+        질문   "백엔드 신입은 뭘 준비해?"  → 조건에 맞는 공고를 세어 그 숫자로 답
+        공고   (목록에서 하나 고른 뒤)      → 그 공고 원문만 근거로 답
 
     추천과 다른 점이 둘이다. 첫째, 이력서가 아니라 **사용자가 말한 조건**으로 찾으므로
     벡터가 필요 없다. 둘째, Pinecone이 아니라 저장소를 보므로 IT 밖 공고도 답할 수 있다.
 
-    LLM은 한 번만 부른다. 말을 조건으로 바꾸는 데만 쓰고, 답 문장은 실제 결과로 조립한다.
-    두 번 부르면 말맛은 좋아지겠지만 몇 초가 더 걸린다.
+    LLM 호출 수를 갈래마다 다르게 둔다. 검색은 한 번(말→조건)이고 답 문장은 실제 결과로
+    조립한다. 건수를 모르는 채 LLM이 쓰면 없는 공고를 있다고 말한다. 질문·공고는 두
+    번째 호출로 답을 쓰되 **근거를 함께 준다** — 질문에는 공고를 센 표를, 공고에는 그
+    공고 원문을. 근거 없이 쓰게 하면 어디서나 들을 수 있는 말이 나온다.
 
     대화를 서버에 저장하지 않는다. 직전 조건을 응답에 실어 보내고 앱이 되돌려준다.
     """
 
-    def __init__(self, generator=None, store_path: Path | None = None):
+    def __init__(self, generator=None, store_path: Path | None = None,
+                 adviser=None, job_asker=None):
         self._generator = generator
         self._store_path = store_path
+        self._adviser = adviser
+        self._job_asker = job_asker
 
     @property
     def generator(self):
         if self._generator is None:
             self._generator = _build_generator(prompts.CHAT_PROMPT, schemas.ChatTurnOut)
         return self._generator
+
+    @property
+    def adviser(self):
+        if self._adviser is None:
+            self._adviser = _build_generator(prompts.ADVICE_PROMPT, schemas.ChatAnswerOut)
+        return self._adviser
+
+    @property
+    def job_asker(self):
+        if self._job_asker is None:
+            self._job_asker = _build_generator(prompts.JOB_ASK_PROMPT, schemas.ChatAnswerOut)
+        return self._job_asker
 
     @property
     def store_path(self) -> Path:
@@ -395,6 +416,11 @@ class ChatService:
             raise StoreUnavailable("공고 저장소가 없습니다. 공유 파일을 먼저 받아 주세요.")
 
         previous = request.filters or schemas.ChatFilters()
+
+        # 공고를 골라 물은 경우. 무슨 말이든 그 공고에 대한 물음이므로 의도를 가르지 않는다.
+        if request.job_id:
+            return self._ask_job(request, previous)
+
         turn = self.generator(
             {
                 "previous": previous.model_dump_json(),
@@ -402,16 +428,27 @@ class ChatService:
             }
         )
 
-        if turn.off_topic:
+        if turn.intent == "잡담":
             return schemas.JobChatResponse(
-                reply="공고 찾기를 도와드릴게요. 직무나 지역을 말씀해 주세요. 예: 서울 백엔드 신입",
+                mode="안내",
+                reply=(
+                    "채용에 대한 것을 도와드릴 수 있어요.\n"
+                    "공고를 찾으시려면 \u201c서울 백엔드 신입\u201d처럼, "
+                    "궁금한 게 있으시면 \u201c백엔드 신입은 뭘 준비해야 해?\u201d처럼 물어보세요."
+                ),
                 filters=previous,
                 total=0,
+                suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
             )
 
         filters = _to_job_filters(turn.filters)
+
+        if turn.intent == "질문":
+            return self._advise(request, turn, filters)
+
         if filters.is_empty:
             return schemas.JobChatResponse(
+                mode="안내",
                 reply=turn.understood or "어떤 일을 찾으시는지 알려 주세요. 예: 데이터 분석 신입",
                 filters=turn.filters,
                 total=0,
@@ -421,23 +458,70 @@ class ChatService:
         return schemas.JobChatResponse(
             reply=self._reply(turn.understood, filters, result),
             filters=turn.filters,
-            jobs=[
-                schemas.JobChatJob(
-                    job_id=hit.job_id,
-                    company=hit.company,
-                    title=hit.title,
-                    source_url=hit.source_url,
-                    region=hit.region,
-                    career=hit.career_label,
-                    employment_type=hit.employment_type,
-                    deadline=hit.deadline,
-                    tech_stack=hit.tech_stack,
-                )
-                for hit in result.jobs
-            ],
+            jobs=[_to_chat_job(hit) for hit in result.jobs],
             total=result.total,
             suggestions=_suggestions(filters, result),
         )
+
+    def _advise(self, request, turn, filters) -> schemas.JobChatResponse:
+        """채용 질문에 답한다. 조건이 잡혔으면 그 조건의 공고를 세어 근거로 준다.
+
+        "백엔드 신입은 뭘 준비해?"는 셀 수 있고 "자소서 어떻게 써?"는 셀 것이 없다.
+        후자에 표를 주면 상관없는 숫자가 답의 첫 문단을 차지한다. 조건이 남아 있느냐가
+        아니라 **이번 물음이 세어서 답할 것이냐**로 가른다. 그 판정은 조건을 뽑을 때
+        같이 받아 두므로 LLM을 더 부르지 않는다.
+        """
+        stats = None
+        if turn.counts_jobs and not filters.is_empty:
+            stats = market_stats.summarize(self.store_path, filters)
+        grounded = bool(stats and stats.total)
+
+        answer = self.adviser(
+            {
+                "condition": filters.summary(),
+                "stats": stats.to_prompt() if grounded else "(셀 수 있는 조건이 없다)",
+                "question": request.message,
+            }
+        )
+        return schemas.JobChatResponse(
+            mode="질문",
+            reply=answer.answer,
+            filters=turn.filters,
+            total=stats.total if grounded else 0,
+            # 답의 근거가 된 공고를 몇 건 붙인다. 숫자만 있으면 확인할 길이 없다.
+            jobs=self._peek(filters, request.top_k) if grounded else [],
+            suggestions=answer.followups[:3],
+        )
+
+    def _ask_job(self, request, previous) -> schemas.JobChatResponse:
+        """공고 하나를 놓고 묻는다. 그 공고 원문만 근거로 쓴다."""
+        from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
+
+        with SqliteJobStore(self.store_path) as store:
+            record = store.get(request.job_id)
+        if record is None:
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="그 공고를 저장소에서 찾지 못했어요. 마감되어 내려갔을 수 있어요.",
+                filters=previous,
+                total=0,
+            )
+
+        answer = self.job_asker(
+            {"job": _job_text(record.job), "question": request.message}
+        )
+        return schemas.JobChatResponse(
+            mode="공고",
+            reply=answer.answer,
+            filters=previous,
+            total=0,
+            suggestions=answer.followups[:3],
+        )
+
+    def _peek(self, filters, top_k: int) -> list[schemas.JobChatJob]:
+        """센 조건에 맞는 공고 몇 건. 답에 붙여 숫자를 눈으로 확인하게 한다."""
+        result = store_search.search(self.store_path, filters, limit=min(top_k, 3))
+        return [_to_chat_job(hit) for hit in result.jobs]
 
     @staticmethod
     def _reply(understood: str, filters, result) -> str:
@@ -458,6 +542,40 @@ class ChatService:
         shown = len(result.jobs)
         tail = f" 관련도 순으로 {shown}건 보여드릴게요." if result.total > shown else ""
         return f"{head}" + "\n" + f"{condition} · {counted}.{tail}"
+
+
+def _to_chat_job(hit) -> schemas.JobChatJob:
+    return schemas.JobChatJob(
+        job_id=hit.job_id,
+        company=hit.company,
+        title=hit.title,
+        source_url=hit.source_url,
+        region=hit.region,
+        career=hit.career_label,
+        employment_type=hit.employment_type,
+        deadline=hit.deadline,
+        tech_stack=hit.tech_stack,
+    )
+
+
+def _job_text(job) -> str:
+    """공고 한 건을 LLM이 읽을 글로. 본문은 자르지 않는다 — 요건은 대개 뒤쪽에 있다."""
+    lines = [
+        f"회사: {job.company}",
+        f"제목: {job.title}",
+        f"지역: {job.region or '미기재'}",
+        f"경력: {store_search._career_label(job.career_type or '', job.min_career_years)}",
+        f"학력: {job.education or '미기재'}",
+        f"고용형태: {job.employment_type or '미기재'}",
+        f"마감: {job.deadline or '미기재'}",
+    ]
+    if job.tech_stack:
+        lines.append("기술 태그: " + ", ".join(job.tech_stack))
+    if job.required_certifications:
+        lines.append("자격증: " + ", ".join(job.required_certifications))
+    lines.append("")
+    lines.append(job.description or "(본문 없음)")
+    return "\n".join(lines)
 
 
 def _to_job_filters(filters: schemas.ChatFilters):

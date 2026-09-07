@@ -257,12 +257,19 @@ class JobChatJob {
 
 class JobChatResponse {
   const JobChatResponse({
+    required this.mode,
     required this.reply,
     required this.filters,
     required this.jobs,
     required this.total,
     required this.suggestions,
   });
+
+  /// 서버가 어떤 갈래로 답했는지. 검색 / 질문 / 공고 / 안내.
+  ///
+  /// 답을 어떻게 보여줄지가 달라진다. 검색은 목록이 본문이고, 질문은 글이 본문이며
+  /// 공고 목록은 근거로 붙는 것이다.
+  final String mode;
 
   final String reply;
   final JobChatFilters filters;
@@ -277,6 +284,7 @@ class JobChatResponse {
   factory JobChatResponse.fromMap(Map<String, dynamic> map) {
     final items = map['jobs'];
     return JobChatResponse(
+      mode: map['mode'] as String? ?? '검색',
       reply: map['reply'] as String? ?? '',
       filters: JobChatFilters.fromMap(
         Map<String, dynamic>.from(map['filters'] as Map? ?? const {}),
@@ -311,16 +319,22 @@ class JobRecommendApiClient {
     );
   }
 
-  /// 말로 공고를 찾는다. 직전 조건을 함께 보내야 대화가 이어진다.
+  /// 채용에 대해 묻고 답을 받는다. 서버가 세 갈래로 나눠 처리한다.
+  ///
+  /// - 직전 조건(`filters`)을 함께 보내야 "서울만" 같은 말이 이어진다.
+  /// - [jobId]를 주면 그 공고 하나에 대한 물음이 된다. 서버는 조건 해석을 건너뛰고
+  ///   그 공고 원문만 근거로 답한다.
   Future<JobChatResponse> chat({
     required String message,
     JobChatFilters? filters,
     int topK = 5,
+    String? jobId,
   }) async {
     final decoded = await _post('/api/v1/jobs/chat', {
       'message': message,
       'filters': filters?.toJson(),
       'top_k': topK,
+      'job_id': jobId,
     });
     return JobChatResponse.fromMap(decoded);
   }

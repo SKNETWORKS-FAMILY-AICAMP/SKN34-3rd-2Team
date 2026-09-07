@@ -167,12 +167,30 @@ class ChatFilters(StrictModel):
 
 
 class ChatTurnOut(StrictModel):
-    """LLM ①: 사용자의 말과 직전 조건을 합쳐 새 조건을 만든다."""
+    """LLM ①: 무엇을 원하는 말인지 가르고, 조건을 뽑는다.
 
+    조건은 의도와 상관없이 뽑는다. "백엔드 신입은 뭘 준비해야 해?"는 질문이지만
+    그 안에 직무·경력이 들어 있고, 그 조건으로 공고를 세어야 숫자로 답할 수 있다.
+    """
+
+    intent: Literal["검색", "질문", "잡담"] = Field(
+        description="공고 목록을 원하면 검색, 채용에 대해 묻는 말이면 질문, 그 밖은 잡담"
+    )
     filters: ChatFilters
+    counts_jobs: bool = Field(
+        default=False,
+        description="공고를 세어서 답할 질문이면 true. 조언을 구하는 말이면 false",
+    )
     understood: str = Field(description="무엇으로 찾을지 사용자에게 확인시키는 한 문장")
-    off_topic: bool = Field(
-        default=False, description="공고 찾기와 무관한 말이면 true"
+
+
+class ChatAnswerOut(StrictModel):
+    """LLM ②: 채용 질문에 대한 답. 공고 통계나 공고 원문을 근거로 쓴다."""
+
+    answer: str = Field(description="사용자에게 보여 줄 답. 여러 문단이어도 된다")
+    followups: list[str] = Field(
+        default_factory=list,
+        description="이어서 물어볼 만한 말 세 개 이내. 그대로 눌러 보낼 수 있는 문장으로",
     )
 
 
@@ -182,6 +200,10 @@ class JobChatRequest(StrictModel):
         default=None, description="직전 응답의 filters. 첫 질문이면 비운다"
     )
     top_k: int = Field(default=5, ge=1, le=20)
+    job_id: str | None = Field(
+        default=None,
+        description="이 공고를 놓고 묻는 경우의 job_id. 있으면 그 공고 원문만 근거로 답한다",
+    )
 
 
 class JobChatJob(StrictModel):
@@ -197,6 +219,9 @@ class JobChatJob(StrictModel):
 
 
 class JobChatResponse(StrictModel):
+    mode: Literal["검색", "질문", "공고", "안내"] = Field(
+        default="검색", description="앱이 답을 어떻게 보여 줄지 정하는 데 쓴다"
+    )
     reply: str
     filters: ChatFilters
     jobs: list[JobChatJob] = Field(default_factory=list)

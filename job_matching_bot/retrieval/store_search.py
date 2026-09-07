@@ -104,17 +104,16 @@ def _terms(filters: JobFilters) -> list[str]:
     return seen
 
 
-def search(
-    store_path: Path, filters: JobFilters, limit: int = 5, as_of: datetime | None = None
-) -> SearchResult:
-    """조건에 맞는 공고를 최근 등록순으로. (보여 줄 것, 전체 건수).
+def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[object]]:
+    """조건을 WHERE 절과 값으로. 검색(`search`)과 집계(`market_stats`)가 같이 쓴다.
 
     조건이 여럿이면 **모두 만족**해야 한다. 직무·기술 말은 그중 하나만 맞아도 된다 —
     "백엔드 파이썬"이라고 하면 둘 다 적힌 공고만 남기는 것보다 하나라도 걸리는 편이 낫다.
-    """
-    as_of = as_of or datetime.now(KST)
-    today = as_of.date().isoformat()
 
+    두 곳이 같은 함수를 쓰는 것이 중요하다. "412건 중 Spring 61%"라고 말해 놓고 목록에는
+    다른 모수의 공고가 나오면 답이 거짓말이 된다.
+    """
+    today = as_of.date().isoformat()
     where = ["status = 'OPEN'", "(deadline IS NULL OR substr(deadline, 1, 10) >= ?)"]
     params: list[object] = [today]
 
@@ -137,12 +136,7 @@ def search(
         params.append(until)
 
     # 직무·기술은 제목·분류 태그·기술 태그·본문 어디에 있어도 맞은 것으로 본다.
-    #
-    # 다만 **어디에 있었는지로 순서를 가른다.** 본문만 훑으면 "신입/경력 공개채용" 같은
-    # 범용 공고가 온갖 직무 말을 다 담고 있어서 무엇을 물어도 같은 공고가 올라온다.
-    # 제목에 있으면 그 일을 뽑는 공고이고, 태그에 있으면 기업이 그렇게 분류한 것이다.
     terms = _terms(filters)
-    relevance = "0"
     if terms:
         clauses = []
         for term in terms:
@@ -150,6 +144,22 @@ def search(
             params.extend([f"%{term}%"] * 4)
         where.append("(" + " OR ".join(clauses) + ")")
 
+    return where, params
+
+
+def search(
+    store_path: Path, filters: JobFilters, limit: int = 5, as_of: datetime | None = None
+) -> SearchResult:
+    """조건에 맞는 공고를 관련도 순으로. (보여 줄 것, 전체 건수)."""
+    as_of = as_of or datetime.now(KST)
+    where, params = conditions(filters, as_of)
+
+    # 어디에서 맞았는지로 순서를 가른다. 본문만 훑으면 "신입/경력 공개채용" 같은 범용
+    # 공고가 온갖 직무 말을 다 담고 있어서 무엇을 물어도 같은 공고가 올라온다.
+    # 제목에 있으면 그 일을 뽑는 공고이고, 태그에 있으면 기업이 그렇게 분류한 것이다.
+    terms = _terms(filters)
+    relevance = "0"
+    if terms:
         title_like = " OR ".join("title LIKE ?" for _ in terms)
         tag_like = " OR ".join("(keywords LIKE ? OR tech_stack LIKE ?)" for _ in terms)
         relevance = f"CASE WHEN {title_like} THEN 3 WHEN {tag_like} THEN 2 ELSE 1 END"
