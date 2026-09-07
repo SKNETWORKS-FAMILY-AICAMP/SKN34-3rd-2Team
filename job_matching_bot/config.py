@@ -15,27 +15,14 @@ REPO_ROOT = PACKAGE_ROOT.parent
 FIXTURES_DIR = PACKAGE_ROOT / "fixtures"
 ARTIFACTS_DIR = PACKAGE_ROOT / "artifacts"
 
+# 다른 소스 어댑터의 표본. 저장소 테스트가 "이번 수집이 책임지지 않는 소스"로 쓴다.
 DEFAULT_INPUT = FIXTURES_DIR / "jobkorea_detail_first_page.json"
 # 크롤러 출력. 상세는 한 건씩 이어 쓰는 JSON Lines, 목록은 JSON 배열.
 RAW_DIR = ARTIFACTS_DIR / "raw"
 DEFAULT_SARAMIN_INPUT = RAW_DIR / "saramin_detail.jsonl"
 DEFAULT_SARAMIN_LIST = RAW_DIR / "saramin_raw.json"
-DEFAULT_JSON_OUTPUT = ARTIFACTS_DIR / "job_coach_pipeline_test.json"
-DEFAULT_REPORT_OUTPUT = ARTIFACTS_DIR / "job_coach_pipeline_test.md"
-DEFAULT_COLLECTION_OUTPUT = ARTIFACTS_DIR / "collected_it_jobs.json"
-
-# Flutter의 채용공고 찾기(챗봇 검색)가 읽는 생성 파일.
-DEFAULT_DART_OUTPUT = (
-    REPO_ROOT
-    / "lib"
-    / "features"
-    / "resume"
-    / "ai_coach"
-    / "data"
-    / "generated"
-    / "collected_jobs.g.dart"
-)
-
 # 웹용 가상 이력서. 시드 스크립트와 앱의 "목업 채우기" 메뉴가 같은 원본을 쓴다.
 DEFAULT_RESUME_MOCKS_INPUT = REPO_ROOT / "scripts" / "resume_mocks.json"
-DEFAULT_RESUME_MOCKS_DART_OUTPUT = DEFAULT_DART_OUTPUT.parent / "resume_mocks.g.dart"
+DEFAULT_RESUME_MOCKS_DART_OUTPUT = (
+    REPO_ROOT / "lib" / "features" / "resume" / "ai_coach" / "data" / "generated" / "resume_mocks.g.dart"
+)

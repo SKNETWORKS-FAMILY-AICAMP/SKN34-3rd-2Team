@@ -66,9 +66,12 @@ schemas/      Job / ResumeProfile / 원본 레코드
 sync.py       수집 원본 → 인덱스까지 한 번에 (증분)
 ```
 
-`coach/`, `exporters/`, `pipeline.py`는 벡터 검색 이전의 규칙 기반 경로다.
-지금은 앱의 공고 검색·기술 카탈로그가 읽는 Dart 생성 파일을 만드는 데만 쓴다.
-추천은 `api/`만 담당하고, 앱과 Functions의 규칙 기반 추천은 없앴다.
+`coach/`는 공고 본문에서 요구역량을 뽑는 수집 단계의 도구다. `exporters/`에는
+이력서 목업을 앱용 Dart로 내보내는 것만 남아 있다.
+
+벡터 검색 이전의 규칙 기반 추천 경로(파이프라인·랭킹·Skill Gap·공고 Dart 내보내기)는
+없앴다. 추천은 `api/`만 담당한다. 앱이 아직 들고 있는 공고 생성 파일
+(`collected_jobs.g.dart`)은 챗봇 공고 검색을 서버로 옮길 때 함께 지운다.
 
 ## 준비
 
@@ -120,6 +123,7 @@ python -m job_matching_bot.sync --dry-run         # 뭘 할지만 본다
 python -m job_matching_bot.sync --skip-index      # 정제까지만, 인덱스는 안 건드림
 python -m job_matching_bot.retrieval.refresh_metadata   # 메타데이터만 갱신. 임베딩 안 함
 python -m job_matching_bot.retrieval.index_state        # 저장소가 기억하는 인덱스 상태. --adopt 로 기존 벡터 등록
+python -m job_matching_bot.exporters.resume_mocks_dart  # 이력서 목업 → 앱 생성 파일
 ```
 
 ```

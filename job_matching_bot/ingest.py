@@ -4,7 +4,7 @@
 돌리며 저장소를 쌓아가는 일이고, 분석은 그 저장소를 읽어 한 번 계산하는
 일이라 주기가 다르기 때문이다.
 
-    python -m job_matching_bot.ingest --source JOBKOREA_POC
+    python -m job_matching_bot.ingest --source SARAMIN_POC
     python -m job_matching_bot.ingest --source SARAMIN_POC --observed job_matching_bot/artifacts/raw/saramin_raw.json
 
 `--input`을 생략하면 소스별 기본 경로(`SOURCES`)를 쓴다. `--observed`는 목록
@@ -155,7 +155,7 @@ def main() -> int:
     parser.add_argument(
         "--input", type=Path, default=None, help="생략하면 소스별 기본 경로를 쓴다"
     )
-    parser.add_argument("--source", default="JOBKOREA_POC", choices=sorted(SOURCES))
+    parser.add_argument("--source", default="SARAMIN_POC", choices=sorted(SOURCES))
     parser.add_argument("--store", type=Path, default=DEFAULT_STORE)
     parser.add_argument("--raw-root", type=Path, default=DEFAULT_RAW_ROOT)
     parser.add_argument(

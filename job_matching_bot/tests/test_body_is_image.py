@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import unittest
 
-from job_matching_bot.ingestion.collection import to_collection_record
 from job_matching_bot.matching.hard_filter import hard_filter
 from job_matching_bot.schemas.resume import mock_resumes
 from job_matching_bot.tests.test_resumes import _saramin_job
@@ -24,11 +23,6 @@ class BodyIsImageTest(unittest.TestCase):
         job = _saramin_job("txt1", region="전국")
         self.assertFalse(job.body_is_image)
         self.assertNotIn("공고 상세가 이미지라 요구사항 미확인", hard_filter(job, resume)["unknown"])
-
-    def test_collection_record_carries_flag(self):
-        job = _saramin_job("img2")
-        job.body_is_image = True
-        self.assertTrue(to_collection_record(job)["body_is_image"])
 
 
 if __name__ == "__main__":

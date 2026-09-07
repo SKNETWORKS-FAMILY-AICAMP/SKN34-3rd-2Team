@@ -12,7 +12,6 @@ from job_matching_bot.config import DEFAULT_SARAMIN_INPUT, REPO_ROOT
 from job_matching_bot.exporters.resume_mocks_dart import build_resume_mocks_module
 from job_matching_bot.ingestion.saramin import normalize_many, normalize_saramin
 from job_matching_bot.matching.hard_filter import EDUCATION_RANK, hard_filter
-from job_matching_bot.matching.ranking import rank_jobs
 from job_matching_bot.matching.skill_normalize import canonical_set
 from job_matching_bot.schemas.resume import mock_resumes, sample_resume
 
@@ -97,34 +96,6 @@ class RegionBranchTest(unittest.TestCase):
         self.assertEqual("FAIL", hard_filter(seoul, resume)["status"])
 
 
-class RoleRankingTest(unittest.TestCase):
-    def test_frontend_persona_ranks_frontend_posting_above_backend(self):
-        resume = mock_resumes()["frontend_entry"]
-        frontend = _saramin_job(
-            "8", title="프론트엔드 개발자 신입", tech_stack=("React", "TypeScript", "Javascript")
-        )
-        backend = _saramin_job(
-            "9", title="백엔드 개발자 신입", tech_stack=("Java", "SpringBoot", "MySQL")
-        )
-        ranked = rank_jobs([backend, frontend], resume)
-        self.assertEqual("SARAMIN-8", ranked[0]["job_id"])
-        # 표기 변형이 태그와 맞는다: 이력서 "JavaScript" ↔ 태그 "Javascript"
-        self.assertIn("Javascript", ranked[0]["evidence"]["matched_skills"])
-
-    def test_spring_boot_spelling_matches_tag(self):
-        resume = mock_resumes()["backend_experienced_3y"]
-        job = _saramin_job("10", career="경력 3년 ↑", tech_stack=("SpringBoot", "Java"))
-        [result] = rank_jobs([job], resume)
-        self.assertEqual(["Java", "SpringBoot"], result["evidence"]["matched_skills"])
-
-    def test_korean_tag_matches_korean_resume_skill(self):
-        resume = mock_resumes()["embedded_entry_regional"]
-        job = _saramin_job("11", region="대전 유성구", tech_stack=("임베디드리눅스", "C++"))
-        [result] = rank_jobs([job], resume)
-        # 이력서 "임베디드 리눅스"(띄어쓰기) ↔ 태그 "임베디드리눅스"
-        self.assertEqual(["C++", "임베디드리눅스"], result["evidence"]["matched_skills"])
-
-
 class WebMockParityTest(unittest.TestCase):
     """웹(Firestore)용 목업(scripts/resume_mocks.json)이 매칭 엔진 인물과 어긋나지 않는지.
 
@@ -203,25 +174,33 @@ class RealDataTest(unittest.TestCase):
             normalize_many(list(latest_by_id(read_records(DEFAULT_SARAMIN_INPUT)).values()))
         )
 
-    def test_every_persona_ranks_without_error(self):
+    def test_every_persona_filters_without_error(self):
         if not self.jobs:
             self.skipTest("수집본 없음")
         for name, resume in mock_resumes().items():
             with self.subTest(persona=name):
-                rank_jobs(self.jobs, resume)
+                for job in self.jobs:
+                    hard_filter(job, resume)
 
-    def test_experienced_only_postings_never_reach_entry_personas(self):
+    def test_experienced_only_postings_never_pass_for_entry_personas(self):
+        """신입 이력서에 연차를 요구하는 공고가 통과하면 안 된다.
+
+        추천 순위는 서버(벡터 검색 + LLM 재정렬)가 정하지만, 연차 같은 숫자 조건은
+        여기 하드 필터가 끝까지 책임진다.
+        """
         if not self.jobs:
             self.skipTest("수집본 없음")
-        by_id = {job.job_id: job for job in self.jobs}
         for name, resume in mock_resumes().items():
             if resume.career_years > 0:
                 continue
             with self.subTest(persona=name):
-                for item in rank_jobs(self.jobs, resume):
-                    job = by_id[item["job_id"]]
+                for job in self.jobs:
                     if job.career_type == "EXPERIENCED" and job.min_career_years:
-                        self.fail(f"{name}에게 경력 {job.min_career_years}년 공고 {job.job_id}가 추천됨")
+                        result = hard_filter(job, resume)
+                        if result["status"] != "FAIL":
+                            self.fail(
+                                f"{name}에게 경력 {job.min_career_years}년 공고 {job.job_id}가 통과됨"
+                            )
 
 
 if __name__ == "__main__":

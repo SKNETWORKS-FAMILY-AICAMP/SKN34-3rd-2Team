@@ -66,3 +66,35 @@ def build_resume_mocks_module(mocks: dict[str, Any]) -> str:
         f"{body}\n"
         "];\n"
     )
+
+
+def main() -> int:
+    """`scripts/resume_mocks.json` → 앱의 `resume_mocks.g.dart`.
+
+        python -m job_matching_bot.exporters.resume_mocks_dart
+    """
+    import argparse
+    import sys
+    from pathlib import Path
+
+    from job_matching_bot.config import (
+        DEFAULT_RESUME_MOCKS_DART_OUTPUT,
+        DEFAULT_RESUME_MOCKS_INPUT,
+    )
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(description="이력서 목업 → Dart 생성 파일")
+    parser.add_argument("--input", type=Path, default=DEFAULT_RESUME_MOCKS_INPUT)
+    parser.add_argument("--output", type=Path, default=DEFAULT_RESUME_MOCKS_DART_OUTPUT)
+    args = parser.parse_args()
+
+    mocks = json.loads(args.input.read_text(encoding="utf-8"))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(build_resume_mocks_module(mocks), encoding="utf-8")
+    print(f"{len(mocks['personas'])}명 → {args.output.resolve()}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
