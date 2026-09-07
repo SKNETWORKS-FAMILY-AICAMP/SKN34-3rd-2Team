@@ -2,10 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/date_utils.dart';
 import '../models/assessment_model.dart';
+import '../models/alert_popup_model.dart';
+import '../models/curriculum_sheet_model.dart';
+import '../models/inflearn_package_model.dart';
+import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
 import '../models/form_task_model.dart';
 import '../models/notice_model.dart';
+import '../models/scheduled_notice_model.dart';
 import '../models/post_model.dart';
 import '../models/resume_model.dart';
 import '../models/submission_model.dart';
@@ -17,6 +22,15 @@ import '../providers/cohort_providers.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../providers/firebase_providers.dart';
 import '../data/lms_repository.dart';
+import '../../features/admin/data/scheduled_notice_admin_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
+final scheduledNoticeAdminServiceProvider =
+    Provider<ScheduledNoticeAdminService>((ref) {
+  return ScheduledNoticeAdminService(
+    FirebaseFunctions.instanceFor(region: 'asia-northeast3'),
+  );
+});
 
 final lmsRepositoryProvider = Provider<dynamic>((ref) {
   final uid = ref.watch(sessionUidProvider).value;
@@ -43,6 +57,34 @@ final noticesStreamProvider =
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (cohortId == null) return Stream.value([]);
   return ref.watch(lmsRepositoryProvider).watchNotices(cohortId);
+});
+
+final scheduledNoticesProvider =
+    StreamProvider.autoDispose<List<ScheduledNoticeModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  final isAdmin = ref.watch(isAdminProvider);
+  if (cohortId == null || !isAdmin) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchScheduledNotices(cohortId)
+      as Stream<List<ScheduledNoticeModel>>;
+});
+
+final alertPopupsAdminProvider =
+    StreamProvider.autoDispose<List<AlertPopupModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  final isAdmin = ref.watch(isAdminProvider);
+  if (cohortId == null || !isAdmin) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchAlertPopups(cohortId)
+      as Stream<List<AlertPopupModel>>;
+});
+
+final activeAlertPopupsProvider =
+    StreamProvider<List<AlertPopupModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null || cohortId.isEmpty) {
+    return Stream.value(const <AlertPopupModel>[]);
+  }
+  return ref.watch(lmsRepositoryProvider).watchActiveAlertPopups(cohortId)
+      as Stream<List<AlertPopupModel>>;
 });
 
 final mySubmissionsProvider =
@@ -73,8 +115,8 @@ final myResumesProvider = StreamProvider.autoDispose<List<ResumeModel>>((ref) {
 final cohortResumesProvider =
     StreamProvider.autoDispose<List<ResumeModel>>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  final isAdmin = ref.watch(isAdminProvider);
-  if (cohortId == null || !isAdmin) return Stream.value([]);
+  final canReview = ref.watch(canReviewResumesProvider);
+  if (cohortId == null || !canReview) return Stream.value([]);
   return ref.watch(lmsRepositoryProvider).watchCohortResumes(cohortId);
 });
 
@@ -99,9 +141,10 @@ final myAttendancesProvider =
   final user = ref.watch(currentUserSyncProvider);
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (user == null || cohortId == null) return Stream.value([]);
-  return ref
-      .watch(lmsRepositoryProvider)
-      .watchUserAttendances(cohortId, user.uid);
+  return ref.watch(lmsRepositoryProvider).watchUserAttendances(
+        cohortId,
+        user.uid,
+      ) as Stream<List<AttendanceModel>>;
 });
 
 /// 관리자 출석 관리 대상 학생 uid
@@ -121,18 +164,69 @@ final cohortStudentsProvider =
     StreamProvider.autoDispose<List<UserModel>>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
   final isAdmin = ref.watch(isAdminProvider);
-  if (cohortId == null || !isAdmin) return Stream.value([]);
+  final isInstructor = ref.watch(isInstructorProvider);
+  if (cohortId == null || (!isAdmin && !isInstructor)) return Stream.value([]);
   return ref.watch(lmsRepositoryProvider).watchCohortStudents(cohortId);
+});
+
+final instructorsStreamProvider =
+    StreamProvider.autoDispose<List<UserModel>>((ref) {
+  final isAdmin = ref.watch(isAdminProvider);
+  if (!isAdmin) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchInstructors();
+});
+
+final attendancesByDateProvider = StreamProvider.autoDispose
+    .family<List<AttendanceModel>, String>((ref, dateKey) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  final isAdmin = ref.watch(isAdminProvider);
+  final isInstructor = ref.watch(isInstructorProvider);
+  if (cohortId == null || (!isAdmin && !isInstructor)) {
+    return Stream.value([]);
+  }
+  return ref.watch(lmsRepositoryProvider).watchAttendancesByDate(
+        cohortId,
+        dateKey,
+      ) as Stream<List<AttendanceModel>>;
+});
+
+final rollCallConfirmedProvider =
+    StreamProvider.autoDispose.family<Set<String>, String>((ref, dateKey) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  final isAdmin = ref.watch(isAdminProvider);
+  final isInstructor = ref.watch(isInstructorProvider);
+  if (cohortId == null || (!isAdmin && !isInstructor)) {
+    return Stream.value(const <String>{});
+  }
+  return ref.watch(lmsRepositoryProvider).watchRollCallConfirmed(
+        cohortId,
+        dateKey,
+      ) as Stream<Set<String>>;
+});
+
+final rollCallHeldProvider =
+    StreamProvider.autoDispose.family<Set<String>, String>((ref, dateKey) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  final isAdmin = ref.watch(isAdminProvider);
+  final isInstructor = ref.watch(isInstructorProvider);
+  if (cohortId == null || (!isAdmin && !isInstructor)) {
+    return Stream.value(const <String>{});
+  }
+  return ref.watch(lmsRepositoryProvider).watchRollCallHeld(
+        cohortId,
+        dateKey,
+      ) as Stream<Set<String>>;
 });
 
 final attendanceStatusMapProvider = StreamProvider.autoDispose
     .family<Map<String, String>, String>((ref, userId) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (cohortId == null) return Stream.value({});
-  return ref
-      .watch(lmsRepositoryProvider)
-      .watchUserAttendances(cohortId, userId)
-      .map((list) {
+  final stream = ref.watch(lmsRepositoryProvider).watchUserAttendances(
+        cohortId,
+        userId,
+      ) as Stream<List<AttendanceModel>>;
+  return stream.map((list) {
     final map = <String, String>{};
     for (final a in list) {
       final s = a.dayStatus;
@@ -140,16 +234,6 @@ final attendanceStatusMapProvider = StreamProvider.autoDispose
     }
     return map;
   });
-});
-
-final mileageTransactionsProvider =
-    StreamProvider.autoDispose<List<MileageTransactionModel>>((ref) {
-  final user = ref.watch(currentUserSyncProvider);
-  final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (user == null || cohortId == null) return Stream.value([]);
-  return ref
-      .watch(lmsRepositoryProvider)
-      .watchMyMileageTransactions(cohortId, user.uid);
 });
 
 final todayScheduleProvider = StreamProvider.autoDispose<ScheduleModel?>((ref) {
@@ -180,6 +264,69 @@ final assignmentsProvider =
   return ref.watch(lmsRepositoryProvider).watchAssignments(cohortId);
 });
 
+final inflearnPackagesProvider =
+    StreamProvider.autoDispose<List<InflearnPackageModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchInflearnPackages(cohortId);
+});
+
+final publishedInflearnPackagesProvider =
+    StreamProvider.autoDispose<List<InflearnPackageModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchPublishedInflearnPackages(cohortId);
+});
+
+final youtubeRecommendationsProvider =
+    StreamProvider.autoDispose<List<YoutubeRecommendationModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchYoutubeRecommendations(cohortId);
+});
+
+final publishedYoutubeRecommendationsProvider =
+    StreamProvider.autoDispose<List<YoutubeRecommendationModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchPublishedYoutubeRecommendations(cohortId);
+});
+
+/// 현재 유저 skills 기준 랭킹된 YouTube 추천
+final rankedYoutubeRecommendationsProvider =
+    Provider.autoDispose<AsyncValue<List<RankedYoutubeRecommendation>>>((ref) {
+  final user = ref.watch(currentUserSyncProvider);
+  final videosAsync = ref.watch(publishedYoutubeRecommendationsProvider);
+
+  return videosAsync.when(
+    loading: () => const AsyncValue.loading(),
+    error: (e, st) => AsyncValue.error(e, st),
+    data: (videos) {
+      final skills = user?.skills ?? const <String>[];
+      if (skills.isEmpty) {
+        // 스킬 없으면 매칭 없이 공개 영상 상위만 (score 0)
+        final ranked = rankYoutubeRecommendations(
+          videos: videos,
+          skills: const [],
+        );
+        return AsyncValue.data(ranked.take(6).toList());
+      }
+      final ranked = rankYoutubeRecommendations(
+        videos: videos,
+        skills: skills,
+      );
+      final matched = ranked.where((r) => r.score > 0).toList();
+      // 매칭 없으면 전체 공개 목록(점수 0)으로 폴백
+      final result = matched.isNotEmpty ? matched : ranked;
+      return AsyncValue.data(result.take(12).toList());
+    },
+  );
+});
+
 final assessmentsProvider =
     StreamProvider.autoDispose<List<AssessmentModel>>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
@@ -194,6 +341,22 @@ final publishedAssessmentsProvider =
   return ref.watch(lmsRepositoryProvider).watchPublishedAssessments(cohortId);
 });
 
+final assessmentProvider =
+    StreamProvider.autoDispose.family<AssessmentModel?, String>((ref, id) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value(null);
+  return ref.watch(lmsRepositoryProvider).watchAssessment(cohortId, id);
+});
+
+final assessmentQuestionsProvider = StreamProvider.autoDispose
+    .family<List<AssessmentQuestionModel>, String>((ref, assessmentId) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchAssessmentQuestions(cohortId, assessmentId);
+});
+
 final myAssessmentSubmissionsProvider = StreamProvider.autoDispose<
     List<AssessmentSubmissionModel>>((ref) {
   final user = ref.watch(currentUserSyncProvider);
@@ -202,6 +365,40 @@ final myAssessmentSubmissionsProvider = StreamProvider.autoDispose<
   return ref
       .watch(lmsRepositoryProvider)
       .watchMyAssessmentSubmissions(cohortId, user.uid);
+});
+
+final assessmentSubmissionsProvider = StreamProvider.autoDispose
+    .family<List<AssessmentSubmissionModel>, String>((ref, assessmentId) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchAssessmentSubmissions(cohortId, assessmentId);
+});
+
+final assessmentSubmissionProvider = StreamProvider.autoDispose
+    .family<AssessmentSubmissionModel?, String>((ref, submissionId) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value(null);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchAssessmentSubmission(cohortId, submissionId);
+});
+
+final latestCurriculumSheetProvider =
+    StreamProvider.autoDispose<CurriculumSheetModel?>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value(null);
+  return ref
+      .watch(lmsRepositoryProvider)
+      .watchLatestCurriculumSheet(cohortId);
+});
+
+final curriculumSheetsProvider =
+    StreamProvider.autoDispose<List<CurriculumSheetModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchCurriculumSheets(cohortId);
 });
 
 /// 선택된 캘린더 날짜의 시간표

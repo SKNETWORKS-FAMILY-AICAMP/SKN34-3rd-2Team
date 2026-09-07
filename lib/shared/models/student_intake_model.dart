@@ -28,6 +28,7 @@ class StudentIntakeModel {
     this.teamRole = '',
     this.selfLearningStyle = '',
     this.slumpOvercomeExperience = '',
+    this.isActive = true,
     this.createdAt,
     this.createdBy,
   });
@@ -66,6 +67,8 @@ class StudentIntakeModel {
   final String selfLearningStyle;
   final String slumpOvercomeExperience;
 
+  final bool isActive;
+
   final DateTime? createdAt;
   final String? createdBy;
 
@@ -103,6 +106,7 @@ class StudentIntakeModel {
       selfLearningStyle: intake['selfLearningStyle'] as String? ?? '',
       slumpOvercomeExperience:
           intake['slumpOvercomeExperience'] as String? ?? '',
+      isActive: data['isActive'] as bool? ?? true,
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
       createdBy: data['createdBy'] as String?,
     );
@@ -118,6 +122,7 @@ class StudentIntakeModel {
         'initialPassword': initialPassword,
         if (seatNumber != null) 'seatNumber': seatNumber,
         'passwordChanged': passwordChanged,
+        'isActive': isActive,
         'intake': {
           'educationMajor': educationMajor,
           'currentStatus': currentStatus,
@@ -206,4 +211,33 @@ class StudentIntakeFormData {
           'slumpOvercomeExperience': slumpOvercomeExperience,
         },
       };
+
+  Map<String, dynamic> toUpdateJson(String uid) => {
+        'uid': uid,
+        ...toJson(),
+      };
+
+  factory StudentIntakeFormData.fromModel(StudentIntakeModel model) {
+    return StudentIntakeFormData(
+      displayName: model.displayName,
+      personalEmail: model.personalEmail ?? '',
+      cohortId: model.cohortId,
+      cohortName: model.cohortName,
+      seatNumber: model.seatNumber,
+      educationMajor: model.educationMajor,
+      currentStatus: model.currentStatus,
+      weeklyStudyHours: model.weeklyStudyHours,
+      programmingLevel: model.programmingLevel,
+      collaborationTools: model.collaborationTools,
+      aiLlmExperience: model.aiLlmExperience,
+      motivation: model.motivation,
+      desiredRole: model.desiredRole,
+      postCompletionGoal: model.postCompletionGoal,
+      awards: model.awards,
+      projectLinks: model.projectLinks,
+      teamRole: model.teamRole,
+      selfLearningStyle: model.selfLearningStyle,
+      slumpOvercomeExperience: model.slumpOvercomeExperience,
+    );
+  }
 }

@@ -3,6 +3,13 @@ import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 
 import {admin, db} from "./firebase";
+import {
+  applyAttendanceFromForm,
+  findStudentForAttendance,
+  hasAttendanceAnswers,
+  parseAttendanceAnswers,
+} from "./attendanceForm";
+
 export const googleFormWebhookSecret = defineSecret("GOOGLE_FORM_WEBHOOK_SECRET");
 
 interface WebhookPayload {
@@ -10,44 +17,27 @@ interface WebhookPayload {
   taskId?: string;
   email?: string;
   responseId?: string;
+  answers?: Record<string, unknown>;
 }
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-async function findUserByEmail(email: string) {
-  const normalized = normalizeEmail(email);
-
-  const byPersonal = await db
-    .collection("users")
-    .where("personalEmail", "==", normalized)
-    .limit(1)
-    .get();
-  if (!byPersonal.empty) return byPersonal.docs[0];
-
-  const byLogin = await db
-    .collection("users")
-    .where("email", "==", normalized)
-    .limit(1)
-    .get();
-  if (!byLogin.empty) return byLogin.docs[0];
-
-  return null;
-}
-
 /**
  * Google Apps Script → Firebase
- * POST JSON: { cohortId, taskId, email, responseId? }
+ * POST JSON: { cohortId, taskId?, email?, responseId?, answers? }
  * Header: X-Webhook-Secret
  *
- * email: 상담 시 등록한 personalEmail (Gmail) 우선 매칭
+ * answers: 구글폼 문항 제목 → 응답 값 (출석 유형/공가 등)
+ * email: 상담 시 등록한 personalEmail (Gmail) 우선, 없으면 이름 매칭
  */
 export const googleFormWebhook = onRequest(
   {
     region: "asia-northeast3",
     secrets: [googleFormWebhookSecret],
     cors: false,
+    invoker: "public",
   },
   async (req, res) => {
     if (req.method !== "POST") {
@@ -62,68 +52,103 @@ export const googleFormWebhook = onRequest(
     }
 
     const body = req.body as WebhookPayload;
-    const {cohortId, taskId, email, responseId} = body;
+    const {cohortId, taskId, responseId, answers} = body;
+    const email = body.email ? normalizeEmail(body.email) : "";
+    const parsed = parseAttendanceAnswers(answers);
+    const isAttendance = hasAttendanceAnswers(answers);
 
-    if (!cohortId || !taskId || !email) {
+    if (!cohortId) {
+      res.status(400).json({error: "cohortId is required"});
+      return;
+    }
+    if (!taskId && !isAttendance) {
       res.status(400).json({
-        error: "cohortId, taskId, email are required",
+        error: "taskId, email are required (or attendance answers)",
       });
       return;
     }
 
     try {
-      const taskRef = db
-        .collection("cohorts")
-        .doc(cohortId)
-        .collection("formTasks")
-        .doc(taskId);
-      const taskDoc = await taskRef.get();
-      if (!taskDoc.exists) {
-        res.status(404).json({error: "Form task not found"});
-        return;
-      }
-
-      const userDoc = await findUserByEmail(email);
+      const userDoc = await findStudentForAttendance({
+        cohortId,
+        email,
+        name: parsed.name,
+      });
       if (!userDoc) {
-        logger.warn("Google form submit: user not found", {email, taskId});
-        res.status(404).json({error: "User not found for email"});
+        logger.warn("Google form submit: user not found", {
+          email,
+          name: parsed.name,
+          taskId,
+        });
+        res.status(404).json({error: "User not found for email/name"});
         return;
       }
 
       const userId = userDoc.id;
       const userData = userDoc.data();
-      const responseRef = taskRef.collection("responses").doc(userId);
-      const existing = await responseRef.get();
+      const userDisplayName =
+        (userData?.displayName as string | undefined) ?? parsed.name ?? "";
 
-      const batch = db.batch();
-      batch.set(
-        responseRef,
-        {
-          userId,
-          userEmail: normalizeEmail(email),
-          userDisplayName: userData?.displayName ?? "",
-          taskId,
+      let attendanceStatus: string | null = null;
+      if (isAttendance) {
+        attendanceStatus = await applyAttendanceFromForm({
           cohortId,
-          source: "google_form",
-          googleResponseId: responseId ?? null,
-          submittedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        {merge: true},
-      );
-
-      if (!existing.exists) {
-        batch.update(taskRef, {
-          responseCount: admin.firestore.FieldValue.increment(1),
+          userId,
+          userDisplayName,
+          parsed,
+          responseId,
+          answers,
         });
       }
 
-      await batch.commit();
+      if (taskId) {
+        const taskRef = db
+          .collection("cohorts")
+          .doc(cohortId)
+          .collection("formTasks")
+          .doc(taskId);
+        const taskDoc = await taskRef.get();
+        if (taskDoc.exists) {
+          const responseRef = taskRef.collection("responses").doc(userId);
+          const existing = await responseRef.get();
+          const batch = db.batch();
+          batch.set(
+            responseRef,
+            {
+              userId,
+              userEmail: email,
+              userDisplayName,
+              taskId,
+              cohortId,
+              source: "google_form",
+              googleResponseId: responseId ?? null,
+              answers: answers ?? {},
+              submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {merge: true},
+          );
+          if (!existing.exists) {
+            batch.update(taskRef, {
+              responseCount: admin.firestore.FieldValue.increment(1),
+            });
+          }
+          await batch.commit();
+        }
+      }
 
-      logger.info("Google form response recorded", {cohortId, taskId, userId});
+      logger.info("Google form response recorded", {
+        cohortId,
+        taskId,
+        userId,
+        attendanceStatus,
+      });
       res.status(200).json({
         ok: true,
         userId,
-        message: "Submission recorded",
+        attendanceStatus,
+        message: attendanceStatus
+          ? `Submission recorded (${attendanceStatus})`
+          : "Submission recorded",
       });
     } catch (error) {
       logger.error("Google form webhook failed", error);

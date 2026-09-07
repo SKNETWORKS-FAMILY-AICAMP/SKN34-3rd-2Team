@@ -6,6 +6,7 @@ import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../hub/presentation/widgets/notice_list_widgets.dart';
 import '../../../shared/models/notice_model.dart';
 import '../../../shared/models/submission_model.dart';
 import '../../../shared/models/todo_model.dart';
@@ -13,9 +14,13 @@ import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/qual_exam_providers.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../curriculum/presentation/widgets/curriculum_dashboard_section.dart';
+import '../../curriculum/providers/curriculum_providers.dart';
 import '../../forms/presentation/form_tasks_screen.dart';
+import '../../seating/providers/seating_providers.dart';
 import 'widgets/attendance_calendar_card.dart';
-import 'widgets/dashboard_profile_card.dart';
+import 'widgets/dashboard_profile_header.dart';
+import 'widgets/my_seating_dashboard_card.dart';
 import 'widgets/qual_exam_schedule_section.dart';
 import 'widgets/resume_dashboard_section.dart';
 
@@ -81,6 +86,10 @@ class _DashboardBody extends ConsumerWidget {
         ref.invalidate(mySubmissionsProvider);
         ref.invalidate(formTasksWithStatusProvider);
         ref.invalidate(qualExamSchedulesProvider);
+        ref.invalidate(publishedSeatingLayoutProvider);
+        ref.invalidate(publishedSeatingAssignmentProvider);
+        ref.invalidate(activeAlertPopupsProvider);
+        ref.invalidate(curriculumMetaProvider);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -103,12 +112,12 @@ class _DashboardBody extends ConsumerWidget {
           if (!wide) {
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   mainColumn,
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   sidebar,
                 ],
               ),
@@ -117,13 +126,13 @@ class _DashboardBody extends ConsumerWidget {
 
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: mainColumn),
-                const SizedBox(width: 16),
-                SizedBox(width: 320, child: sidebar),
+                const SizedBox(width: 20),
+                SizedBox(width: 240, child: sidebar),
               ],
             ),
           );
@@ -151,21 +160,26 @@ class _DashboardMainColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DashboardProfileCard(user: user),
-        const SizedBox(height: 16),
-        const _SectionTitle('공지'),
+        DashboardProfileHeader(user: user),
+        const SizedBox(height: 20),
+        _NoticeSectionHeader(
+          onViewAll: () => context.go(RoutePaths.board),
+        ),
         notices.when(
           loading: () => const _ShimmerCard(),
           error: (e, _) => Text('오류: $e'),
-          data: (list) => _NoticesPreview(notices: list.take(5).toList()),
+          data: (list) => _NoticesPreview(
+            notices: list.take(10).toList(),
+            hasMore: list.length > 10,
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const ResumeDashboardSection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const FormTasksDashboardSection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const QualExamScheduleSection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         const _SectionTitle('이번 주 필수 학습'),
         weeklyTask.when(
           loading: () => const _ShimmerCard(),
@@ -205,14 +219,17 @@ class _DashboardSidebar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AttendanceCalendarCard(user: user, compact: compactCalendar),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
+        const MySeatingDashboardSection(),
         const _SectionTitle('TODO', compact: true),
         _TodoSection(
           todos: todos,
           controller: todoController,
           uid: user.uid,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
+        const CurriculumDashboardSection(),
+        const SizedBox(height: 20),
         const _SectionTitle('승인 현황', compact: true),
         submissions.when(
           loading: () => const _ShimmerCard(),
@@ -227,101 +244,105 @@ class _DashboardSidebar extends StatelessWidget {
   }
 }
 
-class _NoticesPreview extends StatelessWidget {
-  const _NoticesPreview({required this.notices});
-  final List<NoticeModel> notices;
+class _NoticeSectionHeader extends StatelessWidget {
+  const _NoticeSectionHeader({required this.onViewAll});
+
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context) {
-    if (notices.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: Text('공지사항이 없습니다')),
-        ),
-      );
-    }
-    return Card(
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
         children: [
-          for (var i = 0; i < notices.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
-            ListTile(
-              onTap: () => context.go(RoutePaths.board),
-              leading: Icon(
-                notices[i].isPinned ? Icons.push_pin : Icons.campaign_outlined,
-                color: notices[i].isFromDiscord
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
-                size: 20,
-              ),
-              title: Text(
-                notices[i].title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    notices[i].content,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      _ChannelChip(label: notices[i].displayLabel),
-                      const SizedBox(width: 6),
-                      Text(
-                        _timeAgo(notices[i].createdAt),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textHint,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              isThreeLine: true,
+          const Text(
+            '시스템 공지',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: AppColors.textPrimary,
             ),
-          ],
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: onViewAll,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('더보기', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Icon(Icons.chevron_right_rounded, size: 18),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
-
-  String _timeAgo(DateTime? dt) {
-    if (dt == null) return '';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}일 전';
-    if (diff.inHours > 0) return '${diff.inHours}시간 전';
-    return '방금';
-  }
 }
 
-class _ChannelChip extends StatelessWidget {
-  const _ChannelChip({required this.label});
-  final String label;
+class _NoticesPreview extends StatelessWidget {
+  const _NoticesPreview({
+    required this.notices,
+    this.hasMore = false,
+  });
+
+  final List<NoticeModel> notices;
+  final bool hasMore;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: AppColors.primary,
+    if (notices.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 16,
+              offset: Offset(0, 4),
+            ),
+          ],
         ),
-      ),
+        child: const Center(
+          child: Text(
+            '공지사항이 없습니다',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        StudentNoticeRowList(
+          notices: notices,
+          maxVisibleRows: 5,
+          onTap: (notice) => NoticeDetailSheet.show(context, notice),
+        ),
+        if (hasMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '이전 공지는 전체 보기에서 확인하세요.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textHint.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -346,72 +367,73 @@ class _WeeklyLearningCard extends StatelessWidget {
     final completed = progress?.completedCount ?? 0;
     final total = task.totalCount;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: CircularProgressIndicator(
-                    value: percent / 100,
-                    strokeWidth: 6,
-                    color: AppColors.primary,
-                    backgroundColor: AppColors.primaryLight,
-                  ),
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 64,
+                height: 64,
+                child: CircularProgressIndicator(
+                  value: percent / 100,
+                  strokeWidth: 6,
+                  color: AppColors.primary,
+                  backgroundColor: AppColors.primaryLight,
                 ),
-                Text('${percent.toInt()}%'),
+              ),
+              Text(
+                '${percent.toInt()}%',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _StatusBadge(
+                      label: 'D-${task.daysRemaining}',
+                      color: AppColors.badgeLate,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        task.title,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$completed / $total 완료',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
               ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.warning.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'D-${task.daysRemaining}',
-                          style: const TextStyle(
-                            color: AppColors.warning,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          task.title,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '$completed / $total 완료',
-                    style: const TextStyle(color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -574,12 +596,32 @@ class _TodoSection extends ConsumerWidget {
   }
 }
 
-class _SubmissionsList extends StatelessWidget {
+class _SubmissionsList extends StatefulWidget {
   const _SubmissionsList({required this.submissions});
   final List<SubmissionModel> submissions;
 
   @override
+  State<_SubmissionsList> createState() => _SubmissionsListState();
+}
+
+class _SubmissionsListState extends State<_SubmissionsList> {
+  /// 한 칸에 보이는 최근 항목 수
+  static const _visibleCount = 3;
+
+  /// 항목 1개당 대략 높이 (패딩 + 뱃지 + 제목 + 날짜)
+  static const _itemExtent = 86.0;
+
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final submissions = widget.submissions;
     if (submissions.isEmpty) {
       return Card(
         margin: EdgeInsets.zero,
@@ -597,77 +639,115 @@ class _SubmissionsList extends StatelessWidget {
         ),
       );
     }
+
+    final needsScroll = submissions.length > _visibleCount;
+    final maxHeight = _visibleCount * _itemExtent;
+
     return Card(
       margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: needsScroll ? maxHeight : double.infinity,
+        ),
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: needsScroll,
+          child: ListView.separated(
+            controller: _scrollController,
+            shrinkWrap: !needsScroll,
+            primary: false,
+            physics: needsScroll
+                ? const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  )
+                : const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            itemCount: submissions.length,
+            separatorBuilder: (_, _) => const Divider(
+              height: 1,
+              thickness: 1,
+              color: AppColors.border,
+            ),
+            itemBuilder: (context, index) {
+              return _SubmissionTile(submission: submissions[index]);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SubmissionTile extends StatelessWidget {
+  const _SubmissionTile({required this.submission});
+
+  final SubmissionModel submission;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = submission;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Column(
-        children: submissions
-            .take(5)
-            .map(
-              (s) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3E8FF),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        s.typeLabel,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF7C3AED),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    s.typeLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.title,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (s.submittedAt != null)
-                            Text(
-                              AppDateUtils.formatDisplay(s.submittedAt!),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      s.statusLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: s.isApproved
-                            ? AppColors.success
-                            : s.isPending
-                                ? AppColors.warning
-                                : AppColors.error,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            )
-            .toList(),
+              const SizedBox(width: 6),
+              _StatusBadge(
+                label: s.statusLabel,
+                color: s.isApproved
+                    ? AppColors.success
+                    : s.isPending
+                        ? AppColors.badgeLate
+                        : AppColors.error,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            s.title,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (s.submittedAt != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              AppDateUtils.formatDisplay(s.submittedAt!),
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -682,12 +762,39 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Text(
         text,
         style: TextStyle(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           fontSize: compact ? 14 : 16,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

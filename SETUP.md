@@ -97,6 +97,7 @@ flutter run -d windows
 | 역할 | 이메일 | 비밀번호 |
 |------|--------|----------|
 | 관리자 | `admin@playdata.co.kr` | `Playdata123!` |
+| 강사 | `instructor@playdata.co.kr` | `Playdata123!` |
 | 학생 | `student@playdata.co.kr` | `Playdata123!` |
 
 > 최초 로그인 시 비밀번호 변경 화면이 나올 수 있습니다.
@@ -305,6 +306,56 @@ DATA_GO_KR_SERVICE_KEY=발급받은_키
 
 </details>
 
+<details>
+<summary><b>마일리지 CMS</b></summary>
+
+자체 CMS(Firestore + Cloud Functions)로 마일리지 교환·적립·소멸을 처리합니다. 비즈콘 API는 사용하지 않습니다.
+
+### 관리자 메뉴
+
+Drawer → **마일리지 관리**
+
+| 메뉴 | 경로 | 설명 |
+|------|------|------|
+| 상품 관리 | `/admin/mileage/products` | 교환 상품 CRUD, 시드 상품 등록 |
+| 기수 설정 | `/admin/mileage/settings` | 카테고리 한도·기록실 자동 적립 규칙 |
+| 구매 요청 | `/admin/mileage/requests` | 승인/반려/수정요청 (승인 시 즉시 차감) |
+| 지급/차감 | `/admin/mileage/adjust` | 수동 마일리지 조정 |
+
+### Functions 배포 (최초 1회)
+
+```powershell
+cd functions
+npm run build
+cd ..
+firebase deploy --only functions:submitPurchaseRequest,functions:reviewPurchaseRequest,functions:cancelPurchaseRequest,functions:adjustMileage,functions:reviewSubmission,functions:expireMileage,functions:expireMileageNow
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+### E2E 테스트 체크리스트
+
+- [ ] 관리자 **지급/차감**으로 학생에게 마일리지 지급
+- [ ] 기록실 블로그/스터디/자격증 **승인** → 자동 적립 (중복 없음)
+- [ ] 고정가 상품 구매 요청 → 관리자 **승인** → 잔액 차감
+- [ ] 인프런/yes24 커스텀 모달 → 장바구니 → 구매 요청
+- [ ] 카테고리 한도 초과 시 구매 요청 **거부**
+- [ ] 잔액 부족 시 관리자 **승인 거부**
+- [ ] 반려/취소 시 잔액 **변동 없음**
+- [ ] 종강+14일 소멸 배치 (관리자 callable 테스트)
+
+### 소멸 배치 수동 테스트
+
+Firebase Console 또는 앱에서 관리자 로그인 후 `expireMileageNow` 호출:
+
+```javascript
+// Firebase Console > Functions > expireMileageNow 테스트
+{ "mockDate": "2027-01-01" }  // cohort.endDate + 14일 <= mockDate 인 기수 대상
+```
+
+기수 `endDate`를 과거로 설정한 테스트 cohort에서 확인하세요. `users.mileageExpiredAt` 플래그로 중복 소멸을 방지합니다.
+
+</details>
+
 ---
 
 ## 프로젝트 구조 (참고)
@@ -314,15 +365,95 @@ SKN34-3rd-2Team/
 ├── lib/              # Flutter 앱 소스
 ├── functions/        # Firebase Cloud Functions (TypeScript)
 ├── scripts/          # 시드·설정 스크립트
+├── config/firebase/  # Firestore·Storage rules / indexes / CORS
 ├── android/          # Android 빌드
 ├── ios/              # iOS 빌드
 ├── web/              # Web 빌드
-├── firebase.json     # Firebase 설정
-├── firestore.rules   # Firestore 보안 규칙
-└── storage.rules     # Storage 보안 규칙
+└── firebase.json     # Firebase 설정 (rules 경로 포함)
 ```
 
 ---
+
+## 성취도 평가 (CSV 커리큘럼 + AI)
+
+강사가 구글시트를 CSV로 내려받아 업로드하면, 일수 구간을 골라 AI가 객관식/단답 초안을 만듭니다.
+Google Sheets API / Notion Integration은 사용하지 않습니다.
+
+### 1) OpenAI API 키 (`functions/.env`)
+
+```powershell
+copy functions\.env.example functions\.env
+# OPENAI_API_KEY=sk-... 입력 (Git에 올리지 말 것)
+```
+
+앱은 **배포된 Cloud Functions**를 호출합니다. `.env`는 Flutter `R`로는 안 먹고, 아래처럼 Functions를 다시 배포해야 반영됩니다.
+
+```powershell
+cd functions
+npm run build
+cd ..
+firebase deploy --only functions
+```
+
+CSV 업로드 permission-denied 가 나면 rules도 배포:
+
+```powershell
+firebase deploy --only firestore:rules,storage
+```
+
+### 2) 배포
+
+```powershell
+cd functions
+npm run build
+cd ..
+firebase deploy --only functions,firestore:rules,storage
+```
+
+OPENAI_API_KEY가 없어도 앱은 동작합니다. 커리큘럼 AI 생성만 설정 안내 오류를 반환합니다.
+Demo 계정에서는 샘플 커리큘럼으로 AI 다이얼로그가 동작합니다.
+
+### 3) 강사 사용 흐름
+
+1. 구글시트 → 파일 → 다운로드 → CSV
+2. 강사 메뉴 **커리큘럼**에서 CSV 업로드
+3. 성취도평가 만들기 → **커리큘럼 AI** → 일수 구간 선택 → 초안 생성 → 수정 후 발행
+
+---
+
+<details>
+<summary><b>맞춤 공고 추천 — 추천 API 서버 연결 (내 컴퓨터)</b></summary>
+
+이력서 편집 화면의 **AI 코치 → 맞춤 공고 추천**은 `job_matching_bot`의 추천 API
+(`POST /api/v1/jobs/recommend`)를 부릅니다. 벡터 검색 → 하드 필터 → LLM 재정렬 → 근거 검증을
+거친 공고를 이력서·공고 원문 인용과 함께 보여 줍니다. 서버에 닿지 못하면 추천하지 않고
+연결 오류를 그대로 보여 줍니다(앱 안에서 태그만 보고 추측하던 규칙 기반 추천은 없앴습니다).
+
+### 1. 서버 실행 (저장소 루트에서)
+
+```powershell
+playdata_venv\Scripts\activate
+python -m uvicorn job_matching_bot.api.main:app --host 127.0.0.1 --port 8000
+```
+
+`http://127.0.0.1:8000/health` 가 `{"status":"ok", ...}` 를 주면 됩니다. Pinecone·OpenAI 키는
+`functions/.env`에서 읽습니다.
+
+### 2. 앱 실행
+
+앱의 기본 서버 주소가 `http://127.0.0.1:8000` 이라 별도 설정이 없습니다.
+
+```powershell
+flutter run -d windows                                  # 데스크톱: 그대로
+flutter run -d chrome                                   # 웹: 포트가 매번 달라도 됩니다
+```
+
+- Chrome에서 "Failed to fetch"가 나오면 서버가 꺼져 있거나 `functions/.env`에 `CORS_ALLOW_ORIGIN_REGEX=http://(localhost|127\.0\.0\.1)(:\d+)?` 가 없는 경우입니다. 이 값이 로컬호스트의 아무 포트나 허용하므로 `--web-port`를 고정하지 않아도 됩니다.
+- 다른 주소를 쓰려면 `--dart-define=JOB_RECOMMEND_API_URL=http://호스트:포트`. 빈 값이면 추천 버튼이 안내 오류를 냅니다.
+- 응답은 LLM 재정렬 때문에 평균 30초쯤 걸립니다. 화면의 진행 표시가 그동안 돕니다.
+- 지금은 내 컴퓨터에서만 됩니다. 팀원 환경·실제 폰은 서버를 클라우드에 올린 뒤에 됩니다.
+
+</details>
 
 ## 도움이 필요할 때
 

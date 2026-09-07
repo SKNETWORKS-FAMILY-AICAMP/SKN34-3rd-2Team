@@ -14,9 +14,10 @@ const COHORT_ID = 'cohort_34';
 const TASK_ID = 'vFsOtY9w7Xx2vIVkeyLB';
 
 function onFormSubmit(e) {
-  const email = extractEmail(e);
-  if (!email) {
-    console.warn('이메일을 찾을 수 없습니다. 구글폼 "이메일 수집"을 켜주세요.');
+  const answers = collectAnswers(e);
+  const email = extractEmail(e) || '';
+  if (!email && !answers['이름']) {
+    console.warn('이메일/이름을 찾을 수 없습니다. 이메일 수집을 켜거나 이름 문항을 확인하세요.');
     return;
   }
 
@@ -30,6 +31,7 @@ function onFormSubmit(e) {
     taskId: TASK_ID,
     email: String(email).trim().toLowerCase(),
     responseId: e.response.getId(),
+    answers: answers,
   };
 
   const response = UrlFetchApp.fetch(WEBHOOK_URL, {
@@ -47,6 +49,17 @@ function onFormSubmit(e) {
   if (code !== 200) {
     console.error('LMS 연동 실패:', code, body);
   }
+}
+
+function collectAnswers(e) {
+  const answers = {};
+  const items = e.response.getItemResponses();
+  for (var i = 0; i < items.length; i++) {
+    const title = items[i].getItem().getTitle();
+    const resp = items[i].getResponse();
+    answers[title] = Array.isArray(resp) ? resp.join(', ') : String(resp);
+  }
+  return answers;
 }
 
 function extractEmail(e) {

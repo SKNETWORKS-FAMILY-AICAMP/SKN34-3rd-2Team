@@ -58,20 +58,25 @@ class StorageService {
   }) =>
       'cohorts/$cohortId/assignments/$assignmentId/submissions/$userId/$fileName';
 
-  static String assessmentProblemPath({
+  static String assessmentThumbnailPath({
     required String cohortId,
     required String assessmentId,
     required String fileName,
   }) =>
-      'cohorts/$cohortId/assessments/$assessmentId/problems/$fileName';
+      'cohorts/$cohortId/assessments/$assessmentId/thumbnails/$fileName';
 
-  static String assessmentAnswerPath({
+  static String curriculumSheetCsvPath({
     required String cohortId,
-    required String assessmentId,
+    required String sheetId,
+    required String fileName,
+  }) =>
+      'cohorts/$cohortId/curriculumSheets/$sheetId/$fileName';
+
+  static String profilePhotoPath({
     required String userId,
     required String fileName,
   }) =>
-      'cohorts/$cohortId/assessments/$assessmentId/answers/$userId/$fileName';
+      'users/$userId/profile/$fileName';
 }
 
 final storageServiceProvider = Provider<StorageService>((ref) {

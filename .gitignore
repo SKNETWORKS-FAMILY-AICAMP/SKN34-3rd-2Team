@@ -97,9 +97,14 @@ scripts/node_modules/
 !.env.example
 functions/.env
 functions/.env.*
+!functions/.env.example
 
 # 시드 스크립트 실행 시 생성되는 rules 백업
+config/firebase/firestore.rules.production.bak
 firestore.rules.production.bak
+
+# 학생 일괄 생성 계정 목록 (비밀번호 포함)
+scripts/seed-students-*.csv
 
 # ─────────────────────────────────────────────
 # 기타
@@ -114,3 +119,9 @@ migrate_working_dir/
 *.class
 *.log
 *.pyc
+# Widget Preview related
+.widget_preview/
+*venv/
+
+# 크롤링 수집 결과 (수십 MB, 재생성 가능)
+job_matching_bot/artifacts/raw/

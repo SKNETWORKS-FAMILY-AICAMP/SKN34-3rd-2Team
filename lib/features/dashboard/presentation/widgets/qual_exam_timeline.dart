@@ -55,34 +55,36 @@ class _TimelineEntry extends StatelessWidget {
         ? AppDateUtils.formatYmd(item.nextExamDate)
         : '일정 미정';
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 52,
-            child: Column(
-              children: [
-                _DdayBadge(ymd: item.nextExamDate, days: days),
-                if (!isLast)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Container(
-                        width: 2,
-                        color: AppColors.border,
-                      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 52,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DdayBadge(ymd: item.nextExamDate, days: days),
+              if (!isLast)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Center(
+                    child: Container(
+                      width: 2,
+                      height: compact ? 36 : 52,
+                      color: AppColors.border,
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : (compact ? 12 : 16)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+        ),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: isLast ? 0 : (compact ? 12 : 16)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                   Text(
                     title,
                     maxLines: compact ? 2 : 3,
@@ -130,8 +132,7 @@ class _TimelineEntry extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 }
 

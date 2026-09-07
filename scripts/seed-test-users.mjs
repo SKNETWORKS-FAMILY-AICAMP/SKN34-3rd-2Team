@@ -30,6 +30,12 @@ const ACCOUNTS = {
     displayName: "학생",
     role: "student",
   },
+  instructor: {
+    email: "instructor@playdata.co.kr",
+    password: "Playdata123!",
+    displayName: "PLAYDATA 강사",
+    role: "instructor",
+  },
 };
 
 async function createAuthUser({ email, password, displayName }) {
@@ -89,6 +95,23 @@ async function seed() {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   console.log("✅ 학생:", ACCOUNTS.student.email, "/", ACCOUNTS.student.password);
+
+  const instructorUser = await createAuthUser(ACCOUNTS.instructor);
+  await db.collection("users").doc(instructorUser.uid).set({
+    email: ACCOUNTS.instructor.email,
+    displayName: ACCOUNTS.instructor.displayName,
+    role: "instructor",
+    cohortId: COHORT_ID,
+    cohortName: COHORT_NAME,
+    isActive: true,
+    mustChangePassword: false,
+    skills: [],
+    socialLinks: {},
+    mileageBalance: 0,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  console.log("✅ 강사:", ACCOUNTS.instructor.email, "/", ACCOUNTS.instructor.password);
 
   console.log("\n🎉 시드 완료! Emulator UI: http://127.0.0.1:4000");
 }

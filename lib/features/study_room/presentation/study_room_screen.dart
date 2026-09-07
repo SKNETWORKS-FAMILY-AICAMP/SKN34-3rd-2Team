@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
-import '../../../shared/models/assessment_model.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
-import 'widgets/assessment_card.dart';
+import '../providers/curriculum_youtube_providers.dart';
+import 'widgets/inflearn_package_card.dart';
 import 'widgets/study_room_layout.dart';
+import 'widgets/youtube_recommendation_section.dart';
 
-/// 학습실 — 성취도 평가 카드 목록 (학생)
+/// 학습실 — 배정된 인프런 강의 패키지 (학생)
 class StudyRoomScreen extends ConsumerStatefulWidget {
   const StudyRoomScreen({super.key});
 
@@ -33,8 +32,7 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
     final cohortName = ref.watch(effectiveCohortNameProvider);
-    final assessments = ref.watch(publishedAssessmentsProvider);
-    final submissions = ref.watch(myAssessmentSubmissionsProvider);
+    final packages = ref.watch(publishedInflearnPackagesProvider);
 
     return userAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -44,8 +42,9 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
 
         return RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(publishedAssessmentsProvider);
-            ref.invalidate(myAssessmentSubmissionsProvider);
+            ref.invalidate(publishedInflearnPackagesProvider);
+            ref.invalidate(publishedYoutubeRecommendationsProvider);
+            ref.invalidate(curriculumYoutubeRecommendationsProvider);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -53,77 +52,95 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  StudyRoomPageHeader(user: user, cohortName: cohortName),
-                  const SizedBox(height: 20),
-                  StudyRoomSearchBar(
-                    controller: _searchController,
-                    onChanged: (v) => setState(() => _query = v.trim()),
+                  StudyRoomPageHeader(
+                    user: user,
+                    cohortName: cohortName,
+                    subtitle: '배정된 인프런 강의와 이번 주 커리큘럼 YouTube 추천을 확인하세요.',
                   ),
                   const SizedBox(height: 20),
-                  assessments.when(
+                  const YoutubeRecommendationSection(),
+                  const SizedBox(height: 28),
+                  const Text(
+                    '배정된 인프런 강의',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  StudyRoomSearchBar(
+                    controller: _searchController,
+                    hintText: '교과목·강의명 검색',
+                    onChanged: (v) => setState(() => _query = v.trim()),
+                  ),
+                  const SizedBox(height: 16),
+                  packages.when(
                     loading: () => const Padding(
                       padding: EdgeInsets.all(40),
                       child: Center(child: CircularProgressIndicator()),
                     ),
                     error: (e, _) => ErrorView(message: e.toString()),
                     data: (list) {
-                      final submissionMap = submissions.maybeWhen(
-                        data: (subs) => {
-                          for (final s in subs) s.assessmentId: s,
-                        },
-                        orElse: () => <String, AssessmentSubmissionModel>{},
-                      );
-
-                      final filtered = list
-                          .where(
-                            (a) =>
-                                _query.isEmpty ||
-                                a.title
-                                    .toLowerCase()
-                                    .contains(_query.toLowerCase()),
-                          )
-                          .toList();
+                      final filtered = list.where((p) {
+                        if (_query.isEmpty) return true;
+                        final q = _query.toLowerCase();
+                        if (p.title.toLowerCase().contains(q)) return true;
+                        if (p.subject.toLowerCase().contains(q)) return true;
+                        if (p.summary?.toLowerCase().contains(q) ?? false) {
+                          return true;
+                        }
+                        for (final unit in p.units) {
+                          if (unit.name.toLowerCase().contains(q)) return true;
+                          for (final c in unit.courses) {
+                            if (c.title.toLowerCase().contains(q)) return true;
+                          }
+                        }
+                        for (final c in p.courses) {
+                          if (c.title.toLowerCase().contains(q)) return true;
+                        }
+                        return false;
+                      }).toList();
 
                       if (filtered.isEmpty) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 48),
                           child: Center(
-                            child: Text(
-                              '등록된 평가가 없습니다',
-                              style: TextStyle(color: AppColors.textSecondary),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.menu_book_outlined,
+                                  size: 48,
+                                  color: AppColors.textHint,
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  '배정된 인프런 강의가 없습니다',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  '강의 배정 후 이곳에 표시됩니다.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textHint,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
                       }
 
-                      return LayoutBuilder(
-                        builder: (context, constraints) {
-                          final crossAxisCount =
-                              constraints.maxWidth >= 720 ? 2 : 1;
-                          return GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: crossAxisCount == 2 ? 0.85 : 1.1,
-                            ),
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final a = filtered[i];
-                              final sub = submissionMap[a.id];
-                              return AssessmentCard(
-                                assessment: a,
-                                completed: sub?.completed ?? false,
-                                onTap: () => context.push(
-                                  RoutePaths.studyRoomAssessmentPath(a.id),
-                                ),
-                              );
-                            },
-                          );
-                        },
+                      return Column(
+                        children: [
+                          for (final p in filtered) ...[
+                            InflearnPackageCard(package: p),
+                            const SizedBox(height: 16),
+                          ],
+                        ],
                       );
                     },
                   ),

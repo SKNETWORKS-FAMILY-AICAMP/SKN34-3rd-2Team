@@ -1,0 +1,78 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/theme/app_colors.dart';
+
+/// 마일리지 화면 전용 accent (AppColors 기반)
+abstract final class MileageColors {
+  static const primary = AppColors.primary;
+  static const primaryDark = AppColors.primaryDark;
+  static const primaryLight = AppColors.primary;
+  static const cardGradientStart = AppColors.primaryDark;
+  static const cardGradientEnd = AppColors.sidebar;
+  static const chipBg = AppColors.primaryLight;
+  static const infoBanner = Color(0xFFEFF6FF);
+  static const infoBannerBorder = Color(0xFFBFDBFE);
+
+  static const gifticonTag = Color(0xFFEA580C);
+  static const bookTag = Color(0xFF16A34A);
+  static const courseTag = AppColors.primary;
+
+  static Color categoryTagColor(String category) => switch (category) {
+        'gifticon' => gifticonTag,
+        'book' => bookTag,
+        'onlineCourse' => courseTag,
+        _ => primary,
+      };
+
+  static Color statusColor(String status) => switch (status) {
+        'approved' => AppColors.success,
+        'pending' => AppColors.primary,
+        'modify_requested' => AppColors.warning,
+        'rejected' => AppColors.error,
+        'cancelled' => AppColors.textSecondary,
+        _ => AppColors.textSecondary,
+      };
+}
+
+/// 마일리지 화면 공통 레이아웃 상수
+abstract final class MileageLayout {
+  static const pagePaddingH = 20.0;
+  static const sectionGap = 12.0;
+  static const maxContentWidth = 720.0;
+  static const cardHeight = 140.0;
+  static const buttonHeight = 36.0;
+}
+
+ButtonStyle mileagePrimaryButtonStyle({double? minHeight}) {
+  return FilledButton.styleFrom(
+    backgroundColor: MileageColors.primary,
+    foregroundColor: Colors.white,
+    minimumSize: Size(0, minHeight ?? MileageLayout.buttonHeight),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  );
+}
+
+ButtonStyle mileageOutlinedButtonStyle({double? minHeight}) {
+  return OutlinedButton.styleFrom(
+    foregroundColor: MileageColors.primary,
+    minimumSize: Size(0, minHeight ?? MileageLayout.buttonHeight),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  );
+}
+
+String formatMileageAmount(int n) =>
+    n.abs().toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
+
+String formatMileageSigned(int n) {
+  final prefix = n >= 0 ? '+ ' : '- ';
+  return '$prefix${formatMileageAmount(n)} P';
+}
+
+String formatMileageM(int n) => '${formatMileageAmount(n)}M';

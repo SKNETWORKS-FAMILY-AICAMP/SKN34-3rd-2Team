@@ -38,14 +38,14 @@ class ResumeSectionNav extends StatelessWidget {
           final selected = selectedKey == key;
           return InkWell(
             onTap: () => onSelected(key),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: selected ? AppColors.primaryLight : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: selected ? AppColors.textPrimary : AppColors.border,
+                  color: selected ? AppColors.primary : AppColors.border,
                 ),
               ),
               child: Row(
@@ -61,6 +61,7 @@ class ResumeSectionNav extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                      color: selected ? AppColors.primary : AppColors.textPrimary,
                     ),
                   ),
                 ],

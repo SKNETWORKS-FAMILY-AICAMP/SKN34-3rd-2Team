@@ -1,3 +1,5 @@
+import '../constants/role.dart';
+
 /// go_router 경로 상수
 abstract final class RoutePaths {
   static const login = '/login';
@@ -13,7 +15,12 @@ abstract final class RoutePaths {
   static const recordsCreateCert = '/records/create/certification';
   static const recordsCreateStudy = '/records/create/study';
   static const recordsCreateBlog = '/records/create/blog';
+  static const recordsCreateStudyCert = '/records/create/study-cert';
+  static const recordsCreatePrecourseQuiz = '/records/create/precourse-quiz';
   static const mileage = '/mileage';
+  static const mileageShop = '/mileage/shop';
+  static const mileageCart = '/mileage/shop/cart';
+  static const assessments = '/assessments';
   static const myPage = '/my-page';
   static const forms = '/forms';
   static const qualExams = '/qual-exams';
@@ -24,6 +31,9 @@ abstract final class RoutePaths {
   static const adminRecords = '/admin/records';
   static const adminResumes = '/admin/resumes';
   static const adminBoard = '/admin/board';
+  static const adminBoardNoticeCreate = '/admin/board/create';
+  static const adminBoardScheduledCreate = '/admin/board/scheduled/create';
+  static const adminBoardAlertPopupCreate = '/admin/board/alert-popups/create';
   static const adminStudyRoom = '/admin/study-room';
   static const adminMyPage = '/admin/my-page';
   static const adminStudyRoomCreate = '/admin/study-room/create';
@@ -33,8 +43,64 @@ abstract final class RoutePaths {
   static const adminCohortsCreate = '/admin/cohorts/create';
   static const adminFormTasks = '/admin/form-tasks';
   static const adminFormTasksCreate = '/admin/form-tasks/create';
+  static const adminSeating = '/admin/seating';
+  static const adminMileage = '/admin/mileage';
+  static const adminMileageProducts = '/admin/mileage/products';
+  static const adminMileageProductsCreate = '/admin/mileage/products/create';
+  static const adminMileageRequests = '/admin/mileage/requests';
+  static const adminMileageAdjust = '/admin/mileage/adjust';
+  static const adminMileageSettings = '/admin/mileage/settings';
+  static const adminInstructors = '/admin/instructors';
+  static const adminInstructorsCreate = '/admin/instructors/create';
+  static const adminAttendance = '/admin/attendance';
+  static const adminAssessments = '/admin/assessments';
+
+  // Instructor Shell
+  static const instructor = '/instructor';
+  static const instructorResumes = '/instructor/resumes';
+  static const instructorBoard = '/instructor/board';
+  static const instructorBoardCreate = '/instructor/board/create';
+  static const instructorAssessments = '/instructor/assessments';
+  static const instructorAssessmentsCreate = '/instructor/assessments/create';
+  static const instructorCurriculum = '/instructor/curriculum';
+  static const instructorMyPage = '/instructor/my-page';
+
+  static String assessmentTakePath(String assessmentId) =>
+      '/assessments/$assessmentId/take';
+  static String assessmentResultPath(String assessmentId) =>
+      '/assessments/$assessmentId/result';
+
+  static String instructorBoardNoticeEditPath(String noticeId) =>
+      '/instructor/board/$noticeId/edit';
+  static String instructorAssessmentDetailPath(String assessmentId) =>
+      '/instructor/assessments/$assessmentId';
+  static String instructorAssessmentEditPath(String assessmentId) =>
+      '/instructor/assessments/$assessmentId/edit';
+  static String instructorAssessmentSubmissionPath(
+    String assessmentId,
+    String submissionId,
+  ) =>
+      '/instructor/assessments/$assessmentId/submissions/$submissionId';
+
+  static String adminAssessmentDetailPath(String assessmentId) =>
+      '/admin/assessments/$assessmentId';
+  static String adminAssessmentSubmissionPath(
+    String assessmentId,
+    String submissionId,
+  ) =>
+      '/admin/assessments/$assessmentId/submissions/$submissionId';
+
+  static String homeFor(UserRole role) => switch (role) {
+        UserRole.admin => admin,
+        UserRole.instructor => instructor,
+        UserRole.student => dashboard,
+      };
+
+  static String adminMileageProductEditPath(String productId) =>
+      '/admin/mileage/products/$productId/edit';
 
   static String adminStudentDetailPath(String uid) => '/admin/students/$uid';
+  static String adminStudentEditPath(String uid) => '/admin/students/$uid/edit';
   static String adminFormTaskDetailPath(String taskId) =>
       '/admin/form-tasks/$taskId';
   static String adminFormTaskEditPath(String taskId) =>
@@ -56,10 +122,15 @@ abstract final class RoutePaths {
     return '$path?$query';
   }
 
-  static String studyRoomAssessmentPath(String assessmentId) =>
-      '/study-room/$assessmentId';
-  static String adminStudyRoomAssessmentPath(String assessmentId) =>
-      '/admin/study-room/$assessmentId';
+  static String adminBoardNoticeEditPath(String noticeId) =>
+      '/admin/board/$noticeId/edit';
+  static String adminBoardScheduledEditPath(String scheduledId) =>
+      '/admin/board/scheduled/$scheduledId/edit';
+  static String adminBoardAlertPopupEditPath(String popupId) =>
+      '/admin/board/alert-popups/$popupId/edit';
+
+  static String adminStudyRoomPackagePath(String packageId) =>
+      '/admin/study-room/$packageId';
   static const attendance = '/attendance';
   static const seating = '/seating';
 }

@@ -144,15 +144,15 @@ class FormTasksDashboardSection extends ConsumerWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.warning.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
+                          color: AppColors.badgeLate.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           '미제출 $pendingCount건',
                           style: const TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.warning,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.badgeLate,
                           ),
                         ),
                       ),

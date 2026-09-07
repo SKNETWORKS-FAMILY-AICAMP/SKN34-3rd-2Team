@@ -32,14 +32,17 @@ abstract final class AppTheme {
       cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 0,
+        shadowColor: AppColors.shadow,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           side: const BorderSide(color: AppColors.border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceVariant,
+        fillColor: AppColors.surface,
+        hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.border),
@@ -61,11 +64,17 @@ abstract final class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 48),
+          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.45),
+          disabledForegroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 50),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
           ),
           elevation: 0,
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -77,6 +86,11 @@ abstract final class AppTheme {
           ),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primary,
+        ),
+      ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface,
         indicatorColor: AppColors.primaryLight,
@@ -85,7 +99,7 @@ abstract final class AppTheme {
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const TextStyle(
-              color: AppColors.textPrimary,
+              color: AppColors.primary,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             );
@@ -93,23 +107,43 @@ abstract final class AppTheme {
           return const TextStyle(color: AppColors.textSecondary, fontSize: 12);
         }),
       ),
+      navigationRailTheme: const NavigationRailThemeData(
+        backgroundColor: AppColors.sidebar,
+        selectedIconTheme: IconThemeData(color: Colors.white, size: 24),
+        unselectedIconTheme: IconThemeData(
+          color: AppColors.sidebarIconInactive,
+          size: 24,
+        ),
+        indicatorColor: Color(0x33FFFFFF),
+      ),
       drawerTheme: const DrawerThemeData(
         backgroundColor: AppColors.surface,
       ),
       tabBarTheme: const TabBarThemeData(
-        labelColor: AppColors.textPrimary,
+        labelColor: AppColors.primary,
         unselectedLabelColor: AppColors.textSecondary,
-        indicatorColor: AppColors.textPrimary,
+        indicatorColor: AppColors.primary,
         dividerColor: AppColors.border,
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.primaryLight,
-        labelStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+        labelStyle: const TextStyle(color: AppColors.primary, fontSize: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: AppColors.border),
         ),
         side: BorderSide.none,
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppColors.primary;
+          }
+          return null;
+        }),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.primary,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,

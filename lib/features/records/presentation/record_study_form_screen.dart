@@ -26,6 +26,7 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
   DateTime? _end;
   List<PlatformFile> _files = [];
   bool _submitting = false;
+  bool _isTeamStudy = true;
 
   @override
   void dispose() {
@@ -71,6 +72,10 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
       _snack('증빙 이미지를 1개 이상 첨부해 주세요.');
       return;
     }
+    if (!_isTeamStudy) {
+      _snack('개인 스터디는 마일리지 미션 대상이 아닙니다. 팀 스터디만 인정됩니다.');
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -95,6 +100,7 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
           startAt: _start,
           endAt: _end,
           fileUrls: urls,
+          isTeamStudy: true,
         ),
       );
 
@@ -135,7 +141,15 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
               RecordInfoBanner(
                 message: RecordTypes.descriptions[RecordTypes.study]!,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('팀 스터디입니다'),
+                subtitle: const Text('개인 스터디는 미션 적립 대상이 아닙니다'),
+                value: _isTeamStudy,
+                onChanged: (v) => setState(() => _isTeamStudy = v),
+              ),
+              const SizedBox(height: 8),
               const RecordFieldLabel('스터디 제목'),
               TextField(
                 controller: _titleCtrl,
@@ -176,7 +190,7 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
               RecordFileUpload(
                 files: _files,
                 multiple: true,
-                hint: '스터디 활동 증빙 이미지를 첨부해 주세요 (복수 선택 가능)',
+                hint: '오프라인 스터디 사진(날짜·시간 확인 가능)을 첨부해 주세요',
                 onPick: () async {
                   final picked = await pickRecordFiles(multiple: true);
                   if (picked.isNotEmpty) {

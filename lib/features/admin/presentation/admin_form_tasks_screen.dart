@@ -604,9 +604,10 @@ const COHORT_ID = '${cohortId ?? 'cohort_34'}';
 const TASK_ID = '$taskId';
 
 function onFormSubmit(e) {
-  const email = extractEmail(e);
-  if (!email) {
-    console.warn('이메일 없음 — 구글폼 "이메일 수집" 켜기');
+  const answers = collectAnswers(e);
+  const email = extractEmail(e) || '';
+  if (!email && !answers['이름']) {
+    console.warn('이메일/이름 없음 — 이메일 수집을 켜거나 이름 문항을 확인하세요.');
     return;
   }
   if (WEBHOOK_SECRET === 'YOUR_SECRET_HERE') {
@@ -623,10 +624,22 @@ function onFormSubmit(e) {
       taskId: TASK_ID,
       email: String(email).trim().toLowerCase(),
       responseId: e.response.getId(),
+      answers: answers,
     }),
     muteHttpExceptions: true,
   });
   console.log('Webhook', response.getResponseCode(), response.getContentText());
+}
+
+function collectAnswers(e) {
+  const answers = {};
+  const items = e.response.getItemResponses();
+  for (var i = 0; i < items.length; i++) {
+    const title = items[i].getItem().getTitle();
+    const resp = items[i].getResponse();
+    answers[title] = Array.isArray(resp) ? resp.join(', ') : String(resp);
+  }
+  return answers;
 }
 
 function extractEmail(e) {

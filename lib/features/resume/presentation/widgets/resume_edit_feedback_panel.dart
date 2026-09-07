@@ -261,13 +261,13 @@ class _FeedbackCommentBubble extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 16,
-            backgroundColor: const Color(0xFFE9D5FF),
+            backgroundColor: AppColors.primaryLight,
             child: Text(
               initial,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF7C3AED),
+                color: AppColors.primary,
               ),
             ),
           ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../shared/models/assessment_model.dart';
 import '../../../../shared/models/user_model.dart';
 
 class StudyRoomPageHeader extends StatelessWidget {
@@ -9,7 +8,7 @@ class StudyRoomPageHeader extends StatelessWidget {
     super.key,
     required this.user,
     this.cohortName,
-    this.subtitle = '퀴즈와 학습 과제를 확인하세요.',
+    this.subtitle = '배정된 인프런 강의를 확인하세요.',
     this.showProfile = true,
   });
 
@@ -34,7 +33,7 @@ class StudyRoomPageHeader extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F),
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 6),
@@ -61,13 +60,13 @@ class StudyRoomPageHeader extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFFE9D5FF),
+                  backgroundColor: AppColors.primaryLight,
                   child: Text(
                     initial,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF7C3AED),
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
@@ -103,50 +102,36 @@ class StudyRoomSearchBar extends StatelessWidget {
   const StudyRoomSearchBar({
     super.key,
     required this.controller,
+    this.hintText = '제목 검색',
     this.onChanged,
   });
 
   final TextEditingController controller;
+  final String hintText;
   final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            onChanged: onChanged,
-            style: const TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              hintText: '제목 검색',
-              hintStyle: const TextStyle(fontSize: 13, color: AppColors.textHint),
-              prefixIcon: const Icon(Icons.search, size: 20),
-              filled: true,
-              fillColor: AppColors.surfaceVariant,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 0),
-            ),
-          ),
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      style: const TextStyle(fontSize: 13),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(fontSize: 13, color: AppColors.textHint),
+        prefixIcon: const Icon(Icons.search, size: 20),
+        filled: true,
+        fillColor: AppColors.surfaceVariant,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
-        const SizedBox(width: 8),
-        OutlinedButton(
-          onPressed: () {},
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(44, 44),
-            padding: EdgeInsets.zero,
-            side: const BorderSide(color: AppColors.border),
-          ),
-          child: const Icon(Icons.tune, size: 20),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
-      ],
+        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+      ),
     );
   }
 }
@@ -167,18 +152,4 @@ Widget studyRoomContentWrapper({required Widget child}) {
       ),
     ),
   );
-}
-
-String assessmentStatusBadgeLabel(AssessmentModel a) {
-  if (!a.published) return '임시저장';
-  if (a.isEnded) return '종료';
-  if (a.isUpcoming) return '예정';
-  return '진행중';
-}
-
-Color assessmentStatusBadgeColor(AssessmentModel a) {
-  if (!a.published) return AppColors.textSecondary;
-  if (a.isEnded) return const Color(0xFF374151);
-  if (a.isUpcoming) return AppColors.info;
-  return AppColors.success;
 }

@@ -90,7 +90,7 @@ export async function syncDiscordNoticesToFirestore(
           content: message.content.trim(),
           authorId: "discord",
           authorName: message.author.username,
-          isPinned: channel.type === "manager",
+          isFavorite: channel.type === "manager",
           priority: channel.type === "manager" ? 1 : 0,
           source: "discord",
           channelLabel: channel.label,
