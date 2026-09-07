@@ -48,6 +48,7 @@ dependencies:
   pdf: ^3.13.0
   printing: ^5.15.0
   cloud_functions: ^6.4.0
+  http: ^1.6.0
   shared_preferences: ^2.5.3
 
 dev_dependencies:

@@ -22,6 +22,7 @@ import '../models/resume_model.dart';
 import '../models/submission_model.dart';
 import '../models/todo_model.dart';
 import '../models/user_model.dart';
+import '../models/job_preferences.dart';
 
 /// Firestore CRUD 통합 Repository — cohort 격리 쿼리 중앙화
 class LmsRepository {
@@ -1452,12 +1453,14 @@ class LmsRepository {
     Map<String, String>? socialLinks,
     String? birthDate,
     String? personalEmail,
+    JobPreferences? jobPreferences,
     String? photoUrl,
     String? photoStoragePath,
   }) async {
     final updates = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
     };
+    if (jobPreferences != null) updates['jobPreferences'] = jobPreferences.toMap();
     if (motto != null) updates['motto'] = motto;
     if (skills != null) updates['skills'] = skills;
     if (socialLinks != null) updates['socialLinks'] = socialLinks;

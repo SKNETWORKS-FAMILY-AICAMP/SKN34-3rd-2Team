@@ -1,0 +1,18 @@
+# AI 취업 코치 파이프라인 (Python 3.12)
+#
+#   py -3.12 -m venv playdata_venv
+#   playdata_venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# job_matching_bot 패키지 자체는 표준 라이브러리만으로 동작한다.
+# 아래는 LLM 추출과 수집 POC에 필요한 것들이다.
+
+# LLM 추출 — OpenAI. CLOVA Studio도 OpenAI 호환 엔드포인트라 같은 패키지를 쓴다.
+openai>=1.60
+
+# LLM 응답 스키마 검증 (설계 문서 §14)
+pydantic>=2.9
+
+# 수집 (job_matching_bot/crawling/)
+requests>=2.32
+beautifulsoup4>=4.12

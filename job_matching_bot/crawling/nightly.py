@@ -1,0 +1,420 @@
+"""밤마다 도는 수집 배치. 목록을 훑어 신규를 찾고, 상세를 받고, 저장소·인덱스를 맞춘다.
+
+    python -m job_matching_bot.crawling.nightly                 # 오늘 몫 (월~토: IT 인접 4개 / 일: 전 대분류)
+    python -m job_matching_bot.crawling.nightly --full          # 전 대분류 강제
+    python -m job_matching_bot.crawling.nightly --dry-run       # 목록만 훑고 상세·기록·적재는 안 함
+    python -m job_matching_bot.crawling.nightly --max-minutes 300
+
+## 순서
+
+1. 목록 sweep    대분류를 끝까지 훑는다(100건/쪽). 읽은 쪽수가 사이트 total_count 기준
+                 쪽수에 못 미치면 '불완전'이다. 차단 신호가 오면 그 자리에서 모든 요청을 멈춘다.
+2. 관측 기록     본 (공고, 대분류)를 저장소 `list_seen`에 남긴다. 사라짐 판정의 근거다.
+3. 신규 상세     목록에는 있는데 저장소에 없는 공고를 인기 배지 → 목록 순위 → 마감 순으로
+                 받는다(3~5초 간격). 시간이 다 되면 멈추고 남은 건 다음 밤에.
+4. 링크 확인     오늘 삭제로 넘어갈 공고는 상세 페이지를 열어 정말 없어졌는지 본다.
+                 열려 있으면 지우지 않는다. 하룻밤 건수 상한이 있다.
+5. 적재          `sync`를 부른다. 오늘 받은 상세만 넣고, 목록 관측(observed)으로 만료·삭제를
+                 판정한다. sweep이 불완전하면 안 본 공고는 '모름'으로 두어 지우지 않는다.
+6. 공유          팀원이 쓸 슬림 파일을 만들어 Firebase Storage에 올린다. 첨삭은 공고 원문
+                 전체가 필요한데 그건 이 저장소에만 있다. 실패해도 배치는 성공으로 둔다.
+
+## 주기
+
+- 월~토: IT개발·데이터, 연구·R&D, 디자인, 기획·전략 (하루 신규 약 1,000건, 목록 약 250쪽)
+- 일: 운전·운송·배송을 뺀 대분류 14개 전부 (목록 약 1,760쪽, 2~3시간)
+- 매일 훑는 대분류의 공고는 이틀 연속 안 보이면 삭제. 주 1회 대분류의 공고는 마지막
+  관측 뒤 15일까지 살아 있는 것으로 본다.
+
+수집 규칙(robots 허용 경로만, UA 고정, 3~5초 간격, 차단 시 즉시 중단)은 `http_session`과
+`crawl_list` / `crawl_detail`에 있고 여기서는 그대로 쓴다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+import time
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Callable
+
+import requests
+from bs4 import BeautifulSoup
+
+from job_matching_bot.config import ARTIFACTS_DIR, RAW_DIR, REPO_ROOT
+from job_matching_bot.crawling.crawl_detail import DETAIL_URL, SOURCE, crawl_details
+from job_matching_bot.crawling.crawl_list import ALL_CATEGORIES, fetch_page, pages_for
+from job_matching_bot.crawling.detail_queue import build_queue
+from job_matching_bot.crawling.http_session import (
+    LIST_PAGE_URL,
+    BlockedByTargetSiteError,
+    check_response,
+    navigation_headers,
+    new_session,
+    polite_delay,
+)
+from job_matching_bot.ingest import DEFAULT_STORE
+from job_matching_bot.ingestion.job_store import open_store
+from job_matching_bot.ingestion.record_files import latest_by_id, read_records
+
+KST = timezone(timedelta(hours=9))
+
+# 매일 훑는 대분류. IT와 이력서가 겹치는 직군이다.
+DAILY_CATEGORIES: tuple[str, ...] = ("2", "9", "15", "16")  # IT개발·데이터, 연구·R&D, 디자인, 기획·전략
+# 추천 대상이 아니라 훑지 않는 대분류.
+SKIPPED_CATEGORIES: tuple[str, ...] = ("7",)  # 운전·운송·배송
+WEEKLY_DAY = 6  # 일요일
+# 신규 상세를 받는 순서에서 앞에 두는 대분류. 첫 채우기는 IT부터 하기로 했다.
+PRIORITY_CATEGORIES: tuple[str, ...] = ("2",)
+
+# 주 1회 훑는 대분류의 공고를 살아 있다고 볼 기간. 일요일 sweep을 한 번 놓쳐도 지우지 않는다.
+OBSERVED_WINDOW_DAYS = 15
+PAGE_COUNT = 100
+DEFAULT_MAX_MINUTES = 420.0  # 23:00 → 06:00
+SYNC_RESERVE_MINUTES = 30.0  # 적재에 남겨 두는 시간
+LINK_CHECK_LIMIT = 200
+SWEEP_KEEP_DAYS = 14
+
+SWEEP_DIR = RAW_DIR / "sweeps"
+DETAIL_DIR = RAW_DIR / "details"
+NIGHTLY_DIR = ARTIFACTS_DIR / "nightly"
+
+# 상세 페이지가 이 문구를 담으면 공고가 내려간 것으로 본다.
+CLOSED_MARKERS = ("마감된 공고", "마감된 채용공고", "종료된 공고", "삭제된 공고", "존재하지 않는 공고", "채용이 마감")
+
+
+def categories_for(today: date, full: bool = False) -> list[str]:
+    if full or today.weekday() == WEEKLY_DAY:
+        return [cat for cat in ALL_CATEGORIES if cat not in SKIPPED_CATEGORIES]
+    return list(DAILY_CATEGORIES)
+
+
+# ── 1. 목록 sweep ──────────────────────────────────────────────
+@dataclass
+class SweepResult:
+    records: list[dict[str, Any]] = field(default_factory=list)   # (공고, 대분류)마다 한 건
+    seen: dict[str, set[str]] = field(default_factory=dict)        # 대분류 → 본 ID
+    totals: dict[str, int] = field(default_factory=dict)           # 대분류 → 사이트 total_count
+    pages: dict[str, tuple[int, int]] = field(default_factory=dict)  # 대분류 → (읽은 쪽, 전체 쪽)
+    complete: set[str] = field(default_factory=set)
+    blocked: bool = False
+
+    @property
+    def seen_today(self) -> set[str]:
+        return set().union(*self.seen.values()) if self.seen else set()
+
+    def authoritative(self, planned: list[str]) -> bool:
+        """계획한 대분류를 전부 끝까지 훑었는가. 그래야 '기록 없음 = 사라짐'으로 볼 수 있다."""
+        return set(planned) <= self.complete
+
+
+Fetcher = Callable[[str, int], tuple[int, list[dict[str, Any]]]]
+
+
+def prioritize(queue: list[dict[str, Any]], first: tuple[str, ...] = PRIORITY_CATEGORIES) -> list[dict[str, Any]]:
+    """우선 대분류의 공고를 앞으로. 그 안의 순서(인기 배지 → 순위 → 마감)는 그대로 둔다."""
+    return sorted(queue, key=lambda r: 0 if str(r.get("cat_mcls") or "") in first else 1)
+
+
+def sweep_category(
+    fetch: Fetcher, cat: str, *, min_delay: float, max_delay: float, page_count: int = PAGE_COUNT
+) -> tuple[list[dict[str, Any]], int, int, int, bool]:
+    """대분류 하나를 끝까지 훑는다. (레코드, total_count, 읽은 쪽, 전체 쪽, 차단 여부).
+
+    `fetch(cat, page)`는 (total_count, 레코드들)을 돌려준다. 네트워크는 거기에만 있다.
+    """
+    records: list[dict[str, Any]] = []
+    total, last_page, page, retried, blocked = 0, 1, 1, False, False
+    while page <= last_page:
+        try:
+            total, rows = fetch(cat, page)
+        except BlockedByTargetSiteError as error:
+            print(f"  [중단] {error}")
+            blocked = True
+            break
+        except requests.RequestException as error:
+            if retried:
+                print(f"  [중단] 요청이 연속으로 실패했습니다: {error}")
+                break
+            retried = True
+            print(f"  page {page}: 요청 실패({error}). 20~40초 쉬고 한 번 더 시도합니다.")
+            polite_delay(20.0, 40.0)
+            continue
+        retried = False
+        if page == 1:
+            last_page = pages_for(total, page_count)
+            print(f"  cat_mcls={cat} {ALL_CATEGORIES.get(cat, '')}: 사이트 {total:,}건 → {last_page}쪽")
+        for row in rows:
+            row["cat_mcls"] = cat
+            row["list_rank"] = len(records) + 1
+            row["list_sort"] = ""
+            records.append(row)
+        if not rows:
+            # 사이트가 말한 쪽수보다 일찍 끝났다. 훑는 동안 공고가 줄어든 것이라 완전한 것으로 본다.
+            page = last_page
+            break
+        page += 1
+        if page <= last_page:
+            polite_delay(min_delay, max_delay)
+    pages_read = min(page, last_page) if not blocked and not retried else page - 1
+    return records, total, pages_read, last_page, blocked
+
+
+def sweep(
+    categories: list[str], fetch: Fetcher, *, min_delay: float, max_delay: float, page_count: int = PAGE_COUNT
+) -> SweepResult:
+    result = SweepResult()
+    for index, cat in enumerate(categories):
+        print(f"[목록 {index + 1}/{len(categories)}] {ALL_CATEGORIES.get(cat, cat)}")
+        records, total, pages_read, last_page, blocked = sweep_category(
+            fetch, cat, min_delay=min_delay, max_delay=max_delay, page_count=page_count
+        )
+        result.records.extend(records)
+        result.seen[cat] = {str(r["source_job_id"]) for r in records if r.get("source_job_id")}
+        result.totals[cat] = total
+        result.pages[cat] = (pages_read, last_page)
+        if pages_read >= last_page and not blocked:
+            result.complete.add(cat)
+        print(f"  {len(records):,}건 / {pages_read}/{last_page}쪽 {'완전' if cat in result.complete else '불완전'}")
+        if blocked:
+            result.blocked = True
+            break
+        if index < len(categories) - 1:
+            polite_delay(min_delay, max_delay)
+    return result
+
+
+def site_fetcher(session: requests.Session, page_count: int = PAGE_COUNT) -> Fetcher:
+    def fetch(cat: str, page: int) -> tuple[int, list[dict[str, Any]]]:
+        return fetch_page(session, page, None, cat, page_count=page_count)
+
+    return fetch
+
+
+# ── 4. 링크 확인 ───────────────────────────────────────────────
+def is_closed_page(html: str) -> bool:
+    if any(marker in html for marker in CLOSED_MARKERS):
+        return True
+    # 본문 섹션(.jv_cont)이 하나도 없으면 공고 페이지가 아니다.
+    return not BeautifulSoup(html, "html.parser").select(".jv_cont")
+
+
+def check_alive(session: requests.Session, rec_idx: str, timeout: int = 30) -> bool | None:
+    """True=아직 열려 있음, False=내려감, None=모름(일시 오류). 차단은 예외로 올린다."""
+    url = f"{DETAIL_URL}?rec_idx={rec_idx}"
+    try:
+        response = session.get(url, headers=navigation_headers(LIST_PAGE_URL), timeout=timeout)
+    except requests.RequestException:
+        return None
+    if response.status_code in (404, 410):
+        return False
+    try:
+        check_response(response)
+    except requests.HTTPError:
+        return None
+    return not is_closed_page(response.text)
+
+
+def link_check(
+    session: requests.Session, candidates: list[str], *, limit: int, min_delay: float, max_delay: float
+) -> tuple[set[str], Counter]:
+    """삭제 직전 공고를 열어 본다. (살아 있어 남길 ID, 결과 집계)."""
+    alive: set[str] = set()
+    counts: Counter = Counter()
+    for index, rec_idx in enumerate(candidates[:limit]):
+        try:
+            state = check_alive(session, rec_idx)
+        except BlockedByTargetSiteError as error:
+            print(f"  [중단] {error}")
+            counts["blocked"] += 1
+            # 못 본 나머지는 모르는 것이다. 지우지 않는다.
+            alive.update(candidates[index:])
+            break
+        if state is None:
+            counts["unknown"] += 1
+            alive.add(rec_idx)
+        elif state:
+            counts["alive"] += 1
+            alive.add(rec_idx)
+        else:
+            counts["closed"] += 1
+        if index < min(limit, len(candidates)) - 1:
+            polite_delay(min_delay, max_delay)
+    # 상한 밖의 후보는 확인하지 못했다. 모르는 것은 지우지 않는다.
+    alive.update(candidates[limit:])
+    counts["unchecked"] += max(0, len(candidates) - limit)
+    return alive, counts
+
+
+# ── 5. 적재 ────────────────────────────────────────────────────
+def run_sync(detail_file: Path, observed: set[str], store_path: Path, as_of: datetime, work_dir: Path) -> int:
+    observed_file = work_dir / f"{as_of.date().isoformat()}_observed.json"
+    observed_file.write_text(json.dumps([{"source_job_id": i} for i in sorted(observed)]), encoding="utf-8")
+    command = [
+        sys.executable, "-m", "job_matching_bot.sync",
+        "--input", str(detail_file), "--observed", str(observed_file),
+        "--store", str(store_path), "--as-of", as_of.isoformat(),
+        "--report", str(work_dir / f"{as_of.date().isoformat()}_sync.json"),
+    ]
+    print("[적재] " + " ".join(command[2:]), flush=True)
+    return subprocess.run(command, cwd=str(REPO_ROOT)).returncode
+
+
+def share_store_file(store_path: Path) -> dict[str, Any]:
+    """팀원이 받아 쓸 슬림 파일을 만들어 올린다.
+
+    추천은 Pinecone만 보므로 키만 있으면 되지만, 첨삭은 공고 원문 전체가 필요하고
+    그건 이 저장소에만 있다. 매일 밤 갱신해 두면 팀원이 최신 공고로 시험할 수 있다.
+    """
+    from job_matching_bot.sharing import share_store
+
+    print("[공유] 슬림 파일 생성·업로드")
+    try:
+        slim = share_store.export(store_path, share_store.EXPORT_PATH)
+        archive = share_store.compress(slim)
+        share_store.upload(archive, share_store.DEFAULT_BUCKET)
+        return {"ok": True, "megabytes": round(archive.stat().st_size / 1048576, 1)}
+    except Exception as error:
+        # 인증 만료, 네트워크 끊김 등. 다음 밤에 다시 올라간다.
+        print(f"  실패(수집·적재에는 영향 없음): {type(error).__name__}: {error}")
+        return {"ok": False, "error": f"{type(error).__name__}: {error}"}
+
+
+def prune(directory: Path, keep_days: int, today: date) -> int:
+    removed = 0
+    cutoff = (today - timedelta(days=keep_days)).isoformat()
+    for path in directory.glob("*.json"):
+        if path.stem[:10] < cutoff:
+            path.unlink()
+            removed += 1
+    return removed
+
+
+def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(description="야간 수집 배치")
+    parser.add_argument("--store", type=Path, default=DEFAULT_STORE)
+    parser.add_argument("--full", action="store_true", help="요일과 무관하게 전 대분류를 훑는다")
+    parser.add_argument("--categories", default=None, help="훑을 대분류 코드. 쉼표 구분(예: 2,15)")
+    parser.add_argument("--max-minutes", type=float, default=DEFAULT_MAX_MINUTES, help="전체 시간 한도")
+    parser.add_argument("--link-check-limit", type=int, default=LINK_CHECK_LIMIT)
+    parser.add_argument("--min-delay", type=float, default=3.0)
+    parser.add_argument("--max-delay", type=float, default=5.0)
+    parser.add_argument("--dry-run", action="store_true", help="목록만 훑고 상세·기록·적재는 하지 않는다")
+    parser.add_argument("--no-share", action="store_true", help="공유 파일을 만들지 않는다")
+    args = parser.parse_args()
+
+    started = time.monotonic()
+    now = datetime.now(KST)
+    today = now.date()
+    stamp = today.isoformat()
+    planned = [c.strip() for c in args.categories.split(",")] if args.categories else categories_for(today, args.full)
+    summary: dict[str, Any] = {"date": stamp, "started_at": now.isoformat(timespec="seconds"), "categories": planned}
+    print(f"야간 배치 {now:%Y-%m-%d %H:%M} · 대분류 {len(planned)}개 · 한도 {args.max_minutes:.0f}분")
+
+    def minutes_left() -> float:
+        return args.max_minutes - (time.monotonic() - started) / 60
+
+    # 1. 목록 sweep
+    try:
+        session = new_session(min_delay=args.min_delay, max_delay=args.max_delay)
+    except (BlockedByTargetSiteError, requests.RequestException) as error:
+        print(f"[중단] 첫 페이지를 열지 못했습니다: {error}")
+        return 1
+    result = sweep(planned, site_fetcher(session), min_delay=args.min_delay, max_delay=args.max_delay)
+    authoritative = result.authoritative(planned)
+    summary["sweep"] = {
+        "records": len(result.records), "unique": len(result.seen_today), "totals": result.totals,
+        "pages": {c: list(p) for c, p in result.pages.items()}, "complete": sorted(result.complete),
+        "authoritative": authoritative, "blocked": result.blocked,
+    }
+    print(
+        f"[목록] {len(result.seen_today):,}건 · 완전 {len(result.complete)}/{len(planned)} · "
+        f"{'전 대분류 확정' if authoritative else '불완전 — 안 본 공고는 지우지 않음'}"
+    )
+
+    SWEEP_DIR.mkdir(parents=True, exist_ok=True)
+    (SWEEP_DIR / f"{stamp}.json").write_text(json.dumps(result.records, ensure_ascii=False), encoding="utf-8")
+    prune(SWEEP_DIR, SWEEP_KEEP_DAYS, today)
+
+    # 2. 관측 기록 · 신규 선별
+    store = open_store(args.store)
+    if not hasattr(store, "list_observed"):
+        print(f"SQLite 저장소만 지원합니다: {args.store}")
+        return 1
+    known_ids = store.source_job_ids(SOURCE)
+    detail_file = DETAIL_DIR / f"{stamp}.jsonl"
+    already_today = set(latest_by_id(read_records(detail_file)))
+    queue, queue_stats = build_queue(result.records, known_ids | already_today, now)
+    queue = prioritize(queue)
+    summary["new"] = {"queued": len(queue), **{k: v for k, v in queue_stats.items()}}
+    print(f"[신규] 저장소에 없는 공고 {len(queue):,}건 (제외 직종 {queue_stats.get('제외 직종(배달·배송·운전)', 0):,})")
+
+    if args.dry_run:
+        store.close()
+        print("(--dry-run: 기록·상세·적재를 하지 않았습니다)")
+        return 0
+
+    store.record_list_seen(
+        result.seen, {c: result.totals[c] for c in result.complete}, now
+    )
+    observed = store.list_observed(
+        SOURCE, seen_today=result.seen_today, as_of=now, within_days=OBSERVED_WINDOW_DAYS, authoritative=authoritative
+    )
+    candidates = store.removal_candidates(SOURCE, observed)
+    store.close()
+    summary["observed"] = {"count": len(observed), "removal_candidates": len(candidates)}
+    print(f"[관측] 살아 있는 것으로 볼 공고 {len(observed):,}건 · 삭제 후보 {len(candidates):,}건")
+
+    # 3. 신규 상세 (차단됐으면 더 요청하지 않는다)
+    crawl_counts: dict[str, int] = {}
+    if result.blocked:
+        print("[상세] 차단 신호가 있어 오늘은 더 요청하지 않습니다")
+    elif queue:
+        budget = minutes_left() - SYNC_RESERVE_MINUTES - min(len(candidates), args.link_check_limit) * (args.max_delay + 1) / 60
+        if budget < 5:
+            print(f"[상세] 남은 시간이 {budget:.0f}분이라 건너뜁니다")
+        else:
+            DETAIL_DIR.mkdir(parents=True, exist_ok=True)
+            print(f"[상세] {len(queue):,}건 중 {budget:.0f}분 동안 받습니다")
+            crawl_counts = crawl_details(queue, detail_file, args.min_delay, args.max_delay, max_minutes=budget)
+    summary["detail"] = crawl_counts
+
+    # 4. 링크 확인
+    if candidates and not result.blocked:
+        print(f"[링크 확인] 삭제 후보 {len(candidates):,}건 중 {min(len(candidates), args.link_check_limit)}건")
+        alive, check_counts = link_check(
+            session, candidates, limit=args.link_check_limit, min_delay=args.min_delay, max_delay=args.max_delay
+        )
+        observed |= alive
+        summary["link_check"] = dict(check_counts)
+        print("  " + " · ".join(f"{k} {v}" for k, v in check_counts.items()))
+    elif candidates:
+        observed |= set(candidates)  # 확인 못 했으니 지우지 않는다
+        summary["link_check"] = {"skipped": len(candidates)}
+
+    # 5. 적재
+    NIGHTLY_DIR.mkdir(parents=True, exist_ok=True)
+    detail_file.parent.mkdir(parents=True, exist_ok=True)
+    detail_file.touch(exist_ok=True)
+    code = run_sync(detail_file, observed, args.store, now, NIGHTLY_DIR)
+    summary["sync_exit_code"] = code
+
+    # 6. 공유 파일. 여기서 실패해도 수집·적재는 이미 끝났으므로 배치를 실패로 만들지 않는다.
+    if not args.no_share:
+        summary["share"] = share_store_file(args.store)
+
+    summary["elapsed_minutes"] = round((time.monotonic() - started) / 60, 1)
+    (NIGHTLY_DIR / f"{stamp}.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"완료 ({summary['elapsed_minutes']}분) · 요약 {NIGHTLY_DIR / f'{stamp}.json'}")
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
