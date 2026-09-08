@@ -35,6 +35,7 @@ import sqlite3
 import sys
 import time
 from collections import Counter
+from functools import lru_cache
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -149,18 +150,47 @@ def check_quote_not_in_job(persona, job, row) -> str | None:
     """
     if row is None:
         return None
-    body = row["description"] or ""
-    if not body:
-        return None
     from job_matching_bot.api.service import _quote_in
+
+    # 서버는 원문 전체가 아니라 excerpt(= index_body)를 공고 본문으로 삼는다
+    # (`service.hit_to_job`). 요건 구간만 골라 라벨을 붙여 다시 이은 글이라 원문의
+    # 부분 문자열이 아니다. 원문과만 대조하면 정상인 인용이 결함으로 잡힌다. 둘 다 본다.
+    sources = [t for t in (row["description"] or "", _excerpt_of(job.get("job_id", ""))) if t]
+    if not sources:
+        return None
 
     for reason in job.get("reasons") or []:
         quote = (reason.get("job_quote") or "").strip()
         if len(quote) < MIN_QUOTE:
             continue
-        if not _quote_in(quote, body):
-            return f"공고에 없는 인용: {quote[:40]}"
+        if not any(_quote_in(quote, source) for source in sources):
+            # 자르지 않는다. 잘라 두면 어디가 어긋났는지 볼 수 없어 한참 헤맸다.
+            return f"공고에 없는 인용: {quote!r}"
     return None
+
+
+def _excerpt_of(job_id: str) -> str:
+    """서버가 재정렬에 넘긴 글. 저장소의 공고로 다시 만든다(인덱스를 부르지 않는다)."""
+    record = _record(job_id) if job_id else None
+    if record is None:
+        return ""
+    from job_matching_bot.retrieval.documents import index_body
+
+    try:
+        return index_body(record.job)
+    except Exception:
+        return ""
+
+
+@lru_cache(maxsize=512)
+def _record(job_id: str):
+    from job_matching_bot.ingest import DEFAULT_STORE
+    from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
+
+    if not DEFAULT_STORE.exists():
+        return None
+    with SqliteJobStore(DEFAULT_STORE) as store:
+        return store.get(job_id)
 
 
 def check_closed(persona, job, row) -> str | None:
