@@ -88,6 +88,34 @@ void main() {
       expect(readiness.canRecommendJobs, isTrue);
     });
 
+    test('자기소개서만 있으면 막지 않되 근거가 얇다고 알린다', () {
+      // 여섯 항목 중 하나만 채워도 "있음"이 된다. 막지 않는 대신 왜 약한지 말한다.
+      final content = _completeResume().copyWith(
+        coreCompetencies: const ResumeCoreCompetencies(),
+        techStack: const [],
+        projects: const [],
+      );
+      final readiness = ResumeReadiness.of(content);
+      expect(readiness.canRecommendJobs, isTrue);
+      expect(readiness.weakEvidenceHint, contains('기술스택'));
+    });
+
+    test('기술스택이나 프로젝트가 있으면 안내하지 않는다', () {
+      expect(ResumeReadiness.of(_completeResume()).weakEvidenceHint, isNull);
+    });
+
+    test('근거가 아예 없으면 안내 대신 막는다', () {
+      final content = _completeResume().copyWith(
+        coreCompetencies: const ResumeCoreCompetencies(),
+        techStack: const [],
+        projects: const [],
+        selfIntroduction: const ResumeSelfIntroduction(),
+      );
+      final readiness = ResumeReadiness.of(content);
+      expect(readiness.weakEvidenceHint, isNull);
+      expect(readiness.canRecommendJobs, isFalse);
+    });
+
     test('막힌 이유에 비어 있는 필수 항목 이름이 들어간다', () {
       final content = _completeResume().copyWith(education: const []);
       final reason = ResumeReadiness.of(

@@ -273,9 +273,11 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       if (!mounted) return;
       setState(() {
         _result = result;
+        final hint = _readiness.weakEvidenceHint;
         _messages.add(
           _ChatMessage.bot(
-            _recommendSummary(result.recommendations, scope),
+            _recommendSummary(result.recommendations, scope) +
+                (hint == null ? '' : '\n\n$hint'),
             mode: '추천',
             recommendations: result.recommendations.take(3).toList(),
           ),

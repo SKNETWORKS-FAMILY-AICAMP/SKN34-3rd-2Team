@@ -81,6 +81,22 @@ class ResumeReadiness {
   bool get hasJobEvidence =>
       evidenceSectionsForRecommendation.any(filledSections.contains);
 
+  /// 추천은 되지만 근거가 얇을 때 건네는 말. 튼튼하면 null.
+  ///
+  /// 자기소개서는 여섯 항목 중 하나만 채워도 "있음"이 된다. 성장과정에 한 줄만 써도
+  /// 버튼이 열린다는 뜻이다. 막지는 않는다 — 핵심역량을 필수에서 뺀 것과 같은
+  /// 이유다. 대신 왜 결과가 약한지 알려 준다.
+  ///
+  /// 기술스택이나 프로젝트는 공고의 요구 기술과 바로 대조되는 자리라, 하나라도 있으면
+  /// 근거가 튼튼하다고 본다.
+  String? get weakEvidenceHint {
+    if (!hasJobEvidence) return null; // 그때는 blockedReason 이 말한다
+    const strong = ['techStack', 'projects', 'experience'];
+    if (strong.any(filledSections.contains)) return null;
+    return '기술스택이나 프로젝트 경험을 적으면 공고와 맞춰 볼 근거가 늘어 '
+        '추천이 훨씬 정확해집니다.';
+  }
+
   /// 분석할 내용이 하나라도 있는 상태.
   bool get canAnalyzeResume =>
       analyzableSections.any(filledSections.contains);
