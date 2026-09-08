@@ -4,8 +4,9 @@
 #   playdata_venv\Scripts\activate
 #   pip install -r requirements.txt
 #
-# job_matching_bot 패키지 자체는 표준 라이브러리만으로 동작한다.
-# 아래는 LLM 추출과 수집 POC에 필요한 것들이다.
+# 첨삭 모듈(cover_letter_rag)과 **한 가상환경에서 같이 돈다**. 통합 서버가 둘을 함께
+# 띄우기 때문이다. 그래서 겹치는 패키지는 cover_letter_rag/pyproject.toml 과 범위를
+# 맞춰 둔다. 한쪽만 올리면 다른 쪽이 깨진다.
 
 # LLM 추출 — OpenAI. CLOVA Studio도 OpenAI 호환 엔드포인트라 같은 패키지를 쓴다.
 openai>=1.60
@@ -16,3 +17,30 @@ pydantic>=2.9
 # 수집 (job_matching_bot/crawling/)
 requests>=2.32
 beautifulsoup4>=4.12
+
+# 추천·챗봇 API 서버 (job_matching_bot/api/)
+fastapi>=0.116,<2
+uvicorn[standard]>=0.34,<1
+
+# 프롬프트 조립과 구조화 출력 (api/service.py 의 `prompt | model.with_structured_output`)
+langchain-core>=1.1,<2
+langchain-openai>=1.4.1,<2
+
+# 벡터 검색·적재 (retrieval/). `pinecone` 패키지를 직접 부른다.
+#
+# langchain-pinecone 은 넣지 않는다. 그 패키지가 pinecone 을 <8 로 묶어 첨삭 모듈의
+# >=9 와 충돌한다. 양쪽 코드 모두 pinecone 을 직접 쓰므로 래퍼가 필요 없다.
+pinecone>=9,<11
+
+# 공고 데이터 공유 (sharing/share_store.py) — Firebase Storage 업로드·다운로드.
+# 인증은 gcloud application-default 자격증명을 쓴다.
+firebase-admin>=7,<8
+
+# ── 첨삭 모듈 ────────────────────────────────────────────────
+# 통합 서버는 추천·챗봇과 첨삭을 한 프로세스로 띄운다.
+#
+#   python -m uvicorn app.integrated:app --app-dir cover_letter_rag --port 8000
+#
+# 첨삭 쪽 의존성(pydantic-settings, chromadb 등)은 그쪽 pyproject.toml 이 갖고 있다.
+# 여기에 옮겨 적으면 두 곳이 어긋나므로 그대로 참조한다.
+-e ./cover_letter_rag
