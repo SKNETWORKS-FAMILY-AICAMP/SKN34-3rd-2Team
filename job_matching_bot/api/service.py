@@ -460,6 +460,8 @@ class ChatService:
             source = {
                 "프로젝트": "이력서의 프로젝트 경험만",
                 "기술스택": "이력서의 기술스택만",
+                "자기소개서": "이력서의 자기소개서만",
+                "경력": "이력서의 경력만",
             }.get(turn.resume_scope, "이력서를")
             return schemas.JobChatResponse(
                 mode="추천",

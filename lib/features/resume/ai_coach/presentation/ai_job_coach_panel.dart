@@ -256,6 +256,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       _chatBusyLabel = switch (scope) {
         '프로젝트' => '프로젝트 경험을 읽고 공고를 고르는 중…',
         '기술스택' => '기술스택을 읽고 공고를 고르는 중…',
+        '자기소개서' => '자기소개서를 읽고 공고를 고르는 중…',
+        '경력' => '경력을 읽고 공고를 고르는 중…',
         _ => '이력서를 읽고 공고를 고르는 중…',
       };
     });
@@ -324,6 +326,25 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           coreCompetencies: emptyCore,
           selfIntroduction: emptyIntro,
         ),
+      // 자기소개서에는 핵심역량을 함께 남긴다. 둘 다 "내가 어떤 사람인가"를 쓰는
+      // 칸이고, 자기소개서만으로는 글이 너무 짧아 검색이 흐려진다.
+      '자기소개서' => content.copyWith(
+          experience: const [],
+          projects: const [],
+          techStack: const [],
+          awards: const [],
+          trainingExperience: const [],
+          otherActivities: const [],
+        ),
+      '경력' => content.copyWith(
+          projects: const [],
+          techStack: const [],
+          awards: const [],
+          trainingExperience: const [],
+          otherActivities: const [],
+          coreCompetencies: emptyCore,
+          selfIntroduction: emptyIntro,
+        ),
       _ => content,
     };
   }
@@ -336,6 +357,14 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (scope == '기술스택' && content.techStack.isEmpty) {
       return '이력서에 기술스택이 아직 없어요. 쓸 줄 아는 기술을 넣어 주시면 그걸 기준으로 찾아드릴게요.';
     }
+    if (scope == '자기소개서' &&
+        !content.selfIntroduction.isFilled &&
+        !content.coreCompetencies.isFilled) {
+      return '이력서에 자기소개서가 아직 없어요. 한 항목이라도 적어 주시면 그걸 기준으로 찾아드릴게요.';
+    }
+    if (scope == '경력' && content.experience.where((e) => e.isFilled).isEmpty) {
+      return '이력서에 경력이 아직 없어요. 신입이시라면 "내 프로젝트 경험만 보고 추천해줘"라고 해보세요.';
+    }
     return null;
   }
 
@@ -344,6 +373,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     final source = switch (scope) {
       '프로젝트' => '프로젝트 경험',
       '기술스택' => '기술스택',
+      '자기소개서' => '자기소개서',
+      '경력' => '경력',
       _ => '이력서',
     };
     if (found.isEmpty) {
