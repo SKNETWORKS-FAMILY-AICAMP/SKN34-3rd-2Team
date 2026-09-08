@@ -4,9 +4,11 @@
 #   playdata_venv\Scripts\activate
 #   pip install -r requirements.txt
 #
-# 첨삭 모듈(cover_letter_rag)과 **한 가상환경에서 같이 돈다**. 통합 서버가 둘을 함께
-# 띄우기 때문이다. 그래서 겹치는 패키지는 cover_letter_rag/pyproject.toml 과 범위를
-# 맞춰 둔다. 한쪽만 올리면 다른 쪽이 깨진다.
+# 첨삭 모듈(cover_letter_rag)과 한 가상환경에서 함께 실행한다. 통합 서버가 두 모듈을
+# 한 프로세스로 띄우므로, 공통 패키지는 cover_letter_rag/pyproject.toml 과 버전 범위를
+# 맞춘다. 한쪽만 올리면 다른 쪽이 깨진다.
+#
+#   python -m uvicorn app.integrated:app --app-dir cover_letter_rag --port 8000
 
 # LLM 추출 — OpenAI. CLOVA Studio도 OpenAI 호환 엔드포인트라 같은 패키지를 쓴다.
 openai>=1.60
@@ -22,25 +24,32 @@ beautifulsoup4>=4.12
 fastapi>=0.116,<2
 uvicorn[standard]>=0.34,<1
 
-# 프롬프트 조립과 구조화 출력 (api/service.py 의 `prompt | model.with_structured_output`)
+# 프롬프트 조립·청킹·구조화 출력
 langchain-core>=1.1,<2
+langchain-text-splitters>=1.0,<2
 langchain-openai>=1.4.1,<2
 
-# 벡터 검색·적재 (retrieval/). `pinecone` 패키지를 직접 부른다.
-#
-# langchain-pinecone 은 넣지 않는다. 그 패키지가 pinecone 을 <8 로 묶어 첨삭 모듈의
-# >=9 와 충돌한다. 양쪽 코드 모두 pinecone 을 직접 쓰므로 래퍼가 필요 없다.
+# 벡터 검색·적재. langchain-pinecone은 Pinecone 버전 제약 충돌을 피해 사용하지 않는다.
 pinecone>=9,<11
 
-# 공고 데이터 공유 (sharing/share_store.py) — Firebase Storage 업로드·다운로드.
-# 인증은 gcloud application-default 자격증명을 쓴다.
+# 공고 데이터 공유 (Firebase Storage)
 firebase-admin>=7,<8
 
-# ── 첨삭 모듈 ────────────────────────────────────────────────
-# 통합 서버는 추천·챗봇과 첨삭을 한 프로세스로 띄운다.
+# 첨삭 API 설정 및 .env 로딩
+pydantic-settings>=2.7,<3
+python-dotenv>=1.0,<2
+
+# ── 여기까지가 통합 서버를 띄우는 데 필요한 전부다 ───────────
 #
-#   python -m uvicorn app.integrated:app --app-dir cover_letter_rag --port 8000
+# 첨삭 모듈을 editable 로 설치하지 않는다(`pip install -e ./cover_letter_rag`).
+# 그러면 chromadb 와 그 딸린 것들(kubernetes, tokenizers, huggingface-hub …)까지
+# 들어온다. chroma 는 **Pinecone 대신** 쓰는 로컬 벡터 저장소이고(오프라인 개발·테스트용),
+# 벡터 저장소 기본값이 pinecone 이라 서버 실행에는 쓰이지 않는다. `langchain-chroma` 는
+# provider=chroma 일 때만 지연 import 된다.
 #
-# 첨삭 쪽 의존성(pydantic-settings, chromadb 등)은 그쪽 pyproject.toml 이 갖고 있다.
-# 여기에 옮겨 적으면 두 곳이 어긋나므로 그대로 참조한다.
--e ./cover_letter_rag
+# 공고 파일을 나누는 Firebase Storage 와는 무관하다. 이름이 비슷할 뿐 다른 것이다.
+#
+# 첨삭 모듈의 인덱싱 스크립트나 테스트를 돌릴 때만 따로 설치한다.
+#
+#   pip install -e ./cover_letter_rag        # + chromadb (Pinecone 대신 쓰는 로컬 벡터 저장소)
+#   pip install -e ./cover_letter_rag[dev]   # + pytest-cov, httpx
