@@ -59,7 +59,7 @@ def _like_or_regex(column: str, term: str) -> tuple[str, list[object]]:
         return f"{column} LIKE ?", [f"%{term}%"]
     # 한 공고에 Java 와 Javascript 가 둘 다 있으면 Java 쪽이 걸린다. 빼면 진짜 Java
     # 공고를 잃는다.
-    return "RE_HAS(?, {})".format(column), [pattern]
+    return f"RE_HAS(?, {column})", [pattern]
 
 
 def _re_has(pattern: str, text: str | None) -> int:

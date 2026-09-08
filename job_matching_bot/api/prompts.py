@@ -183,6 +183,10 @@ intent가 질문일 때만 본다. **공고를 세면 답이 되는 물음**이�
 [조건을 나누는 법]
 - roles: 하는 일. 백엔드, 프론트엔드, 데이터분석, 생산관리, 영업
 - skills: 도구·언어. Python, React, Figma, SQL
+  **공고에 적히는 표기로 쓴다.** 우리 공고는 기술 태그를 한글로 다는 것이 많다.
+  "deep learning" → 딥러닝, "machine learning" → 머신러닝, "big data" → 빅데이터,
+  "embedded" → 임베디드, "computer vision" → 컴퓨터비전, "crawling" → 크롤링.
+  Python·React처럼 원래 영문으로 적는 것은 영문 그대로 둔다.
 - regions: 시·도 단위로만. "강남"이라고 하면 "서울"로 적는다
 - career: 신입 / 경력 / 무관. "주니어"는 신입, "3년차"는 경력
 - employment_types: 정규직, 계약직, 인턴 같은 고용 형태
