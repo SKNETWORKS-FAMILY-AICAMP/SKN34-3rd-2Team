@@ -32,7 +32,7 @@ from typing import Any
 
 from job_matching_bot.env import ensure_loaded
 
-# 키는 functions/.env에 모여 있다. 모듈 상수를 읽기 전에 먼저 채운다.
+# 키는 저장소 루트 .env에 모여 있다. 모듈 상수를 읽기 전에 먼저 채운다.
 ensure_loaded()
 
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
@@ -80,7 +80,7 @@ class OpenAIChatModel:
             # 정확한 이유를 먼저 알려주기 위해서다.
             if not self._api_key:
                 raise RuntimeError(
-                    "OPENAI_API_KEY가 없습니다. functions/.env에 넣거나 "
+                    "OPENAI_API_KEY가 없습니다. 저장소 루트 .env에 넣거나 "
                     "환경변수로 설정해주세요."
                 )
             try:

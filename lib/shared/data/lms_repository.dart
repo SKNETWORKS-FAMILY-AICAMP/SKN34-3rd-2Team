@@ -588,6 +588,41 @@ class LmsRepository {
     }
   }
 
+  /// 마이페이지의 생년월일은 사실 정보이므로, 같은 기수의 승인 전 이력서에도
+  /// 함께 반영한다. 승인된 이력서는 제출 당시의 기록을 보존한다.
+  Future<int> syncBirthDateToMyResumes({
+    required String cohortId,
+    required String userId,
+    required String birthDate,
+  }) async {
+    final normalized = birthDate.trim();
+    if (cohortId.isEmpty || normalized.isEmpty) return 0;
+
+    final resumes = await cohortSub(cohortId, 'resumes')
+        .where('userId', isEqualTo: userId)
+        .get();
+    final targets = resumes.docs.where((doc) {
+      final resume = ResumeModel.fromFirestore(doc);
+      return !resume.isApproved &&
+          resume.content.basicInfo.birthDate != normalized;
+    }).toList();
+
+    // Firestore batch는 최대 500개 쓰기다. 사용자 이력서는 보통 훨씬 적지만
+    // 안전하게 여유를 둔 단위로 나눈다.
+    for (var start = 0; start < targets.length; start += 450) {
+      final end = (start + 450).clamp(0, targets.length) as int;
+      final batch = _firestore.batch();
+      for (final doc in targets.sublist(start, end)) {
+        batch.update(doc.reference, {
+          'content.basicInfo.birthDate': normalized,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+    return targets.length;
+  }
+
   Future<void> approveResume({
     required String cohortId,
     required String resumeId,

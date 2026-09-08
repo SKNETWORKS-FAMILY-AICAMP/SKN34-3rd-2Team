@@ -1,7 +1,7 @@
 """`.env` 파일에서 환경변수를 읽는다.
 
-API 키는 `functions/.env`에 모여 있다. Functions(TypeScript)와 파이프라인
-(Python)이 같은 키를 쓰므로 파일을 두 곳에 두지 않는다.
+로컬 개발의 단일 원본은 레포 루트 `.env`다. Firebase Functions 배포 시에는
+`scripts/sync-functions-env.ps1`가 이 파일을 `functions/.env`로 복사한다.
 
 외부 패키지(python-dotenv)를 쓰지 않는다. 이 패키지는 표준 라이브러리만으로
 동작하는 것이 원칙이고, 필요한 문법이 `KEY=VALUE` 몇 줄뿐이라서다.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from job_matching_bot.config import REPO_ROOT
 
-DEFAULT_ENV_PATH = REPO_ROOT / "functions" / ".env"
+DEFAULT_ENV_PATH = REPO_ROOT / ".env"
 
 _loaded = False
 

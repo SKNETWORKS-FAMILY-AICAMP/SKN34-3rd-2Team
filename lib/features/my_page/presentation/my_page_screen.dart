@@ -93,10 +93,27 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
 
   Future<void> _saveBirthDate(UserModel user, String birthDate) async {
     try {
-      await ref.read(lmsRepositoryProvider).updateProfile(
+      final repository = ref.read(lmsRepositoryProvider);
+      await repository.updateProfile(
             uid: user.uid,
             birthDate: birthDate,
           );
+      final updatedResumes = await repository.syncBirthDateToMyResumes(
+            cohortId: user.cohortId,
+            userId: user.uid,
+            birthDate: birthDate,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              updatedResumes > 0
+                  ? '생년월일을 저장하고 작성 중 이력서 $updatedResumes개에 반영했습니다.'
+                  : '생년월일이 저장되었습니다.',
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

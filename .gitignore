@@ -125,3 +125,8 @@ migrate_working_dir/
 
 # 크롤링 수집 결과 (수십 MB, 재생성 가능)
 job_matching_bot/artifacts/raw/
+
+# 로컬 환경값의 단일 원본은 레포 루트 .env이다.
+.env
+.env.*
+!.env.example

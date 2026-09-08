@@ -38,14 +38,14 @@ cover_letter_rag/
 ## 실행 준비
 
 ```powershell
-cd cover_letter_rag
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+cd ..
+py -3.12 -m venv playdata_venv
+.\playdata_venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-`.env`의 `OPENAI_API_KEY`, `PINECONE_API_KEY`에 실제 키를 넣습니다. 키는 Flutter 앱이나 요청 본문에 넣지 않습니다. 공지 검색과 채용공고 추천은 데이터와 검색 목적이 다르므로, 이 서비스는 공지용 `student` 인덱스와 분리된 채용공고 전용 `job-postings` 인덱스를 사용합니다.
+루트 `.env`의 `OPENAI_API_KEY`, `PINECONE_API_KEY`에 실제 키를 넣습니다. 키는 Flutter 앱이나 요청 본문에 넣지 않습니다. 공지 검색과 채용공고 추천은 데이터와 검색 목적이 다르므로, 이 서비스는 공지용 `student` 인덱스와 분리된 채용공고 전용 `job-postings` 인덱스를 사용합니다.
 
 ## 1. 정적 공고 인덱싱
 

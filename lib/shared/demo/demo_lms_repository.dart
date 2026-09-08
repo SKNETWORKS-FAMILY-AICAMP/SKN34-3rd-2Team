@@ -727,6 +727,33 @@ class DemoLmsRepository {
     );
   }
 
+  /// Firebase 구현과 동일하게 승인 전 이력서의 생년월일을 프로필 값으로 맞춘다.
+  Future<int> syncBirthDateToMyResumes({
+    required String cohortId,
+    required String userId,
+    required String birthDate,
+  }) async {
+    final normalized = birthDate.trim();
+    if (normalized.isEmpty) return 0;
+    var updated = 0;
+    for (var i = 0; i < _resumes.length; i++) {
+      final resume = _resumes[i];
+      if (resume.userId != userId ||
+          resume.isApproved ||
+          resume.content.basicInfo.birthDate == normalized) {
+        continue;
+      }
+      _resumes[i] = resume.copyWith(
+        content: resume.content.copyWith(
+          basicInfo: resume.content.basicInfo.copyWith(birthDate: normalized),
+        ),
+      );
+      updated++;
+    }
+    if (updated > 0) _emit();
+    return updated;
+  }
+
   Future<void> approveResume({
     required String cohortId,
     required String resumeId,

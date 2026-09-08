@@ -28,7 +28,7 @@ const firebaseConfig = {
 };
 
 function loadEnvKey() {
-  const envPath = resolve(__dirname, "../functions/.env");
+  const envPath = resolve(__dirname, "../.env");
   const text = readFileSync(envPath, "utf8");
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
@@ -36,7 +36,7 @@ function loadEnvKey() {
       return trimmed.slice("DATA_GO_KR_SERVICE_KEY=".length).trim();
     }
   }
-  throw new Error("DATA_GO_KR_SERVICE_KEY not found in functions/.env");
+  throw new Error("DATA_GO_KR_SERVICE_KEY not found in root .env");
 }
 
 function parseItems(json) {

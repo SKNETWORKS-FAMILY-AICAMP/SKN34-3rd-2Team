@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
+from copy import deepcopy
+import hashlib
+import json
 
 import firebase_admin
 from firebase_admin import auth, credentials, firestore
@@ -64,6 +67,53 @@ class FirebaseGateway:
     def _review_ref(self, cohort_id, resume_id, review_id):
         return self._resume_ref(cohort_id, resume_id).collection(self._settings.firestore_ai_reviews_collection).document(review_id)
 
+    def create_tailored_resume(self, cohort_id: str, resume_id: str, uid: str, job_source: dict[str, Any]) -> dict[str, Any]:
+        """Clone an owned base resume once per immutable job snapshot.
+
+        The deterministic id makes a repeated button click idempotent while a changed
+        job snapshot intentionally creates a new draft instead of overwriting history.
+        """
+        base = self.get_owned_resume(cohort_id, resume_id, uid)
+        source_hash = hashlib.sha256(json.dumps(base.get('content') or {}, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+        snapshot_hash = str(job_source.get('snapshot_hash') or '')
+        job_id = str(job_source.get('job_id') or '')
+        if not job_id or not snapshot_hash:
+            raise ValueError('job_source_is_incomplete')
+        tailored_id = 'tailored_' + hashlib.sha256(
+            f'{resume_id}:{job_id}:{snapshot_hash}'.encode()
+        ).hexdigest()[:24]
+        ref = self._tailored_ref(cohort_id, resume_id, tailored_id)
+        payload = {
+            'userId': uid,
+            'baseResumeId': resume_id,
+            'jobId': job_id,
+            'companyName': str(job_source.get('company') or ''),
+            'jobTitle': str(job_source.get('title') or ''),
+            'jobSnapshotHash': snapshot_hash,
+            'sourceResumeHash': source_hash,
+            'status': 'draft',
+            'content': deepcopy(base.get('content') or {}),
+            'createdAt': firestore.SERVER_TIMESTAMP,
+            'updatedAt': firestore.SERVER_TIMESTAMP,
+        }
+        try:
+            ref.create(payload)
+            return {'tailored_resume_id': tailored_id, **payload}
+        except AlreadyExists:
+            existing = ref.get().to_dict() or {}
+            if existing.get('userId') != uid or existing.get('jobSnapshotHash') != snapshot_hash:
+                raise ResumeNotFoundError('tailored resume not found')
+            return {'tailored_resume_id': tailored_id, **existing}
+
+    def list_tailored_resumes(self, cohort_id: str, resume_id: str, uid: str) -> list[dict[str, Any]]:
+        self.get_owned_resume(cohort_id, resume_id, uid)
+        result = []
+        for snapshot in self._resume_ref(cohort_id, resume_id).collection('tailoredResumes').stream():
+            data = snapshot.to_dict() or {}
+            if data.get('userId') == uid:
+                result.append({'tailored_resume_id': snapshot.id, **data})
+        return result
+
     def get_ai_review(self, cohort_id, resume_id, uid, review_id):
         self.get_owned_resume(cohort_id, resume_id, uid)
         data = self._review_ref(cohort_id, resume_id, review_id).get().to_dict() or {}
@@ -118,6 +168,9 @@ class FirebaseGateway:
             .collection(self._settings.firestore_resumes_collection)
             .document(resume_id)
         )
+
+    def _tailored_ref(self, cohort_id: str, resume_id: str, tailored_resume_id: str):
+        return self._resume_ref(cohort_id, resume_id).collection('tailoredResumes').document(tailored_resume_id)
 
 
 def extract_bearer_token(authorization: str | None) -> str:

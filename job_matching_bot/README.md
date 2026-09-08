@@ -75,8 +75,9 @@ sync.py       수집 원본 → 인덱스까지 한 번에 (증분)
 
 ## 준비
 
-API 키는 `functions/.env` 한 곳에 둔다. Functions(TypeScript)와 이 패키지가 같은
-파일을 읽는다. 키를 코드나 문서에 적지 않는다.
+API 키와 로컬 서버 설정은 레포 루트 `.env` 한 곳에 둔다. Firebase Functions 배포 전에는
+`powershell -ExecutionPolicy Bypass -File scripts/sync-functions-env.ps1`로 생성본
+`functions/.env`를 동기화한다. 키를 코드나 문서에 적지 않는다.
 
 ```
 OPENAI_API_KEY=

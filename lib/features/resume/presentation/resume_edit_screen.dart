@@ -1290,7 +1290,9 @@ class _IconFieldState extends State<_IconField> {
         isDense: true,
       ),
       readOnly: widget.onTap != null,
+      showCursor: widget.onTap == null,
       keyboardType: widget.keyboardType,
+      onTap: widget.onTap,
       onChanged: widget.onChanged,
       style: const TextStyle(fontSize: 13),
     );
@@ -1321,9 +1323,7 @@ class _IconFieldState extends State<_IconField> {
                       ),
                     ],
                   )
-                : widget.onTap != null
-                    ? InkWell(onTap: widget.onTap, child: textField)
-                    : textField,
+                : textField,
           ),
         ],
       ),
