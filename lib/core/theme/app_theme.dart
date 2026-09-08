@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import '../widgets/app_dropdown.dart';
 
 abstract final class AppTheme {
+  /// 삭제·위험 액션용 FilledButton 스타일
+  static ButtonStyle get destructiveFilled => FilledButton.styleFrom(
+        backgroundColor: AppColors.error,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: AppColors.error.withValues(alpha: 0.45),
+        disabledForegroundColor: Colors.white,
+      );
+
   static ThemeData get light {
     const colorScheme = ColorScheme(
       brightness: Brightness.light,
@@ -60,6 +69,24 @@ abstract final class AppTheme {
           vertical: 14,
         ),
       ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.45),
+          disabledForegroundColor: Colors.white,
+          minimumSize: const Size(64, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          elevation: 0,
+          textStyle: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
@@ -108,13 +135,13 @@ abstract final class AppTheme {
         }),
       ),
       navigationRailTheme: const NavigationRailThemeData(
-        backgroundColor: AppColors.sidebar,
-        selectedIconTheme: IconThemeData(color: Colors.white, size: 24),
+        backgroundColor: AppColors.surface,
+        selectedIconTheme: IconThemeData(color: AppColors.primary, size: 24),
         unselectedIconTheme: IconThemeData(
-          color: AppColors.sidebarIconInactive,
+          color: AppColors.textSecondary,
           size: 24,
         ),
-        indicatorColor: Color(0x33FFFFFF),
+        indicatorColor: AppColors.primaryLight,
       ),
       drawerTheme: const DrawerThemeData(
         backgroundColor: AppColors.surface,
@@ -134,6 +161,8 @@ abstract final class AppTheme {
         ),
         side: BorderSide.none,
       ),
+      menuTheme: MenuThemeData(style: AppMenuStyles.panel),
+      popupMenuTheme: AppMenuStyles.popupTheme,
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -148,7 +177,15 @@ abstract final class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.textPrimary,
+        elevation: 2,
+        width: 420,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        contentTextStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
+        ),
       ),
     );
   }

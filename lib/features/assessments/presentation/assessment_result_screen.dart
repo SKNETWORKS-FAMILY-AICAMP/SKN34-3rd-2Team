@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/demo/demo_lms_repository.dart';
 import '../../../shared/models/assessment_model.dart';
@@ -172,7 +173,7 @@ class _AssessmentResultScreenState
                             heightFactor: 1,
                             child: ConstrainedBox(
                               constraints:
-                                  const BoxConstraints(maxWidth: 720),
+                                  const BoxConstraints(maxWidth: AppLayout.reading),
                               child: Column(
                                 crossAxisAlignment:
                                     CrossAxisAlignment.stretch,
@@ -290,7 +291,7 @@ class _AssessmentResultScreenState
                             heightFactor: 1,
                             child: ConstrainedBox(
                               constraints:
-                                  const BoxConstraints(maxWidth: 720),
+                                  const BoxConstraints(maxWidth: AppLayout.reading),
                               child: SizedBox(
                                 width: double.infinity,
                                 height: 48,

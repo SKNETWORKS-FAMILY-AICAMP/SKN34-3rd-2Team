@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/attendance_status.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/domain_models.dart';
 import '../../../shared/models/user_model.dart';
@@ -123,12 +125,12 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
     final attendancesAsync = ref.watch(attendancesByDateProvider(_dateKey));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('출석관리'),
-      ),
       body: studentsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(message: e.toString()),
+        error: (e, _) => ErrorView(
+          message: e.toString(),
+          onRetry: () => ref.invalidate(cohortStudentsProvider),
+        ),
         data: (students) {
           final byUser = <String, AttendanceModel>{};
           for (final a in attendancesAsync.asData?.value ?? const []) {
@@ -157,100 +159,137 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1100),
+              constraints: const BoxConstraints(maxWidth: AppLayout.wide),
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
                 children: [
                   Text(
                     cohortName ?? '기수를 먼저 선택하세요',
                     style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   const Text(
                     '고용24 입퇴실은 예시 데이터입니다. 지각·조퇴·외출·결석·공가는 당일 구글폼 선택값이 반영됩니다.',
                     style: TextStyle(
                       fontSize: 13,
+                      height: 1.4,
                       color: AppColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _pickDate,
-                        icon: const Icon(Icons.calendar_today, size: 16),
-                        label: Text(_dateKey),
-                      ),
-                      TextButton(
-                        onPressed: () => setState(() => _day = DateTime.now()),
-                        child: const Text('오늘'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: _seeding || students.isEmpty ? null : _seedDemo,
-                        icon: _seeding
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.schedule, size: 16),
-                        label: const Text('예시 입퇴실 채우기'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed:
-                            _ensuringNotice ? null : _ensureNotice,
-                        icon: _ensuringNotice
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.campaign_outlined, size: 16),
-                        label: const Text('매일 08:30 공지 등록'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _CountChip(
-                        label: '전체 ${students.length}',
-                        color: AppColors.textPrimary,
-                      ),
-                      ...AttendanceStatus.all.map(
-                        (s) => _CountChip(
-                          label:
-                              '${AttendanceStatus.labelOf(s)} ${counts[s] ?? 0}',
-                          color: AttendanceStatus.colorOf(s),
+                  _ToolbarCard(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _pickDate,
+                          icon: const Icon(Icons.calendar_today, size: 16),
+                          label: Text(_dateKey),
                         ),
-                      ),
-                      _CountChip(
-                        label: '미기록 ${counts['_none'] ?? 0}',
-                        color: AppColors.textHint,
-                      ),
-                    ],
+                        TextButton(
+                          onPressed: () =>
+                              setState(() => _day = DateTime.now()),
+                          child: const Text('오늘'),
+                        ),
+                        const SizedBox(width: 4),
+                        FilledButton.icon(
+                          onPressed:
+                              _seeding || students.isEmpty ? null : _seedDemo,
+                          icon: _seeding
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.schedule, size: 16),
+                          label: const Text('예시 입퇴실 채우기'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _ensuringNotice ? null : _ensureNotice,
+                          icon: _ensuringNotice
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.campaign_outlined, size: 16),
+                          label: const Text('매일 08:30 공지 등록'),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search, size: 20),
-                      hintText: '이름 검색',
-                      isDense: true,
+                  _ToolbarCard(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final narrow = constraints.maxWidth < 720;
+                        final chips = Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _CountChip(
+                              label: '전체 ${students.length}',
+                              color: AppColors.textPrimary,
+                            ),
+                            ...AttendanceStatus.all.map(
+                              (s) => _CountChip(
+                                label:
+                                    '${AttendanceStatus.labelOf(s)} ${counts[s] ?? 0}',
+                                color: AttendanceStatus.colorOf(s),
+                              ),
+                            ),
+                            _CountChip(
+                              label: '미기록 ${counts['_none'] ?? 0}',
+                              color: AppColors.textHint,
+                            ),
+                          ],
+                        );
+                        final search = SizedBox(
+                          width: narrow ? double.infinity : 260,
+                          child: TextField(
+                            decoration: const InputDecoration(
+                              prefixIcon: Icon(Icons.search, size: 20),
+                              hintText: '이름 검색',
+                              isDense: true,
+                            ),
+                            onChanged: (v) => setState(() => _query = v),
+                          ),
+                        );
+                        if (narrow) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              chips,
+                              const SizedBox(height: 12),
+                              search,
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: chips),
+                            const SizedBox(width: 16),
+                            search,
+                          ],
+                        );
+                      },
                     ),
-                    onChanged: (v) => setState(() => _query = v),
                   ),
                   const SizedBox(height: 12),
                   if (attendancesAsync.isLoading)
                     const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
+                      padding: EdgeInsets.symmetric(vertical: 48),
                       child: Center(child: CircularProgressIndicator()),
                     )
                   else if (attendancesAsync.hasError)
@@ -265,28 +304,55 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
                         ),
                       ),
                     )
-                  else
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(
-                          AppColors.surfaceVariant,
+                  else if (filtered.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 48),
+                      child: Center(
+                        child: Text(
+                          '검색 결과가 없습니다.',
+                          style: TextStyle(color: AppColors.textSecondary),
                         ),
-                        columns: const [
-                          DataColumn(label: Text('이름')),
-                          DataColumn(label: Text('입실')),
-                          DataColumn(label: Text('퇴실')),
-                          DataColumn(label: Text('폼')),
-                          DataColumn(label: Text('최종 상태')),
-                          DataColumn(label: Text('출처')),
-                        ],
-                        rows: [
-                          for (final student in filtered)
-                            _row(
-                              student: student,
-                              attendance: byUser[student.uid],
+                      ),
+                    )
+                  else
+                    _ToolbarCard(
+                      padding: EdgeInsets.zero,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minWidth: constraints.maxWidth,
+                              ),
+                              child: DataTable(
+                                headingRowHeight: 44,
+                                dataRowMinHeight: 48,
+                                dataRowMaxHeight: 56,
+                                horizontalMargin: 16,
+                                columnSpacing: 28,
+                                headingRowColor: WidgetStateProperty.all(
+                                  AppColors.surfaceVariant,
+                                ),
+                                columns: const [
+                                  DataColumn(label: Text('이름')),
+                                  DataColumn(label: Text('입실')),
+                                  DataColumn(label: Text('퇴실')),
+                                  DataColumn(label: Text('폼')),
+                                  DataColumn(label: Text('최종 상태')),
+                                  DataColumn(label: Text('출처')),
+                                ],
+                                rows: [
+                                  for (final student in filtered)
+                                    _row(
+                                      student: student,
+                                      attendance: byUser[student.uid],
+                                    ),
+                                ],
+                              ),
                             ),
-                        ],
+                          );
+                        },
                       ),
                     ),
                 ],
@@ -312,43 +378,64 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
         DataCell(Text(attendance?.checkOutTime ?? '-')),
         DataCell(Text(attendance?.formSummary ?? '-')),
         DataCell(
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              hint: const Text('미기록', style: TextStyle(fontSize: 13)),
-              isDense: true,
-              items: [
-                for (final s in AttendanceStatus.all)
-                  DropdownMenuItem(
-                    value: s,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: AttendanceStatus.colorOf(s),
-                            shape: BoxShape.circle,
-                          ),
+          AppDropdownInline<String>(
+            value: value,
+            hint: '미기록',
+            items: [
+              for (final s in AttendanceStatus.all)
+                AppDropdownItem(
+                  value: s,
+                  label: AttendanceStatus.labelOf(s),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: AttendanceStatus.colorOf(s),
+                          shape: BoxShape.circle,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          AttendanceStatus.labelOf(s),
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        AttendanceStatus.labelOf(s),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
                   ),
-              ],
-              onChanged: (s) {
-                if (s != null) _setStatus(student: student, status: s);
-              },
-            ),
+                ),
+            ],
+            onChanged: (s) {
+              if (s != null) _setStatus(student: student, status: s);
+            },
           ),
         ),
         DataCell(Text(attendance?.sourceLabel ?? '-')),
       ],
+    );
+  }
+}
+
+class _ToolbarCard extends StatelessWidget {
+  const _ToolbarCard({
+    required this.child,
+    this.padding = const EdgeInsets.all(14),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(padding: padding, child: child),
     );
   }
 }

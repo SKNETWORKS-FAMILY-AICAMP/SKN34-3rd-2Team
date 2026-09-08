@@ -5,6 +5,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../../../../core/constants/attendance_status.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
+import '../../../../core/widgets/app_dropdown.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
@@ -163,33 +164,26 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                         error: (_, _) => const SizedBox.shrink(),
                         data: (students) {
                           if (students.isEmpty) return const SizedBox.shrink();
-                          return DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: students.any((s) => s.uid == _targetUserId)
-                                  ? _targetUserId
-                                  : students.first.uid,
-                              isDense: true,
-                              style: const TextStyle(fontSize: 11),
-                              items: students
-                                  .map(
-                                    (s) => DropdownMenuItem(
-                                      value: s.uid,
-                                      child: Text(
-                                        s.displayName,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (uid) {
-                                if (uid != null) {
-                                  ref
-                                      .read(adminAttendanceTargetUserIdProvider
-                                          .notifier)
-                                      .select(uid);
-                                }
-                              },
-                            ),
+                          return AppDropdownInline<String>(
+                            value: students.any((s) => s.uid == _targetUserId)
+                                ? _targetUserId
+                                : students.first.uid,
+                            fontSize: 11,
+                            items: [
+                              for (final s in students)
+                                AppDropdownItem(
+                                  value: s.uid,
+                                  label: s.displayName,
+                                ),
+                            ],
+                            onChanged: (uid) {
+                              if (uid != null) {
+                                ref
+                                    .read(adminAttendanceTargetUserIdProvider
+                                        .notifier)
+                                    .select(uid);
+                              }
+                            },
                           );
                         },
                       ),
@@ -206,35 +200,28 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                     error: (_, __) => const SizedBox.shrink(),
                     data: (students) {
                       if (students.isEmpty) return const SizedBox.shrink();
-                      return DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: students.any((s) => s.uid == _targetUserId)
-                              ? _targetUserId
-                              : students.first.uid,
-                          isExpanded: true,
-                          isDense: true,
-                          style: const TextStyle(fontSize: 11),
-                          items: students
-                              .map(
-                                (s) => DropdownMenuItem(
-                                  value: s.uid,
-                                  child: Text(
-                                    s.displayName,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (uid) {
-                            if (uid != null) {
-                              ref
-                                  .read(
-                                    adminAttendanceTargetUserIdProvider.notifier,
-                                  )
-                                  .select(uid);
-                            }
-                          },
-                        ),
+                      return AppDropdownInline<String>(
+                        value: students.any((s) => s.uid == _targetUserId)
+                            ? _targetUserId
+                            : students.first.uid,
+                        isExpanded: true,
+                        fontSize: 11,
+                        items: [
+                          for (final s in students)
+                            AppDropdownItem(
+                              value: s.uid,
+                              label: s.displayName,
+                            ),
+                        ],
+                        onChanged: (uid) {
+                          if (uid != null) {
+                            ref
+                                .read(
+                                  adminAttendanceTargetUserIdProvider.notifier,
+                                )
+                                .select(uid);
+                          }
+                        },
                       );
                     },
                   ),

@@ -6,6 +6,7 @@ import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/widgets/status_badge.dart';
 import '../../hub/presentation/widgets/notice_list_widgets.dart';
 import '../../../shared/models/notice_model.dart';
 import '../../../shared/models/submission_model.dart';
@@ -417,7 +418,7 @@ class _SubmissionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              _StatusBadge(
+              StatusBadge(
                 label: s.statusLabel,
                 color: s.isApproved
                     ? AppColors.success
@@ -469,32 +470,6 @@ class _SectionTitle extends StatelessWidget {
           fontWeight: FontWeight.w700,
           fontSize: compact ? 14 : 16,
           color: AppColors.textPrimary,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: color,
         ),
       ),
     );

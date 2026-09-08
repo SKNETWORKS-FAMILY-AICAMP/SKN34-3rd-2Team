@@ -164,24 +164,12 @@ class _NoticesTab extends ConsumerWidget {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                const SizedBox(height: 120),
-                Center(
-                  child: Column(
-                    children: [
-                      Icon(
-                        q.isEmpty
-                            ? Icons.campaign_outlined
-                            : Icons.search_off_rounded,
-                        size: 40,
-                        color: AppColors.textHint,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        q.isEmpty ? '공지사항이 없습니다' : '검색 결과가 없습니다',
-                        style: const TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
+                SizedBox(height: 48),
+                EmptyView(
+                  message: q.isEmpty ? '등록된 공지가 없습니다.' : '검색 결과가 없습니다.',
+                  icon: q.isEmpty
+                      ? Icons.campaign_outlined
+                      : Icons.search_off_rounded,
                 ),
               ],
             );
@@ -193,7 +181,8 @@ class _NoticesTab extends ConsumerWidget {
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
+              constraints:
+                  const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
@@ -326,11 +315,9 @@ class _FeedTab extends ConsumerWidget {
             error: (e, _) => ErrorView(message: e.toString()),
             data: (list) {
               if (list.isEmpty) {
-                return const Center(
-                  child: Text(
-                    '게시글이 없습니다',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
+                return const EmptyView(
+                  message: '게시글이 없습니다.',
+                  icon: Icons.forum_outlined,
                 );
               }
               return ListView.builder(

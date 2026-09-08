@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_dropdown.dart';
+import '../../../core/widgets/in_page_header.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/lms_providers.dart';
@@ -21,45 +23,44 @@ class AdminInstructorsScreen extends ConsumerWidget {
     final instructors = ref.watch(instructorsStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('강사 관리'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilledButton.icon(
-              onPressed: () => context.push(RoutePaths.adminInstructorsCreate),
-              icon: const Icon(Icons.person_add, size: 18),
-              label: const Text('강사 등록'),
-            ),
+      body: Column(
+        children: [
+          InPageHeader(
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilledButton.icon(
+                  onPressed: () =>
+                      context.push(RoutePaths.adminInstructorsCreate),
+                  icon: const Icon(Icons.person_add, size: 18),
+                  label: const Text('강사 등록'),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(instructorsStreamProvider),
-        child: instructors.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ErrorView(message: e.toString()),
-          data: (list) {
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async =>
+                  ref.invalidate(instructorsStreamProvider),
+              child: instructors.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (e, _) => ErrorView(
+                  message: e.toString(),
+                  onRetry: () => ref.invalidate(instructorsStreamProvider),
+                ),
+                data: (list) {
             if (list.isEmpty) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(AdminPageLayout.padding),
                 children: [
-                  const SizedBox(height: 80),
-                  const Center(
-                    child: Text(
-                      '등록된 강사가 없습니다',
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: FilledButton.icon(
-                      onPressed: () =>
-                          context.push(RoutePaths.adminInstructorsCreate),
-                      icon: const Icon(Icons.person_add, size: 18),
-                      label: const Text('강사 등록'),
-                    ),
+                  EmptyView(
+                    message: '등록된 강사가 없습니다.',
+                    icon: Icons.school_outlined,
+                    actionLabel: '강사 등록',
+                    onAction: () =>
+                        context.push(RoutePaths.adminInstructorsCreate),
                   ),
                 ],
               );
@@ -72,8 +73,11 @@ class AdminInstructorsScreen extends ConsumerWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _InstructorTile(instructor: list[i]),
             );
-          },
-        ),
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -115,21 +119,14 @@ class _InstructorTile extends ConsumerWidget {
                     decoration: const InputDecoration(labelText: '이름'),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
+                  AppDropdownField<String>(
                     key: ValueKey(selected),
-                    initialValue: selected,
+                    value: selected,
                     decoration: const InputDecoration(labelText: '담당 기수'),
-                    items: cohorts
-                        .map(
-                          (c) => DropdownMenuItem(
-                            value: c.cohortId,
-                            child: Text(
-                              c.name,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
+                    items: [
+                      for (final c in cohorts)
+                        AppDropdownItem(value: c.cohortId, label: c.name),
+                    ],
                     onChanged: (v) {
                       if (v != null) setDialogState(() => cohortId = v);
                     },
@@ -262,7 +259,7 @@ class _InstructorTile extends ConsumerWidget {
             instructor.isActive ? '활성' : '비활성',
           ].where((s) => s.isNotEmpty).join(' · '),
         ),
-        trailing: PopupMenuButton<String>(
+        trailing: AppIconMenu<String>(
           onSelected: (value) {
             switch (value) {
               case 'edit':
@@ -273,12 +270,12 @@ class _InstructorTile extends ConsumerWidget {
                 _toggleActive(context, ref);
             }
           },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('정보 수정')),
-            const PopupMenuItem(value: 'reset', child: Text('비밀번호 재발급')),
-            PopupMenuItem(
+          items: [
+            const AppMenuAction(value: 'edit', label: '정보 수정'),
+            const AppMenuAction(value: 'reset', label: '비밀번호 재발급'),
+            AppMenuAction(
               value: 'toggle',
-              child: Text(instructor.isActive ? '비활성화' : '활성화'),
+              label: instructor.isActive ? '비활성화' : '활성화',
             ),
           ],
         ),

@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../assessments/presentation/widgets/assessment_card.dart';
+import '../../../core/widgets/loading_widgets.dart';
 
 Future<bool> confirmAndDeleteAssessment({
   required BuildContext context,
@@ -28,10 +30,7 @@ Future<bool> confirmAndDeleteAssessment({
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.error,
-            foregroundColor: Colors.white,
-          ),
+          style: AppTheme.destructiveFilled,
           child: const Text('삭제'),
         ),
       ],
@@ -129,7 +128,6 @@ class InstructorAssessmentsScreen extends ConsumerWidget {
     final assessments = ref.watch(assessmentsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(RoutePaths.instructorAssessmentsCreate),
         icon: const Icon(Icons.add),
@@ -137,10 +135,19 @@ class InstructorAssessmentsScreen extends ConsumerWidget {
       ),
       body: assessments.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => ErrorView(
+          message: e.toString(),
+          onRetry: () => ref.invalidate(assessmentsProvider),
+        ),
         data: (list) {
           if (list.isEmpty) {
-            return const Center(child: Text('아직 만든 평가가 없습니다.'));
+            return EmptyView(
+              message: '아직 만든 평가가 없습니다.',
+              icon: Icons.quiz_outlined,
+              actionLabel: '평가 만들기',
+              onAction: () =>
+                  context.push(RoutePaths.instructorAssessmentsCreate),
+            );
           }
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
@@ -150,7 +157,7 @@ class InstructorAssessmentsScreen extends ConsumerWidget {
               final a = list[i];
               return Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 860),
+                  constraints: AppLayout.listConstraints(),
                   child: AssessmentCard(
                     assessment: a,
                     onTap: () => context.push(

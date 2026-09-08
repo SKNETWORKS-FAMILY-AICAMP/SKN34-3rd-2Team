@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_layout.dart';
 import '../../../../shared/models/user_model.dart';
 
 class StudyRoomPageHeader extends StatelessWidget {
@@ -137,7 +138,7 @@ class StudyRoomSearchBar extends StatelessWidget {
 }
 
 abstract final class StudyRoomLayout {
-  static const maxWidth = 960.0;
+  static const maxWidth = AppLayout.page;
   static const padding = 24.0;
 }
 

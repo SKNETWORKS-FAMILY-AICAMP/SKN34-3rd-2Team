@@ -10,8 +10,6 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../hub/presentation/widgets/board_ui.dart';
 import '../../hub/presentation/widgets/notice_list_widgets.dart';
 
-const _kBoardContentMaxWidth = 880.0;
-
 /// 강사 — 게시물 작성 (공지 등록·본인 글 수정)
 class InstructorBoardScreen extends ConsumerWidget {
   const InstructorBoardScreen({super.key});
@@ -24,72 +22,46 @@ class InstructorBoardScreen extends ConsumerWidget {
 
     return ColoredBox(
       color: BoardUi.listBackground,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _kBoardContentMaxWidth),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '게시물관리',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${cohortName ?? '담당 기수'} · 본인이 등록한 글만 수정할 수 있습니다.',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton.icon(
-                      onPressed: () =>
-                          context.push(RoutePaths.instructorBoardCreate),
-                      style: BoardUi.primaryButtonStyle(),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('공지 작성'),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          BoardPageHeader(
+            title: '게시판 관리',
+            subtitle:
+                '${cohortName ?? '담당 기수'} · 본인이 등록한 글만 수정할 수 있습니다.',
+            action: FilledButton.icon(
+              onPressed: () =>
+                  context.push(RoutePaths.instructorBoardCreate),
+              style: BoardUi.primaryButtonStyle(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('공지 작성'),
+            ),
+          ),
+          Expanded(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints:
+                    const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
                 child: RefreshIndicator(
                   onRefresh: () async =>
                       ref.invalidate(noticesStreamProvider),
                   child: notices.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => ErrorView(message: e.toString()),
+                    error: (e, _) => ErrorView(
+                      message: e.toString(),
+                      onRetry: () => ref.invalidate(noticesStreamProvider),
+                    ),
                     data: (list) {
                       if (list.isEmpty) {
                         return ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
                           children: const [
-                            SizedBox(height: 100),
-                            Center(
-                              child: Text(
-                                '등록된 공지가 없습니다.',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
+                            SizedBox(height: 48),
+                            EmptyView(
+                              message: '등록된 공지가 없습니다.',
+                              icon: Icons.campaign_outlined,
                             ),
                           ],
                         );
@@ -131,9 +103,9 @@ class InstructorBoardScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

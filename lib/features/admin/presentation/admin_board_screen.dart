@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/alert_popup_model.dart';
 import '../../../shared/models/notice_model.dart';
@@ -63,42 +64,14 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '게시판 관리',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        '공지 · 예약 게시 · 로그인 알림 팝업을 관리합니다.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _onCreate,
-                  style: BoardUi.primaryButtonStyle(),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(_createLabel),
-                ),
-              ],
+          BoardPageHeader(
+            title: '게시판 관리',
+            subtitle: '공지 · 예약 게시 · 로그인 알림 팝업을 관리합니다.',
+            action: FilledButton.icon(
+              onPressed: _onCreate,
+              style: BoardUi.primaryButtonStyle(),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(_createLabel),
             ),
           ),
           BoardTabBar(
@@ -138,12 +111,10 @@ class _NoticeManageTab extends ConsumerWidget {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: const [
-                SizedBox(height: 120),
-                Center(
-                  child: Text(
-                    '등록된 공지가 없습니다.',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
+                SizedBox(height: 48),
+                EmptyView(
+                  message: '등록된 공지가 없습니다.',
+                  icon: Icons.campaign_outlined,
                 ),
               ],
             );
@@ -175,12 +146,10 @@ class _NoticeManageTab extends ConsumerWidget {
                         size: 22,
                       ),
                     ),
-                    PopupMenuButton<String>(
-                      icon: const Icon(
-                        Icons.more_vert,
-                        color: AppColors.textHint,
-                        size: 20,
-                      ),
+                    AppIconMenu<String>(
+                      icon: const Icon(Icons.more_vert),
+                      iconSize: 20,
+                      color: AppColors.textHint,
                       onSelected: (value) async {
                         if (value == 'edit') {
                           context.push(
@@ -190,9 +159,9 @@ class _NoticeManageTab extends ConsumerWidget {
                           await _confirmDelete(context, ref, notice);
                         }
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'edit', child: Text('수정')),
-                        PopupMenuItem(value: 'delete', child: Text('삭제')),
+                      items: const [
+                        AppMenuAction(value: 'edit', label: '수정'),
+                        AppMenuAction(value: 'delete', label: '삭제', danger: true),
                       ],
                     ),
                   ],
@@ -342,12 +311,10 @@ class _ScheduledNoticeTabState extends ConsumerState<_ScheduledNoticeTab> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               children: const [
-                SizedBox(height: 120),
-                Center(
-                  child: Text(
-                    '등록된 예약 공지가 없습니다.',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
+                SizedBox(height: 48),
+                EmptyView(
+                  message: '등록된 예약 공지가 없습니다.',
+                  icon: Icons.schedule_outlined,
                 ),
               ],
             );
@@ -523,8 +490,10 @@ class _ScheduledRow extends ConsumerWidget {
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textHint),
+          AppIconMenu<String>(
+            icon: const Icon(Icons.more_vert),
+            iconSize: 18,
+            color: AppColors.textHint,
             padding: EdgeInsets.zero,
             onSelected: (action) {
               if (action == 'edit') {
@@ -533,9 +502,9 @@ class _ScheduledRow extends ConsumerWidget {
                 _confirmDelete(context, ref);
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('수정')),
-              PopupMenuItem(value: 'delete', child: Text('삭제')),
+            items: const [
+              AppMenuAction(value: 'edit', label: '수정'),
+              AppMenuAction(value: 'delete', label: '삭제', danger: true),
             ],
           ),
         ],
@@ -600,21 +569,13 @@ class _AlertPopupTab extends ConsumerWidget {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                const SizedBox(height: 80),
-                const Center(
-                  child: Text(
-                    '등록된 알림 팝업이 없습니다.',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: OutlinedButton.icon(
-                    onPressed: () =>
-                        context.push(RoutePaths.adminBoardAlertPopupCreate),
-                    icon: const Icon(Icons.add),
-                    label: const Text('알림 팝업 등록'),
-                  ),
+                const SizedBox(height: 48),
+                EmptyView(
+                  message: '등록된 알림 팝업이 없습니다.',
+                  icon: Icons.notifications_none_outlined,
+                  actionLabel: '알림 팝업 등록',
+                  onAction: () =>
+                      context.push(RoutePaths.adminBoardAlertPopupCreate),
                 ),
               ],
             );
@@ -719,7 +680,7 @@ class _AlertPopupCard extends ConsumerWidget {
               value: item.isActive,
               onChanged: (v) => _toggleActive(ref, v),
             ),
-            PopupMenuButton<String>(
+            AppIconMenu<String>(
               onSelected: (value) async {
                 if (value == 'edit') {
                   context.push(
@@ -729,9 +690,9 @@ class _AlertPopupCard extends ConsumerWidget {
                   await _confirmDelete(context, ref);
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('수정')),
-                PopupMenuItem(value: 'delete', child: Text('삭제')),
+              items: const [
+                AppMenuAction(value: 'edit', label: '수정'),
+                AppMenuAction(value: 'delete', label: '삭제', danger: true),
               ],
             ),
           ],

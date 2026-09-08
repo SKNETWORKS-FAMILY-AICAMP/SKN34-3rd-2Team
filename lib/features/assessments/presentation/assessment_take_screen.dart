@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/demo/demo_lms_repository.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -268,7 +269,7 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
                             heightFactor: 1,
                             child: ConstrainedBox(
                               constraints:
-                                  const BoxConstraints(maxWidth: 720),
+                                  const BoxConstraints(maxWidth: AppLayout.reading),
                               child: AssessmentQuestionView(
                                 number: i + 1,
                                 prompt: q.prompt,
@@ -304,7 +305,7 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
                             heightFactor: 1,
                             child: ConstrainedBox(
                               constraints:
-                                  const BoxConstraints(maxWidth: 720),
+                                  const BoxConstraints(maxWidth: AppLayout.reading),
                               child: SizedBox(
                                 width: double.infinity,
                                 height: 48,

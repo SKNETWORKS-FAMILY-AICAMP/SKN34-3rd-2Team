@@ -20,7 +20,6 @@ class AdminAiQualityScreen extends ConsumerWidget {
         ref.watch(aiQuestionFeedbackProvider).asData?.value ?? const [];
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(aiGenerationLogsProvider);

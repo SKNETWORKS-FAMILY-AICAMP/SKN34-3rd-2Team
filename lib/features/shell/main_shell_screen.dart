@@ -124,74 +124,39 @@ class MainShellScreen extends ConsumerWidget {
               onLogout: () => ref.read(authRepositoryProvider).signOut(),
               profile: user == null
                   ? null
-                  : _RailProfileTile(
-                      user: user,
-                      previewBytes: preview,
+                  : SideRailProfileTile(
+                      label: user.displayName.isNotEmpty
+                          ? user.displayName
+                          : '마이페이지',
+                      initial: user.displayName.isNotEmpty
+                          ? user.displayName[0]
+                          : 'S',
                       onTap: () => context.go(RoutePaths.myPage),
+                      leading: Builder(
+                        builder: (ctx) {
+                          final rail = SideRailStyle.of(ctx);
+                          return Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: rail.border,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: ProfileAvatar(
+                              radius: 14,
+                              userId: user.uid,
+                              photoUrl: user.photoUrl,
+                              photoStoragePath: user.photoStoragePath,
+                              previewBytes: preview,
+                            ),
+                          );
+                        },
+                      ),
                     ),
             ),
           Expanded(child: AlertPopupHost(child: child)),
         ],
-      ),
-    );
-  }
-}
-
-class _RailProfileTile extends StatelessWidget {
-  const _RailProfileTile({
-    required this.user,
-    required this.onTap,
-    this.previewBytes,
-  });
-
-  final UserModel user;
-  final VoidCallback onTap;
-  final Uint8List? previewBytes;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    width: 1.5,
-                  ),
-                ),
-                child: ProfileAvatar(
-                  radius: 14,
-                  userId: user.uid,
-                  photoUrl: user.photoUrl,
-                  photoStoragePath: user.photoStoragePath,
-                  previewBytes: previewBytes,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  user.displayName.isNotEmpty ? user.displayName : '마이페이지',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

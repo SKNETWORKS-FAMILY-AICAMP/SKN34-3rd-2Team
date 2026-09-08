@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
+import '../../../core/widgets/in_page_header.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -20,95 +22,113 @@ class SeatingScreen extends ConsumerWidget {
     final cohortName = ref.watch(effectiveCohortNameProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _title(
-            cohortName,
-            layoutAsync.asData?.value?.roomNumber,
+      body: Column(
+        children: [
+          InPageHeader(
+            title: _title(
+              cohortName,
+              layoutAsync.asData?.value?.roomNumber,
+            ),
           ),
-        ),
-      ),
-      body: layoutAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(message: e.toString()),
-        data: (layout) {
-          return assignmentAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => ErrorView(message: e.toString()),
-            data: (assignment) {
-              if (layout == null) {
-                return const Center(
-                  child: Text('좌석 배치가 아직 준비되지 않았습니다.'),
-                );
-              }
+          Expanded(
+            child: layoutAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => ErrorView(
+                message: e.toString(),
+                onRetry: () {
+                  ref.invalidate(publishedSeatingLayoutProvider);
+                  ref.invalidate(publishedSeatingAssignmentProvider);
+                },
+              ),
+              data: (layout) {
+                return assignmentAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => ErrorView(
+                    message: e.toString(),
+                    onRetry: () =>
+                        ref.invalidate(publishedSeatingAssignmentProvider),
+                  ),
+                  data: (assignment) {
+                    if (layout == null) {
+                      return const Center(
+                        child: Text('좌석 배치가 아직 준비되지 않았습니다.'),
+                      );
+                    }
 
-              if (assignment == null || !assignment.isPublished) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.event_seat_outlined,
-                          size: 48,
-                          color: AppColors.textHint.withValues(alpha: 0.6),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '좌석 배치 확정 대기 중',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                    if (assignment == null || !assignment.isPublished) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.event_seat_outlined,
+                                size: 48,
+                                color:
+                                    AppColors.textHint.withValues(alpha: 0.6),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                '좌석 배치 확정 대기 중',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '관리자가 배치를 확정하면 이곳에서 확인할 수 있습니다.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary
+                                      .withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '관리자가 배치를 확정하면 이곳에서 확인할 수 있습니다.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.textSecondary.withValues(alpha: 0.9),
+                      );
+                    }
+
+                    final seatUserIds = assignment.assignments;
+                    final seatDisplayNames = assignment.seatNames.isNotEmpty
+                        ? assignment.seatNames
+                        : {
+                            for (final e in ref
+                                .watch(seatingAssignedStudentsProvider)
+                                .entries)
+                              e.key: e.value.displayName,
+                          };
+                    final myUid = currentUser.asData?.value?.uid;
+
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: AppLayout.seating),
+                          child: Column(
+                            children: [
+                              SeatGrid(
+                                layout: layout,
+                                seatUserIds: seatUserIds,
+                                seatDisplayNames: seatDisplayNames,
+                                highlightUserId: myUid,
+                                editable: false,
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 );
-              }
-
-              final seatUserIds = assignment.assignments;
-              final seatDisplayNames = assignment.seatNames.isNotEmpty
-                  ? assignment.seatNames
-                  : {
-                      for (final e
-                          in ref.watch(seatingAssignedStudentsProvider).entries)
-                        e.key: e.value.displayName,
-                    };
-              final myUid = currentUser.asData?.value?.uid;
-
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 900),
-                    child: Column(
-                      children: [
-                        SeatGrid(
-                          layout: layout,
-                          seatUserIds: seatUserIds,
-                          seatDisplayNames: seatDisplayNames,
-                          highlightUserId: myUid,
-                          editable: false,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

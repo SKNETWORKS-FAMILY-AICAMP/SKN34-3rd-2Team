@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
+import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../assessments/presentation/widgets/assessment_card.dart';
 import '../../instructor/presentation/instructor_assessments_screen.dart';
@@ -17,13 +18,18 @@ class AdminAssessmentsScreen extends ConsumerWidget {
     final assessments = ref.watch(assessmentsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
       body: assessments.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => ErrorView(
+          message: e.toString(),
+          onRetry: () => ref.invalidate(assessmentsProvider),
+        ),
         data: (list) {
           if (list.isEmpty) {
-            return const Center(child: Text('등록된 평가가 없습니다.'));
+            return const EmptyView(
+              message: '등록된 평가가 없습니다.',
+              icon: Icons.quiz_outlined,
+            );
           }
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -33,7 +39,7 @@ class AdminAssessmentsScreen extends ConsumerWidget {
               final a = list[i];
               return Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 860),
+                  constraints: AppLayout.listConstraints(),
                   child: AssessmentCard(
                     assessment: a,
                     onTap: () => context.push(

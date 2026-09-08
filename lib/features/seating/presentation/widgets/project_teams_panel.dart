@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/loading_widgets.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
-import '../../../auth/providers/auth_providers.dart';
 import '../../data/seating_repository.dart';
 import '../../models/project_team_model.dart';
 import '../../providers/seating_providers.dart';
@@ -243,7 +243,10 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
 
     return teamsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('오류: $e')),
+      error: (e, _) => ErrorView(
+        message: e.toString(),
+        onRetry: () => ref.invalidate(projectTeamsProvider),
+      ),
       data: (teams) {
         final assigned = <String>{
           for (final t in teams) ...t.memberIds,
