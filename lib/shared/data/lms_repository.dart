@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/constants/attendance_status.dart';
 import '../../core/constants/firestore_paths.dart';
 import '../../core/errors/app_exception.dart';
+import '../../core/utils/class_period_utils.dart';
 import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
@@ -828,32 +829,88 @@ class LmsRepository {
     await cohortSub(cohortId, 'attendances').doc(docId).delete();
   }
 
-  Stream<Set<String>> watchRollCallConfirmed(String cohortId, String dateKey) {
-    return cohortSub(cohortId, 'rollCalls').doc(dateKey).snapshots().map((doc) {
+  Stream<Set<String>> watchRollCallConfirmed(
+    String cohortId,
+    String dateKey,
+    String periodId,
+  ) {
+    final docId = '${dateKey}_p$periodId';
+    return cohortSub(cohortId, 'rollCalls').doc(docId).snapshots().map((doc) {
       final raw = doc.data()?['confirmedUserIds'];
       if (raw is! List) return <String>{};
       return raw.map((e) => e.toString()).toSet();
     });
   }
 
-  Stream<Set<String>> watchRollCallHeld(String cohortId, String dateKey) {
-    return cohortSub(cohortId, 'rollCalls').doc(dateKey).snapshots().map((doc) {
+  Stream<Set<String>> watchRollCallHeld(
+    String cohortId,
+    String dateKey,
+    String periodId,
+  ) {
+    final docId = '${dateKey}_p$periodId';
+    return cohortSub(cohortId, 'rollCalls').doc(docId).snapshots().map((doc) {
       final raw = doc.data()?['heldUserIds'];
       if (raw is! List) return <String>{};
       return raw.map((e) => e.toString()).toSet();
     });
   }
 
+  /// 현재 교시 문서가 없으면 직전 교시(확인만)를 복사해 이어받음. 보류는 이어받지 않음.
+  Future<void> ensureRollCallCarriedForward({
+    required String cohortId,
+    required String dateKey,
+    required String periodId,
+    required String updatedBy,
+  }) async {
+    final docRef =
+        cohortSub(cohortId, 'rollCalls').doc('${dateKey}_p$periodId');
+    final snap = await docRef.get();
+    if (snap.exists) return;
+
+    var prev = ClassPeriodUtils.previousPeriod(periodId);
+    while (prev != null) {
+      final prevSnap = await cohortSub(cohortId, 'rollCalls')
+          .doc('${dateKey}_p${prev.id}')
+          .get();
+      if (prevSnap.exists) {
+        final raw = prevSnap.data()?['confirmedUserIds'];
+        final confirmed = raw is List
+            ? raw.map((e) => e.toString()).toList()
+            : <String>[];
+        await docRef.set({
+          'dateKey': dateKey,
+          'periodId': periodId,
+          'confirmedUserIds': confirmed,
+          'heldUserIds': <String>[],
+          'carriedFromPeriodId': prev.id,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'updatedBy': updatedBy,
+        });
+        return;
+      }
+      prev = ClassPeriodUtils.previousPeriod(prev.id);
+    }
+  }
+
   Future<void> setRollCallConfirmed({
     required String cohortId,
     required String dateKey,
+    required String periodId,
     required String userId,
     required bool confirmed,
     required String updatedBy,
   }) async {
-    await cohortSub(cohortId, 'rollCalls').doc(dateKey).set(
+    await ensureRollCallCarriedForward(
+      cohortId: cohortId,
+      dateKey: dateKey,
+      periodId: periodId,
+      updatedBy: updatedBy,
+    );
+    final docId = '${dateKey}_p$periodId';
+    await cohortSub(cohortId, 'rollCalls').doc(docId).set(
       {
         'dateKey': dateKey,
+        'periodId': periodId,
         'confirmedUserIds': confirmed
             ? FieldValue.arrayUnion([userId])
             : FieldValue.arrayRemove([userId]),
@@ -868,13 +925,22 @@ class LmsRepository {
   Future<void> setRollCallHeld({
     required String cohortId,
     required String dateKey,
+    required String periodId,
     required String userId,
     required bool held,
     required String updatedBy,
   }) async {
-    await cohortSub(cohortId, 'rollCalls').doc(dateKey).set(
+    await ensureRollCallCarriedForward(
+      cohortId: cohortId,
+      dateKey: dateKey,
+      periodId: periodId,
+      updatedBy: updatedBy,
+    );
+    final docId = '${dateKey}_p$periodId';
+    await cohortSub(cohortId, 'rollCalls').doc(docId).set(
       {
         'dateKey': dateKey,
+        'periodId': periodId,
         'heldUserIds': held
             ? FieldValue.arrayUnion([userId])
             : FieldValue.arrayRemove([userId]),

@@ -11,13 +11,16 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/seating_repository.dart';
 import '../models/seat_drag_payload.dart';
+import '../models/project_team_model.dart';
 import '../models/seating_assignment_model.dart';
 import '../models/seating_layout_model.dart';
 import '../models/seating_room_model.dart';
 import '../providers/seating_providers.dart';
 import 'widgets/layout_editor_grid.dart';
+import 'widgets/project_teams_panel.dart';
 import 'widgets/seat_grid.dart';
 import 'widgets/unassigned_student_list.dart';
+import '../utils/team_seating_assigner.dart';
 
 /// 관리자 — 좌석 틀 설정(강의실 생성) + 배치 편집(학생 배치)
 class AdminSeatingScreen extends ConsumerStatefulWidget {
@@ -51,7 +54,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -433,6 +436,54 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
     });
   }
 
+  Future<void> _assignByTeams() async {
+    final layout = _assignmentLayout;
+    if (layout == null) return;
+
+    // autoDispose + TabBarView로 스트림이 끊긴 경우 로딩을 빈 목록으로
+    // 오인하지 않도록 future까지 기다린다.
+    final List<ProjectTeamModel> teams;
+    try {
+      teams = await ref.read(projectTeamsProvider.future);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('프로젝트 팀을 불러오지 못했습니다: $e')),
+      );
+      return;
+    }
+
+    final withMembers = teams.where((t) => t.memberIds.isNotEmpty).toList();
+    if (withMembers.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            teams.isEmpty
+                ? '구성된 프로젝트 팀이 없습니다. 「프로젝트 팀」 탭에서 먼저 만들어 주세요.'
+                : '멤버가 있는 팀이 없습니다. 「프로젝트 팀」 탭에서 학생을 배정하세요.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final mapped = TeamSeatingAssigner.assign(
+      layout: layout,
+      teams: withMembers,
+    );
+    setState(() {
+      _assignmentDraftDirty = true;
+      _draftAssignments = mapped;
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${withMembers.length}개 팀을 인접 좌석에 배치했습니다. 확인 후 저장하세요.'),
+      ),
+    );
+  }
+
   void _clearAssignments() {
     setState(() {
       _assignmentDraftDirty = true;
@@ -440,8 +491,30 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
     });
   }
 
+  /// seatId → 프로젝트 팀 soft 색 (팀끼리 뭉침 확인용)
+  Map<String, Color> _seatTeamTints(List<ProjectTeamModel> teams) {
+    final userTint = <String, Color>{};
+    for (final team in teams) {
+      if (team.memberIds.isEmpty) continue;
+      final soft = ProjectTeamColors.softOf(team.colorIndex);
+      for (final uid in team.memberIds) {
+        userTint[uid] = soft;
+      }
+    }
+    if (userTint.isEmpty) return const {};
+
+    final result = <String, Color>{};
+    for (final e in _draftAssignments.entries) {
+      final tint = userTint[e.value];
+      if (tint != null) result[e.key] = tint;
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 배치 편집 탭에서도 팀 스트림을 유지 (팀끼리 앉히기용)
+    ref.watch(projectTeamsProvider);
     final roomsAsync = ref.watch(seatingRoomsProvider);
     final cohortName = ref.watch(effectiveCohortNameProvider);
     final studentsAsync = ref.watch(cohortStudentsProvider);
@@ -491,9 +564,11 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
       }
     }
 
-    final appBarRoom = _tabController.index == 0
-        ? _draftLayout?.roomNumber
-        : _assignmentLayout?.roomNumber;
+    final appBarRoom = switch (_tabController.index) {
+      0 => _draftLayout?.roomNumber,
+      2 => _assignmentLayout?.roomNumber,
+      _ => null,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -503,6 +578,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           onTap: (_) => setState(() {}),
           tabs: const [
             Tab(text: '좌석 틀 설정'),
+            Tab(text: '프로젝트 팀'),
             Tab(text: '배치 편집'),
           ],
         ),
@@ -514,6 +590,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           controller: _tabController,
           children: [
             _buildLayoutTab(rooms),
+            ProjectTeamsPanel(students: students),
             _buildAssignmentTab(rooms, students, studentsAsync.isLoading),
           ],
         ),
@@ -676,6 +753,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
 
     final layout = _assignmentLayout;
     final roomId = _assignmentRoomId;
+    final teams = ref.watch(projectTeamsProvider).asData?.value ?? [];
     final assignmentAsync = roomId != null
         ? ref.watch(seatingRoomAssignmentProvider(roomId))
         : null;
@@ -729,6 +807,11 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                   icon: const Icon(Icons.shuffle, size: 18),
                   label: const Text('랜덤 배치'),
                 ),
+                FilledButton.tonalIcon(
+                  onPressed: _assignByTeams,
+                  icon: const Icon(Icons.groups_rounded, size: 18),
+                  label: const Text('팀끼리 앉히기'),
+                ),
                 OutlinedButton.icon(
                   onPressed: _clearAssignments,
                   icon: const Icon(Icons.clear_all, size: 18),
@@ -768,6 +851,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                       seatDisplayNames: displayNames,
                       editable: true,
                       inactiveSeatIds: inactiveSeats,
+                      seatTintColors: _seatTeamTints(teams),
                       onAssign: _assignStudent,
                       onSwap: _swapSeats,
                     ),

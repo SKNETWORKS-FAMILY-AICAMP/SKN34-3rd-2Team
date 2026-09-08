@@ -39,6 +39,14 @@ class AdminAssessmentsScreen extends ConsumerWidget {
                     onTap: () => context.push(
                       RoutePaths.adminAssessmentDetailPath(a.id),
                     ),
+                    onPublish: a.published
+                        ? null
+                        : () => confirmAndPublishAssessment(
+                              context: context,
+                              ref: ref,
+                              assessmentId: a.id,
+                              title: a.title,
+                            ),
                     onDelete: () => confirmAndDeleteAssessment(
                       context: context,
                       ref: ref,

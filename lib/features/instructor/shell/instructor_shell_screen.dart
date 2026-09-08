@@ -17,7 +17,7 @@ class _NavItem {
 }
 
 const _kInstructorNavItems = [
-  _NavItem(Icons.fact_check_outlined, '출결관리', RoutePaths.instructor),
+  _NavItem(Icons.fact_check_outlined, '자리 확인', RoutePaths.instructor),
   _NavItem(Icons.description_rounded, '이력서관리', RoutePaths.instructorResumes),
   _NavItem(Icons.forum_rounded, '게시물관리', RoutePaths.instructorBoard),
   _NavItem(Icons.quiz_outlined, '성취도평가', RoutePaths.instructorAssessments),

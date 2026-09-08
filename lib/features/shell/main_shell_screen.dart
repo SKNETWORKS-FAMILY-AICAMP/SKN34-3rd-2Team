@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/constants/attendance_status.dart';
 import '../../core/routing/route_paths.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/user_model.dart';
@@ -90,6 +92,14 @@ class MainShellScreen extends ConsumerWidget {
         title: const AppShellHeader(),
         automaticallyImplyLeading: !wide,
         actions: [
+          TextButton.icon(
+            onPressed: () => launchUrl(
+              Uri.parse(AttendanceForm.url),
+              mode: LaunchMode.externalApplication,
+            ),
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: const Text('출결 폼'),
+          ),
           if (user != null)
             Center(
               child: Padding(

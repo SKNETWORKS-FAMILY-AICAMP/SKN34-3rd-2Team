@@ -32,6 +32,11 @@ const _kAdminNavItems = [
     path: RoutePaths.adminAttendance,
   ),
   AppSideRailItem(
+    icon: Icons.event_available_outlined,
+    label: '자리 확인',
+    path: RoutePaths.adminSeatPresence,
+  ),
+  AppSideRailItem(
     icon: Icons.badge_outlined,
     label: '강사 관리',
     path: RoutePaths.adminInstructors,

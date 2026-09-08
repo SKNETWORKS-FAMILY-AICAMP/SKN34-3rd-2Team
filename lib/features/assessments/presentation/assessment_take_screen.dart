@@ -77,6 +77,24 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
     return int.tryParse('$v');
   }
 
+  String _functionsErrorMessage(FirebaseFunctionsException e) {
+    final msg = e.message?.trim();
+    if (msg != null &&
+        msg.isNotEmpty &&
+        msg.toUpperCase() != 'INTERNAL' &&
+        !msg.toUpperCase().startsWith('INTERNAL ')) {
+      return msg;
+    }
+    return switch (e.code) {
+      'failed-precondition' => '지금은 응시할 수 없습니다. 공개·기간을 확인해 주세요.',
+      'already-exists' => '이미 응시한 평가입니다.',
+      'not-found' => '평가를 찾을 수 없습니다.',
+      'permission-denied' => '이 평가에 접근할 권한이 없습니다.',
+      'unauthenticated' => '로그인이 필요합니다.',
+      _ => '평가를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    };
+  }
+
   Future<void> _load() async {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) {
@@ -144,12 +162,12 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
       }
       setState(() {
         _loading = false;
-        _error = e.message ?? e.code;
+        _error = _functionsErrorMessage(e);
       });
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = '$e';
+        _error = '평가를 불러오지 못했습니다.\n$e';
       });
     }
   }
@@ -207,7 +225,7 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? e.code)),
+        SnackBar(content: Text(_functionsErrorMessage(e))),
       );
     } catch (e) {
       if (!mounted) return;

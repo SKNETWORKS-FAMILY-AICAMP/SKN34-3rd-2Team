@@ -4,8 +4,8 @@
 #   playdata_venv\Scripts\activate
 #   pip install -r requirements.txt
 #
-# job_matching_bot 패키지 자체는 표준 라이브러리만으로 동작한다.
-# 아래는 LLM 추출과 수집 POC에 필요한 것들이다.
+# 첨삭 모듈(cover_letter_rag)과 한 가상환경에서 함께 실행한다.
+# 통합 서버가 두 모듈을 함께 띄우므로, 공통 패키지 버전 범위를 맞춘다.
 
 # LLM 추출 — OpenAI. CLOVA Studio도 OpenAI 호환 엔드포인트라 같은 패키지를 쓴다.
 openai>=1.60
@@ -16,3 +16,22 @@ pydantic>=2.9
 # 수집 (job_matching_bot/crawling/)
 requests>=2.32
 beautifulsoup4>=4.12
+
+# 추천·챗봇 API 서버 (job_matching_bot/api/)
+fastapi>=0.116,<2
+uvicorn[standard]>=0.34,<1
+
+# 프롬프트 조립·청킹·구조화 출력
+langchain-core>=1.1,<2
+langchain-text-splitters>=1.0,<2
+langchain-openai>=1.4.1,<2
+
+# 벡터 검색·적재. langchain-pinecone은 Pinecone 버전 제약 충돌을 피해 사용하지 않는다.
+pinecone>=9,<11
+
+# 공고 데이터 공유 (Firebase Storage)
+firebase-admin>=7,<8
+
+# 첨삭 API 설정 및 .env 로딩
+pydantic-settings>=2.7,<3
+python-dotenv>=1.0,<2

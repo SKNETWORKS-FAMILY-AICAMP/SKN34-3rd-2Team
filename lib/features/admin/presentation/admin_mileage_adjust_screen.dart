@@ -234,6 +234,10 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                 if (list.isEmpty) {
                   return const Text('거래 내역이 없습니다.');
                 }
+                final nameById = {
+                  for (final s in studentsAsync.asData?.value ?? const <UserModel>[])
+                    s.uid: s.displayName,
+                };
                 return ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -241,13 +245,27 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                   separatorBuilder: (_, _) => const Divider(),
                   itemBuilder: (_, i) {
                     final tx = list[i];
+                    final storedName = tx.userDisplayName.trim();
+                    final joinedName = nameById[tx.userId]?.trim() ?? '';
+                    final displayName = storedName.isNotEmpty
+                        ? storedName
+                        : joinedName.isNotEmpty
+                            ? joinedName
+                            : '알 수 없는 학생';
+                    final createdAt = tx.createdAt != null
+                        ? AppDateUtils.formatDateTime(tx.createdAt!)
+                        : '';
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(tx.reason),
+                      title: Text(
+                        displayName,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       subtitle: Text(
-                        tx.createdAt != null
-                            ? AppDateUtils.formatDateTime(tx.createdAt!)
-                            : '',
+                        [
+                          tx.reason,
+                          if (createdAt.isNotEmpty) createdAt,
+                        ].join('\n'),
                       ),
                       trailing: Text(
                         formatMileageSigned(tx.amount),

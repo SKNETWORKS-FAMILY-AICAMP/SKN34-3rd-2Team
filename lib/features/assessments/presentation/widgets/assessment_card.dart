@@ -75,6 +75,8 @@ class AssessmentCard extends StatelessWidget {
     this.score,
     this.onEdit,
     this.onDelete,
+    this.onPublish,
+    this.publishing = false,
   });
 
   final AssessmentModel assessment;
@@ -83,10 +85,14 @@ class AssessmentCard extends StatelessWidget {
   final int? score;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onPublish;
+  final bool publishing;
 
   @override
   Widget build(BuildContext context) {
     final hasMenu = onEdit != null || onDelete != null;
+    final showPublish =
+        onPublish != null && !assessment.published && !completed;
 
     return Material(
       color: Colors.white,
@@ -102,7 +108,7 @@ class AssessmentCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SizedBox(
                   width: 96,
@@ -111,8 +117,14 @@ class AssessmentCard extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       AssessmentThumbnail(
+                        key: ValueKey(
+                          assessment.thumbnailPath ??
+                              assessment.thumbnailUrl ??
+                              assessment.id,
+                        ),
                         url: assessment.thumbnailUrl,
                         storagePath: assessment.thumbnailPath,
+                        title: assessment.title,
                         width: 96,
                         height: 72,
                       ),
@@ -204,18 +216,50 @@ class AssessmentCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (showPublish) ...[
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: publishing ? null : onPublish,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: publishing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('발행'),
+                  ),
+                ],
                 if (hasMenu)
                   PopupMenuButton<String>(
                     tooltip: '더보기',
                     onSelected: (value) {
                       if (value == 'edit') onEdit?.call();
                       if (value == 'delete') onDelete?.call();
+                      if (value == 'publish') onPublish?.call();
                     },
                     itemBuilder: (context) => [
                       if (onEdit != null)
                         const PopupMenuItem(
                           value: 'edit',
                           child: Text('수정'),
+                        ),
+                      if (showPublish)
+                        const PopupMenuItem(
+                          value: 'publish',
+                          child: Text('발행'),
                         ),
                       if (onDelete != null)
                         const PopupMenuItem(

@@ -91,8 +91,6 @@ class MySeatingDashboardCard extends ConsumerWidget {
 
             if (!isReady) return const SizedBox.shrink();
 
-            final mySeatId =
-                myUid != null ? assignment.seatIdForUser(myUid) : null;
             final seatUserIds = assignment.assignments;
             final seatDisplayNames = assignment.seatNames.isNotEmpty
                 ? assignment.seatNames
@@ -107,28 +105,6 @@ class MySeatingDashboardCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (mySeatId != null)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.primary),
-                      ),
-                      child: Text(
-                        '내 자리: $mySeatId번',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryDark,
-                        ),
-                      ),
-                    ),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       return SizedBox(

@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -125,7 +126,17 @@ class _AssessmentResultScreenState
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = '$e';
+        if (e is FirebaseFunctionsException) {
+          final msg = e.message?.trim();
+          _error = (msg != null &&
+                  msg.isNotEmpty &&
+                  msg.toUpperCase() != 'INTERNAL' &&
+                  !msg.toUpperCase().startsWith('INTERNAL '))
+              ? msg
+              : '결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        } else {
+          _error = '결과를 불러오지 못했습니다.';
+        }
       });
     }
   }

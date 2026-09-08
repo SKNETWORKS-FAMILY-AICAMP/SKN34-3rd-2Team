@@ -105,6 +105,7 @@ class MileageTransactionModel {
     required this.userId,
     required this.amount,
     required this.reason,
+    this.userDisplayName = '',
     this.type,
     this.relatedId,
     this.adjustedBy,
@@ -113,6 +114,7 @@ class MileageTransactionModel {
 
   final String id;
   final String userId;
+  final String userDisplayName;
   final int amount;
   final String reason;
   final String? type;
@@ -127,7 +129,8 @@ class MileageTransactionModel {
     return MileageTransactionModel(
       id: doc.id,
       userId: data['userId'] as String? ?? '',
-      amount: data['amount'] as int? ?? 0,
+      userDisplayName: data['userDisplayName'] as String? ?? '',
+      amount: (data['amount'] as num?)?.toInt() ?? 0,
       reason: data['reason'] as String? ?? '',
       type: data['type'] as String?,
       relatedId: data['relatedId'] as String?,

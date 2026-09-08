@@ -66,6 +66,60 @@ Future<bool> confirmAndDeleteAssessment({
   }
 }
 
+Future<bool> confirmAndPublishAssessment({
+  required BuildContext context,
+  required WidgetRef ref,
+  required String assessmentId,
+  required String title,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('평가 발행'),
+      content: Text(
+        '"$title" 평가를 학생에게 공개합니다.\n응시 기간이 맞는지 확인하세요.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('발행'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return false;
+
+  final cohortId = ref.read(effectiveCohortIdProvider);
+  if (cohortId == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('기수 정보가 없습니다.')),
+    );
+    return false;
+  }
+
+  try {
+    await ref.read(lmsRepositoryProvider).publishAssessment(
+          cohortId: cohortId,
+          assessmentId: assessmentId,
+        );
+    if (!context.mounted) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('평가를 발행했습니다.')),
+    );
+    return true;
+  } catch (e) {
+    if (!context.mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('발행 실패: $e')),
+    );
+    return false;
+  }
+}
+
 /// 강사 — 평가 목록
 class InstructorAssessmentsScreen extends ConsumerWidget {
   const InstructorAssessmentsScreen({super.key});
@@ -105,6 +159,14 @@ class InstructorAssessmentsScreen extends ConsumerWidget {
                     onEdit: () => context.push(
                       RoutePaths.instructorAssessmentEditPath(a.id),
                     ),
+                    onPublish: a.published
+                        ? null
+                        : () => confirmAndPublishAssessment(
+                              context: context,
+                              ref: ref,
+                              assessmentId: a.id,
+                              title: a.title,
+                            ),
                     onDelete: () => confirmAndDeleteAssessment(
                       context: context,
                       ref: ref,

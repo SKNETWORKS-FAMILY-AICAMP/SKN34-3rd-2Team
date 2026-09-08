@@ -16,6 +16,9 @@ abstract final class FirestorePaths {
       '${cohort(cohortId)}/attendances';
   static String rollCalls(String cohortId) =>
       '${cohort(cohortId)}/rollCalls';
+
+  static String rollCallDoc(String cohortId, String dateKey, String periodId) =>
+      '${rollCalls(cohortId)}/${dateKey}_p$periodId';
   static String notices(String cohortId) => '${cohort(cohortId)}/notices';
   static String scheduledNotices(String cohortId) =>
       '${cohort(cohortId)}/scheduledNotices';
@@ -73,6 +76,8 @@ abstract final class FirestorePaths {
       '${cohort(cohortId)}/inflearnPackages';
   static String youtubeRecommendations(String cohortId) =>
       '${cohort(cohortId)}/youtubeRecommendations';
+  static String projectTeams(String cohortId) =>
+      '${cohort(cohortId)}/projectTeams';
   static String recommendationEvents(String cohortId) =>
       '${cohort(cohortId)}/recommendationEvents';
   static String curriculumMeta(String cohortId) =>

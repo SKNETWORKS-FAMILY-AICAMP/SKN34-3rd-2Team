@@ -165,6 +165,12 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
+      // ── 프로젝트 팀 (좌석 배치용) ──
+      match /projectTeams/{teamId} {
+        allow read: if isAdmin() || isInstructorOfCohort(cohortId);
+        allow write: if isAdmin();
+      }
+
       // ── 강사 호명 확인 (출석 상태와 별개) ──
       match /rollCalls/{dateKey} {
         allow read, write: if isAdmin() || isInstructorOfCohort(cohortId);

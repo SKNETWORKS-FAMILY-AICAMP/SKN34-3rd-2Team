@@ -94,28 +94,6 @@ class SeatingScreen extends ConsumerWidget {
                     constraints: const BoxConstraints(maxWidth: 900),
                     child: Column(
                       children: [
-                        if (myUid != null &&
-                            assignment.seatIdForUser(myUid) != null)
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 16),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryLight,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            child: Text(
-                              '내 자리: ${assignment.seatIdForUser(myUid)}번',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primaryDark,
-                              ),
-                            ),
-                          ),
                         SeatGrid(
                           layout: layout,
                           seatUserIds: seatUserIds,

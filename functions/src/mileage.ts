@@ -160,12 +160,91 @@ function validateCategoryLimits(
   }
 }
 
-function normalizeCartItems(items: CartItem[]): CartItem[] {
-  return items.map((item) => ({
-    ...item,
-    quantity: item.quantity ?? 1,
-    subtotal: item.subtotal ?? item.unitPrice * (item.quantity ?? 1),
-  }));
+/**
+ * 장바구니 항목을 카탈로그(상품 문서) 기준으로 재검증·정규화.
+ * 고정가는 서버 가격을 강제하고, 커스텀가는 양수 금액만 허용한다.
+ */
+async function resolveCartItemsAgainstCatalog(
+  cohortId: string,
+  rawItems: CartItem[],
+): Promise<CartItem[]> {
+  const productIds = [...new Set(rawItems.map((i) => i.productId).filter(Boolean))];
+  if (productIds.length === 0) {
+    throw new HttpsError("invalid-argument", "유효하지 않은 장바구니 항목입니다.");
+  }
+
+  const productRefs = productIds.map((id) =>
+    db.collection("cohorts").doc(cohortId).collection("mileageProducts").doc(id),
+  );
+  const productSnaps = await db.getAll(...productRefs);
+  const byId = new Map(
+    productSnaps.filter((s) => s.exists).map((s) => [s.id, s.data()!]),
+  );
+
+  return rawItems.map((item) => {
+    const product = byId.get(item.productId);
+    if (!product) {
+      throw new HttpsError(
+        "failed-precondition",
+        `상품을 찾을 수 없습니다: ${item.productName || item.productId}`,
+      );
+    }
+    if (product.isActive !== true) {
+      throw new HttpsError(
+        "failed-precondition",
+        `비활성 상품입니다: ${(product.name as string) ?? item.productId}`,
+      );
+    }
+
+    const quantity = Math.floor(Number(item.quantity ?? 1));
+    if (!Number.isFinite(quantity) || quantity < 1) {
+      throw new HttpsError("invalid-argument", "수량은 1 이상이어야 합니다.");
+    }
+
+    const pricingType = product.pricingType as string;
+    const category = product.category as string;
+    if (!category) {
+      throw new HttpsError(
+        "failed-precondition",
+        `상품 카테고리가 없습니다: ${(product.name as string) ?? item.productId}`,
+      );
+    }
+
+    let unitPrice: number;
+    if (pricingType === "fixed") {
+      unitPrice = Number(product.fixedPrice ?? 0);
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        throw new HttpsError(
+          "failed-precondition",
+          `고정가 상품 가격이 올바르지 않습니다: ${(product.name as string) ?? item.productId}`,
+        );
+      }
+    } else if (pricingType === "custom") {
+      unitPrice = Number(item.unitPrice);
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        throw new HttpsError(
+          "invalid-argument",
+          `커스텀 가격이 올바르지 않습니다: ${(product.name as string) ?? item.productId}`,
+        );
+      }
+    } else {
+      throw new HttpsError(
+        "failed-precondition",
+        `알 수 없는 가격 유형입니다: ${(product.name as string) ?? item.productId}`,
+      );
+    }
+
+    return {
+      productId: item.productId,
+      productName: (product.name as string) ?? item.productName,
+      category,
+      pricingType,
+      unitPrice,
+      quantity,
+      purchaseLink: item.purchaseLink,
+      subtotal: unitPrice * quantity,
+    };
+  });
 }
 
 /**
@@ -202,7 +281,7 @@ export const submitPurchaseRequest = onCall({region: REGION}, async (request) =>
     throw new HttpsError("failed-precondition", "장바구니가 비어 있습니다.");
   }
 
-  const items = normalizeCartItems(rawItems);
+  const items = await resolveCartItemsAgainstCatalog(cohortId, rawItems);
   const totalAmount = items.reduce((sum, i) => sum + (i.subtotal ?? 0), 0);
   if (totalAmount <= 0) {
     throw new HttpsError("invalid-argument", "유효하지 않은 요청 금액입니다.");
@@ -293,63 +372,87 @@ export const reviewPurchaseRequest = onCall({region: REGION}, async (request) =>
   }
 
   const userId = reqData.userId as string;
-  const totalAmount = reqData.totalAmount as number;
   const items = (reqData.items as CartItem[]) ?? [];
-  const productNames = items.map((i) => i.productName).join(", ");
 
   if (status === "approved") {
-    const userRef = db.collection("users").doc(userId);
-    const userDoc = await userRef.get();
-    if (!userDoc.exists) {
-      throw new HttpsError("not-found", "학생을 찾을 수 없습니다.");
-    }
-
-    const balance = (userDoc.data()?.mileageBalance as number) ?? 0;
-    if (balance < totalAmount) {
-      throw new HttpsError(
-        "failed-precondition",
-        `마일리지 잔액이 부족합니다. (잔액: ${balance.toLocaleString()}M, 필요: ${totalAmount.toLocaleString()}M)`,
-      );
-    }
-
     const settings = await getMileageSettings(cohortId);
     const usage = await computeUserCategoryUsage(cohortId, userId, requestId);
     validateCategoryLimits(usage, items, settings.categoryLimits);
 
-    const batch = db.batch();
-
-    batch.update(userRef, {
-      mileageBalance: fieldValue.increment(-totalAmount),
-      updatedAt: fieldValue.serverTimestamp(),
-    });
-
+    const userRef = db.collection("users").doc(userId);
     const txRef = db
       .collection("cohorts")
       .doc(cohortId)
       .collection("mileageTransactions")
       .doc();
 
-    batch.set(txRef, {
-      userId,
-      amount: -totalAmount,
-      reason: `${productNames} 구매 승인`,
-      type: "redemption",
-      relatedId: requestId,
-      adjustedBy: request.auth.uid,
-      createdAt: fieldValue.serverTimestamp(),
-    });
+    await db.runTransaction(async (transaction) => {
+      const freshReq = await transaction.get(reqRef);
+      if (!freshReq.exists) {
+        throw new HttpsError("not-found", "구매 요청을 찾을 수 없습니다.");
+      }
+      const freshData = freshReq.data()!;
+      const freshStatus = freshData.status as string;
+      if (!["pending", "modify_requested"].includes(freshStatus)) {
+        throw new HttpsError(
+          "failed-precondition",
+          "대기 또는 수정 요청 상태의 건만 처리할 수 있습니다.",
+        );
+      }
 
-    batch.update(reqRef, {
-      status: "approved",
-      managerMemo: managerMemo ?? null,
-      managerPurchaseLink: managerPurchaseLink ?? null,
-      processedAt: fieldValue.serverTimestamp(),
-      processedBy: request.auth.uid,
-      processedByName: adminName,
-      updatedAt: fieldValue.serverTimestamp(),
-    });
+      const totalAmount = Number(freshData.totalAmount ?? 0);
+      if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+        throw new HttpsError("failed-precondition", "유효하지 않은 요청 금액입니다.");
+      }
 
-    await batch.commit();
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "학생을 찾을 수 없습니다.");
+      }
+
+      const userData = userDoc.data()!;
+      const balance = Number(userData.mileageBalance ?? 0);
+      if (balance < totalAmount) {
+        throw new HttpsError(
+          "failed-precondition",
+          `마일리지 잔액이 부족합니다. (잔액: ${balance.toLocaleString()}M, 필요: ${totalAmount.toLocaleString()}M)`,
+        );
+      }
+
+      const userDisplayName =
+        (userData.displayName as string | undefined) ??
+        (freshData.userDisplayName as string | undefined) ??
+        "";
+
+      const freshItems = (freshData.items as CartItem[]) ?? items;
+      const reasonNames = freshItems.map((i) => i.productName).join(", ");
+
+      transaction.update(userRef, {
+        mileageBalance: fieldValue.increment(-totalAmount),
+        updatedAt: fieldValue.serverTimestamp(),
+      });
+
+      transaction.set(txRef, {
+        userId,
+        userDisplayName,
+        amount: -totalAmount,
+        reason: `${reasonNames} 구매 승인`,
+        type: "redemption",
+        relatedId: requestId,
+        adjustedBy: request.auth!.uid,
+        createdAt: fieldValue.serverTimestamp(),
+      });
+
+      transaction.update(reqRef, {
+        status: "approved",
+        managerMemo: managerMemo ?? null,
+        managerPurchaseLink: managerPurchaseLink ?? null,
+        processedAt: fieldValue.serverTimestamp(),
+        processedBy: request.auth!.uid,
+        processedByName: adminName,
+        updatedAt: fieldValue.serverTimestamp(),
+      });
+    });
 
     return {message: "구매 요청이 승인되었습니다.", txId: txRef.id};
   }
@@ -472,6 +575,7 @@ export async function runExpireMileage(asOf: Date = new Date()): Promise<number>
 
       batch.set(txRef, {
         userId: userDoc.id,
+        userDisplayName: (userDoc.data().displayName as string | undefined) ?? "",
         amount: -balance,
         reason: "종강 후 마일리지 소멸",
         type: "expiry",

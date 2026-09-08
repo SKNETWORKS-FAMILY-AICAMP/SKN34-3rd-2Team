@@ -47,7 +47,14 @@ class AssessmentFunctionsService {
       'cohortId': cohortId,
       'assessmentId': assessmentId,
     });
-    return Map<String, dynamic>.from(result.data as Map);
+    final raw = result.data;
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    throw FirebaseFunctionsException(
+      code: 'internal',
+      message: '평가 응답 형식이 올바르지 않습니다.',
+    );
   }
 
   Future<Map<String, dynamic>> submitAssessment({

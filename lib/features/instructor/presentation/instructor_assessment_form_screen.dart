@@ -175,6 +175,8 @@ class _InstructorAssessmentFormScreenState
                 contentType: contentType,
               );
           thumbPath = path;
+          AssessmentThumbnail.putCache(path, _pendingThumbBytes!);
+          AssessmentThumbnail.putCache(thumbUrl, _pendingThumbBytes!);
         }
       }
 
@@ -407,6 +409,9 @@ class _InstructorAssessmentFormScreenState
                           url: _thumbnailUrl,
                           storagePath: _thumbnailPath,
                           bytes: _pendingThumbBytes,
+                          title: _title.text.trim().isEmpty
+                              ? null
+                              : _title.text.trim(),
                           width: 96,
                           height: 54,
                           placeholderIcon: Icons.image_outlined,

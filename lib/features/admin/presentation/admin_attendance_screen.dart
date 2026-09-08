@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/attendance_status.dart';
 import '../../../core/theme/app_colors.dart';
@@ -126,19 +125,6 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('출석관리'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton.icon(
-              onPressed: () => launchUrl(
-                Uri.parse(AttendanceForm.url),
-                mode: LaunchMode.externalApplication,
-              ),
-              icon: const Icon(Icons.open_in_new, size: 16),
-              label: const Text('출결 폼'),
-            ),
-          ),
-        ],
       ),
       body: studentsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
