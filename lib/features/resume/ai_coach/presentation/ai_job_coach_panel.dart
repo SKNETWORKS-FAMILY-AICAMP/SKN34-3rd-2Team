@@ -804,16 +804,17 @@ class _RecommendationCardState extends State<_RecommendationCard> {
     }
   }
 
-  /// 접힌 상태에서도 왜 이 순위인지 한 줄로 보이게 한다.
+  /// 접힌 상태에서 이 공고가 어떤 자리인지 한 줄로 보이게 한다.
+  ///
+  /// 근거 건수·확인할 요건 건수·조건 통과 여부는 뺐다. 펼치면 근거와 우려가 그대로
+  /// 나오므로 숫자로 미리 말할 이유가 없고, "조건 통과"는 걸러진 것만 보여주는 목록에서
+  /// 늘 참이라 정보가 되지 않는다. 지원할지 정할 때 먼저 보는 것은 근무지·고용형태·경력이다.
   String _summary() {
     if (item.isFromServer) {
       return [
-        '근거 ${item.reasons.length}건',
-        if (item.concerns.isNotEmpty) '확인할 요건 ${item.concerns.length}건',
         if (item.region.isNotEmpty) item.region,
         ?item.employmentType,
         item.careerLabel,
-        item.hardFilterStatus == 'PASS' ? '조건 통과' : '조건 확인 필요',
       ].join(' · ');
     }
     String bucket(String label, List<String> matched, List<String> unmatched) =>
