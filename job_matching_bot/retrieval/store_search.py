@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,50 @@ SCAN_LIMIT = 3000
 
 # 사용자가 말하는 경력 표현 → 저장소의 career_type
 CAREER_TYPES = {"신입": ("ENTRY", "ANY"), "경력": ("EXPERIENCED", "ANY"), "무관": None}
+
+# 접두사인데 **뜻이 다른** 말. 이것만 막는다.
+#
+# `LIKE '%Java%'` 는 JavaScript 도 걸린다. 실측으로 "Java" 검색 2,004건 중 198건(15%)이
+# Java 태그 없이 Javascript 만 있는 공고였다. 그렇다고 단어 경계로 일괄 차단하면 안 된다.
+# 기술 태그 220종에서 접두사 쌍 11개 중 10개는 같은 계열이라(Spring⊂SpringBoot,
+# React⊂ReactJS, HTML⊂HTML5, 임베디드⊂임베디드리눅스 …) 막으면 열 곳이 나빠지고 한 곳만
+# 고쳐진다. 뜻이 갈리는 것만 여기 적는다.
+#
+# 값은 "이 말 뒤에 이것이 붙으면 다른 것"이다.
+CONFUSABLE = {
+    "java": ("script",),
+    "자바": ("스크립트",),
+}
+
+
+def _like_or_regex(column: str, term: str) -> tuple[str, list[object]]:
+    """한 컬럼에서 한 말을 찾는 조건. 헷갈리는 말이면 뒤에 오는 글자를 본다.
+
+    돌려주는 것은 (SQL 조각, 값 목록)이다. 값 개수가 조건마다 다르므로 함께 돌려준다.
+    """
+    suffixes = CONFUSABLE.get(term.strip().lower())
+    if not suffixes:
+        return f"{column} LIKE ?", [f"%{term}%"]
+    # "java" 는 찾되 "javascript" 는 아니다. 한 공고에 둘 다 있으면 java 쪽이 걸린다.
+    pattern = re.escape(term) + r"(?!" + "|".join(re.escape(s) for s in suffixes) + r")"
+    return "RE_HAS(?, {})".format(column), [pattern]
+
+
+def _re_has(pattern: str, text: str | None) -> int:
+    """SQLite에 등록해 쓰는 함수. 대소문자를 가리지 않는다."""
+    if not text:
+        return 0
+    return 1 if re.search(pattern, text, re.IGNORECASE) else 0
+
+
+def connect(store_path: Path) -> sqlite3.Connection:
+    """읽기 전용으로 열고 `RE_HAS` 를 등록한다. 검색과 집계가 같이 쓴다."""
+    connection = sqlite3.connect(
+        f"{Path(store_path).resolve().as_uri()}?mode=ro", uri=True
+    )
+    connection.row_factory = sqlite3.Row
+    connection.create_function("RE_HAS", 2, _re_has, deterministic=True)
+    return connection
 
 
 @dataclass
@@ -162,8 +207,12 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
     if terms:
         clauses = []
         for term in terms:
-            clauses.append("(title LIKE ? OR keywords LIKE ? OR tech_stack LIKE ? OR description LIKE ?)")
-            params.extend([f"%{term}%"] * 4)
+            parts = []
+            for column in ("title", "keywords", "tech_stack", "description"):
+                sql, values = _like_or_regex(column, term)
+                parts.append(sql)
+                params.extend(values)
+            clauses.append("(" + " OR ".join(parts) + ")")
         where.append("(" + " OR ".join(clauses) + ")")
 
     return where, params
@@ -181,17 +230,25 @@ def search(
     # 제목에 있으면 그 일을 뽑는 공고이고, 태그에 있으면 기업이 그렇게 분류한 것이다.
     terms = _terms(filters)
     relevance = "0"
-    if terms:
-        title_like = " OR ".join("title LIKE ?" for _ in terms)
-        tag_like = " OR ".join("(keywords LIKE ? OR tech_stack LIKE ?)" for _ in terms)
-        relevance = f"CASE WHEN {title_like} THEN 3 WHEN {tag_like} THEN 2 ELSE 1 END"
-
     # CASE 식이 SELECT에 들어가므로 그 물음표 값을 따로 모은다. 제목 먼저, 그다음 태그 둘씩.
     case_params: list[object] = []
     if terms:
-        case_params.extend(f"%{term}%" for term in terms)
+        title_parts, tag_parts = [], []
         for term in terms:
-            case_params.extend([f"%{term}%"] * 2)
+            sql, values = _like_or_regex("title", term)
+            title_parts.append(sql)
+            case_params.extend(values)
+        for term in terms:
+            pieces = []
+            for column in ("keywords", "tech_stack"):
+                sql, values = _like_or_regex(column, term)
+                pieces.append(sql)
+                case_params.extend(values)
+            tag_parts.append("(" + " OR ".join(pieces) + ")")
+        relevance = (
+            f"CASE WHEN {' OR '.join(title_parts)} THEN 3 "
+            f"WHEN {' OR '.join(tag_parts)} THEN 2 ELSE 1 END"
+        )
 
     sql = (
         f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance FROM jobs WHERE "
@@ -202,8 +259,7 @@ def search(
     )
 
     # ORDER BY는 별칭을 쓰므로 값이 없다. 순서는 SELECT → WHERE → LIMIT.
-    connection = sqlite3.connect(f"{Path(store_path).resolve().as_uri()}?mode=ro", uri=True)
-    connection.row_factory = sqlite3.Row
+    connection = connect(store_path)
     try:
         rows = connection.execute(sql, [*case_params, *params, SCAN_LIMIT]).fetchall()
     finally:
@@ -236,8 +292,7 @@ def by_ids(
         f"SELECT {_HIT_COLUMNS} FROM jobs WHERE job_id IN ({placeholders}) "
         "AND status = 'OPEN' AND (deadline IS NULL OR substr(deadline, 1, 10) >= ?)"
     )
-    connection = sqlite3.connect(f"{Path(store_path).resolve().as_uri()}?mode=ro", uri=True)
-    connection.row_factory = sqlite3.Row
+    connection = connect(store_path)
     try:
         rows = connection.execute(sql, [*job_ids, today]).fetchall()
     finally:

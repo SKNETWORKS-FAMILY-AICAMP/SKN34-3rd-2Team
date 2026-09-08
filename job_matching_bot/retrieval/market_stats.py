@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from job_matching_bot.retrieval.store_search import KST, JobFilters, conditions
+from job_matching_bot.retrieval.store_search import KST, JobFilters, conditions, connect
 
 # 집계에 훑을 최대 행. 저장소 전체가 이보다 작으므로 보통은 전수로 센다. 상한은
 # 저장소가 훨씬 커졌을 때를 위한 안전장치다. 걸리면 "대략"이라고 밝히고 답한다.
@@ -126,8 +126,8 @@ def summarize(
     clause = " AND ".join(where)
     scope = describe(filters)
 
-    connection = sqlite3.connect(f"{Path(store_path).resolve().as_uri()}?mode=ro", uri=True)
-    connection.row_factory = sqlite3.Row
+    # 검색과 같은 연결 함수를 쓴다. 조건에 RE_HAS 가 들어갈 수 있어 등록이 필요하다.
+    connection = connect(store_path)
     try:
         total = connection.execute(
             f"SELECT COUNT(*) FROM jobs WHERE {clause}", params

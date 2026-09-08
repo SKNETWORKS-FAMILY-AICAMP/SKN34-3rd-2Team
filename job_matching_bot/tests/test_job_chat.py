@@ -17,6 +17,7 @@ from pathlib import Path
 
 from job_matching_bot.api import schemas
 from job_matching_bot.api.service import ChatService, StoreUnavailable
+from job_matching_bot.retrieval import store_search
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
 
@@ -184,6 +185,70 @@ class SearchTest(ChatTestCase):
         self.assertTrue(job.job_id and job.company and job.title)
         self.assertEqual("신입", job.career)
         self.assertEqual("정규직", job.employment_type)
+
+
+class ConfusableTermTest(unittest.TestCase):
+    """Java 로 찾을 때 JavaScript 가 걸리면 안 된다. 그렇다고 Spring 이 SpringBoot 를
+    놓쳐서도 안 된다.
+
+    `LIKE '%Java%'` 는 부분 문자열이라 실측에서 "Java" 검색 2,004건 중 198건(15%)이
+    Java 태그 없이 Javascript 만 있는 공고였다. 그렇다고 단어 경계로 일괄 차단하면
+    기술 태그 220종의 접두사 쌍 11개 중 10개가 같은 계열이라 열 곳이 나빠진다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "store.sqlite"
+        base = mock_jobs()[0]
+        jobs = [
+            replace(
+                base, job_id=job_id, source_job_id=job_id, company=f"{job_id}회사",
+                title=title, description=description, tech_stack=list(tech),
+                keywords=["IT개발·데이터"], region="서울 강남구", career_type="ANY",
+                min_career_years=None, employment_type="정규직", deadline=None, status="OPEN",
+            )
+            for job_id, title, description, tech in [
+                ("J-JAVA", "백엔드 개발자", "Java와 Spring으로 서버를 만듭니다", ["Java", "Spring"]),
+                ("J-JS", "프론트 개발자", "Javascript로 화면을 만듭니다", ["Javascript"]),
+                ("J-BOTH", "풀스택 개발자", "Java와 Javascript를 씁니다", ["Java", "Javascript"]),
+                ("J-BOOT", "서버 개발자", "SpringBoot로 API를 만듭니다", ["SpringBoot"]),
+                ("J-KOR", "웹 개발자", "자바 기반 서비스를 운영합니다", []),
+                ("J-KORJS", "화면 개발자", "자바스크립트로 UI를 만듭니다", []),
+            ]
+        ]
+        with SqliteJobStore(self.path) as store:
+            store.upsert(jobs, source="MOCK")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def found(self, term):
+        result = store_search.search(
+            self.path, store_search.JobFilters(skills=[term]), limit=50
+        )
+        return {job.job_id for job in result.jobs}
+
+    def test_java_does_not_match_javascript(self):
+        self.assertNotIn("J-JS", self.found("Java"))
+
+    def test_java_still_matches_java(self):
+        self.assertIn("J-JAVA", self.found("Java"))
+
+    def test_a_job_with_both_is_found_by_java(self):
+        """한 공고에 둘 다 있으면 Java 쪽이 걸린다. 빼면 진짜 Java 공고를 잃는다."""
+        self.assertIn("J-BOTH", self.found("Java"))
+
+    def test_javascript_still_finds_javascript(self):
+        self.assertIn("J-JS", self.found("Javascript"))
+
+    def test_korean_follows_the_same_rule(self):
+        found = self.found("자바")
+        self.assertIn("J-KOR", found)
+        self.assertNotIn("J-KORJS", found)
+
+    def test_spring_still_matches_springboot(self):
+        """접두사 쌍 11개 중 10개는 같은 계열이라 막으면 손해다."""
+        self.assertIn("J-BOOT", self.found("Spring"))
 
 
 class MeaningSearchTest(ChatTestCase):
