@@ -34,10 +34,18 @@ CAREER_TYPES = {"신입": ("ENTRY", "ANY"), "경력": ("EXPERIENCED", "ANY"), "�
 # React⊂ReactJS, HTML⊂HTML5, 임베디드⊂임베디드리눅스 …) 막으면 열 곳이 나빠지고 한 곳만
 # 고쳐진다. 뜻이 갈리는 것만 여기 적는다.
 #
-# 값은 "이 말 뒤에 이것이 붙으면 다른 것"이다.
+# 값은 그 말을 찾을 정규식이다. 형태가 제각각이라 규칙 하나로 못 묶는다.
+#
+# 후보는 `python -m job_matching_bot.evaluation.scan_terms` 로 뽑는다. 태그가 늘면
+# 다시 돌려 새로 생긴 겹침만 보면 된다. 판단은 사람이 한다 — "같은 계열인가"는
+# 글자로 알 수 없다.
 CONFUSABLE = {
-    "java": ("script",),
-    "자바": ("스크립트",),
+    # 뒤를 본다. JavaScript 는 Java 가 아니다.
+    "java": r"java(?!script)",
+    "자바": r"자바(?!스크립트)",
+    # 앞뒤를 다 본다. MongoDB·Django·Google 의 "go" 는 Go 가 아니다. GoLang 은 맞다.
+    # 두 글자짜리라 어쩔 수 없이 "Go-to-market" 같은 말은 남는다.
+    "go": r"(?<![a-z])go(?:lang)?(?![a-z])",
 }
 
 
@@ -46,11 +54,11 @@ def _like_or_regex(column: str, term: str) -> tuple[str, list[object]]:
 
     돌려주는 것은 (SQL 조각, 값 목록)이다. 값 개수가 조건마다 다르므로 함께 돌려준다.
     """
-    suffixes = CONFUSABLE.get(term.strip().lower())
-    if not suffixes:
+    pattern = CONFUSABLE.get(term.strip().lower())
+    if not pattern:
         return f"{column} LIKE ?", [f"%{term}%"]
-    # "java" 는 찾되 "javascript" 는 아니다. 한 공고에 둘 다 있으면 java 쪽이 걸린다.
-    pattern = re.escape(term) + r"(?!" + "|".join(re.escape(s) for s in suffixes) + r")"
+    # 한 공고에 Java 와 Javascript 가 둘 다 있으면 Java 쪽이 걸린다. 빼면 진짜 Java
+    # 공고를 잃는다.
     return "RE_HAS(?, {})".format(column), [pattern]
 
 

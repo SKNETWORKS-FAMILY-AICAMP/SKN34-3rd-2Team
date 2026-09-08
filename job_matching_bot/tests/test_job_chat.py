@@ -214,6 +214,10 @@ class ConfusableTermTest(unittest.TestCase):
                 ("J-BOOT", "서버 개발자", "SpringBoot로 API를 만듭니다", ["SpringBoot"]),
                 ("J-KOR", "웹 개발자", "자바 기반 서비스를 운영합니다", []),
                 ("J-KORJS", "화면 개발자", "자바스크립트로 UI를 만듭니다", []),
+                ("J-GO", "서버 개발자", "Go로 API를 만듭니다", ["Go"]),
+                ("J-GOLANG", "백엔드 개발자", "GoLang 기반 서비스", ["GoLang"]),
+                ("J-MONGO", "데이터 개발자", "MongoDB와 Django를 씁니다", ["MongoDB", "Django"]),
+                ("J-GOOGLE", "클라우드 엔지니어", "Google Cloud를 운영합니다", ["GCP"]),
             ]
         ]
         with SqliteJobStore(self.path) as store:
@@ -245,6 +249,14 @@ class ConfusableTermTest(unittest.TestCase):
         found = self.found("자바")
         self.assertIn("J-KOR", found)
         self.assertNotIn("J-KORJS", found)
+
+    def test_go_does_not_match_mongodb_django_google(self):
+        """두 글자짜리는 앞뒤를 다 봐야 한다. "Go" 는 Django 안에도 Google 안에도 있다."""
+        found = self.found("Go")
+        self.assertIn("J-GO", found)
+        self.assertIn("J-GOLANG", found, "GoLang 은 Go 가 맞다")
+        self.assertNotIn("J-MONGO", found)
+        self.assertNotIn("J-GOOGLE", found)
 
     def test_spring_still_matches_springboot(self):
         """접두사 쌍 11개 중 10개는 같은 계열이라 막으면 손해다."""
