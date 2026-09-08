@@ -110,6 +110,7 @@ ResumeAnalysis analyzeResume(ResumeContent content) {
   // 아직 작성하지 않은 선택 항목은 '부족'이 아니라 '추가하면 좋은 것'으로 안내한다.
   final optionalEmpty = AppConstants.resumeSections
       .where((key) => !requiredSectionsForRecommendation.contains(key))
+      .where((key) => !evidenceSectionsForRecommendation.contains(key))
       .where((key) => !readiness.filledSections.contains(key))
       .map((key) => AppConstants.resumeSectionLabels[key] ?? key)
       .toList();

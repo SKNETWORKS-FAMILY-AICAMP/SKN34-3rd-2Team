@@ -3,25 +3,39 @@ import '../../../../shared/models/resume_content.dart';
 
 /// AI 코치 기능별로 이력서에 요구하는 조건이 다르다.
 ///
-/// - 맞춤 공고 추천: 필수 항목이 **하나라도 비어 있으면** 실행하지 않는다.
-///   조건이 빠진 채로 추천하면 근거 없는 순위가 나오기 때문이다.
+/// - 맞춤 공고 추천: 조건 판정에 쓰는 항목이 있고, 직무 근거가 **하나라도** 있으면
+///   실행한다. 근거 없는 순위를 내지 않으려는 것이지, 칸을 다 채우게 하려는 것이 아니다.
 /// - 이력서 분석: 분석할 내용이 하나라도 있으면 실행한다.
 /// - 채용공고 찾기: 이력서와 무관하게 언제나 실행한다.
 enum AiCoachFeature { resumeAnalysis, jobRecommendation, jobSearch }
 
 /// 맞춤 공고 추천 전에 반드시 채워야 하는 섹션.
 ///
+/// **조건 판정에 쓰이는 것만** 둔다. 학력은 하드 필터가 공고의 학력 조건과 대조하고,
+/// 기본정보는 이력서가 비어 있는지 가리는 값이다.
+///
 /// 경력사항·자격사항·수상내역·교육경험·기타활동은 제외했다. 이 서비스의 주
 /// 사용자인 부트캠프 수료 예정자는 경력이나 수상 이력이 없는 경우가 많아,
-/// 이를 필수로 두면 아무도 추천을 받을 수 없다. 대신 매칭에 실제로 쓰이는
-/// 항목만 필수로 둔다.
+/// 이를 필수로 두면 아무도 추천을 받을 수 없다.
 const requiredSectionsForRecommendation = <String>[
   'basicInfo', // 기본정보
-  'coreCompetencies', // 핵심역량/강점
   'education', // 학력 — Hard Filter의 학력 조건에 사용
-  'techStack', // 기술스택 — 필수기술 매칭의 핵심
-  'projects', // 프로젝트 경험 — 프로젝트 근거 매칭
+];
+
+/// 직무 근거. 이 중 **하나 이상** 있으면 추천할 수 있다.
+///
+/// 예전에는 핵심역량·기술스택·프로젝트·자기소개서를 모두 요구했다. 그런데 직무
+/// 근거는 이 중 어디에나 있다 — 자기소개서 여섯 항목에도, 프로젝트 설명에도,
+/// 기술 태그에도 있다. 한 칸이 비었다고 막는 것은 값에 비해 불편하다.
+///
+/// 게다가 챗봇에서 "내 프로젝트 경험만 보고 추천해줘"처럼 범위를 좁혀 물을 수 있게
+/// 되면서, 한 종류만 있어도 뜻있는 추천이 된다.
+const evidenceSectionsForRecommendation = <String>[
+  'coreCompetencies', // 핵심역량/강점
+  'techStack', // 기술스택
+  'projects', // 프로젝트 경험
   'selfIntroduction', // 자기소개서
+  'experience', // 경력사항
 ];
 
 /// 이력서 분석에 최소한 필요한 섹션. 이 중 하나라도 있으면 분석할 수 있다.
@@ -59,8 +73,13 @@ class ResumeReadiness {
     );
   }
 
-  /// 필수 항목이 모두 채워져 맞춤 공고를 추천할 수 있는 상태.
-  bool get canRecommendJobs => missingRequiredSections.isEmpty;
+  /// 조건 판정에 쓰는 항목이 있고, 직무 근거가 하나라도 있는 상태.
+  bool get canRecommendJobs =>
+      missingRequiredSections.isEmpty && hasJobEvidence;
+
+  /// 무엇을 근거로 공고를 고를 수 있는가. 하나라도 있으면 된다.
+  bool get hasJobEvidence =>
+      evidenceSectionsForRecommendation.any(filledSections.contains);
 
   /// 분석할 내용이 하나라도 있는 상태.
   bool get canAnalyzeResume =>
@@ -85,8 +104,14 @@ class ResumeReadiness {
     if (canRun(feature)) return null;
     switch (feature) {
       case AiCoachFeature.jobRecommendation:
-        return '맞춤 공고를 추천하려면 다음 항목을 먼저 작성해주세요: '
-            '${missingRequiredSectionLabels.join(', ')}';
+        if (missingRequiredSections.isNotEmpty) {
+          return '맞춤 공고를 추천하려면 다음 항목을 먼저 작성해주세요: '
+              '${missingRequiredSectionLabels.join(', ')}';
+        }
+        // 필수는 다 찼는데 근거가 없는 경우. 무엇이든 하나 적으면 된다고 알린다.
+        return '무엇을 근거로 공고를 고를지 알 수 없습니다. '
+            '핵심역량, 기술스택, 프로젝트, 자기소개서, 경력 중 '
+            '하나 이상을 작성해주세요.';
       case AiCoachFeature.resumeAnalysis:
         return '분석할 내용이 아직 없습니다. 핵심역량, 경력, 기술스택, '
             '프로젝트 중 하나 이상을 작성해주세요.';
@@ -100,9 +125,13 @@ class ResumeReadiness {
       .map((key) => AppConstants.resumeSectionLabels[key] ?? key)
       .toList();
 
-  /// 필수 항목 중 몇 개를 채웠는지.
+  /// 진행 표시에 쓰는 값. 필수 항목에 "직무 근거" 한 칸을 더해 센다.
+  ///
+  /// 근거는 여러 항목 중 하나면 되므로 개수로 세면 뜻이 흐려진다. 있으면 한 칸을
+  /// 채운 것으로 본다.
   int get completedRequiredCount =>
-      requiredSectionsForRecommendation.length - missingRequiredSections.length;
+      (requiredSectionsForRecommendation.length - missingRequiredSections.length) +
+      (hasJobEvidence ? 1 : 0);
 
-  int get totalRequiredCount => requiredSectionsForRecommendation.length;
+  int get totalRequiredCount => requiredSectionsForRecommendation.length + 1;
 }
