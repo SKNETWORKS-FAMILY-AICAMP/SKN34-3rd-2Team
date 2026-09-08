@@ -71,11 +71,26 @@ class CareerBranchTest(unittest.TestCase):
         self.assertIn("경력 조건 충족", hard_filter(mid, resume)["passed"])
 
     def test_entry_persona_fails_experienced_only_posting(self):
+        """연차를 안 적었어도 경력자를 뽑는 공고는 신입에게 탈락이다.
+
+        확인 필요로 두었더니 신입 이력서에 경력 공고가 적합도 "높음"으로 나갔다
+        (이력서 5종 실측, 25건 중 6건). 미기재인 것은 연차이지 "경력자를 뽑는다"는
+        사실이 아니다.
+        """
         resume = mock_resumes()["frontend_entry"]
         # "경력무관(신입제외)"는 신입에게 지원 불가다.
         job = _saramin_job("3", career="경력무관(신입제외)")
-        self.assertEqual("CHECK_REQUIRED", hard_filter(job, resume)["status"])
-        self.assertIn("경력 연수 미기재", hard_filter(job, resume)["unknown"])
+        result = hard_filter(job, resume)
+        self.assertEqual("FAIL", result["status"])
+        self.assertIn("경력자 채용 (연차 미기재)", result["failed"])
+
+    def test_experienced_persona_still_passes_that_posting(self):
+        """경력자에게는 그대로 통과다. 연차를 모를 뿐 경력은 있다."""
+        resume = mock_resumes()["backend_experienced_3y"]
+        job = _saramin_job("3", career="경력무관(신입제외)")
+        result = hard_filter(job, resume)
+        self.assertNotEqual("FAIL", result["status"])
+        self.assertIn("경력 조건 충족 (연차 미기재, 경력 보유)", result["passed"])
 
 
 class EducationBranchTest(unittest.TestCase):

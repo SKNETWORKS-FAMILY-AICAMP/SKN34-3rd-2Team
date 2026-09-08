@@ -86,12 +86,15 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
 
     if job.career_type == "EXPERIENCED":
         if job.min_career_years is None:
-            # "경력자"라고만 쓰고 연차가 없는 공고. 경력이 있으면 충족이다. "얼마나"를 모를
-            # 뿐 "경력을 원한다"는 적혀 있으니 신입에게는 확인 필요로 남긴다.
+            # "경력자"라고만 쓰고 연차가 없는 공고. 경력이 있으면 충족이다.
+            #
+            # 신입에게는 **탈락**이다. 미기재인 것은 연차이지 "경력자를 뽑는다"는 사실이
+            # 아니다. 몇 년인지 모르는 것과 경력자용인지 모르는 것은 다르다. 확인 필요로
+            # 두었더니 신입 이력서에 경력 공고가 적합도 "높음"으로 나갔다(25건 중 6건).
             if resume.career_years >= 1:
                 passed.append("경력 조건 충족 (연차 미기재, 경력 보유)")
             else:
-                unknown.append("경력 연수 미기재")
+                failed.append("경력자 채용 (연차 미기재)")
         elif resume.career_years < job.min_career_years:
             failed.append(f"최소 경력 {job.min_career_years}년")
         else:
