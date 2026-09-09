@@ -7,8 +7,23 @@ import '../../../shared/models/resume_model.dart';
 
 /// 이력서 Doc 모드 → PDF 미리보기/인쇄
 abstract final class ResumePdfExporter {
+  /// 한 번 받아 두고 다시 쓴다. 내보낼 때마다 내려받지 않는다.
+  static pw.ThemeData? _theme;
+
+  /// PDF 기본 글꼴에는 한글 글자가 없어 그냥 두면 전부 네모로 나온다.
+  /// 본문·굵은 글씨 둘 다 한글 글꼴로 깔아 둔다.
+  static Future<pw.ThemeData> _koreanTheme() async {
+    final cached = _theme;
+    if (cached != null) return cached;
+    final [base, bold] = await Future.wait([
+      PdfGoogleFonts.notoSansKRRegular(),
+      PdfGoogleFonts.notoSansKRBold(),
+    ]);
+    return _theme = pw.ThemeData.withFont(base: base, bold: bold);
+  }
+
   static Future<void> showPrintPreview(ResumeModel resume) async {
-    final doc = pw.Document();
+    final doc = pw.Document(theme: await _koreanTheme());
     final c = resume.content;
 
     doc.addPage(
