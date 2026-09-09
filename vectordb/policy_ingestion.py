@@ -82,6 +82,7 @@ KEYWORDS = {
     "생활 및 기타": ("생활", "기타"),
 }
 CLASSIFICATION_SCHEMA = {
+    "title": "PolicyClassification",
     "type": "object",
     "properties": {
         "policy_type": {"type": "string", "enum": POLICY_ENUM},
@@ -273,7 +274,8 @@ def load_file(path: Path, model: Any | None = None) -> list[SourceSection]:
 
 def discover_files(paths: Sequence[str]) -> list[Path]:
     default_data = DATA_DIR.resolve()
-    roots = [Path(value).resolve() for value in paths] if paths else [default_data if default_data.exists() else ROOT]
+    default_roots = sorted(path.resolve() for path in DATA_DIR.glob("policy_*") if path.is_dir())
+    roots = [Path(value).resolve() for value in paths] if paths else default_roots or [ROOT]
     found: set[Path] = set()
     for root in roots:
         if root.is_file():
@@ -285,9 +287,9 @@ def discover_files(paths: Sequence[str]) -> list[Path]:
         for path in root.rglob("*"):
             if not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES or SKIP_DIRS.intersection(path.parts):
                 continue
-            # ponytail: files in vectordb/data are intentional inputs; elsewhere use filename hints.
+            # ponytail: policy_* directories are intentional inputs; elsewhere use filename hints.
             hints = ("policy", "faq", "ot", "정책", "규정", "출결", "공가", "훈련")
-            if paths or root == default_data or any(hint in path.name.lower() for hint in hints):
+            if paths or root in default_roots or any(hint in path.name.lower() for hint in hints):
                 found.add(path)
     return sorted(found)
 
@@ -586,7 +588,10 @@ def _index_ready(pc: Any, index_name: str) -> None:
     raise TimeoutError(f"Pinecone index 준비 시간 초과: {index_name}")
 
 
-def upload_records(records: Sequence[ChunkRecord], state_path: Path = STATE_FILE) -> dict[str, Any]:
+def upload_records(
+    records: Sequence[ChunkRecord], state_path: Path = STATE_FILE,
+    managed_source_types: set[str] | None = None,
+) -> dict[str, Any]:
     if not records:
         return {"upserted": 0, "stats": {}}
     if not os.getenv("OPENAI_API_KEY") or not os.getenv("PINECONE_API_KEY"):
@@ -625,9 +630,13 @@ def upload_records(records: Sequence[ChunkRecord], state_path: Path = STATE_FILE
     current_ids = {record.metadata["doc_id"] for record in records}
     document_keys = {record.source.document_key for record in records}
     previous_keys = {key for key in saved_sources if any(key.startswith(prefix) for prefix in document_keys)}
+    if managed_source_types:
+        previous_keys.update(key for key in saved_sources if key.partition(":")[0] in managed_source_types)
     stale = set().union(*(set(saved_sources[key]) for key in previous_keys)) - current_ids
-    if stale:
-        retry(lambda: index.delete(ids=sorted(stale), namespace=namespace))
+    stale_ids = sorted(stale)
+    for start in range(0, len(stale_ids), 1000):
+        batch = stale_ids[start:start + 1000]
+        retry(lambda batch=batch: index.delete(ids=batch, namespace=namespace))
     for source_key in previous_keys - current.keys():
         saved_sources.pop(source_key)
     for source_key, ids in current.items():
@@ -696,7 +705,8 @@ def run_ingestion(args: argparse.Namespace) -> dict[str, Any]:
         "dry_run": args.dry_run,
     }
     if not args.dry_run:
-        result.update(upload_records(records))
+        managed_source_types = {"csv", "excel", "file", "pdf"} if not args.paths and args.source in {"all", "files"} else None
+        result.update(upload_records(records, managed_source_types=managed_source_types))
     return result
 
 
