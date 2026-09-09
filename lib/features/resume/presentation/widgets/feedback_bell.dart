@@ -74,25 +74,11 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
     setState(() => _open = true);
   }
 
-  Future<void> _openDetail(ResumeFeedbackModel item) async {
+  /// 종은 길잡이다. 읽는 곳은 항목 아래 댓글 한 곳이다.
+  /// 읽음도 거기서 넘어간다 — 여기서 미리 넘기면 안 읽고도 숫자가 준다.
+  void _goToSection(ResumeFeedbackModel item) {
     _close();
-    // 전문을 연 순간이 읽음이다.
-    final cohortId = ref.read(effectiveCohortIdProvider);
-    if (cohortId != null && !ref.read(isAdminProvider)) {
-      ref.read(lmsRepositoryProvider).markResumeFeedbackRead(
-            cohortId: cohortId,
-            resumeId: widget.resume.id,
-            feedbackId: item.id,
-          );
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => FeedbackDetailDialog(
-        item: item,
-        onGoToSection: widget.onGoToSection,
-      ),
-    );
+    widget.onGoToSection(item.sectionKey);
   }
 
   @override
@@ -132,7 +118,7 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
             child: _FeedbackPopover(
               items: items,
               readIds: widget.resume.readFeedbackIds.toSet(),
-              onPick: _openDetail,
+              onPick: _goToSection,
               onClose: _close,
             ),
           ),
@@ -409,76 +395,6 @@ class _Row extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// 전문. 여기까지 와야 읽음이다.
-class FeedbackDetailDialog extends StatelessWidget {
-  const FeedbackDetailDialog({
-    super.key,
-    required this.item,
-    required this.onGoToSection,
-  });
-
-  final ResumeFeedbackModel item;
-  final ValueChanged<String> onGoToSection;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = sectionLabelOf(item.sectionKey);
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      titlePadding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '$label에 대한 피드백',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: AppColors.textHint),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            item.createdAt == null
-                ? item.authorName
-                : '${item.authorName} · ${AppDateUtils.formatDateTime(item.createdAt!)}',
-            style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: SingleChildScrollView(
-          child: Text(
-            item.content,
-            style: const TextStyle(fontSize: 13.5, height: 1.7, color: Color(0xFF374151)),
-          ),
-        ),
-      ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기')),
-        FilledButton(
-          onPressed: () {
-            Navigator.pop(context);
-            onGoToSection(item.sectionKey);
-          },
-          child: const Text('해당 항목으로 이동'),
-        ),
-      ],
     );
   }
 }

@@ -118,7 +118,8 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('항목을 누르면 전문 팝업이 뜬다', (tester) async {
+  testWidgets('항목을 누르면 그 항목으로 보내고 말풍선은 닫힌다', (tester) async {
+    // 종은 길잡이다. 읽는 곳은 항목 아래 댓글 한 곳이다.
     final tapped = <String>[];
     await tester.pumpWidget(_app(resume: _resume(), tapped: tapped));
     await tester.pumpAndSettle();
@@ -128,10 +129,8 @@ void main() {
     await tester.tap(find.textContaining('프로젝트 경험'));
     await tester.pumpAndSettle();
 
-    expect(find.text('성과를 숫자로 적어 주세요.'), findsOneWidget, reason: '전문은 팝업에서');
-    await tester.tap(find.text('해당 항목으로 이동'));
-    await tester.pumpAndSettle();
-    expect(tapped, ['projects']);
+    expect(tapped, ['projects'], reason: '그 항목으로 보내야 한다');
+    expect(find.text('피드백'), findsNothing, reason: '보냈으면 말풍선은 닫는다');
   });
 
   testWidgets('종을 다시 누르면 닫힌다', (tester) async {
