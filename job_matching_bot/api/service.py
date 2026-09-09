@@ -90,13 +90,50 @@ def _build_generator(prompt, schema, effort: str | None = None):
     return (prompt | model.with_structured_output(schema, method="json_schema")).invoke
 
 
-class RecommendService:
-    def __init__(self, profiler=None, reranker=None) -> None:
+class _LivenessMixin:
+    """내려간 공고를 내보내기 직전에 걸러 내는 손잡이.
+
+    저장소 상태는 밤에 한 번 맞춘 것이라 낮에 조기 마감된 공고를 모른다. 마감일이
+    미래고 어젯밤 목록에도 있었는데 오늘 사이트에서는 "접수마감"인 공고가 실제로 있다.
+    그건 페이지를 열어 봐야만 안다. 그래서 **사용자에게 나갈 것만** 그 자리에서 본다.
+
+    확인이 안 되면(네트워크 오류·차단) 그대로 내보낸다. 잘못 지우는 것보다 낫다.
+    """
+
+    _liveness = None
+
+    @property
+    def liveness(self):
+        if self._liveness is None:
+            from job_matching_bot.retrieval.liveness import Liveness
+
+            self._liveness = Liveness(self.store_path)
+        return self._liveness
+
+    def drop_dead(self, job_ids: list[str]) -> set[str]:
+        """살아 있는 job_id 집합. 확인이 실패하면 전부 살아 있는 것으로 본다."""
+        try:
+            return set(self.liveness.alive(job_ids))
+        except Exception:  # noqa: BLE001 — 확인 실패가 추천을 막을 이유는 아니다
+            return set(job_ids)
+
+
+class RecommendService(_LivenessMixin):
+    def __init__(self, profiler=None, reranker=None, store_path: Path | None = None) -> None:
         self._profiler = profiler
         self._reranker = reranker
+        self._store_path = store_path
         # 같은 이력서로 다시 추천하면 구조화를 건너뛴다. 앱은 범위(프로젝트·기술스택 …)를
         # 바꿔 가며 여러 번 부르는데, 범위마다 글이 다르므로 글 자체를 열쇠로 쓴다.
         self._profiles: OrderedDict[str, schemas.ResumeProfileOut] = OrderedDict()
+
+    @property
+    def store_path(self) -> Path:
+        if self._store_path is None:
+            from job_matching_bot.ingest import DEFAULT_STORE
+
+            self._store_path = DEFAULT_STORE
+        return self._store_path
 
     @property
     def profiler(self):
@@ -301,6 +338,12 @@ class RecommendService:
             raise SearchUnavailable(f"조건 판정에 실패했습니다: {type(error).__name__}") from error
 
         candidates = candidates[:RERANK_TOP_K]
+        # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없고, 걸러 낸 만큼
+        # 뒤 후보가 올라와 자리를 채운다.
+        alive = self.drop_dead([hit.job_id for hit, _, _ in candidates])
+        if len(alive) < len(candidates):
+            warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
+            candidates = [c for c in candidates if c[0].job_id in alive]
         fits, reranked = self.rerank(request.resume_text, candidates, warnings)
 
         order = {"높음": 0, "보통": 1, "낮음": 2}
@@ -394,7 +437,7 @@ def _deduplicate(items: list[str]) -> list[str]:
 
 
 # ── 공고 찾아보기 챗봇 ───────────────────────────────────
-class ChatService:
+class ChatService(_LivenessMixin):
     """말을 받아 세 갈래로 답한다.
 
         검색   "서울 백엔드 신입 찾아줘"   → 저장소 조회, 목록
@@ -538,10 +581,24 @@ class ChatService:
                 )
                 by_meaning = True
 
+        # 보여 주기 직전에 내려간 공고를 뺀다. 저장소가 OPEN이라고 해도 사이트에서
+        # 이미 마감됐을 수 있다 — 그건 열어 봐야만 안다.
+        shown = result.jobs
+        if shown:
+            alive = self.drop_dead([hit.job_id for hit in shown])
+            if len(alive) < len(shown):
+                shown = [hit for hit in shown if hit.job_id in alive]
+                result = store_search.SearchResult(
+                    jobs=shown,
+                    total=max(result.total - (len(result.jobs) - len(shown)), len(shown)),
+                    scanned_cap=result.scanned_cap,
+                    strong=min(result.strong, len(shown)),
+                )
+
         return schemas.JobChatResponse(
             reply=self._reply(turn.understood, filters, result, by_meaning),
             filters=turn.filters,
-            jobs=[_to_chat_job(hit) for hit in result.jobs],
+            jobs=[_to_chat_job(hit) for hit in shown],
             total=result.total,
             suggestions=_suggestions(filters, result),
         )

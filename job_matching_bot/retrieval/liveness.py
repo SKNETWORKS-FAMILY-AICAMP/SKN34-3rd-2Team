@@ -29,7 +29,9 @@ from job_matching_bot.schemas.job_record import STATUS_CLOSED
 
 log = logging.getLogger(__name__)
 
-SOURCE = "saramin"  # 이 소스의 공고만 열어 본다. 나머지는 확인 없이 남긴다.
+# 이 소스의 공고만 열어 본다. 나머지는 확인 없이 남긴다.
+# 저장소의 job_id 는 "SARAMIN-54947118" 꼴이라 대소문자를 무시하고 견준다.
+SOURCE = "saramin"
 TTL_HOURS = 24.0
 MAX_WORKERS = 8
 PAUSE_MINUTES = 30.0
@@ -108,7 +110,7 @@ class Liveness:
     # ── 안쪽 ─────────────────────────────────────────────────
     def _rec_idx(self, job_id: str) -> str | None:
         source, _, rec_idx = job_id.partition("-")
-        return rec_idx if source == self.source and rec_idx else None
+        return rec_idx if source.lower() == self.source.lower() and rec_idx else None
 
     def _open_store(self):
         from job_matching_bot.ingestion.sqlite_store import SqliteJobStore

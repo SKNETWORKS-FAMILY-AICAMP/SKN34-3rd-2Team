@@ -228,10 +228,18 @@ def site_fetcher(session: requests.Session, page_count: int = PAGE_COUNT) -> Fet
 
 # ── 4. 링크 확인 ───────────────────────────────────────────────
 def is_closed_page(html: str) -> bool:
-    if any(marker in html for marker in CLOSED_MARKERS):
+    """마감 문구는 **원본 HTML이 아니라 뽑아낸 글에서** 찾는다.
+
+    화면의 "본 채용정보는 마감되었습니다."는 실제 HTML에서 `채용정보는 <span>마감</span>
+    되었습니다` 처럼 태그로 끊겨 있다. 원본 문자열에서 찾으면 글자가 이어지지 않아
+    하나도 걸리지 않는다. 실제로 마감된 공고 4건에서 0건이 걸렸다.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(" ", strip=True)
+    if any(marker in text for marker in CLOSED_MARKERS):
         return True
     # 본문 섹션(.jv_cont)이 하나도 없으면 공고 페이지가 아니다.
-    return not BeautifulSoup(html, "html.parser").select(".jv_cont")
+    return not soup.select(".jv_cont")
 
 
 def check_alive(session: requests.Session, rec_idx: str, timeout: int = 30) -> bool | None:
