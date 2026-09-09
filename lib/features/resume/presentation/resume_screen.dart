@@ -599,7 +599,13 @@ class _FeedbackSection extends ConsumerWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text('피드백 작성'),
-          content: Column(
+          // 너비를 정해 준다. 안 그러면 AlertDialog 가 내용의 고유 크기를 재려 하는데,
+          // 섹션 드롭다운이 LayoutBuilder 로 되어 있어 그 계산을 하지 못한다.
+          // 레이아웃이 실패하면서 크기가 0이 되고, 마우스가 지날 때마다 히트 테스트
+          // 오류가 매 프레임 쏟아진다.
+          content: SizedBox(
+            width: 360,
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               AppDropdownField<String>(
@@ -622,6 +628,7 @@ class _FeedbackSection extends ConsumerWidget {
                 maxLines: 3,
               ),
             ],
+          ),
           ),
           actions: [
             TextButton(
