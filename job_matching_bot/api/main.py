@@ -18,7 +18,9 @@ CORS는 개발용이다. `functions/.env`의 두 값으로 켠다. 둘 다 비�
 
 from __future__ import annotations
 
+import asyncio
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +35,31 @@ from job_matching_bot.api.service import (
 from job_matching_bot.env import ensure_loaded
 from job_matching_bot.retrieval.pinecone_index import client, index_name
 
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    """첫 요청이 물어야 할 준비 비용을 서버가 뜰 때 미리 치른다.
+
+    임베딩 클라이언트를 처음 만드는 데 2.3초, Pinecone 인덱스를 처음 잡는 데 1.2초가
+    든다. 그냥 두면 그 3.5초를 **처음 추천을 누른 사람**이 기다린다.
+
+    실패해도 서버는 뜬다. 준비를 못 했을 뿐이고 요청이 오면 그때 다시 시도한다.
+    """
+    try:
+        from langchain_openai import OpenAIEmbeddings
+
+        from job_matching_bot.retrieval.pinecone_index import EMBEDDING_MODEL, index
+
+        await asyncio.to_thread(
+            OpenAIEmbeddings(model=EMBEDDING_MODEL).embed_query, "준비"
+        )
+        await asyncio.to_thread(index().describe_index_stats)
+    except Exception as error:  # noqa: BLE001 — 준비 실패가 서버를 막을 이유는 없다
+        print(f"[준비] 미리 데우지 못했습니다: {type(error).__name__}")
+    yield
+
+
 app = FastAPI(
+    lifespan=_lifespan,
     title="AI 취업 코치 — 채용공고 추천 API",
     version="0.1.0",
     description="이력서를 읽고 채용공고를 추천한다. 벡터 검색 + LLM 재정렬 + 근거 검증.",

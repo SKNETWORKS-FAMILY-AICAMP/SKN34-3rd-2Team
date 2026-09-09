@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -41,6 +41,8 @@ MAX_PER_COMPANY = 2
 JOB_EXCERPT_CHARS = 1200
 # LLM 추론 강도. 대조 작업이라 낮춰도 근거 품질이 유지되고 응답이 크게 빨라진다.
 REASONING_EFFORT = "low"
+# 구조화 결과를 몇 벌까지 들고 있을지. 이력서 한 건이 몇 KB라 넉넉해도 가볍다.
+PROFILE_CACHE_SIZE = 64
 
 
 class StoreUnavailable(RuntimeError):
@@ -52,7 +54,7 @@ class SearchUnavailable(RuntimeError):
 
 
 
-def _build_generator(prompt, schema):
+def _build_generator(prompt, schema, effort: str | None = None):
     """프롬프트 | 구조화 출력. 첨삭 모듈과 같은 방식으로 맞춘다.
 
     추론 강도를 낮게 둔다. 이 단계들은 새로운 것을 궁리하는 일이 아니라 두 글을 대조해
@@ -66,7 +68,8 @@ def _build_generator(prompt, schema):
 
     model = ChatOpenAI(
         model=os.environ.get("OPENAI_MODEL", "gpt-5.6-luna"),
-        reasoning_effort=os.environ.get("OPENAI_REASONING_EFFORT", REASONING_EFFORT),
+        reasoning_effort=effort
+        or os.environ.get("OPENAI_REASONING_EFFORT", REASONING_EFFORT),
         max_retries=2,
     )
     return (prompt | model.with_structured_output(schema, method="json_schema")).invoke
@@ -76,6 +79,9 @@ class RecommendService:
     def __init__(self, profiler=None, reranker=None) -> None:
         self._profiler = profiler
         self._reranker = reranker
+        # 같은 이력서로 다시 추천하면 구조화를 건너뛴다. 앱은 범위(프로젝트·기술스택 …)를
+        # 바꿔 가며 여러 번 부르는데, 범위마다 글이 다르므로 글 자체를 열쇠로 쓴다.
+        self._profiles: OrderedDict[str, schemas.ResumeProfileOut] = OrderedDict()
 
     @property
     def profiler(self):
@@ -93,8 +99,16 @@ class RecommendService:
     def build_profile(
         self, request: schemas.RecommendRequest, warnings: list[str]
     ) -> schemas.ResumeProfileOut:
+        cached = self._profiles.get(request.resume_text)
+        if cached is not None:
+            self._profiles.move_to_end(request.resume_text)
+            return cached
         try:
-            return self.profiler({"resume_text": request.resume_text})
+            profile = self.profiler({"resume_text": request.resume_text})
+            self._profiles[request.resume_text] = profile
+            if len(self._profiles) > PROFILE_CACHE_SIZE:
+                self._profiles.popitem(last=False)
+            return profile
         except Exception as error:
             warnings.append(f"이력서 구조화에 실패해 원문으로 검색합니다: {type(error).__name__}")
             return schemas.ResumeProfileOut(
