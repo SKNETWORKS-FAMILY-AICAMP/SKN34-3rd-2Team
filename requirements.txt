@@ -53,3 +53,9 @@ python-dotenv>=1.0,<2
 #
 #   pip install -e ./cover_letter_rag        # + chromadb (Pinecone 대신 쓰는 로컬 벡터 저장소)
 #   pip install -e ./cover_letter_rag[dev]   # + pytest-cov, httpx
+
+# 기타 랭체인 라이브러리
+langchain_classic
+langchain_community
+langgraph
+lark
