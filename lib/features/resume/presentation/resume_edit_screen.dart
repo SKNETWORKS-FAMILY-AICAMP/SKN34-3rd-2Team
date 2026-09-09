@@ -43,6 +43,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _isSaving = false;
   bool _dirty = false;
   bool _showAiCoach = false;
+  bool _showFeedback = true;
 
   String _title = '';
   ResumeContent _content = ResumeContent.empty();
@@ -216,17 +217,18 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     }
   }
 
+  /// 학생이 피드백을 요청한다. 이때부터 강사·관리자에게 이력서가 보인다.
   Future<void> _submitRequest(ResumeModel resume) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('제출 요청'),
+        title: const Text('피드백 요청'),
         content: const Text(
-          '관리자에게 검토를 요청합니다. 승인 전까지는 계속 수정할 수 있습니다.',
+          '강사·관리자에게 피드백을 요청합니다. 요청해야 이력서가 전달되고, 승인 전까지는 계속 수정할 수 있습니다.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('제출 요청')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('피드백 요청')),
         ],
       ),
     );
@@ -234,7 +236,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     await _save(resume: resume, status: 'submitted', incrementRevision: false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('제출 요청이 완료되었습니다.')),
+        const SnackBar(content: Text('피드백을 요청했습니다.')),
       );
     }
   }
@@ -354,6 +356,21 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   icon: const Icon(Icons.auto_awesome, size: 16),
                   label: const Text('AI 취업 코치'),
                 ),
+                const SizedBox(width: 4),
+                // AI 코치를 보는 중에는 피드백이 그 뒤에 가려 있어 토글할 것이 없다.
+                if (!_showAiCoach)
+                  IconButton(
+                    tooltip: _showFeedback ? '피드백 닫기' : '피드백 열기',
+                    isSelected: _showFeedback,
+                    onPressed: () =>
+                        setState(() => _showFeedback = !_showFeedback),
+                    icon: Icon(
+                      _showFeedback
+                          ? Icons.chat_bubble
+                          : Icons.chat_bubble_outline,
+                      size: 18,
+                    ),
+                  ),
                 const SizedBox(width: 8),
                 if (!resume.isApproved || isAdmin)
                   _ModeToggle(
@@ -380,7 +397,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     FilledButton.icon(
                       onPressed: _isSaving ? null : () => _submitRequest(resume),
                       icon: const Icon(Icons.send, size: 16),
-                      label: const Text('제출 요청'),
+                      label: const Text('피드백 요청'),
                     ),
                   ],
                   const SizedBox(width: 8),
@@ -419,7 +436,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     color: AppColors.primaryLight,
                     child: const Text(
-                      '제출 요청됨 — 승인 전까지 수정 가능합니다.',
+                      '피드백 요청됨 — 승인 전까지 수정 가능합니다.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ),
@@ -689,21 +706,27 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                               onClose: () => setState(() => _showAiCoach = false),
                             ),
                           ),
-                          if (!_showAiCoach)
+                          if (!_showAiCoach && _showFeedback)
                             ResumeEditFeedbackPanel(
                               resumeId: widget.resumeId,
-                              isAdmin: isAdmin,
+                              // 피드백을 요청한 이력서에만 남길 수 있다.
+                              isAdmin: isAdmin && resume.acceptsFeedback,
                               selectedSectionKey: _selectedSection,
                               isSidebar: wide,
+                              onClose: () =>
+                                  setState(() => _showFeedback = false),
                             ),
                         ],
                       );
+
+                      // 둘 다 닫혔으면 오른쪽 자리를 통째로 비운다. 이력서가 넓어진다.
+                      final hasRightPanel = _showAiCoach || _showFeedback;
 
                       if (!wide) {
                         return Column(
                           children: [
                             Expanded(child: resumeScroll),
-                            rightPanel,
+                            if (hasRightPanel) rightPanel,
                           ],
                         );
                       }
@@ -712,7 +735,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: resumeScroll),
-                          SizedBox(
+                          if (hasRightPanel)
+                            SizedBox(
                             width: 340,
                             child: DecoratedBox(
                               decoration: const BoxDecoration(
@@ -1431,6 +1455,7 @@ class _ExperienceSection extends StatelessWidget {
               readOnly: readOnly,
               onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Field(label: '회사명', value: item.company, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(company: v))),
                   _Field(label: '직무', value: item.role, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(role: v))),
@@ -1491,6 +1516,7 @@ class _EducationSection extends StatelessWidget {
               readOnly: readOnly,
               onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Field(label: '학교명', value: item.school, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(school: v))),
                   _Field(label: '전공', value: item.major, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(major: v))),
@@ -1570,6 +1596,7 @@ class _CertificationsSection extends StatelessWidget {
               readOnly: readOnly,
               onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Field(label: '자격명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
                   _Field(label: '발급기관', value: item.issuer, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(issuer: v))),
@@ -1621,6 +1648,7 @@ class _AwardsSection extends StatelessWidget {
               readOnly: readOnly,
               onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Field(label: '수상명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
                   _Field(label: '기관', value: item.organization, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(organization: v))),
@@ -1673,6 +1701,7 @@ class _TrainingSection extends StatelessWidget {
               readOnly: readOnly,
               onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Field(label: '과정명', value: item.course, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(course: v))),
                   _Field(label: '기관', value: item.organization, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(organization: v))),
@@ -1726,6 +1755,7 @@ class _ActivitiesSection extends StatelessWidget {
               readOnly: readOnly,
               onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Field(label: '활동명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
                   _Field(label: '시작일', value: item.startDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(startDate: v))),
@@ -1778,6 +1808,7 @@ class _ProjectsSection extends StatelessWidget {
               readOnly: readOnly,
               onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Field(label: '프로젝트명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
                   _Field(label: '시작일', value: item.startDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(startDate: v))),
@@ -1817,6 +1848,7 @@ class _SelfIntroSection extends StatelessWidget {
     return _FlatSection(
       title: AppConstants.resumeSectionLabels['selfIntroduction']!,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: ResumeSelfIntroLabels.keys.map((key) {
           final section = data.sectionByKey(key);
           final label = ResumeSelfIntroLabels.labels[key]!;

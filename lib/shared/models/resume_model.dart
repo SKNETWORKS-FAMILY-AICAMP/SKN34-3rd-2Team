@@ -140,13 +140,24 @@ class ResumeModel {
   }
 
   String get statusLabel => switch (status) {
-        'submitted' => '제출 요청',
+        'submitted' => '피드백 요청',
         'approved' || 'completed' => '승인 완료',
         _ => '작성 중',
       };
 
+  /// 저장된 값은 'submitted' 그대로 둔다. 이미 쌓인 이력서를 옮기지 않으려는 것이고,
+  /// 바뀐 것은 학생에게 보이는 이름뿐이다.
   bool get isSubmitted => status == 'submitted';
   bool get isApproved => status == 'approved' || status == 'completed';
+
+  /// 학생이 피드백을 요청했나. 작성 중인 이력서는 아직 남의 눈에 보일 것이 아니다.
+  bool get isFeedbackRequested => isSubmitted;
+
+  /// 강사·관리자가 이 이력서를 볼 수 있나. 작성 중인 것은 목록에서 아예 뺀다.
+  bool get isVisibleToReviewer => isFeedbackRequested || isApproved;
+
+  /// 피드백을 남길 수 있나. 요청하지 않은 이력서에는 손대지 않는다.
+  bool get acceptsFeedback => isFeedbackRequested;
   bool get canStudentEdit => !isApproved;
 
   ResumeModel copyWith({

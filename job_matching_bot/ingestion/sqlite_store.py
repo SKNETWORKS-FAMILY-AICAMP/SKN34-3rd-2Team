@@ -35,6 +35,7 @@ from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import (
     DEFAULT_MISSING_RUN_LIMIT,
+    STATUS_CLOSED,
     STATUS_OPEN,
     STATUS_REMOVED,
     CollectionReport,
@@ -97,6 +98,11 @@ CREATE TABLE IF NOT EXISTS list_seen (
     PRIMARY KEY (source_job_id, cat_mcls)
 );
 CREATE INDEX IF NOT EXISTS list_seen_at ON list_seen(seen_at);
+CREATE TABLE IF NOT EXISTS link_checks (
+    job_id TEXT PRIMARY KEY,
+    checked_at TEXT NOT NULL,
+    alive INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS list_sweeps (
     cat_mcls TEXT PRIMARY KEY,
     swept_at TEXT NOT NULL,
@@ -471,6 +477,43 @@ class SqliteJobStore:
             for row in rows
             if row["source_job_id"] not in observed and int(row["missing_runs"]) + 1 >= missing_run_limit
         )
+
+    # ── 링크 확인 기록 ────────────────────────────────────────
+    def recent_link_checks(self, job_ids: Iterable[str], since: datetime) -> dict[str, bool]:
+        """`since` 이후에 열어 본 공고 → 살아 있었나. 낮 확인이 같은 공고를 되풀이해 열지 않게."""
+        ids = list(job_ids)
+        if not ids:
+            return {}
+        placeholders = ", ".join("?" for _ in ids)
+        rows = self.conn.execute(
+            f"SELECT job_id, alive FROM link_checks WHERE checked_at >= ? AND job_id IN ({placeholders})",
+            (since.isoformat(), *ids),
+        )
+        return {row["job_id"]: bool(row["alive"]) for row in rows}
+
+    def record_link_checks(self, results: dict[str, bool], at: datetime) -> list[str]:
+        """확인 결과를 남기고, 내려간 공고는 CLOSED로 넘긴다. 넘어간 job_id 목록을 돌려준다.
+
+        OPEN인 것만 넘긴다. EXPIRED·REMOVED는 이미 인덱스 밖이라 건드릴 이유가 없다.
+        """
+        stamp = at.isoformat()
+        closed = [job_id for job_id, alive in results.items() if not alive]
+        with self.conn:
+            self.conn.executemany(
+                "INSERT OR REPLACE INTO link_checks (job_id, checked_at, alive) VALUES (?, ?, ?)",
+                [(job_id, stamp, int(alive)) for job_id, alive in results.items()],
+            )
+            if closed:
+                placeholders = ", ".join("?" for _ in closed)
+                rows = self.conn.execute(
+                    f"SELECT job_id FROM jobs WHERE status = ? AND job_id IN ({placeholders})", (STATUS_OPEN, *closed)
+                ).fetchall()
+                moved = [row["job_id"] for row in rows]
+                self.conn.executemany(
+                    "UPDATE jobs SET status = ? WHERE job_id = ?", [(STATUS_CLOSED, job_id) for job_id in moved]
+                )
+                return moved
+        return []
 
     # ── 실행 기록 ─────────────────────────────────────────────
     def record_run(self, report: CollectionReport, *, started_at: datetime, finished_at: datetime,

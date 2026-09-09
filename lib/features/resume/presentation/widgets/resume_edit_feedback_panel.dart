@@ -16,12 +16,16 @@ class ResumeEditFeedbackPanel extends ConsumerStatefulWidget {
     required this.isAdmin,
     this.selectedSectionKey,
     this.isSidebar = false,
+    this.onClose,
   });
 
   final String resumeId;
   final bool isAdmin;
   final String? selectedSectionKey;
   final bool isSidebar;
+
+  /// 주면 머리말에 닫기 아이콘이 생긴다. 없으면 닫을 수 없는 자리라는 뜻이다.
+  final VoidCallback? onClose;
 
   @override
   ConsumerState<ResumeEditFeedbackPanel> createState() =>
@@ -115,6 +119,7 @@ class _ResumeEditFeedbackPanelState
           _PanelHeader(
             isSidebar: widget.isSidebar,
             count: feedback.maybeWhen(data: (l) => l.length, orElse: () => 0),
+            onClose: widget.onClose,
           ),
           Expanded(
             child: feedback.when(
@@ -194,10 +199,15 @@ class _ResumeEditFeedbackPanelState
 }
 
 class _PanelHeader extends StatelessWidget {
-  const _PanelHeader({required this.isSidebar, required this.count});
+  const _PanelHeader({
+    required this.isSidebar,
+    required this.count,
+    this.onClose,
+  });
 
   final bool isSidebar;
   final int count;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -230,6 +240,15 @@ class _PanelHeader extends StatelessWidget {
                   color: AppColors.primary,
                 ),
               ),
+            ),
+          ],
+          if (onClose != null) ...[
+            const Spacer(),
+            IconButton(
+              tooltip: '피드백 닫기',
+              visualDensity: VisualDensity.compact,
+              onPressed: onClose,
+              icon: const Icon(Icons.close, size: 18),
             ),
           ],
         ],

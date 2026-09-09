@@ -29,22 +29,54 @@ class ResumeScreen extends ConsumerWidget {
       child: resumes.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorView(message: e.toString()),
-        data: (list) => _ResumeBody(resumes: list, canReview: canReview),
+        data: (list) => _ResumeBody(
+          // 작성 중인 이력서는 아직 학생의 것이다. 요청해야 넘어온다.
+          resumes: canReview
+              ? list.where((r) => r.isVisibleToReviewer).toList()
+              : list,
+          canReview: canReview,
+        ),
       ),
     );
   }
 }
 
-class _ResumeBody extends ConsumerWidget {
+/// 통계 카드가 가리키는 묶음. 카드를 누르면 그 묶음만 목록에 남는다.
+enum _ResumeFilter { all, writing, requested, approved }
+
+class _ResumeBody extends ConsumerStatefulWidget {
   const _ResumeBody({required this.resumes, required this.canReview});
   final List<ResumeModel> resumes;
   final bool canReview;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final submitted = resumes.where((r) => r.status == 'submitted').length;
-    final writing = resumes.where((r) => r.status == 'writing').length;
+  ConsumerState<_ResumeBody> createState() => _ResumeBodyState();
+}
+
+class _ResumeBodyState extends ConsumerState<_ResumeBody> {
+  _ResumeFilter _filter = _ResumeFilter.all;
+
+  bool _matches(ResumeModel r) => switch (_filter) {
+        _ResumeFilter.all => true,
+        _ResumeFilter.writing => !r.isFeedbackRequested && !r.isApproved,
+        _ResumeFilter.requested => r.isFeedbackRequested,
+        _ResumeFilter.approved => r.isApproved,
+      };
+
+  void _select(_ResumeFilter tapped) => setState(
+        // 눌린 카드를 다시 누르면 전체로 돌아온다.
+        () => _filter = _filter == tapped ? _ResumeFilter.all : tapped,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final resumes = widget.resumes;
+    final canReview = widget.canReview;
+    final submitted = resumes.where((r) => r.isFeedbackRequested).length;
+    final writing =
+        resumes.where((r) => !r.isFeedbackRequested && !r.isApproved).length;
     final approved = resumes.where((r) => r.isApproved).length;
+    final shown = resumes.where(_matches).toList();
 
     return Center(
       child: ConstrainedBox(
@@ -77,24 +109,37 @@ class _ResumeBody extends ConsumerWidget {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      _StatCard(label: '전체', value: '${resumes.length}'),
-                      const SizedBox(width: 8),
                       _StatCard(
-                        label: '작성 중',
-                        value: '$writing',
-                        color: AppColors.warning,
+                        label: '전체',
+                        value: '${resumes.length}',
+                        selected: _filter == _ResumeFilter.all,
+                        onTap: () => _select(_ResumeFilter.all),
                       ),
                       const SizedBox(width: 8),
+                      if (!canReview) ...[
+                        _StatCard(
+                          label: '작성 중',
+                          value: '$writing',
+                          color: AppColors.warning,
+                          selected: _filter == _ResumeFilter.writing,
+                          onTap: () => _select(_ResumeFilter.writing),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       _StatCard(
-                        label: '제출 요청',
+                        label: '피드백 요청',
                         value: '$submitted',
                         color: AppColors.primary,
+                        selected: _filter == _ResumeFilter.requested,
+                        onTap: () => _select(_ResumeFilter.requested),
                       ),
                       const SizedBox(width: 8),
                       _StatCard(
                         label: '승인',
                         value: '$approved',
                         color: AppColors.success,
+                        selected: _filter == _ResumeFilter.approved,
+                        onTap: () => _select(_ResumeFilter.approved),
                       ),
                     ],
                   ),
@@ -113,18 +158,22 @@ class _ResumeBody extends ConsumerWidget {
               ),
             ),
             Expanded(
-              child: resumes.isEmpty
-                  ? const Center(
+              child: shown.isEmpty
+                  ? Center(
                       child: Text(
-                        '이력서가 없습니다',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        resumes.isEmpty
+                            ? (canReview
+                                ? '피드백을 요청한 이력서가 없습니다'
+                                : '이력서가 없습니다')
+                            : '이 묶음에 해당하는 이력서가 없습니다',
+                        style: const TextStyle(color: AppColors.textSecondary),
                       ),
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                      itemCount: resumes.length,
+                      itemCount: shown.length,
                       itemBuilder: (_, i) => _ResumeCard(
-                        resume: resumes[i],
+                        resume: shown[i],
                         canReview: canReview,
                       ),
                     ),
@@ -154,44 +203,60 @@ class _StatCard extends StatelessWidget {
     required this.label,
     required this.value,
     this.color,
+    this.selected = false,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final Color? color;
 
+  /// 지금 이 묶음만 보고 있나. 테두리를 그 색으로 굵게 그려 알려 준다.
+  final bool selected;
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
+    final accent = color ?? AppColors.textPrimary;
     return Expanded(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
+      child: Material(
+        color: selected ? accent.withValues(alpha: 0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          child: Column(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selected ? accent : AppColors.border,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            child: Column(
             children: [
               Text(
                 value,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: color ?? AppColors.textPrimary,
+                  color: accent,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textSecondary,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected ? accent : AppColors.textSecondary,
                 ),
               ),
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -353,7 +418,8 @@ class _ResumeCard extends ConsumerWidget {
                     ),
                   _FeedbackSection(
                     resumeId: resume.id,
-                    canReview: canReview,
+                    // 요청하지 않은 이력서에는 피드백을 남기지 않는다.
+                    canReview: canReview && resume.acceptsFeedback,
                   ),
                 ],
               ),
