@@ -87,6 +87,11 @@ class ResumeReviewApiClient {
         '선택한 공고 원문을 찾을 수 없습니다. 추천 목록을 새로고침한 뒤 다시 선택해 주세요.',
       (422, 'invalid_selection') || (422, 'selection_not_applicable') =>
         '선택한 수정안이 현재 이력서 원문에 적용될 수 없습니다. 첨삭을 다시 실행해 주세요.',
+      (409, 'resume_version_changed') ||
+      (409, 'resume_version_changed: reload the resume and review') =>
+        '수정안 적용으로 이력서가 갱신되었습니다. 기존 결과는 적용 전 내용 기준이므로 최신 이력서로 첨삭을 다시 시작해 주세요.',
+      (409, 'resume_changed_after_application') =>
+        '이력서가 적용 후 변경되어 되돌릴 수 없습니다. 최신 내용을 확인해 주세요.',
       (401, _) => '로그인이 만료됐습니다. 다시 로그인해 주세요.',
       (403, _) => '본인 소유 이력서만 첨삭할 수 있습니다.',
       (404, _) => '이력서를 찾을 수 없습니다.',

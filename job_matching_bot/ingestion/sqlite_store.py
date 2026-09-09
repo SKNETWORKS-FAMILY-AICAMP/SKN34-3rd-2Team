@@ -31,6 +31,7 @@ from typing import Any, Iterable, Iterator
 
 from job_matching_bot.config import AS_OF
 from job_matching_bot.ingestion.job_store import REQUIRED_FIELDS, _is_expired, resolve_status
+from job_matching_bot.ingestion.detail_quality import has_requirement_text
 from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import (
@@ -174,6 +175,11 @@ class SqliteJobStore:
     # ── 읽기 ──────────────────────────────────────────────────
     def _row_to_record(self, row: sqlite3.Row) -> JobRecord:
         job_fields = {name: _decode(name, row[name]) for name in JOB_FIELDS}
+        # 구 버전은 상세 영역 안의 보조 이미지가 하나라도 있으면 image 플래그를
+        # 남겼다. 실제 요구사항 텍스트가 저장돼 있으면 카드·첨삭에서는 텍스트
+        # 공고로 복구한다. DB를 읽는 과정만 보정하므로 원본 레코드는 훼손하지 않는다.
+        if job_fields["body_is_image"] and has_requirement_text(job_fields["description"]):
+            job_fields["body_is_image"] = False
         return JobRecord(
             job=Job(**job_fields),
             first_seen_at=row["first_seen_at"],

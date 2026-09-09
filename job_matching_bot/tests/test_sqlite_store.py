@@ -129,6 +129,17 @@ class RoundTripTest(unittest.TestCase):
             self.assertEqual(1, store.stats()["by_status"][STATUS_OPEN])
             self.assertEqual([job.job_id], [j.job_id for j in store.active_jobs()])
 
+    def test_legacy_image_flag_with_requirement_text_is_repaired_on_read(self):
+        """구 수집본의 잘못된 이미지 플래그가 추천 카드까지 전파되지 않는다."""
+        with tempfile.TemporaryDirectory() as temp, SqliteJobStore(Path(temp) / "s.sqlite") as store:
+            job = replace(
+                mock_jobs()[0],
+                description="주요업무 " + "Python 기반 데이터 분석과 API 개발을 수행합니다. " * 12,
+                body_is_image=True,
+            )
+            store.upsert([job], source="MOCK")
+            self.assertFalse(store.get(job.job_id).job.body_is_image)
+
     def test_json_store_still_used_for_json_paths(self):
         self.assertTrue(is_sqlite_path(Path("x/store.sqlite")))
         self.assertFalse(is_sqlite_path(Path("x/store.json")))

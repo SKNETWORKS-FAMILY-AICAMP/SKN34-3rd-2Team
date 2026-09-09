@@ -3,7 +3,9 @@ import sqlite3
 from datetime import datetime, time, timezone, timedelta
 from pathlib import Path
 
-from app.review_workflow import ReviewConflict, ReviewInputError, digest
+from job_matching_bot.ingestion.detail_quality import is_image_only_detail
+
+from app.review_workflow import ReviewConflict, ReviewInputError, digest, job_role_title
 
 
 class JobStoreUnavailable(RuntimeError):
@@ -43,11 +45,12 @@ def load_selected_job(path: Path, job_id: str) -> dict:
         except ValueError as exc:
             raise ReviewInputError('selected_job_deadline_unverified') from exc
     body = record.get('description') or ''
-    if not body.strip() or record.get('body_is_image') in (True, 1, '1'):
+    if not body.strip() or is_image_only_detail(body, record.get('body_is_image')):
         raise ReviewInputError('selected_job_full_text_unavailable')
     text = f"회사: {record.get('company', '')}\n공고: {record.get('title', '')}\n\n{body}"
     if len(text) > 50000:
         raise ReviewInputError('selected_job_text_too_long')
     source = {key: record.get(key) or '' for key in ('job_id', 'company', 'title', 'source_url', 'content_hash', 'deadline')}
+    source['role_title'] = job_role_title(source['company'], source['title'])
     source['snapshot_hash'] = digest([source, text, record['status']])
     return {'text': text, 'source': source}

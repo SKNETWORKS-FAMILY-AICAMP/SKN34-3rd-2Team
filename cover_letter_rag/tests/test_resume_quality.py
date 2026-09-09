@@ -1,8 +1,8 @@
 """Offline guardrail regressions; these do not measure live LLM quality."""
 import pytest
 
-from app.models import ResumeReviewGeneration, SentenceReview
-from app.resume_review import ground_sentences
+from app.models import ConfirmationAnswer, ResumeReviewGeneration, SentenceReview
+from app.resume_review import ground_sentences, require_answer_reflection
 
 
 def review(original, replacement, **kwargs):
@@ -11,6 +11,54 @@ def review(original, replacement, **kwargs):
     result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[item])
     ground_sentences({item.field_path: original}, [], result)
     return result.sentence_reviews[0]
+
+
+def test_followup_revision_must_reflect_the_newly_confirmed_fact():
+    item = SentenceReview(
+        field_path='projects[0].description',
+        original_quote='서비스를 구현했습니다.',
+        suggested_revision='서비스를 안정적으로 구현했습니다.',
+        reason='표현 정리',
+        evidence_quotes=['서비스를 구현했습니다.'],
+        status='improved',
+    )
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[item])
+    warnings = require_answer_reflection(
+        result,
+        [ConfirmationAnswer(
+            question_id='q1',
+            field_path='projects[0].description',
+            question='무엇을 구현했나요?',
+            answer='Pinecone 검색 결과를 원문 DB와 대조하는 API를 구현했습니다.',
+        )],
+    )
+    assert item.suggested_revision is None
+    assert 'answer_not_reflected' in item.validation_issues
+    assert warnings
+
+
+def test_role_answer_keeps_only_the_candidates_confirmed_scope():
+    original = '채용공고 매칭과 이력서 첨삭 기능을 구현했습니다.'
+    answer = ConfirmationAnswer(
+        question_id='q1',
+        field_path='projects[0].description',
+        question='본인과 팀원의 담당 범위를 구분해 주세요.',
+        answer='저는 공고 원문 비교와 확인 질문 기반 첨삭 API를 구현했고, 팀원은 공고 수집을 담당했습니다.',
+    )
+    item = SentenceReview(
+        field_path=answer.field_path,
+        original_quote=original,
+        suggested_revision='공고 원문 비교와 확인 질문 기반 첨삭 API를 구현했습니다.',
+        reason='본인 담당 범위 명확화',
+        evidence_quotes=[answer.answer],
+        status='improved',
+        edit_type='content',
+    )
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[item])
+    ground_sentences({answer.field_path: original}, [answer], result)
+    assert require_answer_reflection(result, [answer]) == []
+    assert item.suggested_revision is not None
+    assert '팀원' not in item.suggested_revision
 
 
 @pytest.mark.parametrize('original,replacement,kind', [

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, repr=False)
     openai_model: str = "gpt-5.6-luna"
     openai_embedding_model: str = "text-embedding-3-small"
-    openai_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = "low"
+    openai_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = "medium"
     vector_store_provider: Literal["pinecone", "chroma"] = "pinecone"
     pinecone_api_key: str | None = Field(default=None, repr=False)
     pinecone_index_name: str = "job-postings"

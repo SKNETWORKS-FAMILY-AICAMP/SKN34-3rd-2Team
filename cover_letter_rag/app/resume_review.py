@@ -250,6 +250,67 @@ def _change_rate(original: str, revision: str) -> float:
     return round(1 - SequenceMatcher(a=source, b=target, autojunk=False).ratio(), 3)
 
 
+def require_answer_reflection(generation, answers):
+    """Reject a follow-up edit that ignores the fact the user just confirmed.
+
+    A confirmation question is for adding/verifying a fact, not a trigger for
+    an unrelated grammar rewrite.  We deliberately use a conservative lexical
+    check: if no newly supplied factual token survives in the revision, do not
+    offer it as an answer-derived suggestion.
+    """
+    warnings = []
+    if not answers:
+        return warnings
+
+    generic_korean = {
+        '저는', '제가', '직접', '담당', '담당한', '기능', '구현', '구현한',
+        '구현했습니다', '개발', '개발한', '개발했습니다', '설계', '설계한',
+        '진행', '진행한', '했습니다', '프로젝트', '역할', '범위', '팀원', '팀원의',
+    }
+    by_path = {}
+    for answer in answers:
+        by_path.setdefault(answer.field_path, []).append(answer.answer)
+    for item in generation.sentence_reviews:
+        revision = (item.suggested_revision or '').strip()
+        provided = by_path.get(item.field_path, [])
+        if not revision or not provided:
+            continue
+        answer_text = ' '.join(provided)
+        answer_tokens = comparison_terms(answer_text) | set(NUMBER_PATTERN.findall(answer_text))
+        answer_tokens |= set(re.findall(r'[가-힣]{2,}', answer_text)) - generic_korean
+        original_tokens = (
+            comparison_terms(item.original_quote)
+            | set(NUMBER_PATTERN.findall(item.original_quote))
+            | set(re.findall(r'[가-힣]{2,}', item.original_quote))
+        )
+        new_tokens = answer_tokens - original_tokens
+        revision_tokens = comparison_terms(revision) | set(NUMBER_PATTERN.findall(revision))
+        revision_tokens |= set(re.findall(r'[가-힣]{2,}', revision)) - generic_korean
+        cites_answer = any(
+            source.startswith('answer:') for source in item.evidence_sources
+        )
+        role_boundary_question = any(
+            re.search(r'(팀원|담당\s*범위|역할\s*구분)', answer.question)
+            for answer in answers
+            if answer.field_path == item.field_path
+        )
+        exposes_team_detail = bool(
+            role_boundary_question
+            and re.search(r'(팀원은|팀원이|팀원의\s*담당|다른\s*팀원)', revision)
+        )
+        if exposes_team_detail or (
+            new_tokens and (not cites_answer or not (new_tokens & revision_tokens))
+        ):
+            item.suggested_revision = None
+            item.status = 'unchanged'
+            item.edit_type = 'none'
+            item.confirmation_question = None
+            issue = 'team_scope_exposed' if exposes_team_detail else 'answer_not_reflected'
+            item.validation_issues = [*item.validation_issues, issue]
+            warnings.append(f'답변 근거를 반영하지 않은 수정안을 제외했습니다: {item.field_path}')
+    return warnings
+
+
 def ground_sentences(fields, answers, generation):
     warnings, valid = [], []
     spans = {}
