@@ -41,6 +41,7 @@ pydantic-settings>=2.7,<3
 python-dotenv>=1.0,<2
 
 # 기타 랭체인 라이브러리
+langchain
 langchain_classic
 langchain_community
 langgraph
