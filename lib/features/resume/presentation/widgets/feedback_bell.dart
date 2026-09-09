@@ -91,7 +91,9 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
     // 학생의 숫자를 보고 있어 줄지 않았다.
     final asReviewer = ref.watch(canReviewResumesProvider);
     final unreadItems =
-        unreadFeedback(items, widget.resume, asReviewer: asReviewer);
+        unreadFeedback(items, widget.resume,
+            asReviewer: asReviewer,
+            viewerId: ref.watch(currentUserSyncProvider)?.uid);
     final unreadIds = {for (final f in unreadItems) f.id};
     final unread = unreadItems.length;
 

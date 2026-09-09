@@ -100,7 +100,9 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
     ];
     final asReviewer = ref.watch(canReviewResumesProvider);
     final unread =
-        unreadFeedback(items, widget.resume, asReviewer: asReviewer);
+        unreadFeedback(items, widget.resume,
+            asReviewer: asReviewer,
+            viewerId: ref.watch(currentUserSyncProvider)?.uid);
 
     if (widget.expanded && unread.isNotEmpty) {
       // 화면에 보였으니 읽은 것이다. 그리는 중에 쓰지 않도록 프레임 뒤로 미룬다.

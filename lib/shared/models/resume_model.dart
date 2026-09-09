@@ -224,6 +224,7 @@ List<ResumeFeedbackModel> unreadFeedback(
   List<ResumeFeedbackModel> items,
   ResumeModel resume, {
   required bool asReviewer,
+  String? viewerId,
 }) {
   if (!asReviewer &&
       resume.readFeedbackIds.isEmpty &&
@@ -234,9 +235,20 @@ List<ResumeFeedbackModel> unreadFeedback(
       .toSet();
   return [
     for (final item in items)
-      if (item.isReplyOn(resume) == asReviewer && !read.contains(item.id)) item,
+      if (!_isMine(item, viewerId) &&
+          item.isReplyOn(resume) == asReviewer &&
+          !read.contains(item.id))
+        item,
   ];
 }
+
+/// 내가 쓴 글인가. 강사가 **자기 이력서**를 보는 경우가 있어 역할만으로는 모자란다.
+/// 그때 자기 글이 답글로 잡혀 아무리 읽어도 숫자가 줄지 않는다.
+bool _isMine(ResumeFeedbackModel item, String? viewerId) =>
+    viewerId != null &&
+    viewerId.isNotEmpty &&
+    item.authorId.isNotEmpty &&
+    item.authorId == viewerId;
 
 class ResumeFeedbackModel {
   const ResumeFeedbackModel({

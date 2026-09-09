@@ -113,4 +113,44 @@ void main() {
       expect(unreadFeedback(legacy, _resume(), asReviewer: true), isEmpty);
     });
   });
+
+  group('내가 쓴 글', () {
+    test('강사가 자기 이력서를 볼 때 자기 글이 안 읽음으로 잡히지 않는다', () {
+      // 강사도 자기 이력서를 쓴다. 그때는 검토자이면서 주인이라, 역할만 보면
+      // 자기 글이 '답글'로 잡혀 아무리 읽어도 숫자가 줄지 않는다.
+      final own = ResumeModel(
+        id: 'r2',
+        userId: _teacher,
+        title: '강사 본인 이력서',
+        status: 'submitted',
+        sections: const {},
+      );
+      final items = [_item('a', _teacher), _item('b', _teacher)];
+      expect(
+        unreadFeedback(items, own, asReviewer: true, viewerId: _teacher),
+        isEmpty,
+      );
+    });
+
+    test('같은 상황에서 남이 남긴 글은 여전히 잡힌다', () {
+      final own = ResumeModel(
+        id: 'r2',
+        userId: _teacher,
+        title: '강사 본인 이력서',
+        status: 'submitted',
+        sections: const {},
+      );
+      final items = [_item('a', _teacher), _item('b', 'admin-1')];
+      // 남이 남긴 것은 이 이력서 주인이 쓴 것이 아니므로 '검토자가 읽을 것'은 아니다.
+      // 주인(=강사)으로서 읽어야 할 글이다.
+      expect(
+        _ids(unreadFeedback(items, own, asReviewer: false, viewerId: _teacher)),
+        ['b'],
+      );
+    });
+
+    test('viewerId 를 모르면 예전처럼 역할로만 가른다', () {
+      expect(_ids(unreadFeedback(_thread(), _resume(), asReviewer: true)), ['c']);
+    });
+  });
 }

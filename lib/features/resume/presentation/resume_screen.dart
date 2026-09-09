@@ -495,7 +495,10 @@ class _FeedbackSection extends ConsumerWidget {
         );
     final total = items.isEmpty ? resume.feedbackCount : items.length;
     // 보는 사람 기준으로 센다. 검토자에게는 학생이 단 답글이 안 읽은 것이다.
-    final unread = unreadFeedback(items, resume, asReviewer: canReview).length;
+    final unread = unreadFeedback(items, resume,
+            asReviewer: canReview,
+            viewerId: ref.watch(currentUserSyncProvider)?.uid)
+        .length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
