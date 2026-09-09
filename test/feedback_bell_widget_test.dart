@@ -40,7 +40,11 @@ List<ResumeFeedbackModel> _items() => [
       ),
     ];
 
-Widget _app({required ResumeModel resume, List<String>? tapped}) {
+Widget _app({
+  required ResumeModel resume,
+  List<String>? tapped,
+  bool openOnStart = false,
+}) {
   return ProviderScope(
     overrides: [
       resumeFeedbackProvider('r1').overrideWith((ref) => Stream.value(_items())),
@@ -54,6 +58,7 @@ Widget _app({required ResumeModel resume, List<String>? tapped}) {
             FeedbackBell(
               resume: resume,
               onGoToSection: (key) => tapped?.add(key),
+              openOnStart: openOnStart,
             ),
           ],
         ),
@@ -171,5 +176,35 @@ void main() {
     // 막이 남았다면 아래 글자를 눌러도 반응이 없다.
     await tester.tap(find.text('다른 화면'));
     await tester.pumpAndSettle();
+  });
+
+  group('목록에서 들어왔을 때', () {
+    testWidgets('신규가 있으면 펼쳐진 채로 열린다', (tester) async {
+      await tester.pumpWidget(_app(resume: _resume(), openOnStart: true));
+      await tester.pumpAndSettle();
+      expect(find.text('피드백'), findsOneWidget);
+    });
+
+    testWidgets('다 읽었어도 펼쳐진다', (tester) async {
+      // 「다시 보기」로 들어오는 길. 안 읽은 것만 따지면 눌러도 아무 일이 없어 보인다.
+      await tester.pumpWidget(
+        _app(resume: _resume(read: const ['f1', 'f2']), openOnStart: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('피드백'), findsOneWidget);
+      expect(find.textContaining('프로젝트 경험'), findsOneWidget);
+    });
+
+    testWidgets('받은 것이 없으면 펼치지 않는다', (tester) async {
+      await tester.pumpWidget(_app(resume: _resume(count: 0), openOnStart: true));
+      await tester.pumpAndSettle();
+      expect(find.text('피드백'), findsNothing, reason: '빈 목록을 펼칠 이유가 없다');
+    });
+
+    testWidgets('그냥 들어오면 닫힌 채다', (tester) async {
+      await tester.pumpWidget(_app(resume: _resume()));
+      await tester.pumpAndSettle();
+      expect(find.text('피드백'), findsNothing);
+    });
   });
 }

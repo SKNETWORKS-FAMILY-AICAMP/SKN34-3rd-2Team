@@ -25,8 +25,9 @@ class FeedbackBell extends ConsumerStatefulWidget {
 
   final ResumeModel resume;
 
-  /// 목록에서 「읽으러 가기」로 들어왔을 때. 화면이 뜨자마자 말풍선을 펼친다.
-  /// 신규 목록 앞에 바로 서게 하려는 것이라, 안 읽은 것이 없으면 펼치지 않는다.
+  /// 목록에서 「읽으러 가기」나 「다시 보기」로 들어왔을 때. 화면이 뜨자마자 펼친다.
+  /// 받은 피드백이 하나라도 있으면 펼친다 — 「다시 보기」는 다 읽은 뒤에 누르는
+  /// 버튼이라, 안 읽은 것만 따지면 눌러도 아무 일이 없는 것처럼 보인다.
   final bool openOnStart;
 
   /// 상세에서 "해당 항목으로 이동"을 눌렀을 때. 이력서를 그 섹션으로 굴린다.
@@ -49,7 +50,8 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
   @override
   void initState() {
     super.initState();
-    if (widget.openOnStart && widget.resume.unreadFeedbackCount > 0) {
+    // 목록 스트림은 아직 안 왔을 수 있어 이력서 문서의 건수로 판단한다.
+    if (widget.openOnStart && widget.resume.feedbackCount > 0) {
       // 첫 프레임 뒤에 연다. build 중에 오버레이를 건드릴 수 없다.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _toggle();
@@ -140,7 +142,8 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
           child: IconButton(
             tooltip: _open ? '피드백 닫기' : '피드백 열기',
             isSelected: _open,
-            onPressed: items.isEmpty && unread == 0 ? null : _toggle,
+                onPressed:
+                items.isEmpty && widget.resume.feedbackCount == 0 ? null : _toggle,
             icon: _BellIcon(unread: unread, active: _open || unread > 0),
           ),
         ),
