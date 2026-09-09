@@ -48,7 +48,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// 오른쪽 패널 너비. 왼쪽 가장자리를 끌어 바꾼다.
   static const double _panelMinWidth = 280;
   static const double _panelDefaultWidth = 340;
-  double _panelWidth = _panelDefaultWidth;
+  /// 너비만 따로 들고 있는다. `setState`로 두면 끌 때마다 이력서 화면 전체를
+  /// 다시 그린다 — 입력칸 수십 개짜리 화면을 초당 60번 다시 만들어 눈에 띄게 버벅인다.
+  /// 알림값으로 두면 아래의 `ValueListenableBuilder` 안쪽만 다시 그린다.
+  final ValueNotifier<double> _panelWidth =
+      ValueNotifier<double>(_panelDefaultWidth);
 
   /// 끌기를 시작한 순간의 너비. 커서까지의 거리를 여기서 뺀다.
   double? _dragStartWidth;
@@ -84,6 +88,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _panelWidth.dispose();
     super.dispose();
   }
 
@@ -742,37 +747,53 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       // 이력서 쪽이 지나치게 좁아지지 않도록 위쪽을 막아 둔다.
                       final panelMaxWidth =
                           (constraints.maxWidth - 520).clamp(_panelMinWidth, 720).toDouble();
-                      final panelWidth =
-                          _panelWidth.clamp(_panelMinWidth, panelMaxWidth);
 
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: resumeScroll),
-                          if (hasRightPanel) ...[
-                            _PanelResizeHandle(
-                              onStart: () => _dragStartWidth = panelWidth,
-                              onUpdate: (dx) => setState(() {
-                                // 왼쪽으로 끌면(거리가 음수) 패널이 넓어진다.
-                                _panelWidth = ((_dragStartWidth ?? panelWidth) - dx)
-                                    .clamp(_panelMinWidth, panelMaxWidth);
-                              }),
-                              onReset: () => setState(
-                                () => _panelWidth = _panelDefaultWidth,
-                              ),
-                            ),
-                            SizedBox(
-                            width: panelWidth,
-                            child: DecoratedBox(
-                              decoration: const BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(color: AppColors.border),
-                                ),
-                              ),
+                          if (hasRightPanel)
+                            ValueListenableBuilder<double>(
+                              valueListenable: _panelWidth,
+                              // 패널 자체는 여기 그대로 넘어와 다시 만들어지지 않는다.
                               child: rightPanel,
+                              builder: (context, raw, panel) {
+                                final width =
+                                    raw.clamp(_panelMinWidth, panelMaxWidth);
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _PanelResizeHandle(
+                                      onStart: () => _dragStartWidth = width,
+                                      onUpdate: (dx) {
+                                        // 왼쪽으로 끌면(거리가 음수) 넓어진다.
+                                        _panelWidth.value =
+                                            ((_dragStartWidth ?? width) - dx)
+                                                .clamp(_panelMinWidth,
+                                                    panelMaxWidth);
+                                      },
+                                      onReset: () => _panelWidth.value =
+                                          _panelDefaultWidth,
+                                    ),
+                                    SizedBox(
+                                      width: width,
+                                      child: DecoratedBox(
+                                        decoration: const BoxDecoration(
+                                          border: Border(
+                                            left: BorderSide(
+                                              color: AppColors.border,
+                                            ),
+                                          ),
+                                        ),
+                                        child: panel,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
-                          ),
-                          ],
                         ],
                       );
                     },
