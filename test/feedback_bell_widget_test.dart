@@ -23,6 +23,18 @@ ResumeModel _resume({int count = 2, List<String> read = const []}) => ResumeMode
       readFeedbackIds: read,
     );
 
+/// 항목이 많을 때 말풍선이 넘치는지 보려고 수를 늘릴 수 있게 해 둔다.
+List<ResumeFeedbackModel> _many(int n) => [
+      for (var i = 0; i < n; i++)
+        ResumeFeedbackModel(
+          id: 'f$i',
+          sectionKey: i.isEven ? 'projects' : 'experience',
+          content: '내용 $i',
+          authorName: 'PLAYDATA 강사',
+          createdAt: DateTime(2026, 9, 9, 15, i % 60),
+        ),
+    ];
+
 List<ResumeFeedbackModel> _items() => [
       ResumeFeedbackModel(
         id: 'f1',
@@ -44,11 +56,14 @@ Widget _app({
   required ResumeModel resume,
   List<String>? tapped,
   bool openOnStart = false,
+  bool isAdmin = false,
+  List<ResumeFeedbackModel>? items,
 }) {
   return ProviderScope(
     overrides: [
-      resumeFeedbackProvider('r1').overrideWith((ref) => Stream.value(_items())),
-      isAdminProvider.overrideWithValue(false),
+      resumeFeedbackProvider('r1')
+          .overrideWith((ref) => Stream.value(items ?? _items())),
+      isAdminProvider.overrideWithValue(isAdmin),
       effectiveCohortIdProvider.overrideWithValue(null),
     ],
     child: MaterialApp(
@@ -205,6 +220,34 @@ void main() {
       await tester.pumpWidget(_app(resume: _resume()));
       await tester.pumpAndSettle();
       expect(find.text('피드백'), findsNothing);
+    });
+  });
+
+  group('넘침과 강사 화면', () {
+    testWidgets('항목이 많아도 말풍선이 넘치지 않는다', (tester) async {
+      await tester.pumpWidget(
+        _app(resume: _resume(count: 12), items: _many(12), openOnStart: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('피드백'), findsOneWidget);
+      // 넘치면 RenderFlex overflow 예외가 잡힌다.
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('강사에게는 배지가 없다', (tester) async {
+      // 안 읽은 건수는 학생의 것이다. 강사가 아무리 읽어도 줄지 않아
+      // 지워지지 않는 표시가 된다.
+      await tester.pumpWidget(_app(resume: _resume(), isAdmin: true));
+      await tester.pumpAndSettle();
+      expect(find.text('2'), findsNothing);
+      expect(find.byIcon(Icons.notifications_none), findsOneWidget,
+          reason: '빈 종으로 조용히 둔다');
+    });
+
+    testWidgets('학생에게는 배지가 있다', (tester) async {
+      await tester.pumpWidget(_app(resume: _resume()));
+      await tester.pumpAndSettle();
+      expect(find.text('2'), findsOneWidget);
     });
   });
 }

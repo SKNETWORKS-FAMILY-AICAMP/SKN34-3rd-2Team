@@ -100,7 +100,10 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
     final feedback = ref.watch(resumeFeedbackProvider(widget.resume.id));
     final items =
         feedback.maybeWhen(data: (l) => l, orElse: () => const <ResumeFeedbackModel>[]);
-    final unread = widget.resume.unreadFeedbackCount;
+    // 강사·관리자는 쓰는 사람이다. 안 읽은 건수는 학생의 것이라 배지를 달지 않는다.
+    // 달아 두면 아무리 읽어도 줄지 않아 지워지지 않는 표시가 된다.
+    final isAdmin = ref.watch(isAdminProvider);
+    final unread = isAdmin ? 0 : widget.resume.unreadFeedbackCount;
 
     // OverlayPortal 은 이 위젯이 사라지면 말풍선도 함께 걷는다. OverlayEntry 를 손으로
     // 넣고 빼면, 지우는 데 실패했을 때 화면 위에 아무것도 안 눌리는 막만 남는다.
@@ -238,7 +241,10 @@ class _FeedbackPopover extends StatelessWidget {
                 padding: const EdgeInsets.only(left: tailFromLeft - 6),
                 child: CustomPaint(size: const Size(12, 7), painter: _TailPainter()),
               ),
-              Container(
+              // Flexible 이 없으면 목록이 길 때 남은 높이를 넘어서 '13 pixels
+              // overflowed' 가 뜬다. 꼬리가 먼저 자리를 차지하기 때문이다.
+              Flexible(
+                child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(10),
@@ -267,6 +273,7 @@ class _FeedbackPopover extends StatelessWidget {
                     else
                       Flexible(
                         child: ListView.separated(
+                          // 넘칠 때만 구른다. 두세 건이면 내용만큼만 차지한다.
                           shrinkWrap: true,
                           padding: EdgeInsets.zero,
                           itemCount: items.length,
@@ -281,6 +288,7 @@ class _FeedbackPopover extends StatelessWidget {
                       ),
                   ],
                 ),
+              ),
               ),
             ],
           ),
