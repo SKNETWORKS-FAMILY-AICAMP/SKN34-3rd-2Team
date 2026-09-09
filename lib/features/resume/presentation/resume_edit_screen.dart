@@ -45,6 +45,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _showAiCoach = false;
   bool _showFeedback = true;
 
+  /// 오른쪽 패널 너비. 왼쪽 가장자리를 끌어 바꾼다.
+  static const double _panelMinWidth = 280;
+  static const double _panelDefaultWidth = 340;
+  double _panelWidth = _panelDefaultWidth;
+
   String _title = '';
   ResumeContent _content = ResumeContent.empty();
   bool _initialized = false;
@@ -731,13 +736,29 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         );
                       }
 
+                      // 이력서 쪽이 지나치게 좁아지지 않도록 위쪽을 막아 둔다.
+                      final panelMaxWidth =
+                          (constraints.maxWidth - 520).clamp(_panelMinWidth, 720).toDouble();
+                      final panelWidth =
+                          _panelWidth.clamp(_panelMinWidth, panelMaxWidth);
+
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: resumeScroll),
-                          if (hasRightPanel)
+                          if (hasRightPanel) ...[
+                            _PanelResizeHandle(
+                              onDrag: (dx) => setState(() {
+                                // 왼쪽으로 끌면 패널이 넓어진다.
+                                _panelWidth = (panelWidth - dx)
+                                    .clamp(_panelMinWidth, panelMaxWidth);
+                              }),
+                              onReset: () => setState(
+                                () => _panelWidth = _panelDefaultWidth,
+                              ),
+                            ),
                             SizedBox(
-                            width: 340,
+                            width: panelWidth,
                             child: DecoratedBox(
                               decoration: const BoxDecoration(
                                 border: Border(
@@ -747,6 +768,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                               child: rightPanel,
                             ),
                           ),
+                          ],
                         ],
                       );
                     },
@@ -762,6 +784,53 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 }
 
 // ── 공통 위젯 ──
+
+/// 오른쪽 패널의 너비를 바꾸는 손잡이. 패널 왼쪽 가장자리에 세워 둔다.
+///
+/// 보이는 선은 1픽셀이지만 잡히는 폭은 8픽셀이다. 1픽셀짜리는 마우스로 집기 어렵다.
+/// 두 번 누르면 처음 너비로 돌아온다.
+class _PanelResizeHandle extends StatefulWidget {
+  const _PanelResizeHandle({required this.onDrag, required this.onReset});
+
+  final ValueChanged<double> onDrag;
+  final VoidCallback onReset;
+
+  @override
+  State<_PanelResizeHandle> createState() => _PanelResizeHandleState();
+}
+
+class _PanelResizeHandleState extends State<_PanelResizeHandle> {
+  bool _hovered = false;
+  bool _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _dragging;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _dragging = true),
+        onHorizontalDragUpdate: (d) => widget.onDrag(d.delta.dx),
+        onHorizontalDragEnd: (_) => setState(() => _dragging = false),
+        onHorizontalDragCancel: () => setState(() => _dragging = false),
+        onDoubleTap: widget.onReset,
+        child: SizedBox(
+          width: 8,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: active ? 3 : 1,
+              color: active ? AppColors.primary : AppColors.border,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _ModeToggle extends StatelessWidget {
   const _ModeToggle({
