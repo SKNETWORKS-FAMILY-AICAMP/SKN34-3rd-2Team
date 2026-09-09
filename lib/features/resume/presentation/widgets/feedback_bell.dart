@@ -86,10 +86,14 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
     final feedback = ref.watch(resumeFeedbackProvider(widget.resume.id));
     final items =
         feedback.maybeWhen(data: (l) => l, orElse: () => const <ResumeFeedbackModel>[]);
-    // 강사·관리자는 쓰는 사람이다. 안 읽은 건수는 학생의 것이라 배지를 달지 않는다.
-    // 달아 두면 아무리 읽어도 줄지 않아 지워지지 않는 표시가 된다.
-    final isAdmin = ref.watch(isAdminProvider);
-    final unread = isAdmin ? 0 : widget.resume.unreadFeedbackCount;
+    // 안 읽은 건수는 **보는 사람 기준**으로 센다. 학생은 강사의 말을, 검토자는 학생의
+    // 답글을 읽어야 한다. 예전에는 건수만 빼서 셌는데, 그러면 검토자가 아무리 읽어도
+    // 학생의 숫자를 보고 있어 줄지 않았다.
+    final asReviewer = ref.watch(canReviewResumesProvider);
+    final unreadItems =
+        unreadFeedback(items, widget.resume, asReviewer: asReviewer);
+    final unreadIds = {for (final f in unreadItems) f.id};
+    final unread = unreadItems.length;
 
     // OverlayPortal 은 이 위젯이 사라지면 말풍선도 함께 걷는다. OverlayEntry 를 손으로
     // 넣고 빼면, 지우는 데 실패했을 때 화면 위에 아무것도 안 눌리는 막만 남는다.
@@ -117,7 +121,7 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
             onTapOutside: (_) => _close(),
             child: _FeedbackPopover(
               items: items,
-              readIds: widget.resume.readFeedbackIds.toSet(),
+              unreadIds: unreadIds,
               onPick: _goToSection,
               onClose: _close,
             ),
@@ -188,7 +192,7 @@ class _BellIcon extends StatelessWidget {
 class _FeedbackPopover extends StatelessWidget {
   const _FeedbackPopover({
     required this.items,
-    required this.readIds,
+    required this.unreadIds,
     required this.onPick,
     required this.onClose,
   });
@@ -205,7 +209,8 @@ class _FeedbackPopover extends StatelessWidget {
   static const double followerDx = width / 2 - tailFromLeft;
 
   final List<ResumeFeedbackModel> items;
-  final Set<String> readIds;
+  /// 안 읽은 것의 id. 보는 사람에 따라 다르므로 바깥에서 정해 준다.
+  final Set<String> unreadIds;
   final ValueChanged<ResumeFeedbackModel> onPick;
   final VoidCallback onClose;
 
@@ -267,7 +272,7 @@ class _FeedbackPopover extends StatelessWidget {
                               const Divider(height: 1, color: Color(0xFFF1F3F7)),
                           itemBuilder: (_, i) => _Row(
                             item: items[i],
-                            unread: !readIds.contains(items[i].id),
+                            unread: unreadIds.contains(items[i].id),
                             onTap: () => onPick(items[i]),
                           ),
                         ),
@@ -284,7 +289,7 @@ class _FeedbackPopover extends StatelessWidget {
   }
 
   Widget _header() {
-    final unread = items.where((e) => !readIds.contains(e.id)).length;
+    final unread = unreadIds.length;
     return Container(
       padding: const EdgeInsets.fromLTRB(13, 11, 8, 11),
       decoration: const BoxDecoration(

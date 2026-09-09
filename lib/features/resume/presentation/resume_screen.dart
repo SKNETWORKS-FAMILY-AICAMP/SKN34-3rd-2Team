@@ -489,12 +489,13 @@ class _FeedbackSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final feedback = ref.watch(resumeFeedbackProvider(resume.id));
-    final total = feedback.maybeWhen(
-      data: (l) => l.length,
-      orElse: () => resume.feedbackCount,
-    );
-    final unread = resume.unreadFeedbackCount;
+    final items = ref.watch(resumeFeedbackProvider(resume.id)).maybeWhen(
+          data: (l) => l,
+          orElse: () => const <ResumeFeedbackModel>[],
+        );
+    final total = items.isEmpty ? resume.feedbackCount : items.length;
+    // 보는 사람 기준으로 센다. 검토자에게는 학생이 단 답글이 안 읽은 것이다.
+    final unread = unreadFeedback(items, resume, asReviewer: canReview).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -549,12 +550,6 @@ class _FeedbackSection extends ConsumerWidget {
       return Text(
         canReview ? '아직 남긴 피드백이 없습니다' : '아직 없습니다',
         style: const TextStyle(color: AppColors.textHint, fontSize: 12.5),
-      );
-    }
-    if (canReview) {
-      return Text(
-        '내가 남긴 $total건',
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
       );
     }
     if (unread == 0) {

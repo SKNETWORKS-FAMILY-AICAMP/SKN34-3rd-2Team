@@ -31,6 +31,7 @@ List<ResumeFeedbackModel> _many(int n) => [
           sectionKey: i.isEven ? 'projects' : 'experience',
           content: '내용 $i',
           authorName: 'PLAYDATA 강사',
+          authorId: 'teacher-1',
           createdAt: DateTime(2026, 9, 9, 15, i % 60),
         ),
     ];
@@ -41,6 +42,7 @@ List<ResumeFeedbackModel> _items() => [
         sectionKey: 'projects',
         content: '성과를 숫자로 적어 주세요.',
         authorName: '강사 김대호',
+        authorId: 'teacher-1',
         createdAt: DateTime(2026, 9, 9, 15, 42),
       ),
       ResumeFeedbackModel(
@@ -48,6 +50,7 @@ List<ResumeFeedbackModel> _items() => [
         sectionKey: 'selfIntroduction',
         content: '지원동기를 본인 경험으로 이어 주세요.',
         authorName: '강사 김대호',
+        authorId: 'teacher-1',
         createdAt: DateTime(2026, 9, 9, 15, 30),
       ),
     ];
@@ -56,14 +59,16 @@ Widget _app({
   required ResumeModel resume,
   List<String>? tapped,
   bool openOnStart = false,
-  bool isAdmin = false,
+  bool asReviewer = false,
   List<ResumeFeedbackModel>? items,
 }) {
   return ProviderScope(
     overrides: [
       resumeFeedbackProvider('r1')
           .overrideWith((ref) => Stream.value(items ?? _items())),
-      isAdminProvider.overrideWithValue(isAdmin),
+      isAdminProvider.overrideWithValue(asReviewer),
+      // 종은 '관리자인가'가 아니라 '검토할 수 있는가'를 본다. 강사는 관리자가 아니다.
+      canReviewResumesProvider.overrideWithValue(asReviewer),
       effectiveCohortIdProvider.overrideWithValue(null),
     ],
     child: MaterialApp(
@@ -176,6 +181,7 @@ void main() {
         overrides: [
           resumeFeedbackProvider('r1').overrideWith((ref) => Stream.value(_items())),
           isAdminProvider.overrideWithValue(false),
+          canReviewResumesProvider.overrideWithValue(false),
           effectiveCohortIdProvider.overrideWithValue(null),
         ],
         child: const MaterialApp(
@@ -233,14 +239,33 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('강사에게는 배지가 없다', (tester) async {
-      // 안 읽은 건수는 학생의 것이다. 강사가 아무리 읽어도 줄지 않아
-      // 지워지지 않는 표시가 된다.
-      await tester.pumpWidget(_app(resume: _resume(), isAdmin: true));
+    testWidgets('강사에게는 자기가 남긴 피드백이 안 읽음으로 잡히지 않는다', (tester) async {
+      // 목록의 두 건은 모두 강사가 남긴 것이다. 이것이 강사에게 안 읽음으로 잡히면
+      // 아무리 읽어도 줄지 않는, 지워지지 않는 표시가 된다.
+      await tester.pumpWidget(_app(resume: _resume(), asReviewer: true));
       await tester.pumpAndSettle();
       expect(find.text('2'), findsNothing);
       expect(find.byIcon(Icons.notifications_none), findsOneWidget,
-          reason: '빈 종으로 조용히 둔다');
+          reason: '읽을 것이 없으면 빈 종');
+    });
+
+    testWidgets('강사에게는 학생 답글이 안 읽음으로 잡힌다', (tester) async {
+      final withReply = [
+        ..._items(),
+        ResumeFeedbackModel(
+          id: 'reply-1',
+          sectionKey: 'projects',
+          content: '고쳤습니다.',
+          authorName: '홍길동',
+          authorId: 'u1',
+          createdAt: DateTime(2026, 9, 9, 21),
+        ),
+      ];
+      await tester.pumpWidget(
+        _app(resume: _resume(count: 3), items: withReply, asReviewer: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1'), findsOneWidget, reason: '답글 한 건');
     });
 
     testWidgets('학생에게는 배지가 있다', (tester) async {
