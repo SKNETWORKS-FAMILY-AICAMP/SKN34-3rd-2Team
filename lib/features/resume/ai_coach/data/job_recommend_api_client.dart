@@ -74,14 +74,21 @@ class JobRecommendRequest {
 
   /// 이력서와 프로필의 희망 조건으로 만든다. 학력·연차·전공·자격증은
   /// `RecommendResumeProfile`이 이력서에서 뽑는다.
+  /// [focus]를 주면 **읽을 글만** 그것으로 바꾼다. 학력·연차·전공·자격증은 [content]
+  /// 그대로다.
+  ///
+  /// "프로젝트 경험만 보고 추천해줘" 같은 요청을 위한 것이다. 좁혀야 하는 것은 뜻을
+  /// 뽑는 재료이지 조건이 아니다. 조건까지 좁히면 연차가 0이 되어 하드 필터가 달라지고,
+  /// 사용자가 원한 것은 "경력을 없던 셈 치자"가 아니라 "이 부분을 기준으로 보자"다.
   factory JobRecommendRequest.fromResume(
     ResumeContent content, {
     JobPreferences preferences = const JobPreferences(),
     int topK = JobRecommendApiConfig.topK,
+    ResumeContent? focus,
   }) {
     final profile = RecommendResumeProfile.fromContent(content);
     return JobRecommendRequest(
-      resumeText: buildResumeText(content),
+      resumeText: buildResumeText(focus ?? content),
       preferredRegions: preferences.regions,
       preferredEmploymentTypes: preferences.employmentTypes,
       educationLevel: profile.educationLevel,
@@ -257,12 +264,23 @@ class JobChatJob {
 
 class JobChatResponse {
   const JobChatResponse({
+    required this.mode,
+    required this.resumeScope,
     required this.reply,
     required this.filters,
     required this.jobs,
     required this.total,
     required this.suggestions,
   });
+
+  /// 서버가 어떤 갈래로 답했는지. 검색 / 질문 / 공고 / 안내.
+  ///
+  /// 답을 어떻게 보여줄지가 달라진다. 검색은 목록이 본문이고, 질문은 글이 본문이며
+  /// 공고 목록은 근거로 붙는 것이다.
+  final String mode;
+
+  /// mode가 '추천'일 때 이력서의 어디를 근거로 삼을지. 전체 / 프로젝트 / 기술스택.
+  final String resumeScope;
 
   final String reply;
   final JobChatFilters filters;
@@ -277,6 +295,8 @@ class JobChatResponse {
   factory JobChatResponse.fromMap(Map<String, dynamic> map) {
     final items = map['jobs'];
     return JobChatResponse(
+      mode: map['mode'] as String? ?? '검색',
+      resumeScope: map['resume_scope'] as String? ?? '전체',
       reply: map['reply'] as String? ?? '',
       filters: JobChatFilters.fromMap(
         Map<String, dynamic>.from(map['filters'] as Map? ?? const {}),
@@ -311,16 +331,22 @@ class JobRecommendApiClient {
     );
   }
 
-  /// 말로 공고를 찾는다. 직전 조건을 함께 보내야 대화가 이어진다.
+  /// 채용에 대해 묻고 답을 받는다. 서버가 세 갈래로 나눠 처리한다.
+  ///
+  /// - 직전 조건(`filters`)을 함께 보내야 "서울만" 같은 말이 이어진다.
+  /// - [jobId]를 주면 그 공고 하나에 대한 물음이 된다. 서버는 조건 해석을 건너뛰고
+  ///   그 공고 원문만 근거로 답한다.
   Future<JobChatResponse> chat({
     required String message,
     JobChatFilters? filters,
     int topK = 5,
+    String? jobId,
   }) async {
     final decoded = await _post('/api/v1/jobs/chat', {
       'message': message,
       'filters': filters?.toJson(),
       'top_k': topK,
+      'job_id': jobId,
     });
     return JobChatResponse.fromMap(decoded);
   }

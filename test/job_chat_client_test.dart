@@ -78,6 +78,31 @@ void main() {
       expect(result.jobs.single.techStack, ['Python', 'FastAPI']);
       expect(result.filters.regions, ['서울']);
       expect(result.suggestions, ['마감 임박한 것만']);
+      expect(sent!['job_id'], isNull, reason: '공고를 고르지 않았으면 비운다');
+    });
+
+    test('공고를 고르고 물으면 그 job_id를 함께 보낸다', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json({
+            'mode': '공고',
+            'reply': '자격요건은 이렇습니다.',
+            'filters': <String, dynamic>{},
+            'jobs': <dynamic>[],
+            'total': 0,
+            'suggestions': <dynamic>[],
+          });
+        }),
+      );
+
+      final result = await api.chat(message: '신입도 돼?', jobId: 'JOB-1');
+
+      expect(sent!['job_id'], 'JOB-1');
+      expect(result.mode, '공고', reason: '앱이 답을 어떻게 보여줄지 정한다');
+      expect(result.reply, '자격요건은 이렇습니다.');
     });
 
     test('이어지는 질문은 직전 조건을 그대로 실어 보낸다', () async {

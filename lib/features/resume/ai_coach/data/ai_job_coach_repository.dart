@@ -17,9 +17,15 @@ class AiJobCoachRepository {
 
   final JobRecommendApiClient? _apiClient;
 
+  /// [focus]를 주면 서버가 읽을 글만 그것으로 바꾼다. 필수 항목 검증과 조건(학력·연차·
+  /// 전공·자격증)은 [draftContent] 그대로 본다.
+  ///
+  /// "프로젝트 경험만 보고 추천해줘"를 위한 것이다. 좁힌 것을 검증에까지 쓰면 원래
+  /// 이력서가 멀쩡한데도 "핵심역량·기술스택·자기소개서를 작성해 주세요"로 막힌다.
   Future<AiJobCoachResult> analyzeAndMatch({
     required ResumeContent draftContent,
     JobPreferences preferences = const JobPreferences(),
+    ResumeContent? focus,
   }) async {
     // 필수 항목이 비면 서버에 보내기 전에 막는다. 이유는 화면이 그대로 보여 준다.
     final readiness = ResumeReadiness.of(draftContent);
@@ -37,7 +43,11 @@ class AiJobCoachRepository {
     }
 
     final response = await api.recommend(
-      JobRecommendRequest.fromResume(draftContent, preferences: preferences),
+      JobRecommendRequest.fromResume(
+        draftContent,
+        preferences: preferences,
+        focus: focus,
+      ),
     );
     return AiJobCoachResult(
       testMode: false,

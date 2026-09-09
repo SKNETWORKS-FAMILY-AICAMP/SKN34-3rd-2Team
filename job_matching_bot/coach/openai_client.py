@@ -18,7 +18,7 @@
     gpt-5.6-luna   대량·저비용     $0.20 / $1.20
 
 이 작업(공고 본문에서 요구역량 추출)은 판단이 단순하고 건수가 많아 기본값을
-`gpt-5.6-terra`로 둔다. `OPENAI_MODEL` 환경변수로 바꿀 수 있다.
+`gpt-5.6-luna`로 둔다. `OPENAI_MODEL` 환경변수로 바꿀 수 있다.
 
 주의: OpenAI structured outputs는 JSON Schema의 일부만 지원한다. `minimum`,
 `maxLength` 같은 제약은 스키마에서 빠지고 필드 설명으로만 전달되므로,
