@@ -171,7 +171,10 @@ class ResumeModel {
 
   /// 피드백을 남길 수 있나. 요청하지 않은 이력서에는 손대지 않는다.
   bool get acceptsFeedback => isFeedbackRequested;
-  bool get canStudentEdit => !isApproved;
+  /// 승인된 뒤에도 학생은 고칠 수 있다. 승인은 "더는 손대지 말라"가 아니라
+  /// "여기까지 봤다"는 표시다. 회사마다 이력서를 손보는 것이 정상이고, 잠가 두면
+  /// 승인받은 이력서를 두고 새로 만들어야 한다.
+  bool get canStudentEdit => true;
 
   ResumeModel copyWith({
     String? title,

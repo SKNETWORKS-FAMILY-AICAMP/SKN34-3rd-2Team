@@ -85,7 +85,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   late final ScrollController _scrollController;
   late final Map<String, GlobalKey> _sectionKeys;
   String? _selectedSection;
-  bool _isAdmin = false;
+  /// 이 이력서를 검토하는 사람인가(강사·관리자). 관리자만 보던 것을 넓혔다 —
+  /// 강사는 관리자가 아니라 학생용 화면을 받았고, 남의 이력서에 저장을
+  /// 시도해 'permission-denied' 가 났다.
+  bool _isReviewer = false;
   ResumeModel? _resume;
 
   @override
@@ -116,7 +119,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     _title = resume.title;
     _content = resume.content;
     _initialized = true;
-    if (ref.read(isAdminProvider) || resume.isApproved) {
+    // 검토자는 읽는 사람이라 문서 모드로 연다. 승인된 이력서라도 본인은 편집 모드다.
+    if (ref.read(canReviewResumesProvider)) {
       _viewMode = _ResumeViewMode.doc;
     }
     if (_pendingInitialScroll && widget.initialSection != null) {
@@ -133,10 +137,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     _feedbackSeenOnOpen = resume.feedbackCount;
   }
 
-  bool _isReadOnly({required bool isAdmin, required ResumeModel resume}) =>
-      isAdmin ||
-      _viewMode == _ResumeViewMode.doc ||
-      (!isAdmin && resume.isApproved);
+  /// 승인된 뒤에도 학생은 고칠 수 있다. 승인은 "더는 손대지 말라"가 아니라
+  /// "여기까지 봤다"는 표시다. 회사마다 이력서를 손보는 것이 정상이다.
+  bool _isReadOnly({required bool isReviewer, required ResumeModel resume}) =>
+      isReviewer || _viewMode == _ResumeViewMode.doc;
 
   /// 마이페이지 프로필로 기본정보의 빈 칸을 채운다. 학생 본인이 편집할 수 있는
   /// 이력서에서만 동작하고, 이미 적힌 값은 건드리지 않는다.
@@ -144,7 +148,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// [announce]가 true면 채운 항목을 스낵바로 알린다(첫 로드). 프로필 스트림이
   /// 아직 안 왔으면 조용히 건너뛰고, 기본정보 섹션의 버튼으로 다시 시도할 수 있다.
   bool _prefillBasicInfoFromProfile(ResumeModel resume, {required bool announce}) {
-    if (ref.read(isAdminProvider) || resume.isApproved) return false;
+    if (ref.read(canReviewResumesProvider)) return false;
     final user = ref.read(currentUserProvider).value;
     if (user == null) return false;
     final result = prefillBasicInfoFromProfile(_content.basicInfo, user);
@@ -168,7 +172,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   void _markDirty() {
     final resume = _resume;
-    if (resume == null || _isReadOnly(isAdmin: _isAdmin, resume: resume)) return;
+    if (resume == null || _isReadOnly(isReviewer: _isReviewer, resume: resume)) return;
     setState(() => _dirty = true);
   }
 
@@ -249,8 +253,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     String? status,
     bool incrementRevision = true,
   }) async {
-    final isAdmin = ref.read(isAdminProvider);
-    if (_isReadOnly(isAdmin: isAdmin, resume: resume) && status == null) return;
+    final isReviewer = ref.read(canReviewResumesProvider);
+    if (_isReadOnly(isReviewer: isReviewer, resume: resume) && status == null) return;
     setState(() => _isSaving = true);
     try {
       final cohortId = ref.read(effectiveCohortIdProvider)!;
@@ -308,7 +312,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('이력서 승인'),
-        content: const Text('승인 후 학생은 더 이상 수정할 수 없습니다. 승인하시겠습니까?'),
+        content: const Text('이 이력서를 승인합니다. 학생은 승인 뒤에도 계속 수정할 수 있습니다.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
           ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('승인')),
@@ -356,7 +360,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = ref.watch(isAdminProvider);
+    final isReviewer = ref.watch(canReviewResumesProvider);
     final resumeAsync = ref.watch(resumeDetailProvider(widget.resumeId));
 
     return resumeAsync.when(
@@ -375,9 +379,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
           _profilePrefillTried = true;
           _prefillBasicInfoFromProfile(resume, announce: true);
         }
-        _isAdmin = isAdmin;
+        _isReviewer = isReviewer;
         _resume = resume;
-        final readOnly = _isReadOnly(isAdmin: isAdmin, resume: resume);
+        final readOnly = _isReadOnly(isReviewer: isReviewer, resume: resume);
         final liveSections = _content.computeSections();
         final completed = liveSections.values.where((v) => v).length;
 
@@ -399,7 +403,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
               ),
               leadingWidth: 110,
               actions: [
-                if (!isAdmin && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit)
+                if (!isReviewer && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit)
                   ResumeMockMenu(
                     onPick: (title, content) {
                       setState(() {
@@ -456,7 +460,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   onGoToSection: _scrollToSection,
                   openOnStart: widget.openFeedback,
                 ),
-                if (isAdmin && resume.acceptsFeedback)
+                if (isReviewer && resume.acceptsFeedback)
                   IconButton(
                     tooltip: _showFeedback ? '피드백 작성 닫기' : '피드백 작성',
                     isSelected: !_showAiCoach && _showFeedback,
@@ -467,7 +471,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     icon: const Icon(Icons.rate_review_outlined, size: 19),
                   ),
                 const SizedBox(width: 8),
-                if (!resume.isApproved || isAdmin)
+                if (!resume.isApproved || isReviewer)
                   _ModeToggle(
                     isEdit: _viewMode == _ResumeViewMode.edit,
                     onEdit: () => setState(() => _viewMode = _ResumeViewMode.edit),
@@ -481,7 +485,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     icon: const Icon(Icons.picture_as_pdf_outlined),
                   ),
                 ],
-                if (!isAdmin && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit) ...[
+                if (!isReviewer && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit) ...[
                   const SizedBox(width: 8),
                   OutlinedButton(
                     onPressed: _isSaving ? null : () => _save(resume: resume),
@@ -497,7 +501,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   ],
                   const SizedBox(width: 8),
                 ],
-                if (isAdmin && resume.isSubmitted && !resume.isApproved) ...[
+                if (isReviewer && resume.isSubmitted && !resume.isApproved) ...[
                   FilledButton.icon(
                     onPressed: _isSaving ? null : () => _approve(resume),
                     icon: const Icon(Icons.check_circle_outline, size: 16),
@@ -525,8 +529,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   revisionCount: resume.revisionCount,
                   statusLabel: resume.statusLabel,
                 ),
-                if (!isAdmin) _feedbackBanner(resume),
-                if (resume.isSubmitted && !resume.isApproved && !isAdmin)
+                if (!isReviewer) _feedbackBanner(resume),
+                if (resume.isSubmitted && !resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -788,13 +792,13 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                               resumeId: widget.resumeId,
                               draftContent: _content,
                               hasUnsavedChanges: _dirty || _isSaving,
-                              onSaveRequested: isAdmin
+                              onSaveRequested: isReviewer
                                   ? null
                                   : () async {
                                       await _save(resume: resume);
                                       return !_dirty;
                                     },
-                              onResumeChanged: isAdmin ? null : (content) => setState(() {
+                              onResumeChanged: isReviewer ? null : (content) => setState(() {
                                 _content = content;
                                 _dirty = false;
                               }),
@@ -804,11 +808,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                           ),
                           // 학생은 종 아래 말풍선으로 읽는다. 오른쪽 패널은 **글을 쓰는**
                           // 강사·관리자만 쓴다. 읽기와 쓰기를 같은 자리에 둘 이유가 없다.
-                          if (!_showAiCoach && _showFeedback && isAdmin)
+                          if (!_showAiCoach && _showFeedback && isReviewer)
                             ResumeEditFeedbackPanel(
                               resumeId: widget.resumeId,
                               // 피드백을 요청한 이력서에만 남길 수 있다.
-                              isAdmin: isAdmin && resume.acceptsFeedback,
+                              isAdmin: isReviewer && resume.acceptsFeedback,
                               selectedSectionKey: _selectedSection,
                               isSidebar: wide,
                               onClose: () =>
@@ -819,7 +823,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
                       // 둘 다 닫혔으면 오른쪽 자리를 통째로 비운다. 이력서가 넓어진다.
                       final hasRightPanel =
-                          _showAiCoach || (_showFeedback && isAdmin);
+                          _showAiCoach || (_showFeedback && isReviewer);
 
                       if (!wide) {
                         return Column(
