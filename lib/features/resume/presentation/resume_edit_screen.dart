@@ -964,6 +964,10 @@ class _PanelResizeHandleState extends State<_PanelResizeHandle> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
                 width: active ? 3 : 1,
+                // 높이를 안 주면 Center 안에서 0이 된다. 크기가 없는 상자는 히트
+                // 테스트를 할 수 없어, 마우스가 지나갈 때마다 단언문이 매 프레임
+                // 터지고 화면이 눈에 띄게 버벅인다.
+                height: double.infinity,
                 color: active ? AppColors.primary : AppColors.border,
               ),
             ),
