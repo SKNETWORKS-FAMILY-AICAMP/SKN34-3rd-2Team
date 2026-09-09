@@ -70,7 +70,8 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
             targetAnchor: Alignment.bottomCenter,
             followerAnchor: Alignment.topCenter,
             // 종 한가운데에서 꼬리가 나오되, 말풍선은 왼쪽으로 눕는다.
-            offset: const Offset(-_FeedbackPopover.tailInset, 6),
+            offset: const Offset(_FeedbackPopover.followerDx, 6),
+            showWhenUnlinked: false,
             child: _FeedbackPopover(
               items: items,
               readIds: widget.resume.readFeedbackIds.toSet(),
@@ -180,8 +181,14 @@ class _FeedbackPopover extends StatelessWidget {
 
   static const double width = 314;
 
-  /// 꼬리를 종 한가운데에 두기 위해 말풍선을 왼쪽으로 눕히는 거리.
-  static const double tailInset = width / 2 - 30;
+  /// 꼬리 한가운데가 말풍선 왼쪽 끝에서 얼마나 떨어져 있나.
+  /// 종은 툴바 오른쪽에 있으므로 말풍선은 왼쪽으로 눕고, 꼬리는 오른쪽 가까이에 온다.
+  static const double tailFromLeft = width - 30;
+
+  /// 말풍선을 종 기준으로 얼마나 옮길지. `followerAnchor` 가 말풍선 **한가운데**라
+  /// 꼬리를 종에 맞추려면 그 차이만큼 밀어야 한다. 이 둘을 따로 적었다가 꼬리가
+  /// 156px 왼쪽으로 어긋난 적이 있다. 한 값에서 뽑아 두 번 다시 어긋나지 않게 한다.
+  static const double followerDx = width / 2 - tailFromLeft;
 
   final List<ResumeFeedbackModel> items;
   final Set<String> readIds;
@@ -190,18 +197,20 @@ class _FeedbackPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topLeft,
-      child: Material(
-        color: Colors.transparent,
-        child: SizedBox(
-          width: width,
+    // Align 으로 감싸면 자식이 화면 크기로 늘어나고, 그러면 followerAnchor 가
+    // 말풍선이 아니라 화면 한가운데를 가리켜 위치가 통째로 어긋난다. 자식은 제 크기여야 한다.
+    return Material(
+      color: Colors.transparent,
+      child: SizedBox(
+        width: width,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 380),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 꼬리. 종 한가운데에 온다.
               Padding(
-                padding: EdgeInsets.only(left: tailInset - 5),
+                padding: const EdgeInsets.only(left: tailFromLeft - 6),
                 child: CustomPaint(size: const Size(12, 7), painter: _TailPainter()),
               ),
               Container(
@@ -440,6 +449,16 @@ class FeedbackDetailDialog extends StatelessWidget {
     );
   }
 }
+
+/// 종 한가운데 X 를 주면 말풍선 왼쪽 끝이 놓일 자리.
+@visibleForTesting
+double popoverLeftFor(double bellCenterX) =>
+    bellCenterX + _FeedbackPopover.followerDx - _FeedbackPopover.width / 2;
+
+/// 그때 꼬리 한가운데가 놓일 자리. **종 한가운데와 같아야 한다.**
+@visibleForTesting
+double tailCenterFor(double bellCenterX) =>
+    popoverLeftFor(bellCenterX) + _FeedbackPopover.tailFromLeft;
 
 /// 섹션 키를 사람이 읽는 이름으로. 모르는 키는 그대로 보여 준다.
 String sectionLabelOf(String key) =>

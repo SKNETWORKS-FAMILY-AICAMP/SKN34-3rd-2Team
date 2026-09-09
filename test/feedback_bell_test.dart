@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:playdata_lms/features/resume/presentation/widgets/feedback_bell.dart';
 import 'package:playdata_lms/shared/models/resume_model.dart';
 
 ResumeModel _resume({
@@ -77,6 +78,23 @@ void main() {
       final after = before.copyWith(readFeedbackIds: [...before.readFeedbackIds, 'b']);
       expect(after.unreadFeedbackCount, 0);
       expect(before.unreadFeedbackCount, 1, reason: '원본은 그대로여야 한다');
+    });
+  });
+
+  group('말풍선 위치', () {
+    // 꼬리 좌표와 말풍선 좌표를 따로 적었다가 꼬리가 156px 왼쪽으로 어긋난 적이 있다.
+    // 눈으로만 보면 또 놓친다.
+    test('꼬리 한가운데가 종 한가운데에 온다', () {
+      for (final bellX in [120.0, 640.0, 1180.0, 1920.0]) {
+        expect(tailCenterFor(bellX), closeTo(bellX, 0.01), reason: '종 X=$bellX');
+      }
+    });
+
+    test('말풍선은 종에서 왼쪽으로 눕는다', () {
+      const bellX = 1180.0;
+      expect(popoverLeftFor(bellX), lessThan(bellX), reason: '왼쪽으로 펼쳐져야 한다');
+      expect(popoverLeftFor(bellX) + 314, greaterThan(bellX),
+          reason: '오른쪽 끝은 종보다 조금 더 나가야 꼬리가 모서리에 붙지 않는다');
     });
   });
 }
