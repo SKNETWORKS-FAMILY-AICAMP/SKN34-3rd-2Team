@@ -12,15 +12,19 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from vectordb.utills import _split_text, load_env, normalize_text, retry
 
+try:
+    from vectordb.utills import _split_text, load_env, normalize_text, retry
+except ModuleNotFoundError:  # Support `python vectordb/policy_ingestion.py`.
+    from utills import _split_text, load_env, normalize_text, retry
 
 MODULE_DIR = Path(__file__).resolve().parent
 ROOT = MODULE_DIR.parent
@@ -87,6 +91,7 @@ CLASSIFICATION_SCHEMA = {
     "additionalProperties": False,
 }
 log = logging.getLogger("policy_ingestion")
+MEANINGFUL_SYMBOLS = {"+", "=", "<", ">", "|", "₩", "$", "€", "¥"}
 OT_POLICY_TYPES = set(POLICY_TYPES[5:])
 MARKDOWN_NOISE = re.compile(r"(?i)선배들이\s*주는\s*tip|전기수.*블로그|blog\.naver\.com")
 PDF_EXTRACTION_PROMPT = f"""
