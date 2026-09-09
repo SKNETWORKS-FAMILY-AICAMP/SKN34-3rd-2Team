@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -81,6 +82,28 @@ if _origins or _origin_regex:
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type", "Authorization"],
     )
+
+@app.middleware("http")
+async def _log_duration(request, call_next):
+    """요청마다 걸린 시간을 남긴다.
+
+    앱은 90초를 기다리다 포기하는데, 그때 서버가 오래 걸린 것인지 아예 못 받은
+    것인지 알 길이 없었다. 여기 한 줄이 남으면 다음에는 가려낼 수 있다.
+    LLM이 느렸던 요청은 [느림] 으로 표시해 눈에 띄게 한다.
+    """
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        print(f"[요청] {request.method} {request.url.path} 실패 "
+              f"{time.perf_counter() - started:.1f}초")
+        raise
+    seconds = time.perf_counter() - started
+    slow = " [느림]" if seconds >= 30 else ""
+    print(f"[요청] {request.method} {request.url.path} "
+          f"{response.status_code} {seconds:.1f}초{slow}")
+    return response
+
 
 _service = RecommendService()
 _chat = ChatService()
