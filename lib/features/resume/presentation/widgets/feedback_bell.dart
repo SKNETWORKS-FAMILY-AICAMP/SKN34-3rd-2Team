@@ -102,9 +102,11 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
 
     // OverlayPortal 은 이 위젯이 사라지면 말풍선도 함께 걷는다. OverlayEntry 를 손으로
     // 넣고 빼면, 지우는 데 실패했을 때 화면 위에 아무것도 안 눌리는 막만 남는다.
+    // 가장 가까운 Overlay 를 쓴다. 뿌리 오버레이에 매달면 화면(FlutterView)이 바뀌거나
+    // 웹에서 핫 리스타트할 때 이미 버려진 화면에 그리려 해 단언문이 매 프레임 터진다.
+    // 종은 라우트 안에 있으니 라우트의 오버레이로 충분하다.
     return OverlayPortal(
       controller: _controller,
-      overlayLocation: OverlayChildLocation.rootOverlay,
       // Positioned 로 감싸지 않으면 오버레이가 자식에게 화면 크기를 꽉 채우라고 시킨다.
       // 그러면 눈에 안 보이는 말풍선이 화면 전체를 덮어 아무것도 눌리지 않고,
       // followerAnchor 도 말풍선이 아니라 화면 한가운데를 가리켜 위치까지 어긋난다.
