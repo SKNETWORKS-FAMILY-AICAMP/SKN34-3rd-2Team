@@ -44,6 +44,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _dirty = false;
   bool _showAiCoach = false;
   bool _showFeedback = true;
+  bool _isResizingCoach = false;
+  // 넓은 화면에서의 AI 취업 코치 기본 폭. 사용자가 경계선을 드래그하면
+  // 현재 화면에서만 이 값이 바뀐다.
+  double _coachPanelWidth = 700;
 
   String _title = '';
   ResumeContent _content = ResumeContent.empty();
@@ -351,10 +355,40 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       _markDirty();
                     },
                   ),
-                FilledButton.tonalIcon(
-                  onPressed: () => setState(() => _showAiCoach = !_showAiCoach),
-                  icon: const Icon(Icons.auto_awesome, size: 16),
-                  label: const Text('AI 취업 코치'),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFF4ADE80),
+                        Color(0xFF22C55E),
+                        Color(0xFF15803D),
+                      ],
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x3316A34A),
+                        blurRadius: 7,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: FilledButton.icon(
+                    onPressed: () => setState(() => _showAiCoach = !_showAiCoach),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      shadowColor: Colors.transparent,
+                      surfaceTintColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                    ),
+                    icon: const Icon(Icons.auto_awesome, size: 16),
+                    label: const Text('AI 취업 코치'),
+                  ),
                 ),
                 const SizedBox(width: 4),
                 // AI 코치를 보는 중에는 피드백이 그 뒤에 가려 있어 토글할 것이 없다.
@@ -731,22 +765,72 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         );
                       }
 
+                      // 본문을 최소 560px 남기고, 코치 패널은 최소 360px을 유지한다.
+                      // 화면 크기가 달라져도 이전에 조절한 폭을 안전한 범위 안에서만 쓴다.
+                      const dividerWidth = 12.0;
+                      const minCoachPanelWidth = 360.0;
+                      const minResumeWidth = 560.0;
+                      final maxCoachPanelWidth =
+                          constraints.maxWidth - minResumeWidth - dividerWidth;
+                      final coachPanelWidth = _coachPanelWidth
+                          .clamp(minCoachPanelWidth, maxCoachPanelWidth)
+                          .toDouble();
+
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: resumeScroll),
                           if (hasRightPanel)
-                            SizedBox(
-                            width: 340,
-                            child: DecoratedBox(
-                              decoration: const BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(color: AppColors.border),
+                            MouseRegion(
+                              cursor: SystemMouseCursors.resizeColumn,
+                              child: Listener(
+                                behavior: HitTestBehavior.translucent,
+                                // GestureDetector는 웹에서 드래그 인식 후에만 갱신될 수 있어,
+                                // 포인터 이동을 직접 받아 패널 폭을 즉시 다시 그린다.
+                                onPointerDown: (_) {
+                                  setState(() => _isResizingCoach = true);
+                                },
+                                onPointerMove: (event) {
+                                  if (!_isResizingCoach) return;
+                                  setState(() {
+                                    // 왼쪽으로 끌면(음수) 코치 영역이 넓어지고,
+                                    // 오른쪽으로 끌면 좁아진다.
+                                    _coachPanelWidth =
+                                        (_coachPanelWidth - event.delta.dx)
+                                            .clamp(
+                                              minCoachPanelWidth,
+                                              maxCoachPanelWidth,
+                                            )
+                                            .toDouble();
+                                  });
+                                },
+                                onPointerUp: (_) {
+                                  setState(() => _isResizingCoach = false);
+                                },
+                                onPointerCancel: (_) {
+                                  setState(() => _isResizingCoach = false);
+                                },
+                                child: SizedBox(
+                                  width: dividerWidth,
+                                  child: Center(
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 80),
+                                      curve: Curves.easeOut,
+                                      width: _isResizingCoach ? 3 : 1,
+                                      height: double.infinity,
+                                      color: _isResizingCoach
+                                          ? Colors.black
+                                          : AppColors.border,
+                                    ),
+                                  ),
                                 ),
                               ),
+                            ),
+                          if (hasRightPanel)
+                            SizedBox(
+                              width: coachPanelWidth,
                               child: rightPanel,
                             ),
-                          ),
                         ],
                       );
                     },

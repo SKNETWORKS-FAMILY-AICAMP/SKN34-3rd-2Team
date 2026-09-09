@@ -52,6 +52,9 @@ def test_handoff_auth_versions_and_full_source(store):
         expected_input_hash=digest(SAMPLE_CONTENT), expected_job_hash=load_selected_job(store, 'saramin:1')['source']['snapshot_hash'])
     result = service.review('valid-token', request)
     assert len(calls[0]['job_posting_text']) > 1200
+    assert '[선택 공고 식별 정보' in calls[0]['job_posting_text']
+    assert '회사명: 테스트 회사' in calls[0]['job_posting_text']
+    assert '직무명: 백엔드' in calls[0]['job_posting_text']
     assert result.job_source['job_id'] == 'saramin:1'
     assert db.saved['job_source'] == result.job_source
     assert service.review('valid-token', request) == result

@@ -27,6 +27,36 @@ def redact(text):
     return re.sub(r'(?<!\d)(?:\+82[- .]?|0)(?:10|11|16|17|18|19|2|[3-6][1-5])[- .]?\d{3,4}[- .]?\d{4}(?!\d)', '[연락처 삭제]', text)
 
 
+def normalize_confirmed_answer(text):
+    """Remove requests to fabricate; only user-confirmed facts may ground edits."""
+    cleaned = redact(text.strip())
+    fabrication_request = re.search(
+        r'(지어\s*내|꾸며\s*(?:내|줘|작성)|허구|가짜|임의로\s*(?:만들|작성)|만들어\s*줘)',
+        cleaned,
+        re.IGNORECASE,
+    )
+    if fabrication_request:
+        return '사용자가 확인 가능한 추가 사실이 없다고 답했습니다.'
+    return cleaned
+
+
+def review_job_prompt_text(job_text, job_source):
+    """Mark selected-job identity as trusted context, separate from resume facts."""
+    if not job_text:
+        return '제공되지 않음'
+    if not job_source:
+        return job_text
+    company = str(job_source.get('company') or '').strip() or '확인 불가'
+    title = str(job_source.get('title') or '').strip() or '확인 불가'
+    return (
+        '[선택 공고 식별 정보 — 사용자가 선택한 확정값]\n'
+        f'회사명: {company}\n'
+        f'직무명: {title}\n\n'
+        '[공고 원문]\n'
+        f'{job_text}'
+    )
+
+
 def group(path):
     return path.rsplit('.', 1)[0]
 
@@ -70,7 +100,10 @@ def prepare_answers(request, previous, snapshot_hash, refs):
         if not answer.answer.strip():
             raise ReviewInputError('answer is blank')
         seen.add(answer.question_id)
-        answers.append(answer.model_copy(update={'question': question['question'], 'answer': redact(answer.answer)}))
+        answers.append(answer.model_copy(update={
+            'question': question['question'],
+            'answer': normalize_confirmed_answer(answer.answer),
+        }))
     # Carry forward previously confirmed facts, but only for an unchanged snapshot.
     from app.models import ConfirmationAnswer
     prior = [ConfirmationAnswer.model_validate(a) for a in previous.get('confirmed_answers', []) if a.get('question_id') not in seen]
@@ -166,7 +199,7 @@ def run_review(service, id_token, request):
         generated = service._generator({
             'resume_text': text,
             'confirmed_answers': json.dumps([a.model_dump(exclude={'question_id'}) for a in answers], ensure_ascii=False),
-            'job_posting_text': redact(job_text or '제공되지 않음'),
+            'job_posting_text': redact(review_job_prompt_text(job_text, job_source)),
             'review_focus': redact(request.review_focus or '전체 검토'),
         })
         # Structured output with include_raw preserves usage without logging content.
