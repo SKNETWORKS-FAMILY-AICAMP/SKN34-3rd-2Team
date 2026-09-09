@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
+import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/demo/demo_lms_repository.dart';
 import '../../../shared/models/assessment_model.dart';
@@ -126,19 +128,31 @@ class _InstructorAssessmentSubmissionScreenState
       appBar: AppBar(title: const Text('시험 결과')),
       body: submissionAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => ErrorView(
+          message: e.toString(),
+          onRetry: () =>
+              ref.invalidate(assessmentSubmissionProvider(widget.submissionId)),
+        ),
         data: (submission) {
           if (submission == null) {
-            return const Center(child: Text('제출을 찾을 수 없습니다.'));
+            return const EmptyView(
+              message: '제출을 찾을 수 없습니다.',
+              icon: Icons.search_off_rounded,
+            );
           }
           return questionsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('$e')),
+            error: (e, _) => ErrorView(
+              message: e.toString(),
+              onRetry: () => ref.invalidate(
+                assessmentQuestionsProvider(widget.assessmentId),
+              ),
+            ),
             data: (questions) {
               return Align(
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
+                  constraints: AppLayout.readingConstraints(),
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                     children: [

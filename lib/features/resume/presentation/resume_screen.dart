@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/resume_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -568,18 +569,19 @@ class _FeedbackSection extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: sectionKey,
+              AppDropdownField<String>(
+                value: sectionKey,
                 decoration: const InputDecoration(labelText: '섹션'),
-                items: AppConstants.resumeSections
-                    .map(
-                      (k) => DropdownMenuItem(
-                        value: k,
-                        child: Text(AppConstants.resumeSectionLabels[k] ?? k),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => sectionKey = v!),
+                items: [
+                  for (final k in AppConstants.resumeSections)
+                    AppDropdownItem(
+                      value: k,
+                      label: AppConstants.resumeSectionLabels[k] ?? k,
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => sectionKey = v);
+                },
               ),
               TextField(
                 controller: contentCtrl,

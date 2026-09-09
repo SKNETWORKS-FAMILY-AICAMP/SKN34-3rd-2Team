@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/record_types.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../shared/models/submission_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
@@ -110,12 +111,13 @@ class _RecordCertFormScreenState extends ConsumerState<RecordCertFormScreen> {
               ),
               const SizedBox(height: 20),
               const RecordFieldLabel('자격증 종류'),
-              DropdownButtonFormField<String>(
-                initialValue: _certType,
+              AppDropdownField<String>(
+                value: _certType,
                 decoration: recordInputDecoration(),
-                items: RecordTypes.certKinds
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
+                items: [
+                  for (final c in RecordTypes.certKinds)
+                    AppDropdownItem(value: c, label: c),
+                ],
                 onChanged: (v) => setState(() => _certType = v ?? _certType),
               ),
               const SizedBox(height: 20),

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_dropdown.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../data/generated/resume_mocks.g.dart';
@@ -22,7 +23,7 @@ class ResumeMockMenu extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!kDebugMode) return const SizedBox.shrink();
     final user = ref.watch(currentUserSyncProvider);
-    return PopupMenuButton<ResumeMockPersona>(
+    return AppIconMenu<ResumeMockPersona>(
       tooltip: '목업 이력서 채우기 (개발용)',
       icon: const Icon(Icons.science_outlined),
       onSelected: (persona) {
@@ -39,9 +40,9 @@ class ResumeMockMenu extends ConsumerWidget {
           ),
         );
       },
-      itemBuilder: (context) => [
+      items: [
         for (final persona in resumeMockPersonas)
-          PopupMenuItem(value: persona, child: Text(persona.title)),
+          AppMenuAction(value: persona, label: persona.title),
       ],
     );
   }

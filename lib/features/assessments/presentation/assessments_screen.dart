@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
+import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/assessment_model.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'widgets/assessment_card.dart';
@@ -38,8 +40,9 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width =
-            constraints.maxWidth >= 860 ? 860.0 : constraints.maxWidth;
+        final width = constraints.maxWidth >= AppLayout.list
+            ? AppLayout.list
+            : constraints.maxWidth;
         return Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
@@ -77,7 +80,11 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
                   child: assessments.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('불러오기 실패: $e')),
+                    error: (e, _) => ErrorView(
+                      message: '불러오기 실패: $e',
+                      onRetry: () =>
+                          ref.invalidate(publishedAssessmentsProvider),
+                    ),
                     data: (list) {
                       final filtered = list.where((a) {
                         if (_query.isEmpty) return true;
@@ -86,8 +93,11 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
                             .contains(_query.toLowerCase());
                       }).toList();
                       if (filtered.isEmpty) {
-                        return const Center(
-                          child: Text('등록된 성취도평가가 없습니다.'),
+                        return EmptyView(
+                          message: _query.isEmpty
+                              ? '등록된 성취도평가가 없습니다.'
+                              : '검색 결과가 없습니다.',
+                          icon: Icons.quiz_outlined,
                         );
                       }
                       return ListView.separated(

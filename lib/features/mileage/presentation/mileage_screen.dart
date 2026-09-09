@@ -11,6 +11,7 @@ import '../../../shared/models/mileage_models.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
+import '../../../shared/widgets/status_badge.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../theme/mileage_theme.dart';
 import 'widgets/mileage_widgets.dart';
@@ -440,7 +441,7 @@ class _PurchaseRequestCard extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              MileageTagChip(
+              StatusBadge(
                 label: request.statusLabel,
                 color: MileageColors.statusColor(request.status),
               ),

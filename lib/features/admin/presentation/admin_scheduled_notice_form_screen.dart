@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../shared/models/scheduled_notice_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
@@ -207,7 +208,7 @@ class _AdminScheduledNoticeFormScreenState
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
             children: [
@@ -270,20 +271,20 @@ class _AdminScheduledNoticeFormScreenState
                 ),
                 if (_repeatType == ScheduleRepeatType.weekly) ...[
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
-                    initialValue: _weekday,
+                  AppDropdownField<int>(
+                    value: _weekday,
                     decoration: const InputDecoration(
                       labelText: '요일',
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: DateTime.monday, child: Text('월요일')),
-                      DropdownMenuItem(value: DateTime.tuesday, child: Text('화요일')),
-                      DropdownMenuItem(value: DateTime.wednesday, child: Text('수요일')),
-                      DropdownMenuItem(value: DateTime.thursday, child: Text('목요일')),
-                      DropdownMenuItem(value: DateTime.friday, child: Text('금요일')),
-                      DropdownMenuItem(value: DateTime.saturday, child: Text('토요일')),
-                      DropdownMenuItem(value: DateTime.sunday, child: Text('일요일')),
+                      AppDropdownItem(value: DateTime.monday, label: '월요일'),
+                      AppDropdownItem(value: DateTime.tuesday, label: '화요일'),
+                      AppDropdownItem(value: DateTime.wednesday, label: '수요일'),
+                      AppDropdownItem(value: DateTime.thursday, label: '목요일'),
+                      AppDropdownItem(value: DateTime.friday, label: '금요일'),
+                      AppDropdownItem(value: DateTime.saturday, label: '토요일'),
+                      AppDropdownItem(value: DateTime.sunday, label: '일요일'),
                     ],
                     onChanged: (v) {
                       if (v != null) setState(() => _weekday = v);

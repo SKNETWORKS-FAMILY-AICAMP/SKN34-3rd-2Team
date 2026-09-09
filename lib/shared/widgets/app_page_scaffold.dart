@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_layout.dart';
+
 /// 페이지 콘텐츠 래퍼 — 중앙 정렬 + 패딩 + 선택적 maxWidth
 class AppPageScaffold extends StatelessWidget {
   const AppPageScaffold({
     super.key,
     required this.child,
-    this.maxWidth = 960,
+    this.maxWidth = AppLayout.page,
     this.padding,
     this.scrollable = true,
     this.physics,

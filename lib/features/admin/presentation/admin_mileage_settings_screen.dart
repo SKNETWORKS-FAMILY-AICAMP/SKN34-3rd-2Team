@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/mileage_constants.dart';
 import '../../../core/routing/route_paths.dart';
+import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/mileage_models.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
@@ -93,7 +94,10 @@ class _AdminMileageSettingsScreenState
 
     return settingsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.toString())),
+      error: (e, _) => ErrorView(
+        message: e.toString(),
+        onRetry: () => ref.invalidate(mileageSettingsProvider),
+      ),
       data: (settings) {
         _load(settings);
 

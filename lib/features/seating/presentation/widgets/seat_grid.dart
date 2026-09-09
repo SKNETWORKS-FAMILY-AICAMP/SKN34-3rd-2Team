@@ -21,6 +21,7 @@ class SeatGrid extends StatelessWidget {
     this.inactiveSeatIds = const {},
     this.confirmedUserIds = const {},
     this.heldUserIds = const {},
+    this.seatTintColors = const {},
     this.onAssign,
     this.onSwap,
   });
@@ -37,6 +38,8 @@ class SeatGrid extends StatelessWidget {
   final Set<String> inactiveSeatIds;
   final Set<String> confirmedUserIds;
   final Set<String> heldUserIds;
+  /// seatId → 팀 등 연한 배경색 (배치 확인용)
+  final Map<String, Color> seatTintColors;
   final void Function(String seatId, SeatDragPayload payload)? onAssign;
   final void Function(String fromSeatId, String toSeatId)? onSwap;
 
@@ -103,6 +106,7 @@ class SeatGrid extends StatelessWidget {
                       seatUserIds[cell.seatId],
                     ),
                     isInactive: inactiveSeatIds.contains(cell.seatId),
+                    teamTint: seatTintColors[cell.seatId],
                     highlightCaption: highlightCaption,
                     pulseHighlight: pulseHighlight,
                     editable: editable,
@@ -138,6 +142,7 @@ class _SeatCell extends StatelessWidget {
     required this.compact,
     required this.cellW,
     required this.cellH,
+    this.teamTint,
     this.onAssign,
     this.onSwap,
   });
@@ -150,6 +155,7 @@ class _SeatCell extends StatelessWidget {
   final bool isConfirmed;
   final bool isHeld;
   final bool isInactive;
+  final Color? teamTint;
   final String? highlightCaption;
   final bool pulseHighlight;
   final bool editable;
@@ -172,18 +178,21 @@ class _SeatCell extends StatelessWidget {
 
     final edges = computeGroupEdges(layout, cell);
     final hasStudent = displayName.isNotEmpty && userId != null;
+    final mineFill = isHighlighted && !pulseHighlight;
 
     Color bgColor;
     if (isHighlighted) {
       bgColor = pulseHighlight
           ? const Color(0xFFFEF3C7)
-          : AppColors.primaryLight;
+          : AppColors.primary;
     } else if (isConfirmed) {
       bgColor = const Color(0xFFDCFCE7);
     } else if (isHeld) {
       bgColor = const Color(0xFFFFEDD5);
     } else if (isInactive) {
       bgColor = const Color(0xFFFEE2E2);
+    } else if (teamTint != null) {
+      bgColor = teamTint!;
     } else if (edges.isGrouped) {
       bgColor = const Color(0xFFEFF6FF);
     } else if (hasStudent) {
@@ -193,18 +202,28 @@ class _SeatCell extends StatelessWidget {
     }
 
     final borderColor = isHighlighted
-        ? (pulseHighlight ? const Color(0xFFF59E0B) : AppColors.primary)
+        ? (pulseHighlight ? const Color(0xFFF59E0B) : AppColors.primaryDark)
         : isConfirmed
             ? const Color(0xFF22C55E)
             : isHeld
                 ? const Color(0xFFF97316)
                 : isInactive
                     ? const Color(0xFFEF4444)
-                    : edges.isGrouped
-                        ? const Color(0xFF93C5FD)
-                        : AppColors.border;
+                    : teamTint != null
+                        ? Color.lerp(teamTint, Colors.black, 0.22)!
+                        : edges.isGrouped
+                            ? const Color(0xFF93C5FD)
+                            : AppColors.border;
 
-    final borderWidth = isHighlighted ? (compact ? 1.5 : 2.0) : (compact ? 1.0 : 1.5);
+    final borderWidth = isHighlighted ? (compact ? 2.0 : 2.5) : (compact ? 1.0 : 1.5);
+    final onMine = mineFill ? Colors.white : null;
+    final labelColor = onMine ?? AppColors.textSecondary;
+    final nameColor = onMine ??
+        (isHighlighted
+            ? (pulseHighlight
+                ? const Color(0xFFB45309)
+                : AppColors.primaryDark)
+            : AppColors.textPrimary);
 
     Widget seatContent = Container(
       width: cellW,
@@ -216,65 +235,102 @@ class _SeatCell extends StatelessWidget {
         border: edges.isGrouped
             ? groupBorder(edges, borderColor, width: borderWidth)
             : Border.all(color: borderColor, width: borderWidth),
+        boxShadow: isHighlighted
+            ? [
+                BoxShadow(
+                  color: (pulseHighlight
+                          ? const Color(0xFFF59E0B)
+                          : AppColors.primary)
+                      .withValues(alpha: 0.4),
+                  blurRadius: compact ? 5 : 10,
+                  spreadRadius: compact ? 0.5 : 1.5,
+                ),
+              ]
+            : null,
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Text(
-            '${cell.label}번',
-            style: TextStyle(
-              fontSize: compact ? 7 : 10,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (!compact) const SizedBox(height: 2),
-          Expanded(
-            child: Center(
-              child: Text(
-                hasStudent ? displayName : '—',
-                textAlign: TextAlign.center,
-                maxLines: compact ? 1 : 2,
-                overflow: TextOverflow.ellipsis,
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '${cell.label}번',
                 style: TextStyle(
-                  fontSize: compact ? 6 : 11,
-                  fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
-                  color: isHighlighted
-                      ? (pulseHighlight
-                          ? const Color(0xFFB45309)
-                          : AppColors.primaryDark)
-                      : AppColors.textPrimary,
+                  fontSize: compact ? 7 : 10,
+                  color: labelColor.withValues(alpha: onMine != null ? 0.85 : 1),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ),
+              if (!compact) const SizedBox(height: 2),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    hasStudent ? displayName : '—',
+                    textAlign: TextAlign.center,
+                    maxLines: compact ? 1 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: compact ? 6 : 11,
+                      fontWeight:
+                          isHighlighted ? FontWeight.w800 : FontWeight.w500,
+                      color: nameColor,
+                    ),
+                  ),
+                ),
+              ),
+              if (isHighlighted && !compact)
+                Text(
+                  highlightCaption ?? '내 자리',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: pulseHighlight
+                        ? const Color(0xFFD97706)
+                        : Colors.white.withValues(alpha: 0.95),
+                  ),
+                )
+              else if (isConfirmed && !compact && !isHighlighted)
+                const Text(
+                  '확인',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF15803D),
+                  ),
+                )
+              else if (isHeld && !compact && !isHighlighted)
+                const Text(
+                  '보류',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFC2410C),
+                  ),
+                ),
+            ],
           ),
-          if (isHighlighted && !compact)
-            Text(
-              highlightCaption ?? '내 자리',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: pulseHighlight
-                    ? const Color(0xFFD97706)
-                    : AppColors.primary,
-              ),
-            )
-          else if (isConfirmed && !compact && !isHighlighted)
-            const Text(
-              '확인',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF15803D),
-              ),
-            )
-          else if (isHeld && !compact && !isHighlighted)
-            const Text(
-              '보류',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFFC2410C),
+          if (isHighlighted && compact)
+            Positioned(
+              right: -1,
+              top: -1,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: pulseHighlight
+                      ? const Color(0xFFF59E0B)
+                      : AppColors.primaryDark,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '나',
+                  style: TextStyle(
+                    fontSize: 6,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    height: 1,
+                  ),
+                ),
               ),
             ),
         ],

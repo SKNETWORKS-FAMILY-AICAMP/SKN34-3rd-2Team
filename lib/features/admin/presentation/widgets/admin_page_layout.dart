@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_layout.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_section_card.dart';
 
 abstract final class AdminPageLayout {
-  static const maxWidth = 860.0;
+  static const maxWidth = AppLayout.list;
   static const padding = 24.0;
 }
 

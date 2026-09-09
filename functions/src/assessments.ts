@@ -69,20 +69,24 @@ function gradeAnswer(
   question: Record<string, unknown>,
   rawValue: unknown,
 ): {autoScore: number; finalScore: number; isCorrect: boolean; value: unknown} {
-  const points = Number(question.points ?? 0);
-  const type = question.type as string;
+  const points = asFiniteNumber(question.points, 0);
+  const type = String(question.type ?? "mc");
 
-  if (type === "mc") {
-    const selected =
-      typeof rawValue === "number"
-        ? rawValue
-        : Number.parseInt(String(rawValue ?? ""), 10);
-    const correct = Number(question.correctIndex);
+  if (type === "mc" || type === "multipleChoice") {
+    let selected: number | null = null;
+    if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+      selected = rawValue;
+    } else if (rawValue != null && String(rawValue).trim() !== "") {
+      const parsed = Number.parseInt(String(rawValue), 10);
+      selected = Number.isFinite(parsed) ? parsed : null;
+    }
+    const correct = asFiniteNumber(question.correctIndex, Number.NaN);
     const isCorrect =
-      Number.isFinite(selected) && selected === correct;
+      selected != null && Number.isFinite(correct) && selected === correct;
     const score = isCorrect ? points : 0;
     return {
-      value: Number.isFinite(selected) ? selected : rawValue,
+      // Firestore는 undefined 거부 → 미응답은 null
+      value: selected,
       autoScore: score,
       finalScore: score,
       isCorrect,
@@ -90,7 +94,8 @@ function gradeAnswer(
   }
 
   // short answer
-  const normalized = normalizeShortAnswer(rawValue);
+  const text = String(rawValue ?? "").trim();
+  const normalized = normalizeShortAnswer(text);
   const accepted: string[] = Array.isArray(question.acceptedAnswers)
     ? question.acceptedAnswers.map(normalizeShortAnswer)
     : [];
@@ -98,213 +103,302 @@ function gradeAnswer(
     normalized.length > 0 && accepted.includes(normalized);
   const score = isCorrect ? points : 0;
   return {
-    value: String(rawValue ?? "").trim(),
+    value: text,
     autoScore: score,
     finalScore: score,
     isCorrect,
   };
 }
 
+function toMillis(v: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const parsed = Date.parse(v);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof v === "object") {
+    const anyV = v as {
+      toDate?: () => Date;
+      toMillis?: () => number;
+      _seconds?: number;
+      seconds?: number;
+    };
+    if (typeof anyV.toMillis === "function") {
+      try {
+        const ms = anyV.toMillis();
+        return Number.isFinite(ms) ? ms : null;
+      } catch {
+        /* fall through */
+      }
+    }
+    if (typeof anyV.toDate === "function") {
+      try {
+        return anyV.toDate().getTime();
+      } catch {
+        /* fall through */
+      }
+    }
+    const seconds =
+      typeof anyV._seconds === "number"
+        ? anyV._seconds
+        : typeof anyV.seconds === "number"
+          ? anyV.seconds
+          : null;
+    if (seconds != null) return seconds * 1000;
+  }
+  return null;
+}
+
+function asFiniteNumber(v: unknown, fallback = 0): number {
+  if (v == null || v === "") return fallback;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Firestore/Callable JSON에 undefined가 섞이면 500이 난다 */
+function stripUndefined<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 /**
  * 학생용 — 정답 없는 문항 페이로드
  */
 export const getAssessmentForTake = onCall(callOptions, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "인증이 필요합니다.");
-  }
-  const caller = await getCaller(request.auth.uid);
-  const {cohortId, assessmentId} = request.data as {
-    cohortId?: string;
-    assessmentId?: string;
-  };
-  if (!cohortId || !assessmentId) {
-    throw new HttpsError("invalid-argument", "cohortId, assessmentId가 필요합니다.");
-  }
-  assertCohortMember(caller, cohortId);
-
-  const assessmentRef = db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("assessments")
-    .doc(assessmentId);
-  const assessmentSnap = await assessmentRef.get();
-  if (!assessmentSnap.exists) {
-    throw new HttpsError("not-found", "평가를 찾을 수 없습니다.");
-  }
-  const assessment = assessmentSnap.data()!;
-  if (!assessment.published && caller.role === "student") {
-    throw new HttpsError("failed-precondition", "아직 공개되지 않은 평가입니다.");
-  }
-
-  const now = Date.now();
-  const startAt = assessment.startAt?.toDate?.()?.getTime?.() ?? 0;
-  const endAt = assessment.endAt?.toDate?.()?.getTime?.() ?? 0;
-  if (caller.role === "student") {
-    if (now < startAt) {
-      throw new HttpsError("failed-precondition", "아직 응시 기간이 아닙니다.");
+  try {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "인증이 필요합니다.");
     }
-    if (now > endAt) {
-      throw new HttpsError("failed-precondition", "응시 기간이 종료되었습니다.");
-    }
-  }
-
-  const submissionId = `${assessmentId}_${caller.uid}`;
-  const submissionSnap = await db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("assessmentSubmissions")
-    .doc(submissionId)
-    .get();
-  if (submissionSnap.exists && caller.role === "student") {
-    throw new HttpsError(
-      "already-exists",
-      "이미 응시한 평가입니다. 결과만 확인할 수 있습니다.",
-    );
-  }
-
-  const questionsSnap = await assessmentRef
-    .collection("questions")
-    .orderBy("order")
-    .get();
-
-  const questions = questionsSnap.docs.map((doc) => {
-    const q = doc.data();
-    const type = String(q.type ?? "mc");
-    return {
-      id: doc.id,
-      order: Number(q.order ?? 0),
-      type,
-      prompt: String(q.prompt ?? ""),
-      points: Number(q.points ?? 0),
-      choices: type === "mc" || type === "multipleChoice"
-        ? (Array.isArray(q.choices) ? q.choices.map(String) : [])
-        : [],
+    const caller = await getCaller(request.auth.uid);
+    const {cohortId, assessmentId} = request.data as {
+      cohortId?: string;
+      assessmentId?: string;
     };
-  });
+    if (!cohortId || !assessmentId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "cohortId, assessmentId가 필요합니다.",
+      );
+    }
+    assertCohortMember(caller, cohortId);
 
-  const toMillis = (v: unknown): number | null => {
-    if (v && typeof v === "object" && "toDate" in (v as object)) {
-      try {
-        return (v as {toDate: () => Date}).toDate().getTime();
-      } catch {
-        return null;
+    const assessmentRef = db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("assessments")
+      .doc(assessmentId);
+    const assessmentSnap = await assessmentRef.get();
+    if (!assessmentSnap.exists) {
+      throw new HttpsError("not-found", "평가를 찾을 수 없습니다.");
+    }
+    const assessment = assessmentSnap.data()!;
+    if (!assessment.published && caller.role === "student") {
+      throw new HttpsError(
+        "failed-precondition",
+        "아직 공개되지 않은 평가입니다.",
+      );
+    }
+
+    const now = Date.now();
+    const startAt = toMillis(assessment.startAt) ?? 0;
+    const endAt = toMillis(assessment.endAt) ?? Number.MAX_SAFE_INTEGER;
+    if (caller.role === "student") {
+      if (now < startAt) {
+        throw new HttpsError(
+          "failed-precondition",
+          "아직 응시 기간이 아닙니다.",
+        );
+      }
+      if (now > endAt) {
+        throw new HttpsError(
+          "failed-precondition",
+          "응시 기간이 종료되었습니다.",
+        );
       }
     }
-    return null;
-  };
 
-  return {
-    assessment: {
-      id: assessmentId,
-      title: assessment.title ?? "",
-      tags: assessment.tags ?? [],
-      questionCount: assessment.questionCount ?? questions.length,
-      maxScore: assessment.maxScore ?? 0,
-      startAtMs: toMillis(assessment.startAt),
-      endAtMs: toMillis(assessment.endAt),
-      thumbnailUrl: assessment.thumbnailUrl ?? null,
-    },
-    questions,
-  };
+    const submissionId = `${assessmentId}_${caller.uid}`;
+    const submissionSnap = await db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("assessmentSubmissions")
+      .doc(submissionId)
+      .get();
+    if (submissionSnap.exists && caller.role === "student") {
+      throw new HttpsError(
+        "already-exists",
+        "이미 응시한 평가입니다. 결과만 확인할 수 있습니다.",
+      );
+    }
+
+    // orderBy는 인덱스/필드 이슈를 피하기 위해 클라이언트(함수)에서 정렬
+    const questionsSnap = await assessmentRef.collection("questions").get();
+
+    const questions = questionsSnap.docs
+      .map((doc) => {
+        const q = doc.data();
+        const type = String(q.type ?? "mc");
+        const isMc = type === "mc" || type === "multipleChoice";
+        return {
+          id: doc.id,
+          order: asFiniteNumber(q.order, 0),
+          type: isMc ? "mc" : "sa",
+          prompt: String(q.prompt ?? ""),
+          points: asFiniteNumber(q.points, 0),
+          choices: isMc
+            ? (Array.isArray(q.choices) ? q.choices.map((c) => String(c)) : [])
+            : [],
+        };
+      })
+      .sort((a, b) => a.order - b.order);
+
+    return {
+      assessment: {
+        id: assessmentId,
+        title: String(assessment.title ?? ""),
+        tags: Array.isArray(assessment.tags)
+          ? assessment.tags.map((t) => String(t))
+          : [],
+        questionCount: asFiniteNumber(
+          assessment.questionCount,
+          questions.length,
+        ),
+        maxScore: asFiniteNumber(assessment.maxScore, 0),
+        startAtMs: toMillis(assessment.startAt),
+        endAtMs: toMillis(assessment.endAt),
+        thumbnailUrl:
+          typeof assessment.thumbnailUrl === "string"
+            ? assessment.thumbnailUrl
+            : null,
+      },
+      questions,
+    };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error("getAssessmentForTake failed", err);
+    const message =
+      err instanceof Error && err.message
+        ? err.message
+        : "평가를 불러오는 중 오류가 발생했습니다.";
+    throw new HttpsError("internal", message);
+  }
 });
 
 /**
  * 학생 제출 + 서버 자동채점 (1회)
  */
 export const submitAssessment = onCall(callOptions, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "인증이 필요합니다.");
-  }
-  const caller = await getCaller(request.auth.uid);
-  const {cohortId, assessmentId, answers} = request.data as {
-    cohortId?: string;
-    assessmentId?: string;
-    answers?: Record<string, unknown>;
-  };
-  if (!cohortId || !assessmentId || !answers || typeof answers !== "object") {
-    throw new HttpsError(
-      "invalid-argument",
-      "cohortId, assessmentId, answers가 필요합니다.",
-    );
-  }
-  assertCohortMember(caller, cohortId);
-  if (caller.role !== "student") {
-    throw new HttpsError("permission-denied", "학생만 제출할 수 있습니다.");
-  }
-
-  const assessmentRef = db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("assessments")
-    .doc(assessmentId);
-  const submissionRef = db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("assessmentSubmissions")
-    .doc(`${assessmentId}_${caller.uid}`);
-
-  const assessmentSnap = await assessmentRef.get();
-  if (!assessmentSnap.exists) {
-    throw new HttpsError("not-found", "평가를 찾을 수 없습니다.");
-  }
-  const assessment = assessmentSnap.data()!;
-  if (!assessment.published) {
-    throw new HttpsError("failed-precondition", "공개되지 않은 평가입니다.");
-  }
-  const now = Date.now();
-  const startAt = assessment.startAt?.toDate?.()?.getTime?.() ?? 0;
-  const endAt = assessment.endAt?.toDate?.()?.getTime?.() ?? 0;
-  if (now < startAt || now > endAt) {
-    throw new HttpsError("failed-precondition", "응시 가능 기간이 아닙니다.");
-  }
-
-  const existing = await submissionRef.get();
-  if (existing.exists) {
-    throw new HttpsError("already-exists", "이미 응시한 평가입니다.");
-  }
-
-  const questionsSnap = await assessmentRef
-    .collection("questions")
-    .orderBy("order")
-    .get();
-
-  const graded: Record<
-    string,
-    {value: unknown; autoScore: number; finalScore: number; isCorrect: boolean}
-  > = {};
-  let autoTotal = 0;
-  for (const doc of questionsSnap.docs) {
-    const q = doc.data() as Record<string, unknown>;
-    const gradedOne = gradeAnswer(q, answers[doc.id]);
-    graded[doc.id] = gradedOne;
-    autoTotal += gradedOne.finalScore;
-  }
-
   try {
-    await submissionRef.create({
-      assessmentId,
-      userId: caller.uid,
-      userDisplayName: caller.displayName ?? "",
-      answers: graded,
-      autoTotalScore: autoTotal,
-      totalScore: autoTotal,
-      status: "submitted",
-      submittedAt: fieldValue.serverTimestamp(),
-      scoreAdjustments: [],
-    });
-  } catch (e: unknown) {
-    const err = e as {code?: number | string};
-    if (err.code === 6 || err.code === "already-exists") {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "인증이 필요합니다.");
+    }
+    const caller = await getCaller(request.auth.uid);
+    const {cohortId, assessmentId, answers} = request.data as {
+      cohortId?: string;
+      assessmentId?: string;
+      answers?: Record<string, unknown>;
+    };
+    if (!cohortId || !assessmentId || !answers || typeof answers !== "object") {
+      throw new HttpsError(
+        "invalid-argument",
+        "cohortId, assessmentId, answers가 필요합니다.",
+      );
+    }
+    assertCohortMember(caller, cohortId);
+    if (caller.role !== "student") {
+      throw new HttpsError("permission-denied", "학생만 제출할 수 있습니다.");
+    }
+
+    const assessmentRef = db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("assessments")
+      .doc(assessmentId);
+    const submissionRef = db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("assessmentSubmissions")
+      .doc(`${assessmentId}_${caller.uid}`);
+
+    const assessmentSnap = await assessmentRef.get();
+    if (!assessmentSnap.exists) {
+      throw new HttpsError("not-found", "평가를 찾을 수 없습니다.");
+    }
+    const assessment = assessmentSnap.data()!;
+    if (!assessment.published) {
+      throw new HttpsError("failed-precondition", "공개되지 않은 평가입니다.");
+    }
+    const now = Date.now();
+    const startAt = toMillis(assessment.startAt) ?? 0;
+    const endAt = toMillis(assessment.endAt) ?? Number.MAX_SAFE_INTEGER;
+    if (now < startAt || now > endAt) {
+      throw new HttpsError("failed-precondition", "응시 가능 기간이 아닙니다.");
+    }
+
+    const existing = await submissionRef.get();
+    if (existing.exists) {
       throw new HttpsError("already-exists", "이미 응시한 평가입니다.");
     }
-    throw e;
-  }
 
-  return {
-    totalScore: autoTotal,
-    autoTotalScore: autoTotal,
-    submissionId: submissionRef.id,
-  };
+    const questionsSnap = await assessmentRef.collection("questions").get();
+
+    const graded: Record<
+      string,
+      {
+        value: unknown;
+        autoScore: number;
+        finalScore: number;
+        isCorrect: boolean;
+      }
+    > = {};
+    let autoTotal = 0;
+    for (const doc of questionsSnap.docs) {
+      const q = doc.data() as Record<string, unknown>;
+      const gradedOne = gradeAnswer(q, answers[doc.id]);
+      graded[doc.id] = {
+        value: gradedOne.value === undefined ? null : gradedOne.value,
+        autoScore: asFiniteNumber(gradedOne.autoScore, 0),
+        finalScore: asFiniteNumber(gradedOne.finalScore, 0),
+        isCorrect: Boolean(gradedOne.isCorrect),
+      };
+      autoTotal += graded[doc.id].finalScore;
+    }
+    autoTotal = asFiniteNumber(autoTotal, 0);
+
+    try {
+      await submissionRef.create({
+        assessmentId,
+        userId: caller.uid,
+        userDisplayName: caller.displayName ?? "",
+        answers: stripUndefined(graded),
+        autoTotalScore: autoTotal,
+        totalScore: autoTotal,
+        status: "submitted",
+        submittedAt: fieldValue.serverTimestamp(),
+        scoreAdjustments: [],
+      });
+    } catch (e: unknown) {
+      const err = e as {code?: number | string};
+      if (err.code === 6 || err.code === "already-exists") {
+        throw new HttpsError("already-exists", "이미 응시한 평가입니다.");
+      }
+      throw e;
+    }
+
+    return {
+      totalScore: autoTotal,
+      autoTotalScore: autoTotal,
+      submissionId: submissionRef.id,
+    };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error("submitAssessment failed", err);
+    const message =
+      err instanceof Error && err.message
+        ? err.message
+        : "제출 처리 중 오류가 발생했습니다.";
+    throw new HttpsError("internal", message);
+  }
 });
 
 /**
@@ -312,89 +406,115 @@ export const submitAssessment = onCall(callOptions, async (request) => {
  * 학생: 본인 제출이 있을 때만 / 스태프: submissionId로 조회 가능
  */
 export const getAssessmentReview = onCall(callOptions, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "인증이 필요합니다.");
-  }
-  const caller = await getCaller(request.auth.uid);
-  const {cohortId, assessmentId, submissionId} = request.data as {
-    cohortId?: string;
-    assessmentId?: string;
-    submissionId?: string;
-  };
-  if (!cohortId || !assessmentId) {
-    throw new HttpsError(
-      "invalid-argument",
-      "cohortId, assessmentId가 필요합니다.",
-    );
-  }
-  assertCohortMember(caller, cohortId);
-
-  const isStaff =
-    caller.role === "admin" ||
-    (caller.role === "instructor" && caller.cohortId === cohortId);
-
-  const resolvedSubmissionId =
-    submissionId ||
-    (isStaff ? undefined : `${assessmentId}_${caller.uid}`);
-
-  if (!resolvedSubmissionId) {
-    throw new HttpsError(
-      "invalid-argument",
-      "스태프는 submissionId가 필요합니다.",
-    );
-  }
-
-  const submissionRef = db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("assessmentSubmissions")
-    .doc(resolvedSubmissionId);
-  const submissionSnap = await submissionRef.get();
-  if (!submissionSnap.exists) {
-    throw new HttpsError("not-found", "제출 기록이 없습니다.");
-  }
-  const submission = submissionSnap.data()!;
-  if (!isStaff && submission.userId !== caller.uid) {
-    throw new HttpsError("permission-denied", "본인 결과만 조회할 수 있습니다.");
-  }
-  if (submission.assessmentId !== assessmentId) {
-    throw new HttpsError("invalid-argument", "평가 ID가 일치하지 않습니다.");
-  }
-
-  const questionsSnap = await db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("assessments")
-    .doc(assessmentId)
-    .collection("questions")
-    .orderBy("order")
-    .get();
-
-  const questions = questionsSnap.docs.map((doc) => {
-    const q = doc.data();
-    return {
-      id: doc.id,
-      order: q.order ?? 0,
-      type: q.type,
-      prompt: q.prompt,
-      points: q.points ?? 0,
-      choices: q.choices ?? [],
-      correctIndex: q.correctIndex ?? null,
-      acceptedAnswers: q.acceptedAnswers ?? [],
-      explanation: q.explanation ?? null,
+  try {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "인증이 필요합니다.");
+    }
+    const caller = await getCaller(request.auth.uid);
+    const {cohortId, assessmentId, submissionId} = request.data as {
+      cohortId?: string;
+      assessmentId?: string;
+      submissionId?: string;
     };
-  });
+    if (!cohortId || !assessmentId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "cohortId, assessmentId가 필요합니다.",
+      );
+    }
+    assertCohortMember(caller, cohortId);
 
-  return {
-    questions,
-    submission: {
-      id: submissionSnap.id,
-      totalScore: submission.totalScore ?? 0,
-      autoTotalScore: submission.autoTotalScore ?? 0,
-      answers: submission.answers ?? {},
-      userDisplayName: submission.userDisplayName ?? "",
-    },
-  };
+    const isStaff =
+      caller.role === "admin" ||
+      (caller.role === "instructor" && caller.cohortId === cohortId);
+
+    const resolvedSubmissionId =
+      submissionId ||
+      (isStaff ? undefined : `${assessmentId}_${caller.uid}`);
+
+    if (!resolvedSubmissionId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "스태프는 submissionId가 필요합니다.",
+      );
+    }
+
+    const submissionRef = db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("assessmentSubmissions")
+      .doc(resolvedSubmissionId);
+    const submissionSnap = await submissionRef.get();
+    if (!submissionSnap.exists) {
+      throw new HttpsError("not-found", "제출 기록이 없습니다.");
+    }
+    const submission = submissionSnap.data()!;
+    if (!isStaff && submission.userId !== caller.uid) {
+      throw new HttpsError(
+        "permission-denied",
+        "본인 결과만 조회할 수 있습니다.",
+      );
+    }
+    if (submission.assessmentId !== assessmentId) {
+      throw new HttpsError("invalid-argument", "평가 ID가 일치하지 않습니다.");
+    }
+
+    const questionsSnap = await db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("assessments")
+      .doc(assessmentId)
+      .collection("questions")
+      .get();
+
+    const questions = questionsSnap.docs
+      .map((doc) => {
+        const q = doc.data();
+        const type = String(q.type ?? "mc");
+        const isMc = type === "mc" || type === "multipleChoice";
+        return {
+          id: doc.id,
+          order: asFiniteNumber(q.order, 0),
+          type: isMc ? "mc" : "sa",
+          prompt: String(q.prompt ?? ""),
+          points: asFiniteNumber(q.points, 0),
+          choices: Array.isArray(q.choices)
+            ? q.choices.map((c) => String(c))
+            : [],
+          correctIndex:
+            q.correctIndex == null ? null : asFiniteNumber(q.correctIndex, 0),
+          acceptedAnswers: Array.isArray(q.acceptedAnswers)
+            ? q.acceptedAnswers.map((a) => String(a))
+            : [],
+          explanation:
+            q.explanation == null ? null : String(q.explanation),
+        };
+      })
+      .sort((a, b) => a.order - b.order);
+
+    // answers 안의 undefined/Timestamp 등을 JSON-safe 하게
+    const rawAnswers = submission.answers ?? {};
+    const safeAnswers = stripUndefined(rawAnswers);
+
+    return stripUndefined({
+      questions,
+      submission: {
+        id: submissionSnap.id,
+        totalScore: asFiniteNumber(submission.totalScore, 0),
+        autoTotalScore: asFiniteNumber(submission.autoTotalScore, 0),
+        answers: safeAnswers,
+        userDisplayName: String(submission.userDisplayName ?? ""),
+      },
+    });
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error("getAssessmentReview failed", err);
+    const message =
+      err instanceof Error && err.message
+        ? err.message
+        : "결과를 불러오는 중 오류가 발생했습니다.";
+    throw new HttpsError("internal", message);
+  }
 });
 
 /**

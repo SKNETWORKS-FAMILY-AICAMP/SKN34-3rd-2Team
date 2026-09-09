@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_layout.dart';
 import '../../../../shared/models/user_model.dart';
 
 /// 기록실 페이지 최대 너비
 abstract final class RecordLayout {
-  static const maxContentWidth = 860.0;
+  static const maxContentWidth = AppLayout.list;
   static const horizontalPadding = 24.0;
   static const verticalPadding = 20.0;
 }

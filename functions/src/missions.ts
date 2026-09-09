@@ -383,6 +383,11 @@ export async function settleMissionsOnApproval(params: {
     }
 
     const progressSnap = await tx.get(progressRef);
+    const userSnap = await tx.get(userRef);
+    const userDisplayName =
+      (userSnap.data()?.displayName as string | undefined) ??
+      (submission.userDisplayName as string | undefined) ??
+      "";
     const before = progressFromData(progressSnap.data());
     const settled = computeMissionSettlement({
       progress: before,
@@ -419,6 +424,7 @@ export async function settleMissionsOnApproval(params: {
           .doc();
         tx.set(txRef, {
           userId,
+          userDisplayName,
           amount: g.amount,
           reason: g.reason,
           type: "accrual",

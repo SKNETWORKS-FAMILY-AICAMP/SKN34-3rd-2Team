@@ -162,7 +162,7 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
             child: Column(

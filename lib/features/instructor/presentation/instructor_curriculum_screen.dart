@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
+import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/models/curriculum_sheet_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -163,7 +165,6 @@ class _InstructorCurriculumScreenState
     final sheetAsync = ref.watch(latestCurriculumSheetProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _uploading
             ? null
@@ -181,17 +182,16 @@ class _InstructorCurriculumScreenState
       ),
       body: sheetAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => ErrorView(
+          message: e.toString(),
+          onRetry: () => ref.invalidate(latestCurriculumSheetProvider),
+        ),
         data: (sheet) {
           if (sheet == null) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
+            return const EmptyView(
+              message:
                   '등록된 커리큘럼이 없습니다.\n구글시트에서 CSV로 내려받은 파일을 업로드하세요.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+              icon: Icons.table_chart_outlined,
             );
           }
 
@@ -208,7 +208,7 @@ class _InstructorCurriculumScreenState
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 860),
+              constraints: AppLayout.listConstraints(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

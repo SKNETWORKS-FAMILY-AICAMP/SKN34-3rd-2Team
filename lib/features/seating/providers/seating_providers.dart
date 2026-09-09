@@ -4,6 +4,7 @@ import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../data/seating_repository.dart';
+import '../models/project_team_model.dart';
 import '../models/seating_assignment_model.dart';
 import '../models/seating_layout_model.dart';
 import '../models/seating_room_model.dart';
@@ -13,6 +14,13 @@ final seatingRoomsProvider =
   final cohortId = ref.watch(effectiveCohortIdProvider);
   if (cohortId == null) return Stream.value([]);
   return ref.watch(seatingRepositoryProvider).watchRooms(cohortId);
+});
+
+final projectTeamsProvider =
+    StreamProvider.autoDispose<List<ProjectTeamModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(seatingRepositoryProvider).watchProjectTeams(cohortId);
 });
 
 final seatingMetaProvider = StreamProvider.autoDispose<SeatingMetaModel>((ref) {

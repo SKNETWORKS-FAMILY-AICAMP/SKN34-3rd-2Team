@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/models/assessment_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -175,6 +176,8 @@ class _InstructorAssessmentFormScreenState
                 contentType: contentType,
               );
           thumbPath = path;
+          AssessmentThumbnail.putCache(path, _pendingThumbBytes!);
+          AssessmentThumbnail.putCache(thumbUrl, _pendingThumbBytes!);
         }
       }
 
@@ -407,6 +410,9 @@ class _InstructorAssessmentFormScreenState
                           url: _thumbnailUrl,
                           storagePath: _thumbnailPath,
                           bytes: _pendingThumbBytes,
+                          title: _title.text.trim().isEmpty
+                              ? null
+                              : _title.text.trim(),
                           width: 96,
                           height: 54,
                           placeholderIcon: Icons.image_outlined,
@@ -604,19 +610,21 @@ class _QuestionEditorDialogState extends State<_QuestionEditorDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<AssessmentQuestionType>(
+              AppDropdownField<AssessmentQuestionType>(
                 value: _type,
                 items: const [
-                  DropdownMenuItem(
+                  AppDropdownItem(
                     value: AssessmentQuestionType.multipleChoice,
-                    child: Text('객관식'),
+                    label: '객관식',
                   ),
-                  DropdownMenuItem(
+                  AppDropdownItem(
                     value: AssessmentQuestionType.shortAnswer,
-                    child: Text('단답'),
+                    label: '단답',
                   ),
                 ],
-                onChanged: (v) => setState(() => _type = v!),
+                onChanged: (v) {
+                  if (v != null) setState(() => _type = v);
+                },
                 decoration: const InputDecoration(labelText: '유형'),
               ),
               TextField(

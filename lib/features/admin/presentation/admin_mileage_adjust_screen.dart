@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -151,23 +152,30 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                       return const Text('학생이 없습니다.');
                     }
 
-                    return DropdownButtonFormField<UserModel>(
-                      initialValue: _selectedStudent,
+                    return AppDropdownField<String>(
+                      value: _selectedStudent != null &&
+                              filtered.any((s) => s.uid == _selectedStudent!.uid)
+                          ? _selectedStudent!.uid
+                          : null,
                       decoration: const InputDecoration(
                         labelText: '학생 *',
                         border: OutlineInputBorder(),
                       ),
-                      items: filtered
-                          .map(
-                            (s) => DropdownMenuItem(
-                              value: s,
-                              child: Text(
+                      items: [
+                        for (final s in filtered)
+                          AppDropdownItem(
+                            value: s.uid,
+                            label:
                                 '${s.displayName} (${formatMileageM(s.mileageBalance)})',
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _selectedStudent = v),
+                          ),
+                      ],
+                      onChanged: (uid) {
+                        if (uid == null) return;
+                        setState(() {
+                          _selectedStudent =
+                              filtered.firstWhere((s) => s.uid == uid);
+                        });
+                      },
                     );
                   },
                 ),
@@ -234,6 +242,10 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                 if (list.isEmpty) {
                   return const Text('거래 내역이 없습니다.');
                 }
+                final nameById = {
+                  for (final s in studentsAsync.asData?.value ?? const <UserModel>[])
+                    s.uid: s.displayName,
+                };
                 return ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -241,13 +253,27 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                   separatorBuilder: (_, _) => const Divider(),
                   itemBuilder: (_, i) {
                     final tx = list[i];
+                    final storedName = tx.userDisplayName.trim();
+                    final joinedName = nameById[tx.userId]?.trim() ?? '';
+                    final displayName = storedName.isNotEmpty
+                        ? storedName
+                        : joinedName.isNotEmpty
+                            ? joinedName
+                            : '알 수 없는 학생';
+                    final createdAt = tx.createdAt != null
+                        ? AppDateUtils.formatDateTime(tx.createdAt!)
+                        : '';
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(tx.reason),
+                      title: Text(
+                        displayName,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       subtitle: Text(
-                        tx.createdAt != null
-                            ? AppDateUtils.formatDateTime(tx.createdAt!)
-                            : '',
+                        [
+                          tx.reason,
+                          if (createdAt.isNotEmpty) createdAt,
+                        ].join('\n'),
                       ),
                       trailing: Text(
                         formatMileageSigned(tx.amount),

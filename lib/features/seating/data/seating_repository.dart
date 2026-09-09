@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/providers/firebase_providers.dart';
+import '../models/project_team_model.dart';
 import '../models/seating_assignment_model.dart';
 import '../models/seating_layout_model.dart';
 import '../models/seating_room_model.dart';
@@ -201,9 +202,10 @@ class SeatingRepository {
     required SeatingAssignmentModel assignment,
     required String updatedBy,
   }) async {
+    // merge 사용 금지: assignments/seatNames 맵은 deep-merge 되어
+    // 비운·이동한 좌석 키가 남아 빈좌석 복구·이름 중복이 발생함.
     await _assignmentRef(cohortId, roomId).set(
       assignment.toFirestore(updatedBy: updatedBy),
-      SetOptions(merge: true),
     );
   }
 
@@ -229,6 +231,7 @@ class SeatingRepository {
       }
     }
 
+    // assignments/seatNames 전체 교체를 위해 merge 없이 set
     batch.set(
       _assignmentRef(cohortId, roomId),
       {
@@ -240,7 +243,6 @@ class SeatingRepository {
         'publishedAt': FieldValue.serverTimestamp(),
         'publishedBy': publishedBy,
       },
-      SetOptions(merge: true),
     );
 
     batch.set(
@@ -251,6 +253,94 @@ class SeatingRepository {
       SetOptions(merge: true),
     );
 
+    await batch.commit();
+  }
+
+  CollectionReference<Map<String, dynamic>> _projectTeams(String cohortId) =>
+      _firestore.collection('cohorts').doc(cohortId).collection('projectTeams');
+
+  Stream<List<ProjectTeamModel>> watchProjectTeams(String cohortId) {
+    return _projectTeams(cohortId)
+        .orderBy('sortOrder')
+        .snapshots()
+        .map((s) {
+      final list = s.docs.map(ProjectTeamModel.fromFirestore).toList();
+      list.sort((a, b) {
+        final byOrder = a.sortOrder.compareTo(b.sortOrder);
+        if (byOrder != 0) return byOrder;
+        return a.name.compareTo(b.name);
+      });
+      return list;
+    });
+  }
+
+  Future<String> createProjectTeam({
+    required String cohortId,
+    required String name,
+    required int sortOrder,
+    required int colorIndex,
+    required String updatedBy,
+  }) async {
+    final ref = _projectTeams(cohortId).doc();
+    await ref.set(
+      ProjectTeamModel(
+        id: ref.id,
+        name: name,
+        sortOrder: sortOrder,
+        colorIndex: colorIndex,
+      ).toFirestore(updatedBy: updatedBy, isCreate: true),
+    );
+    return ref.id;
+  }
+
+  Future<void> updateProjectTeam({
+    required String cohortId,
+    required ProjectTeamModel team,
+    required String updatedBy,
+  }) async {
+    await _projectTeams(cohortId).doc(team.id).set(
+          team.toFirestore(updatedBy: updatedBy),
+          SetOptions(merge: true),
+        );
+  }
+
+  Future<void> deleteProjectTeam({
+    required String cohortId,
+    required String teamId,
+  }) async {
+    await _projectTeams(cohortId).doc(teamId).delete();
+  }
+
+  /// 팀 멤버십을 일괄 갱신. [deleteTeamIds]는 제거, [upserts]는 merge set.
+  Future<void> replaceProjectTeams({
+    required String cohortId,
+    required List<ProjectTeamModel> upserts,
+    required List<String> deleteTeamIds,
+    required String updatedBy,
+  }) async {
+    final batch = _firestore.batch();
+    for (final id in deleteTeamIds) {
+      batch.delete(_projectTeams(cohortId).doc(id));
+    }
+    for (final team in upserts) {
+      final ref = team.id.isEmpty
+          ? _projectTeams(cohortId).doc()
+          : _projectTeams(cohortId).doc(team.id);
+      batch.set(
+        ref,
+        ProjectTeamModel(
+          id: ref.id,
+          name: team.name,
+          memberIds: team.memberIds,
+          sortOrder: team.sortOrder,
+          colorIndex: team.colorIndex,
+        ).toFirestore(
+          updatedBy: updatedBy,
+          isCreate: team.id.isEmpty,
+        ),
+        SetOptions(merge: true),
+      );
+    }
     await batch.commit();
   }
 }

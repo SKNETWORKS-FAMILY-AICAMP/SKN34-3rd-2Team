@@ -21,7 +21,7 @@ class SeatingRoomModel {
   String get displayLabel {
     final room = roomNumber?.trim();
     if (room != null && room.isNotEmpty) return room;
-    return '강의실';
+    return '이름 없음';
   }
 
   int get seatCount => layout.seatCount;

@@ -17,7 +17,7 @@ class _NavItem {
 }
 
 const _kInstructorNavItems = [
-  _NavItem(Icons.fact_check_outlined, '출결관리', RoutePaths.instructor),
+  _NavItem(Icons.fact_check_outlined, '자리 확인', RoutePaths.instructor),
   _NavItem(Icons.description_rounded, '이력서관리', RoutePaths.instructorResumes),
   _NavItem(Icons.forum_rounded, '게시물관리', RoutePaths.instructorBoard),
   _NavItem(Icons.quiz_outlined, '성취도평가', RoutePaths.instructorAssessments),
@@ -93,53 +93,14 @@ class InstructorShellScreen extends ConsumerWidget {
               onLogout: () => ref.read(authRepositoryProvider).signOut(),
               profile: user == null
                   ? null
-                  : Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        onTap: () => context.go(RoutePaths.instructorMyPage),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 14,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.2),
-                                child: Text(
-                                  user.displayName.isNotEmpty
-                                      ? user.displayName[0]
-                                      : 'I',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  user.displayName.isNotEmpty
-                                      ? user.displayName
-                                      : '마이페이지',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                  : SideRailProfileTile(
+                      label: user.displayName.isNotEmpty
+                          ? user.displayName
+                          : '마이페이지',
+                      initial: user.displayName.isNotEmpty
+                          ? user.displayName[0]
+                          : 'I',
+                      onTap: () => context.go(RoutePaths.instructorMyPage),
                     ),
             ),
           Expanded(

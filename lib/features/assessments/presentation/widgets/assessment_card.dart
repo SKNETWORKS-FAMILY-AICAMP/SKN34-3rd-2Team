@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_dropdown.dart';
 import '../../../../shared/models/assessment_model.dart';
+import '../../../../shared/widgets/status_badge.dart';
 import 'assessment_thumbnail.dart';
 
 class AssessmentStatusChip extends StatelessWidget {
@@ -11,27 +13,12 @@ class AssessmentStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = switch (label) {
-      '진행중' => (AppColors.success.withValues(alpha: 0.12), AppColors.success),
-      '예정' => (AppColors.primaryLight, AppColors.primary),
-      '종료' => (AppColors.surfaceVariant, AppColors.badgeClosed),
-      _ => (AppColors.warning.withValues(alpha: 0.15), AppColors.badgeLate),
+    return switch (label) {
+      '진행중' => StatusBadge.success(label),
+      '예정' => StatusBadge.info(label),
+      '종료' => StatusBadge.neutral(label),
+      _ => StatusBadge.warning(label),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: fg,
-        ),
-      ),
-    );
   }
 }
 
@@ -40,28 +27,7 @@ class AssessmentCompletedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFDCFCE7),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle, size: 13, color: Color(0xFF166534)),
-          SizedBox(width: 3),
-          Text(
-            '완료',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF166534),
-            ),
-          ),
-        ],
-      ),
-    );
+    return StatusBadge.success('완료', icon: Icons.check_circle);
   }
 }
 
@@ -75,6 +41,8 @@ class AssessmentCard extends StatelessWidget {
     this.score,
     this.onEdit,
     this.onDelete,
+    this.onPublish,
+    this.publishing = false,
   });
 
   final AssessmentModel assessment;
@@ -83,10 +51,14 @@ class AssessmentCard extends StatelessWidget {
   final int? score;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onPublish;
+  final bool publishing;
 
   @override
   Widget build(BuildContext context) {
     final hasMenu = onEdit != null || onDelete != null;
+    final showPublish =
+        onPublish != null && !assessment.published && !completed;
 
     return Material(
       color: Colors.white,
@@ -102,7 +74,7 @@ class AssessmentCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SizedBox(
                   width: 96,
@@ -111,8 +83,14 @@ class AssessmentCard extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       AssessmentThumbnail(
+                        key: ValueKey(
+                          assessment.thumbnailPath ??
+                              assessment.thumbnailUrl ??
+                              assessment.id,
+                        ),
                         url: assessment.thumbnailUrl,
                         storagePath: assessment.thumbnailPath,
+                        title: assessment.title,
                         width: 96,
                         height: 72,
                       ),
@@ -146,7 +124,7 @@ class AssessmentCard extends StatelessWidget {
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF3F4F6),
+                                      color: AppColors.surfaceVariant,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -204,26 +182,50 @@ class AssessmentCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (showPublish) ...[
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: publishing ? null : onPublish,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: publishing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('발행'),
+                  ),
+                ],
                 if (hasMenu)
-                  PopupMenuButton<String>(
+                  AppIconMenu<String>(
                     tooltip: '더보기',
                     onSelected: (value) {
                       if (value == 'edit') onEdit?.call();
                       if (value == 'delete') onDelete?.call();
+                      if (value == 'publish') onPublish?.call();
                     },
-                    itemBuilder: (context) => [
+                    items: [
                       if (onEdit != null)
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Text('수정'),
-                        ),
+                        const AppMenuAction(value: 'edit', label: '수정'),
+                      if (showPublish)
+                        const AppMenuAction(value: 'publish', label: '발행'),
                       if (onDelete != null)
-                        const PopupMenuItem(
+                        const AppMenuAction(
                           value: 'delete',
-                          child: Text(
-                            '삭제',
-                            style: TextStyle(color: AppColors.error),
-                          ),
+                          label: '삭제',
+                          danger: true,
                         ),
                     ],
                   ),

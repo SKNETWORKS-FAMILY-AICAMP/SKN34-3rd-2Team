@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/attendance_status.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/class_period_utils.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/domain_models.dart';
@@ -63,9 +64,14 @@ Size _seatingCardSize({
   );
 }
 
-/// 강사 — 담당 기수 출결 조회 + 이름순 호명 확인
+/// 강사/관리자 — 교시별 자리 확인 (학생 조작 없음)
 class InstructorAttendanceScreen extends ConsumerStatefulWidget {
-  const InstructorAttendanceScreen({super.key});
+  const InstructorAttendanceScreen({
+    super.key,
+    this.title = '자리 확인',
+  });
+
+  final String title;
 
   @override
   ConsumerState<InstructorAttendanceScreen> createState() =>
@@ -75,10 +81,42 @@ class InstructorAttendanceScreen extends ConsumerStatefulWidget {
 class _InstructorAttendanceScreenState
     extends ConsumerState<InstructorAttendanceScreen> {
   DateTime _day = DateTime.now();
+  late ClassPeriod _period;
   String? _currentUid;
   final _rollCallScrollKey = GlobalKey<_RollCallPaneState>();
 
+  @override
+  void initState() {
+    super.initState();
+    _period = ClassPeriodUtils.suggestedPeriod(day: _day);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _carryForwardIfNeeded();
+    });
+  }
+
   String get _dateKey => AppDateUtils.toDateKey(_day);
+
+  String get _scopeKey =>
+      ClassPeriodUtils.providerKey(_dateKey, _period.id);
+
+  Future<void> _carryForwardIfNeeded() async {
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    final user = ref.read(currentUserSyncProvider);
+    if (cohortId == null || user == null) return;
+    try {
+      await ref.read(lmsRepositoryProvider).ensureRollCallCarriedForward(
+            cohortId: cohortId,
+            dateKey: _dateKey,
+            periodId: _period.id,
+            updatedBy: user.uid,
+          );
+      if (!mounted) return;
+      ref.invalidate(rollCallConfirmedProvider(_scopeKey));
+      ref.invalidate(rollCallHeldProvider(_scopeKey));
+    } catch (_) {
+      // 이어받기 실패해도 자리 확인은 계속 사용 가능
+    }
+  }
 
   String? _resolvedCurrent(
     List<UserModel> students,
@@ -116,9 +154,20 @@ class _InstructorAttendanceScreenState
     if (picked != null) {
       setState(() {
         _day = picked;
+        _period = ClassPeriodUtils.suggestedPeriod(day: picked);
         _currentUid = null;
       });
+      _carryForwardIfNeeded();
     }
+  }
+
+  void _selectPeriod(ClassPeriod period) {
+    if (period.id == _period.id) return;
+    setState(() {
+      _period = period;
+      _currentUid = null;
+    });
+    _carryForwardIfNeeded();
   }
 
   void _selectStudent(String uid) {
@@ -155,6 +204,7 @@ class _InstructorAttendanceScreenState
       await ref.read(lmsRepositoryProvider).setRollCallConfirmed(
             cohortId: cohortId,
             dateKey: _dateKey,
+            periodId: _period.id,
             userId: student.uid,
             confirmed: confirmed,
             updatedBy: user.uid,
@@ -191,6 +241,7 @@ class _InstructorAttendanceScreenState
       await ref.read(lmsRepositoryProvider).setRollCallHeld(
             cohortId: cohortId,
             dateKey: _dateKey,
+            periodId: _period.id,
             userId: student.uid,
             held: held,
             updatedBy: user.uid,
@@ -218,8 +269,8 @@ class _InstructorAttendanceScreenState
     final cohortName = ref.watch(effectiveCohortNameProvider);
     final studentsAsync = ref.watch(cohortStudentsProvider);
     final attendancesAsync = ref.watch(attendancesByDateProvider(_dateKey));
-    final confirmedAsync = ref.watch(rollCallConfirmedProvider(_dateKey));
-    final heldAsync = ref.watch(rollCallHeldProvider(_dateKey));
+    final confirmedAsync = ref.watch(rollCallConfirmedProvider(_scopeKey));
+    final heldAsync = ref.watch(rollCallHeldProvider(_scopeKey));
     final layoutAsync = ref.watch(publishedSeatingLayoutProvider);
     final assignmentAsync = ref.watch(publishedSeatingAssignmentProvider);
 
@@ -308,16 +359,28 @@ class _InstructorAttendanceScreenState
                     );
 
                     final header = _Header(
+                      title: widget.title,
                       cohortName: cohortName,
                       dateKey: _dateKey,
+                      period: _period,
+                      statusHint: ClassPeriodUtils.isSameDay(_day, DateTime.now())
+                          ? ClassPeriodUtils.statusHint(DateTime.now())
+                          : '',
                       confirmedCount: confirmed.length,
                       heldCount: held.length,
                       total: students.length,
                       onPickDate: _pickDate,
-                      onToday: () => setState(() {
-                        _day = DateTime.now();
-                        _currentUid = null;
-                      }),
+                      onToday: () {
+                        setState(() {
+                          _day = DateTime.now();
+                          _period = ClassPeriodUtils.suggestedPeriod(
+                            day: DateTime.now(),
+                          );
+                          _currentUid = null;
+                        });
+                        _carryForwardIfNeeded();
+                      },
+                      onSelectPeriod: _selectPeriod,
                     );
 
                     if (!wide) {
@@ -440,22 +503,30 @@ class _InstructorAttendanceScreenState
 
 class _Header extends StatelessWidget {
   const _Header({
+    required this.title,
     required this.cohortName,
     required this.dateKey,
+    required this.period,
+    required this.statusHint,
     required this.confirmedCount,
     required this.heldCount,
     required this.total,
     required this.onPickDate,
     required this.onToday,
+    required this.onSelectPeriod,
   });
 
+  final String title;
   final String? cohortName;
   final String dateKey;
+  final ClassPeriod period;
+  final String statusHint;
   final int confirmedCount;
   final int heldCount;
   final int total;
   final VoidCallback onPickDate;
   final VoidCallback onToday;
+  final ValueChanged<ClassPeriod> onSelectPeriod;
 
   @override
   Widget build(BuildContext context) {
@@ -464,21 +535,33 @@ class _Header extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '출결관리',
-            style: TextStyle(
+          Text(
+            title,
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            '${cohortName ?? '담당 기수'} · 이름순으로 호명하면 해당 자리가 빛납니다. 확인·보류만 기록하며 출석 상태는 바뀌지 않습니다.',
+            '${cohortName ?? '담당 기수'} · 교시마다 자리에 있는지 확인합니다. '
+            '학생 조작은 없고, 확인·보류만 기록됩니다. (출석 상태는 변경되지 않음)',
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
             ),
           ),
+          if (statusHint.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              statusHint,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -503,6 +586,41 @@ class _Header extends StatelessWidget {
                 color: const Color(0xFFEA580C),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final p in ClassPeriodUtils.periods) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(
+                        p.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: p.id == period.id
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      selected: p.id == period.id,
+                      onSelected: (_) => onSelectPeriod(p),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '선택 교시: ${period.rangeLabel}',
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -540,7 +658,7 @@ class _SeatingPane extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(20),
                 child: Text(
-                  '확정된 좌석 배치가 없습니다.\n관리자가 배치를 확정하면 호명 시 자리가 빛납니다.',
+                  '확정된 좌석 배치가 없습니다.\n관리자가 배치를 확정하면 자리 확인 시 좌석이 표시됩니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.textSecondary, height: 1.5),
                 ),
