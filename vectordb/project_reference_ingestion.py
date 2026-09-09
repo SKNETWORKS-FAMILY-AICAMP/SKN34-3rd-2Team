@@ -24,6 +24,7 @@ INDEX_NAME = "student"
 NAMESPACE = "project_reference"
 REQUIRED_COLUMNS = {"기수", "구분", "주제", "기획설명", "활용데이터", "활용기술", "깃허브 주소"}
 GITHUB_REPOSITORY = re.compile(r"SKNETWORKS-FAMILY-AICAMP/[A-Za-z0-9_.-]+", re.IGNORECASE)
+TEAM_RE = re.compile(r"[-_](\d+)team", re.IGNORECASE)
 
 
 def _field(value: str) -> str:
@@ -39,11 +40,23 @@ def _project_round(category: str) -> str:
     raise ValueError(f"알 수 없는 프로젝트 구분입니다: {category!r}")
 
 
+def _project_heading(cohort: str, project_round: str, team: str | None) -> str:
+    round_label = "최종 프로젝트" if project_round == "final" else f"{project_round}차 프로젝트"
+    return f"SKN {cohort}기 {round_label} {team}팀" if team else f"SKN {cohort}기 {round_label} (팀 번호 미상)"
+
+
 def _github_url(value: str) -> str:
     match = GITHUB_REPOSITORY.search(value)
     if not match:
         raise ValueError(f"GitHub 저장소 주소를 찾을 수 없습니다: {value!r}")
     return f"https://github.com/{match.group(0).rstrip('.')}"
+
+
+def _team(value: str) -> str | None:
+    match = TEAM_RE.search(_github_url(value))
+    if not match:
+        return None
+    return str(int(match.group(1)))
 
 
 def _csv_files(path: Path) -> list[Path]:
@@ -77,12 +90,12 @@ def load_documents(path: Path = DATA_DIR) -> tuple[list[Any], int]:
                 if not cohort.isdigit():
                     raise ValueError(f"기수는 숫자여야 합니다: {row['기수']!r}")
                 project_round = _project_round(row["구분"] or "")
-                team = row["깃허브 주소"][row["깃허브 주소"].rfind('Team') - 1]
+                team = _team(row["깃허브 주소"] or "")
                 key = (str(int(cohort)), project_round)
                 index = indexes[key]
                 indexes[key] += 1
                 page_content = "\n".join([
-                    f"SKN {key[0]}기 {project_round}차 {team}Team 프로젝트",
+                    _project_heading(key[0], project_round, team),
                     f"주제: {subject}",
                     f"기획 설명: {_field(row['기획설명'] or '')}",
                     f"활용 데이터: {_field(row['활용데이터'] or '')}",
