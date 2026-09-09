@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:playdata_lms/core/routing/route_paths.dart';
 import 'package:playdata_lms/features/resume/presentation/widgets/feedback_bell.dart';
 import 'package:playdata_lms/shared/models/resume_model.dart';
 
@@ -95,6 +96,31 @@ void main() {
       expect(popoverLeftFor(bellX), lessThan(bellX), reason: '왼쪽으로 펼쳐져야 한다');
       expect(popoverLeftFor(bellX) + 314, greaterThan(bellX),
           reason: '오른쪽 끝은 종보다 조금 더 나가야 꼬리가 모서리에 붙지 않는다');
+    });
+  });
+
+  group('목록 카드에서 보낼 주소', () {
+    test('읽으러 가기는 종을 펼치라는 표를 달고 간다', () {
+      final path = RoutePaths.resumeEditPath('r1', openFeedback: true);
+      expect(path, contains('/resume/r1/edit'));
+      expect(path, contains('feedback=1'));
+    });
+
+    test('평소 카드 누름에는 그 표가 없다', () {
+      expect(RoutePaths.resumeEditPath('r1'), isNot(contains('feedback')));
+      expect(RoutePaths.resumeEditPath('r1'), '/resume/r1/edit');
+    });
+
+    test('기수·섹션과 같이 실을 수 있다', () {
+      final path = RoutePaths.resumeEditPath(
+        'r1',
+        section: 'projects',
+        cohortId: 'c1',
+        openFeedback: true,
+      );
+      for (final part in ['section=projects', 'cohortId=c1', 'feedback=1']) {
+        expect(path, contains(part));
+      }
     });
   });
 }

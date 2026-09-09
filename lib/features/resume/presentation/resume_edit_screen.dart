@@ -29,11 +29,15 @@ class ResumeEditScreen extends ConsumerStatefulWidget {
     required this.resumeId,
     this.initialSection,
     this.cohortId,
+    this.openFeedback = false,
   });
 
   final String resumeId;
   final String? initialSection;
   final String? cohortId;
+
+  /// 목록의 「읽으러 가기」로 들어왔나. 그러면 종을 펼친 채로 연다.
+  final bool openFeedback;
 
   @override
   ConsumerState<ResumeEditScreen> createState() => _ResumeEditScreenState();
@@ -447,7 +451,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 const SizedBox(width: 4),
                 // 종. 누르면 아래로 말풍선이 내려온다. 오른쪽 패널을 쓰지 않으므로
                 // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
-                FeedbackBell(resume: resume, onGoToSection: _scrollToSection),
+                FeedbackBell(
+                  resume: resume,
+                  onGoToSection: _scrollToSection,
+                  openOnStart: widget.openFeedback,
+                ),
                 if (isAdmin && resume.acceptsFeedback)
                   IconButton(
                     tooltip: _showFeedback ? '피드백 작성 닫기' : '피드백 작성',

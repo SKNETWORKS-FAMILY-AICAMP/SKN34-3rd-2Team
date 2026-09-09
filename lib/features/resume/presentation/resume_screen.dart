@@ -418,7 +418,7 @@ class _ResumeCard extends ConsumerWidget {
                       ),
                     ),
                   _FeedbackSection(
-                    resumeId: resume.id,
+                    resume: resume,
                     // 요청하지 않은 이력서에는 피드백을 남기지 않는다.
                     canReview: canReview && resume.acceptsFeedback,
                   ),
@@ -476,14 +476,25 @@ class _SectionChip extends StatelessWidget {
   }
 }
 
+/// 카드의 피드백 줄. **알리기만 한다.**
+///
+/// 예전에는 본문을 그대로 늘어놓아 피드백이 늘수록 카드가 길어졌다. 목록을 훑는
+/// 화면인데 읽는 화면이 되어 버렸고, 무엇을 안 읽었는지도 알 수 없었다.
+/// 이제 안 읽은 건수만 알리고 내용은 이력서 안의 종에서 읽는다.
 class _FeedbackSection extends ConsumerWidget {
-  const _FeedbackSection({required this.resumeId, required this.canReview});
-  final String resumeId;
+  const _FeedbackSection({required this.resume, required this.canReview});
+
+  final ResumeModel resume;
   final bool canReview;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final feedback = ref.watch(resumeFeedbackProvider(resumeId));
+    final feedback = ref.watch(resumeFeedbackProvider(resume.id));
+    final total = feedback.maybeWhen(
+      data: (l) => l.length,
+      orElse: () => resume.feedbackCount,
+    );
+    final unread = resume.unreadFeedbackCount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,7 +508,8 @@ class _FeedbackSection extends ConsumerWidget {
               '피드백',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
-            const Spacer(),
+            const SizedBox(width: 10),
+            Expanded(child: _summary(total, unread)),
             if (canReview)
               TextButton.icon(
                 style: TextButton.styleFrom(
@@ -507,51 +519,72 @@ class _FeedbackSection extends ConsumerWidget {
                 onPressed: () => _addFeedback(context, ref),
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('피드백 작성'),
+              )
+            else if (total > 0)
+              TextButton(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                // 가는 곳은 카드를 누를 때와 같다. 다른 것은 도착 상태다 —
+                // 종이 펼쳐진 채로 열려 신규 목록 앞에 바로 선다.
+                onPressed: () => context.go(
+                  RoutePaths.resumeEditPath(
+                    resume.id,
+                    cohortId: ref.read(effectiveCohortIdProvider),
+                    openFeedback: true,
+                  ),
+                ),
+                child: Text(unread > 0 ? '읽으러 가기' : '다시 보기'),
               ),
           ],
         ),
-        feedback.when(
-          loading: () => const SizedBox(
-            height: 24,
-            width: 24,
-            child: CircularProgressIndicator(strokeWidth: 2),
+      ],
+    );
+  }
+
+  /// 강사에게는 "신규"가 없다. 읽는 사람은 학생이다.
+  Widget _summary(int total, int unread) {
+    if (total == 0) {
+      return Text(
+        canReview ? '아직 남긴 피드백이 없습니다' : '아직 없습니다',
+        style: const TextStyle(color: AppColors.textHint, fontSize: 12.5),
+      );
+    }
+    if (canReview) {
+      return Text(
+        '내가 남긴 $total건',
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+      );
+    }
+    if (unread == 0) {
+      return Text(
+        '$total건 · 모두 읽음',
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+      );
+    }
+    return Row(
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          margin: const EdgeInsets.only(right: 7),
+          decoration: const BoxDecoration(
+            color: AppColors.error,
+            shape: BoxShape.circle,
           ),
-          error: (e, _) => Text('오류: $e'),
-          data: (list) {
-            if (list.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.only(bottom: 2),
-                child: Text(
-                  '피드백이 없습니다',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              );
-            }
-            return Column(
-              children: list
-                  .map(
-                    (f) => ListTile(
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.comment, size: 16),
-                      title: Text(
-                        AppConstants.resumeSectionLabels[f.sectionKey] ??
-                            f.sectionKey,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      subtitle: Text(
-                        f.content,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            );
-          },
+        ),
+        Text(
+          '신규 $unread건',
+          style: const TextStyle(
+            color: AppColors.error,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          ' · 전체 $total건',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
         ),
       ],
     );
@@ -600,7 +633,7 @@ class _FeedbackSection extends ConsumerWidget {
                 final user = ref.read(currentUserSyncProvider)!;
                 await ref.read(lmsRepositoryProvider).addResumeFeedback(
                       cohortId: ref.read(cohortIdProvider)!,
-                      resumeId: resumeId,
+                      resumeId: resume.id,
                       feedback: ResumeFeedbackModel(
                         id: '',
                         sectionKey: sectionKey,
