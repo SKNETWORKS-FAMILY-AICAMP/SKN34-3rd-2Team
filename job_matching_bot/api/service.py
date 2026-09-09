@@ -224,6 +224,38 @@ class RecommendService(_LivenessMixin):
             body_is_image=bool(meta.get("body_is_image", False)),
         )
 
+    @staticmethod
+    def _load_reviewable_hits(hits: list[retrieval.Hit], warnings: list[str]) -> list[tuple[retrieval.Hit, Job]]:
+        """Use the full-text store as the authority for cards that can open review.
+
+        Pinecone can briefly retain a vector from a prior ingestion snapshot. Returning
+        that metadata as a recommendation lets a user select an ID that the detailed
+        review service cannot load. Resolve every hit against the SQLite source before
+        it reaches the UI so recommendation and review share one job snapshot.
+        """
+        from job_matching_bot.ingest import DEFAULT_STORE
+        from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
+
+        if not DEFAULT_STORE.is_file():
+            raise SearchUnavailable('공고 원문 저장소를 찾을 수 없습니다.')
+        resolved: list[tuple[retrieval.Hit, Job]] = []
+        missing = inactive = 0
+        with SqliteJobStore(DEFAULT_STORE) as store:
+            for hit in hits:
+                record = store.get(hit.job_id)
+                if record is None:
+                    missing += 1
+                    continue
+                if record.status != 'OPEN':
+                    inactive += 1
+                    continue
+                resolved.append((hit, record.job))
+        if missing:
+            warnings.append(f'원문 저장소에 없는 이전 검색 결과 {missing}건을 제외했습니다.')
+        if inactive:
+            warnings.append(f'마감 또는 비활성 공고 {inactive}건을 제외했습니다.')
+        return resolved
+
     # ── ④ 재정렬 ─────────────────────────────────────
     @staticmethod
     def _job_payload(job: Job) -> dict[str, str]:
@@ -328,8 +360,7 @@ class RecommendService(_LivenessMixin):
         resume_profile = self.to_resume_profile(request, profile)
         candidates: list[tuple[retrieval.Hit, Job, dict]] = []
         try:
-            for hit in hits:
-                job = self.hit_to_job(hit)
+            for hit, job in self._load_reviewable_hits(hits, warnings):
                 result = hard_filter(job, resume_profile)
                 if result["status"] == "FAIL":
                     continue

@@ -66,6 +66,37 @@ class ResumeReviewApiClient {
   Future<Map<String, dynamic>> undo(Map<String, dynamic> body) =>
       _request('POST', '/api/v1/resumes/reviews/undo', body: body);
 
+  String _failureMessage(http.Response response) {
+    String? detail;
+    try {
+      final payload = jsonDecode(utf8.decode(response.bodyBytes));
+      if (payload is Map && payload['detail'] is String) {
+        detail = payload['detail'] as String;
+      }
+    } on FormatException {
+      // A non-JSON proxy error still receives a safe, generic message.
+    }
+    return switch ((response.statusCode, detail)) {
+      (409, 'selected_job_closed') || (409, 'selected_job_expired') =>
+        '선택한 공고가 마감되어 맞춤 첨삭을 할 수 없습니다. 다른 공고를 선택해 주세요.',
+      (422, 'selected_job_full_text_unavailable') =>
+        '이 공고는 상세 내용이 이미지뿐이라 원문 근거 첨삭을 할 수 없습니다. 텍스트 공고를 선택해 주세요.',
+      (422, 'selected_job_deadline_unverified') =>
+        '선택한 공고의 마감일 형식을 확인할 수 없습니다. 공고 원문을 확인하거나 다른 공고를 선택해 주세요.',
+      (422, 'selected_job_not_found') =>
+        '선택한 공고 원문을 찾을 수 없습니다. 추천 목록을 새로고침한 뒤 다시 선택해 주세요.',
+      (422, 'invalid_selection') || (422, 'selection_not_applicable') =>
+        '선택한 수정안이 현재 이력서 원문에 적용될 수 없습니다. 첨삭을 다시 실행해 주세요.',
+      (401, _) => '로그인이 만료됐습니다. 다시 로그인해 주세요.',
+      (403, _) => '본인 소유 이력서만 첨삭할 수 있습니다.',
+      (404, _) => '이력서를 찾을 수 없습니다.',
+      (409, _) => '이력서 또는 공고가 변경됐거나 요청이 처리 중입니다. 결과를 확인하고 다시 시도해 주세요.',
+      (422, _) => '첨삭에 필요한 공고 원문 또는 선택한 수정안을 확인할 수 없습니다.',
+      (503, _) => '첨삭 서버 설정 또는 공고 원문 DB를 사용할 수 없습니다. 서버 로그의 오류 유형을 확인해 주세요.',
+      _ => '첨삭 요청에 실패했습니다 (HTTP ${response.statusCode}).',
+    };
+  }
+
   Future<Map<String, dynamic>> _request(
     String method,
     String path, {
@@ -94,15 +125,10 @@ class ResumeReviewApiClient {
       throw const FormatException('첨삭 서버에 연결하지 못했습니다. 서버 주소와 실행 상태를 확인해 주세요.');
     }
     if (response.statusCode != 200) {
-      throw ResumeReviewApiException(switch (response.statusCode) {
-        401 => '로그인이 만료됐습니다. 다시 로그인해 주세요.',
-        403 => '본인 소유 이력서만 첨삭할 수 있습니다.',
-        404 => '이력서를 찾을 수 없습니다.',
-        409 => '이력서 또는 공고가 변경됐거나 요청이 처리 중입니다. 결과를 확인하고 다시 시도해 주세요.',
-        422 => '공고 원문·마감일 또는 선택한 수정안을 확인할 수 없습니다.',
-        503 => '첨삭 서버 설정 또는 공고 원문 DB를 사용할 수 없습니다. 서버 로그의 오류 유형을 확인해 주세요.',
-        _ => '첨삭 요청에 실패했습니다 (HTTP ${response.statusCode}).',
-      }, response.statusCode);
+      throw ResumeReviewApiException(
+        _failureMessage(response),
+        response.statusCode,
+      );
     }
     final decoded = jsonDecode(utf8.decode(response.bodyBytes));
     if (decoded is! Map<String, dynamic>) {

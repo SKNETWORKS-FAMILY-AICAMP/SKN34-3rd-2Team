@@ -51,11 +51,11 @@ class AiJobCoachPanel extends ConsumerStatefulWidget {
 /// 챗봇 대화 한 줄.
 class _ChatMessage {
   const _ChatMessage.user(this.text)
-      : isUser = true,
-        jobs = const [],
-        suggestions = const [],
-        recommendations = const [],
-        mode = '검색';
+    : isUser = true,
+      jobs = const [],
+      suggestions = const [],
+      recommendations = const [],
+      mode = '검색';
   const _ChatMessage.bot(
     this.text, {
     this.jobs = const [],
@@ -116,6 +116,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   }
 
   Future<void> _reviewJob(JobRecommendation job) async {
+    if (job.bodyIsImage) {
+      setState(
+        () =>
+            _error = '이 공고는 상세 내용이 이미지뿐이라 원문 근거 첨삭을 할 수 없습니다. 텍스트 공고를 선택해 주세요.',
+      );
+      return;
+    }
     // 저장하는 동안 사용자가 패널을 닫을 수 있다. 그러면 대화창을 띄우지 않는다.
     if (widget.hasUnsavedChanges && !await _saveBeforeReview()) return;
     if (!mounted) return;
@@ -127,24 +134,44 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     }
     final client = ResumeReviewApiClient(token: () => user.getIdToken());
     try {
-      await showDialog<void>(context: context, barrierDismissible: false,
-        builder: (_) => JobResumeReviewDialog(client: client, cohortId: cohort,
-          resumeId: widget.resumeId, jobId: job.jobId, draft: widget.draftContent,
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => JobResumeReviewDialog(
+          client: client,
+          cohortId: cohort,
+          resumeId: widget.resumeId,
+          jobId: job.jobId,
+          jobCompany: job.company,
+          jobTitle: job.title,
+          draft: widget.draftContent,
           onChanged: (content) {
             widget.onResumeChanged?.call(content);
-            if (mounted) setState(() { _result = null; _resumeAnalysis = null; });
-          }));
-    } finally { client.close(); }
+            if (mounted)
+              setState(() {
+                _result = null;
+                _resumeAnalysis = null;
+              });
+          },
+        ),
+      );
+    } finally {
+      client.close();
+    }
   }
 
   @override
   void didUpdateWidget(covariant AiJobCoachPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!sameResumeContent(widget.draftContent, oldWidget.draftContent.toMap())) {
+    if (!sameResumeContent(
+      widget.draftContent,
+      oldWidget.draftContent.toMap(),
+    )) {
       _result = null;
       _resumeAnalysis = null;
     }
   }
+
   final TextEditingController _chatController = TextEditingController();
   final List<_ChatMessage> _messages = [
     const _ChatMessage.bot(
@@ -284,10 +311,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         );
       });
     } on JobRecommendApiException catch (error) {
-      if (mounted) setState(() => _messages.add(_ChatMessage.bot(error.message)));
+      if (mounted)
+        setState(() => _messages.add(_ChatMessage.bot(error.message)));
     } catch (error) {
       if (mounted) {
-        setState(() => _messages.add(_ChatMessage.bot('공고를 고르지 못했습니다: $error')));
+        setState(
+          () => _messages.add(_ChatMessage.bot('공고를 고르지 못했습니다: $error')),
+        );
       }
     } finally {
       if (mounted) {
@@ -311,42 +341,42 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     return switch (scope) {
       // 물어본 그대로 그 부분만 남긴다. 경력 기술까지 섞으면 "프로젝트 경험만"이 아니다.
       '프로젝트' => content.copyWith(
-          experience: const [],
-          techStack: const [],
-          awards: const [],
-          trainingExperience: const [],
-          otherActivities: const [],
-          coreCompetencies: emptyCore,
-          selfIntroduction: emptyIntro,
-        ),
+        experience: const [],
+        techStack: const [],
+        awards: const [],
+        trainingExperience: const [],
+        otherActivities: const [],
+        coreCompetencies: emptyCore,
+        selfIntroduction: emptyIntro,
+      ),
       '기술스택' => content.copyWith(
-          experience: const [],
-          projects: const [],
-          awards: const [],
-          trainingExperience: const [],
-          otherActivities: const [],
-          coreCompetencies: emptyCore,
-          selfIntroduction: emptyIntro,
-        ),
+        experience: const [],
+        projects: const [],
+        awards: const [],
+        trainingExperience: const [],
+        otherActivities: const [],
+        coreCompetencies: emptyCore,
+        selfIntroduction: emptyIntro,
+      ),
       // 자기소개서에는 핵심역량을 함께 남긴다. 둘 다 "내가 어떤 사람인가"를 쓰는
       // 칸이고, 자기소개서만으로는 글이 너무 짧아 검색이 흐려진다.
       '자기소개서' => content.copyWith(
-          experience: const [],
-          projects: const [],
-          techStack: const [],
-          awards: const [],
-          trainingExperience: const [],
-          otherActivities: const [],
-        ),
+        experience: const [],
+        projects: const [],
+        techStack: const [],
+        awards: const [],
+        trainingExperience: const [],
+        otherActivities: const [],
+      ),
       '경력' => content.copyWith(
-          projects: const [],
-          techStack: const [],
-          awards: const [],
-          trainingExperience: const [],
-          otherActivities: const [],
-          coreCompetencies: emptyCore,
-          selfIntroduction: emptyIntro,
-        ),
+        projects: const [],
+        techStack: const [],
+        awards: const [],
+        trainingExperience: const [],
+        otherActivities: const [],
+        coreCompetencies: emptyCore,
+        selfIntroduction: emptyIntro,
+      ),
       _ => content,
     };
   }
@@ -480,7 +510,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           );
       if (mounted) {
         setState(() {
-          if (sameResumeContent(widget.draftContent, requestedContent.toMap())) {
+          if (sameResumeContent(
+            widget.draftContent,
+            requestedContent.toMap(),
+          )) {
             _result = result;
           } else {
             _result = null;
@@ -528,94 +561,98 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
               ),
             )
           else
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(14),
-              children: [
-                const SizedBox(height: 10),
-                _ReadinessCard(
-                  readiness: _readiness,
-                  onSearchTap: _openChat,
-                  preferences:
-                      ref.watch(currentUserProvider).value?.jobPreferences ??
-                      const JobPreferences(),
-                  onEditPreferences: () => context.push(RoutePaths.myPage),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _ActionButton(
-                      icon: Icons.description_outlined,
-                      label: '이력서 분석',
-                      loading: _loading,
-                      // 분석할 내용이 하나라도 있으면 실행할 수 있다.
-                      enabled: _readiness.canAnalyzeResume,
-                      disabledTooltip: _readiness.blockedReason(
-                        AiCoachFeature.resumeAnalysis,
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  const SizedBox(height: 10),
+                  _ReadinessCard(
+                    readiness: _readiness,
+                    onSearchTap: _openChat,
+                    preferences:
+                        ref.watch(currentUserProvider).value?.jobPreferences ??
+                        const JobPreferences(),
+                    onEditPreferences: () => context.push(RoutePaths.myPage),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _ActionButton(
+                        icon: Icons.description_outlined,
+                        label: '이력서 분석',
+                        loading: _loading,
+                        // 분석할 내용이 하나라도 있으면 실행할 수 있다.
+                        enabled: _readiness.canAnalyzeResume,
+                        disabledTooltip: _readiness.blockedReason(
+                          AiCoachFeature.resumeAnalysis,
+                        ),
+                        onPressed: _analyzeResumeOnly,
                       ),
-                      onPressed: _analyzeResumeOnly,
-                    ),
-                    _ActionButton(
-                      icon: Icons.track_changes_outlined,
-                      label: '맞춤 공고 추천',
-                      loading: _loading,
-                      // 필수 항목이 하나라도 비면 추천하지 않는다.
-                      enabled: _readiness.canRecommendJobs,
-                      disabledTooltip: _readiness.blockedReason(
-                        AiCoachFeature.jobRecommendation,
+                      _ActionButton(
+                        icon: Icons.track_changes_outlined,
+                        label: '맞춤 공고 추천',
+                        loading: _loading,
+                        // 필수 항목이 하나라도 비면 추천하지 않는다.
+                        enabled: _readiness.canRecommendJobs,
+                        disabledTooltip: _readiness.blockedReason(
+                          AiCoachFeature.jobRecommendation,
+                        ),
+                        onPressed: _run,
                       ),
-                      onPressed: _run,
-                    ),
-                    _ActionButton(
-                      icon: Icons.chat_bubble_outline,
-                      label: '채용공고 찾기',
-                      loading: false,
-                      // 공고 검색은 이력서 상태와 무관하다.
-                      enabled: true,
-                      disabledTooltip: null,
-                      onPressed: _openChat,
+                      _ActionButton(
+                        icon: Icons.chat_bubble_outline,
+                        label: '채용공고 찾기',
+                        loading: false,
+                        // 공고 검색은 이력서 상태와 무관하다.
+                        enabled: true,
+                        disabledTooltip: null,
+                        onPressed: _openChat,
+                      ),
+                    ],
+                  ),
+                  if (_loading) ...[
+                    const SizedBox(height: 20),
+                    const LinearProgressIndicator(minHeight: 3),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '이력서 근거와 채용 조건을 비교하고 있습니다…',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ],
-                ),
-                if (_loading) ...[
-                  const SizedBox(height: 20),
-                  const LinearProgressIndicator(minHeight: 3),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '이력서 근거와 채용 조건을 비교하고 있습니다…',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                  if (_error != null) ...[
+                    const SizedBox(height: 14),
+                    _ErrorCard(message: _error!),
+                  ],
+                  if (_resumeAnalysis case final analysis?) ...[
+                    const SizedBox(height: 18),
+                    _ResumeAnalysisSection(analysis: analysis),
+                  ],
+                  if (_result == null &&
+                      _resumeAnalysis == null &&
+                      !_loading &&
+                      _error == null) ...[
+                    const SizedBox(height: 26),
+                    const _EmptyState(),
+                  ],
+                  if (_result case final result?) ...[
+                    const SizedBox(height: 18),
+                    // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
+                    _RecommendationSection(
+                      result: result,
+                      onReview: widget.onResumeChanged == null
+                          ? null
+                          : _reviewJob,
                     ),
-                  ),
+                    const SizedBox(height: 20),
+                  ],
                 ],
-                if (_error != null) ...[
-                  const SizedBox(height: 14),
-                  _ErrorCard(message: _error!),
-                ],
-                if (_resumeAnalysis case final analysis?) ...[
-                  const SizedBox(height: 18),
-                  _ResumeAnalysisSection(analysis: analysis),
-                ],
-                if (_result == null &&
-                    _resumeAnalysis == null &&
-                    !_loading &&
-                    _error == null) ...[
-                  const SizedBox(height: 26),
-                  const _EmptyState(),
-                ],
-                if (_result case final result?) ...[
-                  const SizedBox(height: 18),
-                  // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
-                  _RecommendationSection(result: result,
-                    onReview: widget.onResumeChanged == null ? null : _reviewJob),
-                  const SizedBox(height: 20),
-                ],
-              ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -693,7 +730,9 @@ class _Header extends StatelessWidget {
             icon: Icon(
               chatMode ? Icons.arrow_back : Icons.chat_bubble_outline,
               size: 18,
-              color: chatMode ? AppColors.textSecondary : const Color(0xFF7C3AED),
+              color: chatMode
+                  ? AppColors.textSecondary
+                  : const Color(0xFF7C3AED),
             ),
           ),
           IconButton(
@@ -797,7 +836,11 @@ class _RecommendationSection extends StatelessWidget {
           if (result.fromServer && result.recommendations.isEmpty)
             const Text(
               '조건에 맞는 공고를 찾지 못했습니다. 희망 지역·고용형태를 넓히거나 이력서에 기술과 프로젝트를 더 적어 보세요.',
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.4),
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
             ),
           for (var index = 0; index < result.recommendations.length; index++)
             Padding(
@@ -815,7 +858,11 @@ class _RecommendationSection extends StatelessWidget {
 }
 
 class _RecommendationCard extends StatefulWidget {
-  const _RecommendationCard({required this.index, required this.item, this.onReview});
+  const _RecommendationCard({
+    required this.index,
+    required this.item,
+    this.onReview,
+  });
 
   final int index;
   final JobRecommendation item;
@@ -852,7 +899,8 @@ class _RecommendationCardState extends State<_RecommendationCard> {
     }
     String bucket(String label, List<String> matched, List<String> unmatched) =>
         '$label ${matched.length}/${matched.length + unmatched.length}';
-    final hasBuckets = item.matchedRequired.isNotEmpty ||
+    final hasBuckets =
+        item.matchedRequired.isNotEmpty ||
         item.unmatchedRequired.isNotEmpty ||
         item.matchedPreferred.isNotEmpty ||
         item.unmatchedPreferred.isNotEmpty ||
@@ -861,15 +909,18 @@ class _RecommendationCardState extends State<_RecommendationCard> {
     final detail = item.scoreDetail;
     final parts = <String>[
       if (hasBuckets) ...[
-        if (item.matchedRequired.isNotEmpty || item.unmatchedRequired.isNotEmpty)
+        if (item.matchedRequired.isNotEmpty ||
+            item.unmatchedRequired.isNotEmpty)
           bucket('필수', item.matchedRequired, item.unmatchedRequired),
-        if (item.matchedPreferred.isNotEmpty || item.unmatchedPreferred.isNotEmpty)
+        if (item.matchedPreferred.isNotEmpty ||
+            item.unmatchedPreferred.isNotEmpty)
           bucket('우대', item.matchedPreferred, item.unmatchedPreferred),
         if (item.matchedTags.isNotEmpty || item.unmatchedTags.isNotEmpty)
           bucket('태그', item.matchedTags, item.unmatchedTags),
       ] else if (detail != null && detail.skillsTotal > 0)
         '요구 기술 ${item.matchedSkills.length}/${detail.skillsTotal} 일치',
-      if (item.projectSkills.isNotEmpty) '프로젝트 근거 ${item.projectSkills.length}건',
+      if (item.projectSkills.isNotEmpty)
+        '프로젝트 근거 ${item.projectSkills.length}건',
       if (item.roleTerms.isNotEmpty) '직무 키워드 ${item.roleTerms.length}개',
       if (item.region.isNotEmpty) item.region,
       ?item.employmentType,
@@ -877,6 +928,33 @@ class _RecommendationCardState extends State<_RecommendationCard> {
       if (item.embeddingRank case final rank?) '임베딩 유사도 $rank위',
     ];
     return parts.join(' · ');
+  }
+
+  Widget _reviewButton() {
+    final unavailable = item.bodyIsImage;
+    return Tooltip(
+      message: unavailable
+          ? '상세 공고가 이미지뿐이라 원문 근거 첨삭을 할 수 없습니다.'
+          : '선택 공고와 이력서를 비교해 첨삭합니다.',
+      child: FilledButton.icon(
+        onPressed: unavailable ? null : () => widget.onReview!(item),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.success,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        icon: const Icon(Icons.auto_fix_high, size: 14),
+        label: Text(
+          unavailable ? '원문 확인 불가' : '공고 맞춤 첨삭',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
   }
 
   @override
@@ -898,7 +976,10 @@ class _RecommendationCardState extends State<_RecommendationCard> {
               CircleAvatar(
                 radius: 13,
                 backgroundColor: AppColors.primaryLight,
-                child: Text('${widget.index}', style: const TextStyle(fontSize: 11)),
+                child: Text(
+                  '${widget.index}',
+                  style: const TextStyle(fontSize: 11),
+                ),
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -927,14 +1008,21 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                       if (item.bodyIsImage) ...[
                         const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.warning.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
                             '상세 이미지 공고 · 기술 태그로만 비교',
-                            style: TextStyle(fontSize: 9.5, color: AppColors.warning, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: AppColors.warning,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -959,7 +1047,9 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                     item.isFromServer ? '적합도 ${item.grade}' : item.grade,
                     style: TextStyle(
                       fontSize: item.isFromServer ? 11 : 10,
-                      fontWeight: item.isFromServer ? FontWeight.w700 : FontWeight.w400,
+                      fontWeight: item.isFromServer
+                          ? FontWeight.w700
+                          : FontWeight.w400,
                       color: item.grade == '높음'
                           ? AppColors.success
                           : AppColors.textSecondary,
@@ -971,16 +1061,16 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                       tooltip: '공고 열기',
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
+                      ),
                       icon: const Icon(
                         Icons.open_in_new,
                         size: 13,
                         color: AppColors.textHint,
                       ),
                     ),
-                  if (item.isFromServer && widget.onReview != null)
-                    TextButton(onPressed: () => widget.onReview!(item),
-                      child: const Text('공고 맞춤 첨삭')),
                 ],
               ),
             ],
@@ -988,7 +1078,11 @@ class _RecommendationCardState extends State<_RecommendationCard> {
           const SizedBox(height: 6),
           Text(
             _summary(),
-            style: const TextStyle(fontSize: 10.5, color: AppColors.info, height: 1.4),
+            style: const TextStyle(
+              fontSize: 10.5,
+              color: AppColors.info,
+              height: 1.4,
+            ),
           ),
           if (item.unknownConditions.isNotEmpty) ...[
             const SizedBox(height: 3),
@@ -997,35 +1091,51 @@ class _RecommendationCardState extends State<_RecommendationCard> {
               style: const TextStyle(fontSize: 10, color: AppColors.warning),
             ),
           ],
-          const SizedBox(height: 4),
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _expanded ? '근거 접기' : '추천 근거 보기',
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF7C3AED),
-                    ),
-                  ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 14,
-                    color: const Color(0xFF7C3AED),
-                  ),
-                ],
-              ),
+          if (_expanded && item.isFromServer && widget.onReview != null) ...[
+            const SizedBox(height: 2),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _reviewButton(),
             ),
-          ),
+          ],
+          const SizedBox(height: 4),
           if (_expanded) ...[
             const SizedBox(height: 6),
             _RecommendationRationale(item: item),
           ],
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _expanded ? '근거 접기' : '추천 근거 보기',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF7C3AED),
+                          ),
+                        ),
+                        Icon(
+                          _expanded ? Icons.expand_less : Icons.expand_more,
+                          size: 14,
+                          color: const Color(0xFF7C3AED),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (!_expanded && item.isFromServer && widget.onReview != null)
+                _reviewButton(),
+            ],
+          ),
         ],
       ),
     );
@@ -1131,7 +1241,10 @@ class _RecommendationRationale extends StatelessWidget {
             const SizedBox(height: 6),
           ],
           if (item.concerns.isNotEmpty) ...[
-            const _AnalysisLabel('공고 자격요건 중 이력서에서 확인되지 않는 것', AppColors.warning),
+            const _AnalysisLabel(
+              '공고 자격요건 중 이력서에서 확인되지 않는 것',
+              AppColors.warning,
+            ),
             for (final concern in item.concerns)
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
@@ -1142,7 +1255,11 @@ class _RecommendationRationale extends StatelessWidget {
               ),
             const Text(
               '경험이 없다는 판단이 아닙니다. 경험이 있다면 이력서에 적어 주세요.',
-              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 8),
           ],
@@ -1172,7 +1289,11 @@ class _RecommendationRationale extends StatelessWidget {
             const Text(
               '회색 기술은 이력서에 적혀 있지 않다는 뜻이며, 경험이 없다고 판단한 것은 아닙니다. '
               '경험이 있다면 기술스택이나 프로젝트에 적어 주세요.',
-              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
             ),
           ],
           if (item.bodyIsImage) ...[
@@ -1180,14 +1301,22 @@ class _RecommendationRationale extends StatelessWidget {
             const Text(
               '이 공고는 상세 내용이 이미지로만 올라와 있어 필수·우대 요건을 텍스트로 확인하지 못했습니다. '
               '기업이 등록 때 고른 기술 태그와 조건만으로 비교했으니 공고 원문을 직접 확인해 주세요.',
-              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
             ),
           ],
           if (item.embeddingRank case final rank?) ...[
             const SizedBox(height: 8),
             Text(
               '자기소개서·프로젝트 문장과 공고 내용의 임베딩 유사도 $rank위로 순위에 반영됨',
-              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
             ),
           ],
         ],
@@ -1231,16 +1360,32 @@ class _ConditionRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 50,
-            child: Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary)),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           if (note != null) ...[
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 3),
             Flexible(
-              child: Text(note!, style: TextStyle(fontSize: 10, color: color), overflow: TextOverflow.ellipsis),
+              child: Text(
+                note!,
+                style: TextStyle(fontSize: 10, color: color),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ],
@@ -1270,7 +1415,9 @@ class _SkillBucketRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            total == 0 ? '$label · 공고에 없음' : '$label ${matched.length}/$total 일치',
+            total == 0
+                ? '$label · 공고에 없음'
+                : '$label ${matched.length}/$total 일치',
             style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
           ),
           if (total > 0) ...[
@@ -1279,8 +1426,10 @@ class _SkillBucketRow extends StatelessWidget {
               spacing: 4,
               runSpacing: 4,
               children: [
-                for (final text in matched) _SkillChip(text: text, color: AppColors.success),
-                for (final text in unmatched) _SkillChip(text: text, color: AppColors.textHint),
+                for (final text in matched)
+                  _SkillChip(text: text, color: AppColors.success),
+                for (final text in unmatched)
+                  _SkillChip(text: text, color: AppColors.textHint),
               ],
             ),
           ],
@@ -1304,7 +1453,14 @@ class _SkillChip extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(text, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 10,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }
@@ -1328,7 +1484,14 @@ class _ChipRow extends StatelessWidget {
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(text, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
       ],
     );
@@ -1612,7 +1775,10 @@ class _AnalysisBullet extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.text, style: const TextStyle(fontSize: 11, height: 1.4)),
+              Text(
+                item.text,
+                style: const TextStyle(fontSize: 11, height: 1.4),
+              ),
               if (quote.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2, bottom: 4),
@@ -1706,8 +1872,9 @@ class _ChatView extends StatelessWidget {
               onOpenDetail: busy ? null : onOpenDetail,
               // 제안은 마지막 답에서만 누를 수 있다. 지나간 답의 제안을 누르면 그때가
               // 아니라 지금 조건에 붙어 엉뚱한 결과가 나온다.
-              onSuggestion:
-                  index == messages.length - 1 && !busy ? onSuggestion : null,
+              onSuggestion: index == messages.length - 1 && !busy
+                  ? onSuggestion
+                  : null,
             ),
           ),
         ),
@@ -1740,14 +1907,21 @@ class _ChatView extends StatelessWidget {
             color: AppColors.primaryLight.withValues(alpha: 0.4),
             child: Row(
               children: [
-                const Icon(Icons.help_outline, size: 14, color: AppColors.primary),
+                const Icon(
+                  Icons.help_outline,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '"${job.title}"에 대해 묻는 중',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: AppColors.primary),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -1911,10 +2085,10 @@ class _ChatRecommendCard extends StatelessWidget {
   }
 
   Color get _gradeColor => switch (job.grade) {
-        '높음' => const Color(0xFF7C3AED),
-        '보통' => AppColors.textSecondary,
-        _ => AppColors.textHint,
-      };
+    '높음' => const Color(0xFF7C3AED),
+    '보통' => AppColors.textSecondary,
+    _ => AppColors.textHint,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -1939,7 +2113,10 @@ class _ChatRecommendCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: _gradeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(3),
@@ -1977,7 +2154,10 @@ class _ChatRecommendCard extends StatelessWidget {
             if (job.region.isNotEmpty || job.careerText.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(
-                [job.region, job.careerText].where((v) => v.isNotEmpty).join(' · '),
+                [
+                  job.region,
+                  job.careerText,
+                ].where((v) => v.isNotEmpty).join(' · '),
                 style: const TextStyle(fontSize: 10, color: AppColors.textHint),
               ),
             ],
@@ -2012,7 +2192,6 @@ class _ChatRecommendCard extends StatelessWidget {
     );
   }
 }
-
 
 class _ChatJobCard extends StatelessWidget {
   const _ChatJobCard({required this.job, this.onAsk});
@@ -2113,10 +2292,12 @@ class _ChatJobCard extends StatelessWidget {
   }
 }
 
-
 /// 서버가 이력서에서 만든 검색 질의문. 어떤 기준으로 찾았는지 사용자가 볼 수 있게 한다.
 class _ServerQueryNote extends StatelessWidget {
-  const _ServerQueryNote({required this.searchQuery, required this.profileSummary});
+  const _ServerQueryNote({
+    required this.searchQuery,
+    required this.profileSummary,
+  });
 
   final String searchQuery;
   final String profileSummary;
@@ -2135,15 +2316,26 @@ class _ServerQueryNote extends StatelessWidget {
         children: [
           const Text(
             '이력서에서 뽑은 검색 기준',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 3),
-          Text(searchQuery, style: const TextStyle(fontSize: 10.5, height: 1.4)),
+          Text(
+            searchQuery,
+            style: const TextStyle(fontSize: 10.5, height: 1.4),
+          ),
           if (profileSummary.isNotEmpty) ...[
             const SizedBox(height: 3),
             Text(
               profileSummary,
-              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
             ),
           ],
         ],
@@ -2167,12 +2359,24 @@ class _ReasonTile extends StatelessWidget {
         children: [
           Text(
             reason.claim,
-            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, height: 1.35),
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
           ),
           if (reason.resumeQuote.isNotEmpty)
-            _QuoteLine(label: '이력서', text: reason.resumeQuote, color: AppColors.success),
+            _QuoteLine(
+              label: '이력서',
+              text: reason.resumeQuote,
+              color: AppColors.success,
+            ),
           if (reason.jobQuote.isNotEmpty)
-            _QuoteLine(label: '공고', text: reason.jobQuote, color: AppColors.info),
+            _QuoteLine(
+              label: '공고',
+              text: reason.jobQuote,
+              color: AppColors.info,
+            ),
         ],
       ),
     );
@@ -2180,7 +2384,11 @@ class _ReasonTile extends StatelessWidget {
 }
 
 class _QuoteLine extends StatelessWidget {
-  const _QuoteLine({required this.label, required this.text, required this.color});
+  const _QuoteLine({
+    required this.label,
+    required this.text,
+    required this.color,
+  });
 
   final String label;
   final String text;
@@ -2188,6 +2396,11 @@ class _QuoteLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 공고 원문 인용은 HTML/문단 경계에서 줄바꿈을 포함할 수 있다. 근거 값 자체는
+    // 보존하고, 카드에서는 라벨 뒤에 자연스럽게 이어지도록 표시만 한 줄로 정리한다.
+    final displayText = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (displayText.isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.only(top: 2, left: 4),
       child: Row(
@@ -2195,12 +2408,23 @@ class _QuoteLine extends StatelessWidget {
         children: [
           SizedBox(
             width: 34,
-            child: Text(label, style: TextStyle(fontSize: 9.5, color: color, fontWeight: FontWeight.w600)),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 9.5,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           Expanded(
             child: Text(
-              '“$text”',
-              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.35),
+              '“$displayText”',
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
             ),
           ),
         ],

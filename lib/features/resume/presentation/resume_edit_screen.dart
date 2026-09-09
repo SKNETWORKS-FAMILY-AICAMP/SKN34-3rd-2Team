@@ -46,8 +46,15 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _showFeedback = true;
 
   /// 오른쪽 패널 너비. 왼쪽 가장자리를 끌어 바꾼다.
-  static const double _panelMinWidth = 280;
-  static const double _panelDefaultWidth = 340;
+  /// 최소값은 첨삭 브랜치 쪽을 따른다 — 패널이 280이면 첨삭 대화가 접힌다.
+  static const double _panelMinWidth = 360;
+  static const double _panelDefaultWidth = 420;
+
+  /// 이력서 본문에 남겨 둘 최소 폭. 이보다 좁아지면 입력칸이 읽기 어려워진다.
+  static const double _minResumeWidth = 560;
+
+  /// 손잡이가 차지하는 폭. 보이는 선은 1px이지만 잡히는 폭은 이만큼이다.
+  static const double _handleWidth = 12;
   /// 너비만 따로 들고 있는다. `setState`로 두면 끌 때마다 이력서 화면 전체를
   /// 다시 그린다 — 입력칸 수십 개짜리 화면을 초당 60번 다시 만들어 눈에 띄게 버벅인다.
   /// 알림값으로 두면 아래의 `ValueListenableBuilder` 안쪽만 다시 그린다.
@@ -364,10 +371,40 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       _markDirty();
                     },
                   ),
-                FilledButton.tonalIcon(
-                  onPressed: () => setState(() => _showAiCoach = !_showAiCoach),
-                  icon: const Icon(Icons.auto_awesome, size: 16),
-                  label: const Text('AI 취업 코치'),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFF4ADE80),
+                        Color(0xFF22C55E),
+                        Color(0xFF15803D),
+                      ],
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x3316A34A),
+                        blurRadius: 7,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: FilledButton.icon(
+                    onPressed: () => setState(() => _showAiCoach = !_showAiCoach),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      shadowColor: Colors.transparent,
+                      surfaceTintColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                    ),
+                    icon: const Icon(Icons.auto_awesome, size: 16),
+                    label: const Text('AI 취업 코치'),
+                  ),
                 ),
                 const SizedBox(width: 4),
                 // 코치를 보는 중에도 남겨 둔다. 없으면 피드백으로 돌아갈 길이 사라진다.
@@ -752,9 +789,13 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         );
                       }
 
-                      // 이력서 쪽이 지나치게 좁아지지 않도록 위쪽을 막아 둔다.
-                      final panelMaxWidth =
-                          (constraints.maxWidth - 520).clamp(_panelMinWidth, 720).toDouble();
+                      // 이력서 본문을 최소 560px 남기고, 오른쪽 패널은 최소 360px을 지킨다.
+                      // 화면 크기가 달라져도 조절해 둔 폭을 안전한 범위 안에서만 쓴다.
+                      final panelMaxWidth = (constraints.maxWidth -
+                              _minResumeWidth -
+                              _handleWidth)
+                          .clamp(_panelMinWidth, 900)
+                          .toDouble();
 
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -820,12 +861,15 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
 /// 오른쪽 패널의 너비를 바꾸는 손잡이. 패널 왼쪽 가장자리에 세워 둔다.
 ///
-/// 보이는 선은 1픽셀이지만 잡히는 폭은 8픽셀이다. 1픽셀짜리는 마우스로 집기 어렵다.
+/// 보이는 선은 1픽셀이지만 잡히는 폭은 12픽셀이다. 1픽셀짜리는 마우스로 집기 어렵다.
 /// 두 번 누르면 처음 너비로 돌아온다.
 ///
-/// 매 신호의 변화량(`delta.dx`)을 더하지 않고 **끌기 시작점에서 커서까지의 거리**를
-/// 넘긴다. 한 프레임에 신호가 여러 번 오면 변화량 방식은 마지막 것만 남아 빠르게 끌수록
-/// 손잡이가 커서보다 뒤처진다. 거리로 주면 몇 번이 오든 가장자리가 커서에 붙어 있다.
+/// 포인터 이벤트를 직접 받는다(`Listener`). `GestureDetector`의 드래그는 웹에서
+/// "이건 드래그다"라고 판정한 뒤에야 알려 주어, 처음 몇 픽셀이 씹히고 손잡이가
+/// 커서보다 뒤처진다. 첨삭 브랜치에서 같은 문제를 만나 이 방식으로 옮겼다.
+///
+/// 매 신호의 변화량을 더하지 않고 **누른 지점에서 커서까지의 거리**를 넘긴다.
+/// 한 프레임에 신호가 여러 번 오면 변화량 방식은 마지막 것만 남아 손실이 생긴다.
 class _PanelResizeHandle extends StatefulWidget {
   const _PanelResizeHandle({
     required this.onStart,
@@ -846,32 +890,41 @@ class _PanelResizeHandleState extends State<_PanelResizeHandle> {
   bool _dragging = false;
   double _startX = 0;
 
+  void _stop() {
+    if (_dragging) setState(() => _dragging = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = _hovered || _dragging;
     return MouseRegion(
-      cursor: SystemMouseCursors.resizeLeftRight,
+      cursor: SystemMouseCursors.resizeColumn,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: (d) {
-          _startX = d.globalPosition.dx;
-          widget.onStart();
-          setState(() => _dragging = true);
-        },
-        onHorizontalDragUpdate: (d) =>
-            widget.onUpdate(d.globalPosition.dx - _startX),
-        onHorizontalDragEnd: (_) => setState(() => _dragging = false),
-        onHorizontalDragCancel: () => setState(() => _dragging = false),
+        // 크기 조절은 아래 Listener가 맡는다. 여기서는 되돌리기만 받는다.
         onDoubleTap: widget.onReset,
-        child: SizedBox(
-          width: 8,
-          child: Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              width: active ? 3 : 1,
-              color: active ? AppColors.primary : AppColors.border,
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (event) {
+            _startX = event.position.dx;
+            widget.onStart();
+            setState(() => _dragging = true);
+          },
+          onPointerMove: (event) {
+            if (!_dragging) return;
+            widget.onUpdate(event.position.dx - _startX);
+          },
+          onPointerUp: (_) => _stop(),
+          onPointerCancel: (_) => _stop(),
+          child: SizedBox(
+            width: _ResumeEditScreenState._handleWidth,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                width: active ? 3 : 1,
+                color: active ? AppColors.primary : AppColors.border,
+              ),
             ),
           ),
         ),

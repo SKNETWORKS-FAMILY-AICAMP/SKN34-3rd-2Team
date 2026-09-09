@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 from app.config import Settings, get_settings
 from app.main import app, get_context_gateway, get_resume_review_service
 from app.matching_handoff import load_selected_job, JobStoreUnavailable
-from app.models import FirestoreResumeReviewRequest, ResumeReviewGeneration
+from app.models import FirestoreResumeReviewRequest, ResumeReviewGeneration, ReviewQuestion
 from app.resume_review import ResumeReviewService
-from app.review_workflow import ReviewConflict, ReviewInputError, digest
+from app.review_workflow import ReviewConflict, ReviewInputError, apply_selected_job_identity_revisions, digest
 from test_resume_review import FakeFirebase, SAMPLE_CONTENT
 
 
@@ -52,10 +52,36 @@ def test_handoff_auth_versions_and_full_source(store):
         expected_input_hash=digest(SAMPLE_CONTENT), expected_job_hash=load_selected_job(store, 'saramin:1')['source']['snapshot_hash'])
     result = service.review('valid-token', request)
     assert len(calls[0]['job_posting_text']) > 1200
+    assert '[선택 공고 식별 정보' in calls[0]['job_posting_text']
+    assert '회사명: 테스트 회사' in calls[0]['job_posting_text']
+    assert '직무명: 백엔드' in calls[0]['job_posting_text']
     assert result.job_source['job_id'] == 'saramin:1'
     assert db.saved['job_source'] == result.job_source
     assert service.review('valid-token', request) == result
     assert len(calls) == 1
+
+
+def test_selected_job_identity_replaces_resume_placeholders_without_question():
+    generated = ResumeReviewGeneration(
+        summary='',
+        section_reviews=[],
+        questions=[ReviewQuestion(
+            field_path='selfIntroduction.aspiration.body',
+            topic='other',
+            question='지원 회사명과 직무명을 실제 값으로 확정해 주세요.',
+            reason='자리표시자',
+        )],
+    )
+    fields = {
+        'selfIntroduction.aspiration.body': '[회사명]의 [직무명]으로 성장하고 싶습니다.',
+    }
+    apply_selected_job_identity_revisions(
+        generated,
+        fields,
+        {'company': '테스트 회사', 'title': '백엔드 개발자'},
+    )
+    assert generated.questions == []
+    assert generated.sentence_reviews[0].suggested_revision == '테스트 회사의 백엔드 개발자로 성장하고 싶습니다.'
     with pytest.raises(ReviewConflict): service.review('valid-token', request.model_copy(update={'expected_input_hash': 'stale'}))
     with pytest.raises(ReviewInputError): service.review('valid-token', request.model_copy(update={'job_posting_text': 'client fake'}))
     with sqlite3.connect(store) as connection: connection.execute("UPDATE jobs SET description = '수정된 공고'")
