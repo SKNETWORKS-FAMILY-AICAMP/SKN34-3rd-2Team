@@ -70,6 +70,12 @@ from job_matching_bot.ingestion.record_files import (
     latest_by_id,
     read_records,
 )
+from job_matching_bot.ingestion.detail_quality import (
+    REQUIREMENT_MARKERS,
+    REQUIREMENT_MIN_CHARS,
+    TEXT_BODY_MIN_CHARS,
+    has_requirement_text,
+)
 
 BASE_URL = "https://www.saramin.co.kr"
 DETAIL_URL = f"{BASE_URL}/zf_user/jobs/view"
@@ -80,29 +86,6 @@ SOURCE = "SARAMIN_POC"
 SKIP_URL_MARKERS = ("innerCampaign=headhuntingView", "/zf_user/jobs/view/etc")
 
 
-
-# 상세요강 텍스트가 이 길이 이상이면 본문이 글로 있다고 본다.
-# 표본에서 텍스트만 있는 공고는 중앙값 1,391자, 이미지형은 400~700자대였다.
-TEXT_BODY_MIN_CHARS = 800
-
-# 길이만으로는 가른 자리가 어긋난다. 자격요건과 주요업무가 다 적힌 789자짜리 공고가
-# 4글자 차이로 "이미지"가 됐다. 실제로 이미지로 표시된 8,951건 중 5,245건(59%)이
-# 본문에 요건 글을 갖고 있었다. 그래서 **길이 대신 요건이 적혀 있는지**를 함께 본다.
-REQUIREMENT_MARKERS = (
-    "자격요건", "지원자격", "주요업무", "담당업무", "우대사항", "모집분야", "모집부문",
-)
-# 표시어만 있고 내용은 이미지인 공고를 걸러 내는 최소 길이. 표시어를 가진 공고 5,245건
-# 중 300자 미만은 55건뿐이라 이 선에서 갈린다.
-REQUIREMENT_MIN_CHARS = 300
-
-
-def has_requirement_text(body_text: str) -> bool:
-    """요구역량을 글에서 확인할 수 있나. 이미지 공고 판정의 반대말이다."""
-    if len(body_text) >= TEXT_BODY_MIN_CHARS:
-        return True
-    return len(body_text) >= REQUIREMENT_MIN_CHARS and any(
-        marker in body_text for marker in REQUIREMENT_MARKERS
-    )
 
 # 일시 오류(5xx, 연결 끊김)는 이만큼 쉬고 한 번 더 시도한다.
 RETRY_DELAY_RANGE = (15.0, 30.0)

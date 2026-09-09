@@ -34,6 +34,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       _undoRequest,
       _application;
   final Set<int> _selected = {};
+  final Set<int> _appliedSuggestionIndices = {};
   final TextEditingController _answerController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
   final List<_ReviewChatMessage> _messages = [];
@@ -144,6 +145,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           {'company': widget.jobCompany, 'title': widget.jobTitle},
     );
     var displayedSuggestions = 0;
+    final identitySuggestions = <Map<String, dynamic>>[];
     for (var index = 0; index < reviews.length; index++) {
       final sentence = Map<String, dynamic>.from(reviews[index]);
       if (answeredFieldPath != null &&
@@ -155,14 +157,29 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         sentence['_index'] = index;
         if (_isIdentityPlaceholderSuggestion(sentence)) {
           sentence['_company'] = job['company'] ?? widget.jobCompany;
-          sentence['_title'] = job['title'] ?? widget.jobTitle;
-          _messages.add(_ReviewChatMessage.identityConfirmation(sentence));
-          _focusPreviewField(sentence['field_path'] as String?);
+          sentence['_title'] =
+              job['role_title'] ?? job['title'] ?? widget.jobTitle;
+          identitySuggestions.add(sentence);
         } else {
           _messages.add(_ReviewChatMessage.suggestion(sentence));
         }
         displayedSuggestions++;
       }
+    }
+    if (identitySuggestions.isNotEmpty) {
+      // 회사명·직무명 자리표시자는 같은 선택 공고의 확정값으로 바뀝니다.
+      // 항목마다 같은 질문을 반복하지 않고 한 번의 확인으로 묶어 적용합니다.
+      final groupedIdentitySuggestion = Map<String, dynamic>.from(
+        identitySuggestions.first,
+      )..['_indices'] = identitySuggestions
+          .map((suggestion) => suggestion['_index'] as int)
+          .toList();
+      _messages.add(
+        _ReviewChatMessage.identityConfirmation(groupedIdentitySuggestion),
+      );
+      _focusPreviewField(
+        groupedIdentitySuggestion['field_path'] as String?,
+      );
     }
     if (!isFirstReview && displayedSuggestions == 0) {
       _messages.add(
@@ -258,6 +275,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       if (mounted) {
         setState(() {
           _application = null;
+          _appliedSuggestionIndices.clear();
           _applyRequest = null;
           _undoRequest = null;
           _undone = false;
@@ -271,12 +289,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     });
   }
 
-  Future<void> _applySuggestion(int index) async {
-    if (_busy || _application != null) return;
+  Future<void> _applySuggestion(List<int> indices) async {
+    if (_busy || indices.isEmpty || indices.every(_appliedSuggestionIndices.contains)) {
+      return;
+    }
     setState(() {
       _selected
         ..clear()
-        ..add(index);
+        ..addAll(indices);
       _applyRequest = null;
     });
     await _apply();
@@ -296,6 +316,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     // The server has rebased this review to the persisted content.  Keep the
     // next answer on the current snapshot rather than the pre-apply hash.
     _result!['input_hash'] = _application!['input_hash'];
+    if (mounted) {
+      setState(() => _appliedSuggestionIndices.addAll(_selected));
+    }
     await _reload();
   });
 
@@ -394,7 +417,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       answerController: _answerController,
                       scrollController: _chatScrollController,
                       activeQuestion: activeQuestion,
-                      applicationDone: _application != null,
+                      appliedSuggestionIndices: _appliedSuggestionIndices,
                       onStart: _review,
                       onAnswer: activeQuestion == null
                           ? null
@@ -679,7 +702,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.answerController,
     required this.scrollController,
     required this.activeQuestion,
-    required this.applicationDone,
+    required this.appliedSuggestionIndices,
     required this.onStart,
     required this.onAnswer,
     required this.onApply,
@@ -692,10 +715,10 @@ class _ReviewChatPane extends StatelessWidget {
   final TextEditingController answerController;
   final ScrollController scrollController;
   final Map<String, dynamic>? activeQuestion;
-  final bool applicationDone;
+  final Set<int> appliedSuggestionIndices;
   final Future<void> Function() onStart;
   final VoidCallback? onAnswer;
-  final ValueChanged<int> onApply;
+  final ValueChanged<List<int>> onApply;
 
   @override
   Widget build(BuildContext context) {
@@ -736,7 +759,7 @@ class _ReviewChatPane extends StatelessWidget {
                 for (final message in messages)
                   _ReviewChatBubble(
                     message: message,
-                    applicationDone: applicationDone,
+                    appliedSuggestionIndices: appliedSuggestionIndices,
                     onApply: onApply,
                   ),
                 if (busy)
@@ -847,21 +870,25 @@ class _ChatIntro extends StatelessWidget {
 class _ReviewChatBubble extends StatelessWidget {
   const _ReviewChatBubble({
     required this.message,
-    required this.applicationDone,
+    required this.appliedSuggestionIndices,
     required this.onApply,
   });
 
   final _ReviewChatMessage message;
-  final bool applicationDone;
-  final ValueChanged<int> onApply;
+  final Set<int> appliedSuggestionIndices;
+  final ValueChanged<List<int>> onApply;
 
   @override
   Widget build(BuildContext context) {
     if (message.identitySuggestion != null) {
       final item = message.identitySuggestion!;
-      final index = item['_index'] as int;
+      final indices = (item['_indices'] as List? ?? [item['_index']])
+          .whereType<int>()
+          .toList();
       final company = item['_company'] as String? ?? '';
       final title = item['_title'] as String? ?? '';
+      final applied = indices.isNotEmpty &&
+          indices.every(appliedSuggestionIndices.contains);
       return Align(
         alignment: Alignment.centerLeft,
         child: Container(
@@ -877,19 +904,21 @@ class _ReviewChatBubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '회사명을 $company, 직무명을 $title(으)로 변경할까요?',
+                indices.length > 1
+                    ? '이력서의 ${indices.length}개 항목에 있는 회사명·직무명 자리표시자를 $company / $title(으)로 한 번에 반영할까요?'
+                    : '회사명을 $company, 직무명을 $title(으)로 변경할까요?',
                 style: const TextStyle(fontSize: 12.5, height: 1.45),
               ),
               const SizedBox(height: 9),
               FilledButton.icon(
-                onPressed: applicationDone ? null : () => onApply(index),
+                onPressed: applied ? null : () => onApply(indices),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF16A34A),
                   foregroundColor: Colors.white,
                   visualDensity: VisualDensity.compact,
                 ),
                 icon: const Icon(Icons.check, size: 15),
-                label: const Text('네, 변경할게요'),
+                label: Text(applied ? '반영됨' : '네, 변경할게요'),
               ),
             ],
           ),
@@ -899,6 +928,7 @@ class _ReviewChatBubble extends StatelessWidget {
     if (message.suggestion != null) {
       final item = message.suggestion!;
       final index = item['_index'] as int;
+      final applied = appliedSuggestionIndices.contains(index);
       return Card(
         margin: const EdgeInsets.only(bottom: 12),
         color: const Color(0xFFF0FDF4),
@@ -939,14 +969,14 @@ class _ReviewChatBubble extends StatelessWidget {
               ],
               const SizedBox(height: 9),
               FilledButton.icon(
-                onPressed: applicationDone ? null : () => onApply(index),
+                onPressed: applied ? null : () => onApply([index]),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF16A34A),
                   foregroundColor: Colors.white,
                   visualDensity: VisualDensity.compact,
                 ),
                 icon: const Icon(Icons.check, size: 15),
-                label: const Text('이 문장으로 바꾸기'),
+                label: Text(applied ? '반영됨' : '이 문장으로 바꾸기'),
               ),
             ],
           ),
