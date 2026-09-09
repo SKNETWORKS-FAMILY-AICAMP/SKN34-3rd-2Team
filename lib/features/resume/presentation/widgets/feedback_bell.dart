@@ -33,63 +33,31 @@ class FeedbackBell extends ConsumerStatefulWidget {
 
 class _FeedbackBellState extends ConsumerState<FeedbackBell> {
   final _link = LayerLink();
-  OverlayEntry? _popover;
+  final _controller = OverlayPortalController();
 
-  @override
-  void dispose() {
-    _popover?.remove();
-    super.dispose();
-  }
+  /// 종과 말풍선을 한 무리로 묶는 표. 종을 누르는 것은 "바깥"이 아니다.
+  /// 이게 없으면 종을 누를 때 닫기와 열기가 한꺼번에 일어나 창이 깜빡인다.
+  final _group = Object();
 
-  bool get _open => _popover != null;
+  bool _open = false;
 
   void _close() {
-    _popover?.remove();
-    _popover = null;
-    if (mounted) setState(() {});
+    if (!_open) return;
+    _controller.hide();
+    if (mounted) setState(() => _open = false);
   }
 
-  void _toggle(List<ResumeFeedbackModel> items) {
+  void _toggle() {
     if (_open) {
       _close();
       return;
     }
-    final entry = OverlayEntry(
-      builder: (_) => Stack(
-        children: [
-          // 바깥을 누르면 닫힌다. 화면 전체를 덮되 어둡게 하지는 않는다.
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _close,
-              child: const SizedBox.shrink(),
-            ),
-          ),
-          CompositedTransformFollower(
-            link: _link,
-            targetAnchor: Alignment.bottomCenter,
-            followerAnchor: Alignment.topCenter,
-            // 종 한가운데에서 꼬리가 나오되, 말풍선은 왼쪽으로 눕는다.
-            offset: const Offset(_FeedbackPopover.followerDx, 6),
-            showWhenUnlinked: false,
-            child: _FeedbackPopover(
-              items: items,
-              readIds: widget.resume.readFeedbackIds.toSet(),
-              onPick: (item) {
-                _close();
-                _openDetail(item);
-              },
-              onClose: _close,
-            ),
-          ),
-        ],
-      ),
-    );
-    Overlay.of(context).insert(entry);
-    setState(() => _popover = entry);
+    _controller.show();
+    setState(() => _open = true);
   }
 
   Future<void> _openDetail(ResumeFeedbackModel item) async {
+    _close();
     // 전문을 연 순간이 읽음이다.
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId != null && !ref.read(isAdminProvider)) {
@@ -112,16 +80,52 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
   @override
   Widget build(BuildContext context) {
     final feedback = ref.watch(resumeFeedbackProvider(widget.resume.id));
-    final items = feedback.maybeWhen(data: (l) => l, orElse: () => const <ResumeFeedbackModel>[]);
+    final items =
+        feedback.maybeWhen(data: (l) => l, orElse: () => const <ResumeFeedbackModel>[]);
     final unread = widget.resume.unreadFeedbackCount;
 
-    return CompositedTransformTarget(
-      link: _link,
-      child: IconButton(
-        tooltip: _open ? '피드백 닫기' : '피드백 열기',
-        isSelected: _open,
-        onPressed: items.isEmpty && unread == 0 ? null : () => _toggle(items),
-        icon: _BellIcon(unread: unread, active: _open || unread > 0),
+    // OverlayPortal 은 이 위젯이 사라지면 말풍선도 함께 걷는다. OverlayEntry 를 손으로
+    // 넣고 빼면, 지우는 데 실패했을 때 화면 위에 아무것도 안 눌리는 막만 남는다.
+    return OverlayPortal(
+      controller: _controller,
+      overlayLocation: OverlayChildLocation.rootOverlay,
+      // Positioned 로 감싸지 않으면 오버레이가 자식에게 화면 크기를 꽉 채우라고 시킨다.
+      // 그러면 눈에 안 보이는 말풍선이 화면 전체를 덮어 아무것도 눌리지 않고,
+      // followerAnchor 도 말풍선이 아니라 화면 한가운데를 가리켜 위치까지 어긋난다.
+      overlayChildBuilder: (_) => Positioned(
+        left: 0,
+        top: 0,
+        child: CompositedTransformFollower(
+          link: _link,
+          targetAnchor: Alignment.bottomCenter,
+          followerAnchor: Alignment.topCenter,
+          offset: const Offset(_FeedbackPopover.followerDx, 6),
+          showWhenUnlinked: false,
+          child: TapRegion(
+            groupId: _group,
+            // 화면을 덮는 막을 깔지 않는다. 막을 깔면 열려 있는 동안 다른 곳이 눌리지
+            // 않고, 그 막이 남으면 앱이 멈춘 것처럼 보인다.
+            onTapOutside: (_) => _close(),
+            child: _FeedbackPopover(
+              items: items,
+              readIds: widget.resume.readFeedbackIds.toSet(),
+              onPick: _openDetail,
+              onClose: _close,
+            ),
+          ),
+        ),
+      ),
+      child: TapRegion(
+        groupId: _group,
+        child: CompositedTransformTarget(
+          link: _link,
+          child: IconButton(
+            tooltip: _open ? '피드백 닫기' : '피드백 열기',
+            isSelected: _open,
+            onPressed: items.isEmpty && unread == 0 ? null : _toggle,
+            icon: _BellIcon(unread: unread, active: _open || unread > 0),
+          ),
+        ),
       ),
     );
   }
