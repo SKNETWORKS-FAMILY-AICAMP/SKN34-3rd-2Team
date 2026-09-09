@@ -370,20 +370,28 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   label: const Text('AI 취업 코치'),
                 ),
                 const SizedBox(width: 4),
-                // AI 코치를 보는 중에는 피드백이 그 뒤에 가려 있어 토글할 것이 없다.
-                if (!_showAiCoach)
-                  IconButton(
-                    tooltip: _showFeedback ? '피드백 닫기' : '피드백 열기',
-                    isSelected: _showFeedback,
-                    onPressed: () =>
-                        setState(() => _showFeedback = !_showFeedback),
-                    icon: Icon(
-                      _showFeedback
-                          ? Icons.chat_bubble
-                          : Icons.chat_bubble_outline,
-                      size: 18,
-                    ),
+                // 코치를 보는 중에도 남겨 둔다. 없으면 피드백으로 돌아갈 길이 사라진다.
+                // 그때 누르면 코치를 접고 피드백을 편다.
+                IconButton(
+                  tooltip: _showAiCoach
+                      ? '피드백 보기'
+                      : (_showFeedback ? '피드백 닫기' : '피드백 열기'),
+                  isSelected: !_showAiCoach && _showFeedback,
+                  onPressed: () => setState(() {
+                    if (_showAiCoach) {
+                      _showAiCoach = false;
+                      _showFeedback = true;
+                    } else {
+                      _showFeedback = !_showFeedback;
+                    }
+                  }),
+                  icon: Icon(
+                    !_showAiCoach && _showFeedback
+                        ? Icons.chat_bubble
+                        : Icons.chat_bubble_outline,
+                    size: 18,
                   ),
+                ),
                 const SizedBox(width: 8),
                 if (!resume.isApproved || isAdmin)
                   _ModeToggle(
