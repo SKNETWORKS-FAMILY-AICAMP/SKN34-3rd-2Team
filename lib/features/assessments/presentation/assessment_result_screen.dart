@@ -184,7 +184,7 @@ class _AssessmentResultScreenState
                                     shape: RoundedRectangleBorder(
                                       borderRadius:
                                           BorderRadius.circular(12),
-                                      side: const BorderSide(
+                                      side: BorderSide(
                                         color: AppColors.border,
                                       ),
                                     ),
@@ -205,7 +205,7 @@ class _AssessmentResultScreenState
                                           const SizedBox(height: 8),
                                           Text(
                                             user?.displayName ?? '',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color:
                                                   AppColors.textSecondary,
                                             ),
@@ -222,7 +222,7 @@ class _AssessmentResultScreenState
                                           Text(
                                             '자동채점 $_autoTotal점'
                                             '${_totalScore != _autoTotal ? ' · 조정 반영' : ''}',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color:
                                                   AppColors.textSecondary,
                                               fontSize: 13,

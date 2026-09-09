@@ -28,7 +28,7 @@ class LayoutEditorGrid extends StatelessWidget {
       children: [
         const _PaletteBar(),
         const SizedBox(height: 12),
-        const Center(
+        Center(
           child: Text(
             '▲ 강사석 방향',
             style: TextStyle(
@@ -245,7 +245,7 @@ class LayoutEditorGrid extends StatelessWidget {
             child: cell.label.isNotEmpty
                 ? Text(
                     '${cell.label}번',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
                       color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
@@ -468,7 +468,7 @@ class _PaletteBar extends StatelessWidget {
           const SizedBox(width: 6),
           Text(label),
           const SizedBox(width: 4),
-          const Icon(Icons.drag_indicator, size: 16, color: AppColors.textHint),
+          Icon(Icons.drag_indicator, size: 16, color: AppColors.textHint),
         ],
       ),
     );

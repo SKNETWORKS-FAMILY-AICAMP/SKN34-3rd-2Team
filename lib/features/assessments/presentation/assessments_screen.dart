@@ -67,11 +67,11 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        borderSide: BorderSide(color: AppColors.border),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        borderSide: BorderSide(color: AppColors.border),
                       ),
                     ),
                   ),

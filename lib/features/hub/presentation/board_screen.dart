@@ -104,7 +104,7 @@ class _BoardSearchBar extends StatelessWidget {
         style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           hintText: '공지 제목·내용·작성자 검색',
-          hintStyle: const TextStyle(fontSize: 13, color: AppColors.textHint),
+          hintStyle: TextStyle(fontSize: 13, color: AppColors.textHint),
           prefixIcon: const Icon(Icons.search, size: 20),
           suffixIcon: query.isEmpty
               ? null
@@ -242,7 +242,7 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
             color: AppColors.textPrimary,
@@ -274,7 +274,7 @@ class _FeedTab extends ConsumerWidget {
                   controller: controller,
                   decoration: InputDecoration(
                     hintText: '무엇이든 물어보세요...',
-                    hintStyle: const TextStyle(color: AppColors.textHint),
+                    hintStyle: TextStyle(color: AppColors.textHint),
                     filled: true,
                     fillColor: BoardUi.listBackground,
                     isDense: true,

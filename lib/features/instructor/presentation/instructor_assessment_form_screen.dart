@@ -498,7 +498,7 @@ class _InstructorAssessmentFormScreenState
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
+                      Text(
                         '문제 생성 AI로 초안을 만들거나\n수동으로 추가해 보세요.',
                         textAlign: TextAlign.center,
                         style: TextStyle(

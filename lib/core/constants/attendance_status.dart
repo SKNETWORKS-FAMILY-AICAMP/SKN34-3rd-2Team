@@ -50,6 +50,9 @@ abstract final class AttendanceStatus {
   }
 }
 
+/// 관리자 예시 출석 채우기 — 입실/퇴실 분리
+enum DemoAttendanceSeed { checkIn, checkOut }
+
 /// 구글폼 공가 유형
 abstract final class OfficialLeaveType {
   static const vacation = 'vacation';

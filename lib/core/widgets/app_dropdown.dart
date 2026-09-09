@@ -65,7 +65,7 @@ class AppDropdownItem<T> {
         label,
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
-        style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+        style: TextStyle(fontSize: 14, color: AppColors.textPrimary),
       );
 }
 

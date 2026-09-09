@@ -51,7 +51,7 @@ class _ShimmerBoxState extends State<ShimmerBox>
             gradient: LinearGradient(
               begin: Alignment(-1 + 2 * _controller.value, 0),
               end: Alignment(1 + 2 * _controller.value, 0),
-              colors: const [
+              colors: [
                 AppColors.surfaceVariant,
                 AppColors.border,
                 AppColors.surfaceVariant,
@@ -115,7 +115,7 @@ class ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: AppColors.textSecondary),
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
@@ -156,7 +156,7 @@ class EmptyView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textSecondary,
                 height: 1.4,
               ),
@@ -196,7 +196,7 @@ class InlineErrorCard extends StatelessWidget {
             Text(
               friendlyErrorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
                 height: 1.4,

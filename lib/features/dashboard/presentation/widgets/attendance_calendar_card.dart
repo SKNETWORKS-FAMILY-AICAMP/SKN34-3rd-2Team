@@ -135,7 +135,7 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -332,7 +332,7 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.textPrimary, width: 1.5),
                 ),
-                todayTextStyle: const TextStyle(
+                todayTextStyle: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),

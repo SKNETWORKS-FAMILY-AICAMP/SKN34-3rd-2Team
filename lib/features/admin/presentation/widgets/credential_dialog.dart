@@ -21,7 +21,7 @@ Future<void> showCredentialDialog(
         children: [
           Text(
             '$displayName $personLabel의 로그인 정보입니다.\n아래 내용을 전달해주세요.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,
             ),
@@ -37,7 +37,7 @@ Future<void> showCredentialDialog(
               color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text(
+            child: Text(
               '관리 페이지에서 비밀번호를 다시 발급할 수 있습니다.',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
@@ -76,7 +76,7 @@ class _CopyTile extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),

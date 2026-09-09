@@ -48,7 +48,7 @@ class QualExamScheduleSection extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               child: Text(
                 '시험 일정을 불러오지 못했습니다: $e',
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ),
           ),
@@ -57,7 +57,7 @@ class QualExamScheduleSection extends ConsumerWidget {
             final preview = upcoming.take(_previewCount).toList();
 
             if (preview.isEmpty) {
-              return const Card(
+              return Card(
                 child: Padding(
                   padding: EdgeInsets.all(20),
                   child: Center(

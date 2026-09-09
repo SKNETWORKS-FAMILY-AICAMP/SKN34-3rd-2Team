@@ -22,7 +22,7 @@ class ResumeSectionNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 44,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
@@ -99,13 +99,13 @@ class ResumeProgressHeader extends StatelessWidget {
             children: [
               Text(
                 '$completed/$total 완료 · $statusLabel',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
               const Spacer(),
               if (revisionCount > 0)
                 Text(
                   'v$revisionCount',
-                  style: const TextStyle(color: AppColors.textHint, fontSize: 12),
+                  style: TextStyle(color: AppColors.textHint, fontSize: 12),
                 ),
             ],
           ),

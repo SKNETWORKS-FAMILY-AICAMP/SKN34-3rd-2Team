@@ -92,19 +92,21 @@ class MissionProgressDashboardCard extends ConsumerWidget {
                       compact ? 8 : 10,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: AppColors.primaryLight,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.25),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.flag_outlined,
                               size: 16,
-                              color: Color(0xFF2563EB),
+                              color: AppColors.primary,
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -118,7 +120,7 @@ class MissionProgressDashboardCard extends ConsumerWidget {
                                   fontSize: compact ? 11 : 12,
                                   height: 1.3,
                                   fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF1E3A8A),
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
                             ),
@@ -133,7 +135,7 @@ class MissionProgressDashboardCard extends ConsumerWidget {
                             fontSize: compact ? 10 : 12,
                             height: 1.3,
                             fontWeight: FontWeight.w500,
-                            color: const Color(0xFF1E3A8A),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -222,7 +224,7 @@ class _MissionProgressRow extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               item.progressLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
               ),

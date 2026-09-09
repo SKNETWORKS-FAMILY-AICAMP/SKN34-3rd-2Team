@@ -733,10 +733,10 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
         ),
         child: Row(
           children: [
-            const Icon(Icons.meeting_room_outlined,
+            Icon(Icons.meeting_room_outlined,
                 size: 20, color: AppColors.textSecondary),
             const SizedBox(width: 10),
-            const Expanded(
+            Expanded(
               child: Text(
                 '아직 강의실이 없습니다. 먼저 만들어 주세요.',
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
@@ -846,7 +846,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 '위에서 편집할 강의실을 고른 뒤, 8×10 그리드에 강사석·출입문·테이블을 배치하세요. 학생 배치는 「배치 편집」에서 합니다.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
@@ -919,7 +919,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           ),
           if (_assignmentRoomId == null) ...[
             const SizedBox(height: 24),
-            const Center(
+            Center(
               child: Text(
                 '배치할 강의실을 선택해주세요.',
                 style: TextStyle(color: AppColors.textSecondary),

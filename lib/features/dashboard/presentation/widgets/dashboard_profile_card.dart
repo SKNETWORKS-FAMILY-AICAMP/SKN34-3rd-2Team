@@ -19,7 +19,7 @@ class DashboardProfileCard extends ConsumerWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color: AppColors.shadow,
             blurRadius: 16,
@@ -55,16 +55,17 @@ class DashboardProfileCard extends ConsumerWidget {
                           user.cohortName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppColors.textSecondary,
                             fontSize: 12,
                           ),
                         ),
                         Text(
                           '${user.displayName}님',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ],
@@ -73,7 +74,7 @@ class DashboardProfileCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              const Divider(height: 1, color: AppColors.border),
+              Divider(height: 1, color: AppColors.border),
               const SizedBox(height: 12),
               InkWell(
                 onTap: () => showSkillPickerDialog(
@@ -94,7 +95,7 @@ class DashboardProfileCard extends ConsumerWidget {
                               color: AppColors.textHint.withValues(alpha: 0.9),
                             ),
                             const SizedBox(width: 6),
-                            const Text(
+                            Text(
                               '탭하여 스킬을 선택해 주세요',
                               style: TextStyle(
                                 fontSize: 13,
@@ -130,7 +131,7 @@ class DashboardProfileCard extends ConsumerWidget {
                             if (user.skills.length > 6)
                               Text(
                                 '+${user.skills.length - 6}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
                                   color: AppColors.textSecondary,
                                 ),

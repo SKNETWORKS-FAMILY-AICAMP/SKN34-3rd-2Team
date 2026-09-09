@@ -34,7 +34,7 @@ class FormTasksScreen extends ConsumerWidget {
           if (list.isEmpty) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
+              children: [
                 SizedBox(height: 120),
                 Center(
                   child: Text(
@@ -115,7 +115,7 @@ class FormTasksDashboardSection extends ConsumerWidget {
           error: (e, _) => Text('오류: $e'),
           data: (list) {
             if (list.isEmpty) {
-              return const Card(
+              return Card(
                 child: Padding(
                   padding: EdgeInsets.all(20),
                   child: Center(
@@ -178,7 +178,7 @@ class _SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 13,
           color: AppColors.textSecondary,

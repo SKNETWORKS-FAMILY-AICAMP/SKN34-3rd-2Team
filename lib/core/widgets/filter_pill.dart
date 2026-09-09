@@ -113,7 +113,7 @@ class FilterPillHeader extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(height: 1, color: AppColors.border),
         ],
       ),
     );

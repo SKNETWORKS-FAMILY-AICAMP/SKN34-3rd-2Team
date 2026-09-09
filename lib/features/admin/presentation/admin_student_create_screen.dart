@@ -163,7 +163,7 @@ class _AdminStudentCreateScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   '학생 상담 등록',
                   style: TextStyle(
                     fontSize: 22,
@@ -176,7 +176,7 @@ class _AdminStudentCreateScreenState
                   cohortName != null
                       ? '기수: $cohortName · 상담 내용 입력 후 계정을 생성합니다.'
                       : '상단에서 기수를 선택해주세요.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
                   ),

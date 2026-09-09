@@ -10,7 +10,10 @@ class SideRailDarkMode extends Notifier<bool> {
     Future<void>(() async {
       final prefs = await SharedPreferences.getInstance();
       if (!ref.mounted) return;
-      state = prefs.getBool(_kSidebarDarkModeKey) ?? false;
+      // 예전 앱 전체 다크 키도 사이드바 설정으로 이어받음
+      state = prefs.getBool(_kSidebarDarkModeKey) ??
+          prefs.getBool('app_dark_mode') ??
+          false;
     });
     return false;
   }

@@ -133,7 +133,7 @@ class _ResumeEditFeedbackPanelState
               ),
               data: (list) {
                 if (list.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(
@@ -184,7 +184,7 @@ class _ResumeEditFeedbackPanelState
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 320),
       child: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.border)),
         ),
         child: panel,
@@ -203,7 +203,7 @@ class _PanelHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(16, isSidebar ? 16 : 12, 16, 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
@@ -289,7 +289,7 @@ class _FeedbackCommentBubble extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         timeLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textHint,
                         ),
@@ -324,7 +324,7 @@ class _FeedbackCommentBubble extends StatelessWidget {
                         ),
                         child: Text(
                           sectionLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textSecondary,
@@ -367,7 +367,7 @@ class _FeedbackComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
@@ -404,7 +404,7 @@ class _FeedbackComposer extends StatelessWidget {
                   style: const TextStyle(fontSize: 13),
                   decoration: InputDecoration(
                     hintText: '피드백을 입력하세요...',
-                    hintStyle: const TextStyle(
+                    hintStyle: TextStyle(
                       fontSize: 13,
                       color: AppColors.textHint,
                     ),
@@ -412,11 +412,11 @@ class _FeedbackComposer extends StatelessWidget {
                     fillColor: AppColors.surfaceVariant,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.border),
+                      borderSide: BorderSide(color: AppColors.border),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.border),
+                      borderSide: BorderSide(color: AppColors.border),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,

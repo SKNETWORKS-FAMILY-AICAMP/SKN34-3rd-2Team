@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/mileage_constants.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/form_task_model.dart';
+import '../../../shared/models/mileage_models.dart';
 import '../../../shared/models/resume_model.dart';
 import '../../../shared/models/submission_model.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../shared/providers/mileage_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 
 /// 관리자 대시보드 — 승인 대기 요약 + 승인 현황 사이드바
@@ -35,6 +38,7 @@ class _AdminDashboardBody extends ConsumerWidget {
     final submissions = ref.watch(allSubmissionsProvider);
     final resumes = ref.watch(cohortResumesProvider);
     final formTasks = ref.watch(allFormTasksAdminProvider);
+    final purchaseRequests = ref.watch(allPurchaseRequestsProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -42,6 +46,7 @@ class _AdminDashboardBody extends ConsumerWidget {
         ref.invalidate(cohortResumesProvider);
         ref.invalidate(cohortStudentsProvider);
         ref.invalidate(allFormTasksAdminProvider);
+        ref.invalidate(allPurchaseRequestsProvider);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -50,6 +55,7 @@ class _AdminDashboardBody extends ConsumerWidget {
             submissions: submissions,
             resumes: resumes,
             formTasks: formTasks,
+            purchaseRequests: purchaseRequests,
           );
           final sidebar = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -108,11 +114,13 @@ class _PendingSummary extends StatelessWidget {
     required this.submissions,
     required this.resumes,
     required this.formTasks,
+    required this.purchaseRequests,
   });
 
   final AsyncValue<List<SubmissionModel>> submissions;
   final AsyncValue<List<ResumeModel>> resumes;
   final AsyncValue<List<FormTaskModel>> formTasks;
+  final AsyncValue<List<PurchaseRequestModel>> purchaseRequests;
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +133,16 @@ class _PendingSummary extends StatelessWidget {
           list.where((r) => r.isSubmitted && !r.isApproved).length,
       orElse: () => 0,
     );
+    final pendingMileage = purchaseRequests.maybeWhen(
+      data: (list) => list
+          .where(
+            (r) =>
+                r.status == PurchaseRequestStatus.pending ||
+                r.status == PurchaseRequestStatus.modifyRequested,
+          )
+          .length,
+      orElse: () => 0,
+    );
     final activeForms = formTasks.maybeWhen(
       data: (list) => list.where((t) => t.published).length,
       orElse: () => null,
@@ -133,7 +151,7 @@ class _PendingSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           '관리자 대시보드',
           style: TextStyle(
             fontSize: 22,
@@ -142,7 +160,7 @@ class _PendingSummary extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           '승인 대기 항목을 확인하고 처리하세요.',
           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
@@ -208,11 +226,11 @@ class _PendingSummary extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _SummaryCard(
-          icon: Icons.menu_book,
-          label: '학습실 — 인프런 강의 관리',
-          count: null,
-          color: AppColors.info,
-          onTap: () => context.go(RoutePaths.adminStudyRoom),
+          icon: Icons.card_giftcard_outlined,
+          label: '마일리지 관리',
+          count: pendingMileage,
+          color: AppColors.primary,
+          onTap: () => context.go(RoutePaths.adminMileage),
           fullWidth: true,
         ),
         const SizedBox(height: 12),
@@ -256,7 +274,7 @@ class _SummaryCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -301,7 +319,7 @@ class _SummaryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textHint),
+              Icon(Icons.chevron_right, color: AppColors.textHint),
             ],
           ),
         ),

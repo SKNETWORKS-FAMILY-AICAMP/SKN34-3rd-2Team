@@ -21,10 +21,6 @@ class MileagePageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initial = user.displayName.isNotEmpty
-        ? user.displayName.characters.first
-        : '?';
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         MileageLayout.pagePaddingH,
@@ -39,7 +35,7 @@ class MileagePageHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '마일리지',
                   style: TextStyle(
                     fontSize: 22,
@@ -50,7 +46,7 @@ class MileagePageHeader extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
                   ),
@@ -61,19 +57,6 @@ class MileagePageHeader extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: MileageColors.chipBg,
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: MileageColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 2),
               Text(
                 user.displayName,
                 style: const TextStyle(
@@ -86,7 +69,7 @@ class MileagePageHeader extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 160),
                   child: Text(
                     cohortName!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 10,
                     ),
@@ -122,22 +105,86 @@ class MileageSegmentTabs extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: MileageLayout.pagePaddingH),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: MileageLayout.maxContentWidth),
-          child: SegmentedButton<int>(
-            segments: [
-              for (var i = 0; i < tabs.length; i++)
-                ButtonSegment(value: i, label: Text(tabs[i])),
-            ],
-            selected: {selectedIndex},
-            onSelectionChanged: (s) => onSelected(s.first),
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: WidgetStateProperty.all(
-                const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          constraints: const BoxConstraints(
+            maxWidth: MileageLayout.maxContentWidth,
+            minWidth: 320,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
               ),
-              padding: WidgetStateProperty.all(
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  for (var i = 0; i < tabs.length; i++) ...[
+                    if (i > 0)
+                      Container(width: 1, color: AppColors.border),
+                    Expanded(
+                      child: _SegmentTab(
+                        label: tabs[i],
+                        selected: selectedIndex == i,
+                        isFirst: i == 0,
+                        isLast: i == tabs.length - 1,
+                        onTap: () => onSelected(i),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentTab extends StatelessWidget {
+  const _SegmentTab({
+    required this.label,
+    required this.selected,
+    required this.isFirst,
+    required this.isLast,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final bool isFirst;
+  final bool isLast;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.textPrimary : Colors.transparent,
+      borderRadius: BorderRadius.horizontal(
+        left: isFirst ? const Radius.circular(19) : Radius.zero,
+        right: isLast ? const Radius.circular(19) : Radius.zero,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.horizontal(
+          left: isFirst ? const Radius.circular(19) : Radius.zero,
+          right: isLast ? const Radius.circular(19) : Radius.zero,
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : AppColors.textPrimary,
               ),
             ),
           ),
@@ -200,7 +247,7 @@ class MileageFilterChipRow extends StatelessWidget {
         if (label != null) ...[
           Text(
             label!,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 12,
               color: AppColors.textSecondary,

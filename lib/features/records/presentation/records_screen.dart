@@ -76,11 +76,11 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
               fillColor: AppColors.surfaceVariant,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               contentPadding: const EdgeInsets.symmetric(vertical: 0),
             ),
@@ -174,7 +174,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                               isAdmin
                                   ? '제출된 기록이 없습니다'
                                   : '아직 제출한 기록이 없습니다',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textSecondary,
                               ),
                             ),
@@ -300,7 +300,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -333,7 +333,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                     ),
                     Text(
                       hasFiles ? '${s.fileUrls.length}' : '',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textHint,
                       ),
@@ -356,7 +356,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                 const SizedBox(height: 4),
                 Text(
                   metaParts.join(' · '),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                     height: 1.3,

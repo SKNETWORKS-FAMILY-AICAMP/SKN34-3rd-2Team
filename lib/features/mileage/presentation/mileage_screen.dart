@@ -98,7 +98,7 @@ class _MileageScreenState extends ConsumerState<MileageScreen> {
                           '기준 2주까지 사용 가능하며, 이후 자동 소멸됩니다.'
                       : '모든 마일리지는 종강일 기준 2주까지 사용 가능하며, 이후 자동 소멸됩니다.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,
                   ),
@@ -248,7 +248,7 @@ class _HistoryTab extends ConsumerWidget {
                         tx.createdAt != null
                             ? AppDateUtils.formatDisplay(tx.createdAt!)
                             : '-',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
                         ),
@@ -371,7 +371,7 @@ class _PurchaseRequestsTabState extends ConsumerState<_PurchaseRequestsTab> {
               else
                 ...filtered.map(
                   (req) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: _PurchaseRequestCard(request: req),
                   ),
                 ),
@@ -392,9 +392,10 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 100,
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+      width: 92,
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       decoration: BoxDecoration(
+        color: AppColors.surface,
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -402,13 +403,13 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 2),
           Text(
             '$count건',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ],
       ),
@@ -429,9 +430,33 @@ class _PurchaseRequestCard extends ConsumerWidget {
     final totalQty =
         request.items.fold(0, (total, item) => total + item.quantity);
 
+    final details = <(String, String)>[
+      ('신청 금액', formatMileageM(request.totalAmount)),
+      ('수량', '$totalQty개'),
+    ];
+    if (request.processedAt != null) {
+      details.add((
+        '처리 일시',
+        AppDateUtils.formatDetailDateTime(request.processedAt!),
+      ));
+    }
+    final processedBy = request.processedByName?.trim();
+    if (processedBy != null && processedBy.isNotEmpty) {
+      details.add(('처리자', processedBy));
+    }
+    final purchaseLink = request.managerPurchaseLink?.trim();
+    if (purchaseLink != null && purchaseLink.isNotEmpty) {
+      details.add(('구매 링크', purchaseLink));
+    }
+    final memo = request.managerMemo?.trim();
+    if (memo != null && memo.isNotEmpty) {
+      details.add(('매니저 메모', memo));
+    }
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
+        color: AppColors.surface,
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -439,7 +464,6 @@ class _PurchaseRequestCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               StatusBadge(
                 label: request.statusLabel,
@@ -453,43 +477,55 @@ class _PurchaseRequestCard extends ConsumerWidget {
               const Spacer(),
               if (request.createdAt != null)
                 Text(
-                  '신청일 ${AppDateUtils.formatDetailDateTime(request.createdAt!)}',
-                  style: const TextStyle(
+                  AppDateUtils.formatDetailDateTime(request.createdAt!),
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            request.primaryProductName,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          _DetailGrid(
-            items: [
-              ('신청 금액', formatMileageM(request.totalAmount)),
-              ('수량', '$totalQty개'),
-              ('처리 일시', request.processedAt != null
-                  ? AppDateUtils.formatDetailDateTime(request.processedAt!)
-                  : '-'),
-              ('처리자', request.processedByName ?? '-'),
-              ('구매 링크', request.managerPurchaseLink ?? '-'),
-              ('매니저 메모', request.managerMemo ?? '-'),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  request.primaryProductName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              if (canCancel) ...[
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 28,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: MileageColors.primary,
+                      minimumSize: const Size(0, 28),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      visualDensity: VisualDensity.compact,
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => _cancel(context, ref),
+                    child: const Text('취소'),
+                  ),
+                ),
+              ],
             ],
           ),
-          if (canCancel) ...[
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: OutlinedButton(
-                style: mileageOutlinedButtonStyle(),
-                onPressed: () => _cancel(context, ref),
-                child: const Text('취소'),
-              ),
-            ),
-          ],
+          const SizedBox(height: 8),
+          _DetailMeta(items: details),
         ],
       ),
     );
@@ -532,45 +568,43 @@ class _PurchaseRequestCard extends ConsumerWidget {
   }
 }
 
-class _DetailGrid extends StatelessWidget {
-  const _DetailGrid({required this.items});
+class _DetailMeta extends StatelessWidget {
+  const _DetailMeta({required this.items});
 
   final List<(String, String)> items;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossCount = constraints.maxWidth > 500 ? 3 : 2;
-        return GridView.count(
-          crossAxisCount: crossCount,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 12,
-          childAspectRatio: 2.8,
-          children: items.map((item) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.$1,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
+    return Wrap(
+      spacing: 16,
+      runSpacing: 6,
+      children: items
+          .map(
+            (item) => ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 120, maxWidth: 220),
+              child: RichText(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                text: TextSpan(
+                  style: const TextStyle(fontSize: 12, height: 1.25),
+                  children: [
+                    TextSpan(
+                      text: '${item.$1}  ',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                    TextSpan(
+                      text: item.$2,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  item.$2,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            );
-          }).toList(),
-        );
-      },
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 }

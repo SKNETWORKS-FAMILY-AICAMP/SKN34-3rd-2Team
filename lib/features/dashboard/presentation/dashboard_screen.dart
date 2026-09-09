@@ -205,7 +205,7 @@ class _NoticeSectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          const Text(
+          Text(
             '시스템 공지',
             style: TextStyle(
               fontWeight: FontWeight.w700,
@@ -255,7 +255,7 @@ class _NoticesPreview extends StatelessWidget {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.border),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
               color: AppColors.shadow,
               blurRadius: 16,
@@ -263,7 +263,7 @@ class _NoticesPreview extends StatelessWidget {
             ),
           ],
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             '공지사항이 없습니다',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
@@ -365,7 +365,7 @@ class _SubmissionsListState extends State<_SubmissionsList> {
                 : const NeverScrollableScrollPhysics(),
             padding: EdgeInsets.zero,
             itemCount: submissions.length,
-            separatorBuilder: (_, _) => const Divider(
+            separatorBuilder: (_, _) => Divider(
               height: 1,
               thickness: 1,
               color: AppColors.border,
@@ -442,7 +442,7 @@ class _SubmissionTile extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               AppDateUtils.formatDisplay(s.submittedAt!),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
               ),
