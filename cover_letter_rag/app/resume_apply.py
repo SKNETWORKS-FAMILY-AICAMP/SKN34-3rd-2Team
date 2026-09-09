@@ -85,6 +85,24 @@ def build_application(content, review, request):
     return updated, sorted(spans)
 
 
+def rebase_review_response(response, content):
+    """Move an existing chat review onto an edit it just applied.
+
+    Applying one suggestion changes the Firestore resume.  The remaining
+    questions are still useful, but their review snapshot must point at that
+    new content; otherwise the next answer is rejected as a stale request.
+    No LLM call is made here.
+    """
+    from app.resume_review import extract_review_fields
+    from app.review_workflow import redact
+
+    rebased = deepcopy(response)
+    fields, _ = extract_review_fields(content)
+    rebased['input_hash'] = digest(content)
+    rebased['input_fields'] = {path: redact(value) for path, value in fields.items()}
+    return rebased
+
+
 def mutate(gateway, uid, request, undo=False):
     resume_ref = gateway._resume_ref(request.cohort_id, request.resume_id)
     operations = resume_ref.collection('aiApplications')
@@ -125,6 +143,11 @@ def mutate(gateway, uid, request, undo=False):
                                    'source_id': request.application_id if undo else request.review_id,
                                    'createdAt': firestore.SERVER_TIMESTAMP})
         transaction.update(resume_ref, {'content': after, 'updatedAt': firestore.SERVER_TIMESTAMP})
+        if not undo:
+            # Keep the same chat session usable after a selected revision is
+            # applied.  The review itself was already generated; only its
+            # snapshot is rebased to the just-persisted resume content.
+            transaction.update(source_ref, {'response': rebase_review_response(source['response'], after)})
         if undo:
             transaction.update(source_ref, {'undoneBy': request.request_id})
         return result

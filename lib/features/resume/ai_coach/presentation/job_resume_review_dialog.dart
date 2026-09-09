@@ -119,7 +119,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _mutationPending = false;
         _messages.add(
           const _ReviewChatMessage.assistant(
-            '수정안이 왼쪽 이력서 미리보기에 반영되었습니다. 최종 저장 전 내용을 확인해 주세요.',
+            '수정안이 왼쪽 이력서에 반영되었습니다. 다음 질문에 답하면 수정된 내용 기준으로 첨삭을 계속합니다.',
           ),
         );
       });
@@ -167,7 +167,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     if (!isFirstReview && displayedSuggestions == 0) {
       _messages.add(
         const _ReviewChatMessage.assistant(
-          '방금 답한 항목에서 수정안에 사용할 새로운 사실을 확인하지 못했습니다. 없는 내용은 만들어 넣지 않습니다.',
+          '방금 답변을 반영한 안전한 수정안을 만들지 못했습니다. 확인되지 않은 내용은 넣지 않고 다음 항목을 살펴봅니다.',
         ),
       );
     }
@@ -252,6 +252,17 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         ],
       };
       _result = await widget.client.review(nextRequest);
+      // The server rebases the previous review after an applied edit.  This
+      // new review now owns the latest resume snapshot and can accept another
+      // selected revision in the same chat flow.
+      if (mounted) {
+        setState(() {
+          _application = null;
+          _applyRequest = null;
+          _undoRequest = null;
+          _undone = false;
+        });
+      }
       _appendReview(
         _result!,
         isFirstReview: false,
@@ -282,6 +293,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       'selected_indices': _selected.toList()..sort(),
     };
     _application = await _mutate(() => widget.client.apply(_applyRequest!));
+    // The server has rebased this review to the persisted content.  Keep the
+    // next answer on the current snapshot rather than the pre-apply hash.
+    _result!['input_hash'] = _application!['input_hash'];
     await _reload();
   });
 
@@ -295,8 +309,23 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       'expected_input_hash': _application!['input_hash'],
     };
     await _mutate(() => widget.client.undo(_undoRequest!));
-    _undone = true;
     await _reload();
+    if (mounted) {
+      setState(() {
+        // The restored resume no longer matches the rebased review. Start a
+        // fresh review instead of sending an answer with the applied hash.
+        _result = null;
+        _reviewRequest = null;
+        _applyRequest = null;
+        _application = null;
+        _undone = true;
+        _messages.add(
+          const _ReviewChatMessage.assistant(
+            '수정안을 되돌렸습니다. 현재 이력서 기준으로 첨삭을 다시 시작할 수 있습니다.',
+          ),
+        );
+      });
+    }
   });
 
   Future<Map<String, dynamic>> _mutate(
@@ -697,37 +726,39 @@ class _ReviewChatPane extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: ListView(
-            controller: scrollController,
-            padding: const EdgeInsets.all(18),
-            children: [
-              if (!resultAvailable && !busy && error == null)
-                _ChatIntro(onStart: onStart),
-              for (final message in messages)
-                _ReviewChatBubble(
-                  message: message,
-                  applicationDone: applicationDone,
-                  onApply: onApply,
-                ),
-              if (busy)
-                const Padding(
-                  padding: EdgeInsets.only(top: 10),
-                  child: LinearProgressIndicator(),
-                ),
-              if (error != null)
-                Container(
-                  margin: const EdgeInsets.only(top: 10),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(8),
+          child: SelectionArea(
+            child: ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(18),
+              children: [
+                if (!resultAvailable && !busy && error == null)
+                  _ChatIntro(onStart: onStart),
+                for (final message in messages)
+                  _ReviewChatBubble(
+                    message: message,
+                    applicationDone: applicationDone,
+                    onApply: onApply,
                   ),
-                  child: Text(
-                    error!,
-                    style: const TextStyle(color: Color(0xFFB91C1C)),
+                if (busy)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: LinearProgressIndicator(),
                   ),
-                ),
-            ],
+                if (error != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      error!,
+                      style: const TextStyle(color: Color(0xFFB91C1C)),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
         if (resultAvailable)
