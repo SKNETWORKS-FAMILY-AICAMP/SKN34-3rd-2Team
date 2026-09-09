@@ -50,6 +50,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   static const double _panelDefaultWidth = 340;
   double _panelWidth = _panelDefaultWidth;
 
+  /// 끌기를 시작한 순간의 너비. 커서까지의 거리를 여기서 뺀다.
+  double? _dragStartWidth;
+
   String _title = '';
   ResumeContent _content = ResumeContent.empty();
   bool _initialized = false;
@@ -748,9 +751,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                           Expanded(child: resumeScroll),
                           if (hasRightPanel) ...[
                             _PanelResizeHandle(
-                              onDrag: (dx) => setState(() {
-                                // 왼쪽으로 끌면 패널이 넓어진다.
-                                _panelWidth = (panelWidth - dx)
+                              onStart: () => _dragStartWidth = panelWidth,
+                              onUpdate: (dx) => setState(() {
+                                // 왼쪽으로 끌면(거리가 음수) 패널이 넓어진다.
+                                _panelWidth = ((_dragStartWidth ?? panelWidth) - dx)
                                     .clamp(_panelMinWidth, panelMaxWidth);
                               }),
                               onReset: () => setState(
@@ -789,10 +793,19 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 ///
 /// 보이는 선은 1픽셀이지만 잡히는 폭은 8픽셀이다. 1픽셀짜리는 마우스로 집기 어렵다.
 /// 두 번 누르면 처음 너비로 돌아온다.
+///
+/// 매 신호의 변화량(`delta.dx`)을 더하지 않고 **끌기 시작점에서 커서까지의 거리**를
+/// 넘긴다. 한 프레임에 신호가 여러 번 오면 변화량 방식은 마지막 것만 남아 빠르게 끌수록
+/// 손잡이가 커서보다 뒤처진다. 거리로 주면 몇 번이 오든 가장자리가 커서에 붙어 있다.
 class _PanelResizeHandle extends StatefulWidget {
-  const _PanelResizeHandle({required this.onDrag, required this.onReset});
+  const _PanelResizeHandle({
+    required this.onStart,
+    required this.onUpdate,
+    required this.onReset,
+  });
 
-  final ValueChanged<double> onDrag;
+  final VoidCallback onStart;
+  final ValueChanged<double> onUpdate;
   final VoidCallback onReset;
 
   @override
@@ -802,6 +815,7 @@ class _PanelResizeHandle extends StatefulWidget {
 class _PanelResizeHandleState extends State<_PanelResizeHandle> {
   bool _hovered = false;
   bool _dragging = false;
+  double _startX = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -812,8 +826,13 @@ class _PanelResizeHandleState extends State<_PanelResizeHandle> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: (_) => setState(() => _dragging = true),
-        onHorizontalDragUpdate: (d) => widget.onDrag(d.delta.dx),
+        onHorizontalDragStart: (d) {
+          _startX = d.globalPosition.dx;
+          widget.onStart();
+          setState(() => _dragging = true);
+        },
+        onHorizontalDragUpdate: (d) =>
+            widget.onUpdate(d.globalPosition.dx - _startX),
         onHorizontalDragEnd: (_) => setState(() => _dragging = false),
         onHorizontalDragCancel: () => setState(() => _dragging = false),
         onDoubleTap: widget.onReset,
