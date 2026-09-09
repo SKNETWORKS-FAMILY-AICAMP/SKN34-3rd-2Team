@@ -16,7 +16,7 @@ import '../ai_coach/presentation/ai_job_coach_panel.dart';
 import '../ai_coach/presentation/resume_mock_menu.dart';
 import '../services/resume_pdf_exporter.dart';
 import 'widgets/feedback_bell.dart';
-import 'widgets/resume_edit_feedback_panel.dart';
+import 'widgets/section_feedback_thread.dart';
 import 'widgets/resume_section_nav.dart';
 import 'widgets/tech_stack_editor.dart';
 
@@ -48,7 +48,6 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _isSaving = false;
   bool _dirty = false;
   bool _showAiCoach = false;
-  bool _showFeedback = false;
 
   /// 화면에 들어왔을 때의 피드백 건수. 이보다 늘어난 것만 배너로 알린다.
   /// 들어올 때마다 알리면 잔소리가 된다.
@@ -56,6 +55,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   /// 배너를 닫았나. 닫아도 배지는 그대로다 — 읽은 것이 아니기 때문이다.
   bool _bannerDismissed = false;
+
+  /// 댓글을 펼쳐 둔 항목. 종에서 넘어오면 그 항목이 여기 들어간다.
+  final Set<String> _openThreads = <String>{};
 
   /// 오른쪽 패널 너비. 왼쪽 가장자리를 끌어 바꾼다.
   /// 최소값은 첨삭 브랜치 쪽을 따른다 — 패널이 280이면 첨삭 대화가 접힌다.
@@ -245,8 +247,36 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     }
   }
 
-  Widget _section(String key, Widget child) =>
-      KeyedSubtree(key: _sectionKeys[key], child: child);
+  /// 항목 하나. 아래에 그 항목의 댓글을 붙인다. 여기 한 곳만 고치면 모든 항목에 붙는다.
+  Widget _section(String key, Widget child, ResumeModel resume) => KeyedSubtree(
+        key: _sectionKeys[key],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            child,
+            SectionFeedbackThread(
+              resume: resume,
+              sectionKey: key,
+              expanded: _openThreads.contains(key),
+              onToggle: () => setState(() {
+                _openThreads.contains(key)
+                    ? _openThreads.remove(key)
+                    : _openThreads.add(key);
+              }),
+            ),
+          ],
+        ),
+      );
+
+  /// 부르는 곳마다 resume 을 적지 않도록 한 번 묶어 둔다.
+  Widget Function(String, Widget) _sectionOf(ResumeModel resume) =>
+      (key, child) => _section(key, child, resume);
+
+  /// 종에서 넘어왔다. 그 항목으로 굴러가 댓글을 펼친다.
+  void _openThread(String key) {
+    setState(() => _openThreads.add(key));
+    _scrollToSection(key);
+  }
 
   Future<void> _save({
     required ResumeModel resume,
@@ -457,19 +487,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
                 FeedbackBell(
                   resume: resume,
-                  onGoToSection: _scrollToSection,
+                  onGoToSection: _openThread,
                   openOnStart: widget.openFeedback,
                 ),
-                if (isReviewer && resume.acceptsFeedback)
-                  IconButton(
-                    tooltip: _showFeedback ? '피드백 작성 닫기' : '피드백 작성',
-                    isSelected: !_showAiCoach && _showFeedback,
-                    onPressed: () => setState(() {
-                      _showAiCoach = false;
-                      _showFeedback = !_showFeedback;
-                    }),
-                    icon: const Icon(Icons.rate_review_outlined, size: 19),
-                  ),
                 const SizedBox(width: 8),
                 if (!resume.isApproved || isReviewer)
                   _ModeToggle(
@@ -581,7 +601,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   },
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'basicInfo',
                                   _BasicInfoSection(
                                     info: _content.basicInfo,
@@ -613,7 +633,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'coreCompetencies',
                                   _CoreCompetenciesSection(
                                     data: _content.coreCompetencies,
@@ -629,7 +649,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'experience',
                                   _ExperienceSection(
                                     items: _content.experience,
@@ -643,7 +663,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'education',
                                   _EducationSection(
                                     items: _content.education,
@@ -657,7 +677,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'techStack',
                                   _TechStackSection(
                                     items: _content.techStack,
@@ -671,7 +691,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'certifications',
                                   _CertificationsSection(
                                     items: _content.certifications,
@@ -687,7 +707,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'awards',
                                   _AwardsSection(
                                     items: _content.awards,
@@ -701,7 +721,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'trainingExperience',
                                   _TrainingSection(
                                     items: _content.trainingExperience,
@@ -717,7 +737,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'otherActivities',
                                   _ActivitiesSection(
                                     items: _content.otherActivities,
@@ -733,7 +753,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'projects',
                                   _ProjectsSection(
                                     items: _content.projects,
@@ -747,7 +767,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                _section(
+                                _sectionOf(resume)(
                                   'selfIntroduction',
                                   _SelfIntroSection(
                                     data: _content.selfIntroduction,
@@ -806,24 +826,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                               onClose: () => setState(() => _showAiCoach = false),
                             ),
                           ),
-                          // 학생은 종 아래 말풍선으로 읽는다. 오른쪽 패널은 **글을 쓰는**
-                          // 강사·관리자만 쓴다. 읽기와 쓰기를 같은 자리에 둘 이유가 없다.
-                          if (!_showAiCoach && _showFeedback && isReviewer)
-                            ResumeEditFeedbackPanel(
-                              resumeId: widget.resumeId,
-                              // 피드백을 요청한 이력서에만 남길 수 있다.
-                              isAdmin: isReviewer && resume.acceptsFeedback,
-                              selectedSectionKey: _selectedSection,
-                              isSidebar: wide,
-                              onClose: () =>
-                                  setState(() => _showFeedback = false),
-                            ),
                         ],
                       );
 
                       // 둘 다 닫혔으면 오른쪽 자리를 통째로 비운다. 이력서가 넓어진다.
-                      final hasRightPanel =
-                          _showAiCoach || (_showFeedback && isReviewer);
+                      // 오른쪽은 이제 AI 코치만 쓴다. 피드백은 항목 아래 댓글로 옮겼다.
+                      final hasRightPanel = _showAiCoach;
 
                       if (!wide) {
                         return Column(

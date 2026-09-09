@@ -672,14 +672,20 @@ class LmsRepository {
     await batch.commit();
   }
 
-  /// 학생이 피드백 전문을 열어 봤다. **여기서만** 읽음으로 넘어간다.
+  /// 피드백을 화면에서 읽었다. **여기서만** 읽음으로 넘어간다.
+  ///
+  /// 보는 사람에 따라 다른 자리에 적는다. 학생이 읽은 것과 검토자가 읽은 것이
+  /// 섞이면, 한쪽이 읽었다고 다른 쪽 숫자까지 줄어든다.
   Future<void> markResumeFeedbackRead({
     required String cohortId,
     required String resumeId,
-    required String feedbackId,
+    required List<String> feedbackIds,
+    required bool asReviewer,
   }) async {
+    if (feedbackIds.isEmpty) return;
+    final field = asReviewer ? 'reviewerReadFeedbackIds' : 'readFeedbackIds';
     await cohortSub(cohortId, 'resumes').doc(resumeId).update({
-      'readFeedbackIds': FieldValue.arrayUnion([feedbackId]),
+      field: FieldValue.arrayUnion(feedbackIds),
     });
   }
 
