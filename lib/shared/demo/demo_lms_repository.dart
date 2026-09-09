@@ -792,6 +792,18 @@ class DemoLmsRepository {
     );
   }
 
+  Future<void> markResumeFeedbackRead({
+    required String cohortId,
+    required String resumeId,
+    required String feedbackId,
+  }) async {
+    final i = _resumes.indexWhere((r) => r.id == resumeId);
+    if (i < 0) return;
+    final read = _resumes[i].readFeedbackIds;
+    if (read.contains(feedbackId)) return;
+    _resumes[i] = _resumes[i].copyWith(readFeedbackIds: [...read, feedbackId]);
+  }
+
   Future<void> markResumeFeedbackSeen({
     required String cohortId,
     required String resumeId,

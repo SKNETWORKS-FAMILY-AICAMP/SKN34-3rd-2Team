@@ -672,6 +672,17 @@ class LmsRepository {
     await batch.commit();
   }
 
+  /// 학생이 피드백 전문을 열어 봤다. **여기서만** 읽음으로 넘어간다.
+  Future<void> markResumeFeedbackRead({
+    required String cohortId,
+    required String resumeId,
+    required String feedbackId,
+  }) async {
+    await cohortSub(cohortId, 'resumes').doc(resumeId).update({
+      'readFeedbackIds': FieldValue.arrayUnion([feedbackId]),
+    });
+  }
+
   Future<void> markResumeFeedbackSeen({
     required String cohortId,
     required String resumeId,

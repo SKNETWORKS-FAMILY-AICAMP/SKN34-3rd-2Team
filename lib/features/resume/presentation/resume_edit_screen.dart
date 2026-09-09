@@ -15,6 +15,7 @@ import '../data/basic_info_prefill.dart';
 import '../ai_coach/presentation/ai_job_coach_panel.dart';
 import '../ai_coach/presentation/resume_mock_menu.dart';
 import '../services/resume_pdf_exporter.dart';
+import 'widgets/feedback_bell.dart';
 import 'widgets/resume_edit_feedback_panel.dart';
 import 'widgets/resume_section_nav.dart';
 import 'widgets/tech_stack_editor.dart';
@@ -43,7 +44,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _isSaving = false;
   bool _dirty = false;
   bool _showAiCoach = false;
-  bool _showFeedback = true;
+  bool _showFeedback = false;
+
+  /// 화면에 들어왔을 때의 피드백 건수. 이보다 늘어난 것만 배너로 알린다.
+  /// 들어올 때마다 알리면 잔소리가 된다.
+  int? _feedbackSeenOnOpen;
+
+  /// 배너를 닫았나. 닫아도 배지는 그대로다 — 읽은 것이 아니기 때문이다.
+  bool _bannerDismissed = false;
 
   /// 오른쪽 패널 너비. 왼쪽 가장자리를 끌어 바꾼다.
   /// 최소값은 첨삭 브랜치 쪽을 따른다 — 패널이 280이면 첨삭 대화가 접힌다.
@@ -113,17 +121,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
         _scrollToSection(widget.initialSection!);
       });
     }
-    if (!ref.read(isAdminProvider) && resume.hasUnreadFeedback) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final cohortId = ref.read(effectiveCohortIdProvider);
-        if (cohortId == null) return;
-        ref.read(lmsRepositoryProvider).markResumeFeedbackSeen(
-              cohortId: cohortId,
-              resumeId: widget.resumeId,
-              feedbackCount: resume.feedbackCount,
-            );
-      });
-    }
+    // 화면을 열었다고 읽은 것이 아니다. 예전에는 여기서 전부 읽음으로 넘겼는데,
+    // 그러면 배지가 사라진 뒤에야 무슨 말이 있었는지 찾게 된다. 이제는 전문을 연
+    // 항목만 읽음이 된다(FeedbackBell).
+    //
+    // 열어 둔 사이에 새로 도착한 것만 배너로 알리려고 지금 건수를 적어 둔다.
+    _feedbackSeenOnOpen = resume.feedbackCount;
   }
 
   bool _isReadOnly({required bool isAdmin, required ResumeModel resume}) =>
@@ -184,6 +187,41 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   Future<void> _goBack() async {
     if (!await _confirmLeave() || !mounted) return;
     context.go(RoutePaths.resume);
+  }
+
+  /// 화면을 열어 둔 사이에 도착한 피드백만 알린다. 저절로 사라지지 않는다 —
+  /// 글을 쓰는 중에 몇 초 만에 사라지면 못 보고 지나친다.
+  Widget _feedbackBanner(ResumeModel resume) {
+    final since = _feedbackSeenOnOpen;
+    final arrived = since == null ? 0 : resume.feedbackCount - since;
+    if (arrived <= 0 || _bannerDismissed) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
+      decoration: const BoxDecoration(
+        color: AppColors.primaryLight,
+        border: Border(bottom: BorderSide(color: Color(0xFFC9DBFF))),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications, size: 16, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '새 피드백 $arrived건이 도착했습니다. 종을 눌러 확인하세요.',
+              style: const TextStyle(fontSize: 12.5, color: AppColors.primaryDark),
+            ),
+          ),
+          IconButton(
+            tooltip: '배너 닫기',
+            visualDensity: VisualDensity.compact,
+            iconSize: 18,
+            onPressed: () => setState(() => _bannerDismissed = true),
+            icon: const Icon(Icons.close, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
   }
 
   void _scrollToSection(String key) {
@@ -407,28 +445,19 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                // 코치를 보는 중에도 남겨 둔다. 없으면 피드백으로 돌아갈 길이 사라진다.
-                // 그때 누르면 코치를 접고 피드백을 편다.
-                IconButton(
-                  tooltip: _showAiCoach
-                      ? '피드백 보기'
-                      : (_showFeedback ? '피드백 닫기' : '피드백 열기'),
-                  isSelected: !_showAiCoach && _showFeedback,
-                  onPressed: () => setState(() {
-                    if (_showAiCoach) {
+                // 종. 누르면 아래로 말풍선이 내려온다. 오른쪽 패널을 쓰지 않으므로
+                // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
+                FeedbackBell(resume: resume, onGoToSection: _scrollToSection),
+                if (isAdmin && resume.acceptsFeedback)
+                  IconButton(
+                    tooltip: _showFeedback ? '피드백 작성 닫기' : '피드백 작성',
+                    isSelected: !_showAiCoach && _showFeedback,
+                    onPressed: () => setState(() {
                       _showAiCoach = false;
-                      _showFeedback = true;
-                    } else {
                       _showFeedback = !_showFeedback;
-                    }
-                  }),
-                  icon: Icon(
-                    !_showAiCoach && _showFeedback
-                        ? Icons.chat_bubble
-                        : Icons.chat_bubble_outline,
-                    size: 18,
+                    }),
+                    icon: const Icon(Icons.rate_review_outlined, size: 19),
                   ),
-                ),
                 const SizedBox(width: 8),
                 if (!resume.isApproved || isAdmin)
                   _ModeToggle(
@@ -488,6 +517,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   revisionCount: resume.revisionCount,
                   statusLabel: resume.statusLabel,
                 ),
+                if (!isAdmin) _feedbackBanner(resume),
                 if (resume.isSubmitted && !resume.isApproved && !isAdmin)
                   Container(
                     width: double.infinity,
@@ -764,7 +794,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                               onClose: () => setState(() => _showAiCoach = false),
                             ),
                           ),
-                          if (!_showAiCoach && _showFeedback)
+                          // 학생은 종 아래 말풍선으로 읽는다. 오른쪽 패널은 **글을 쓰는**
+                          // 강사·관리자만 쓴다. 읽기와 쓰기를 같은 자리에 둘 이유가 없다.
+                          if (!_showAiCoach && _showFeedback && isAdmin)
                             ResumeEditFeedbackPanel(
                               resumeId: widget.resumeId,
                               // 피드백을 요청한 이력서에만 남길 수 있다.
@@ -778,7 +810,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       );
 
                       // 둘 다 닫혔으면 오른쪽 자리를 통째로 비운다. 이력서가 넓어진다.
-                      final hasRightPanel = _showAiCoach || _showFeedback;
+                      final hasRightPanel =
+                          _showAiCoach || (_showFeedback && isAdmin);
 
                       if (!wide) {
                         return Column(

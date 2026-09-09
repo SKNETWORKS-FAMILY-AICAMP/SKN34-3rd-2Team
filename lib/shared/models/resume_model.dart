@@ -73,6 +73,7 @@ class ResumeModel {
     this.content = const ResumeContent(),
     this.feedbackCount = 0,
     this.lastSeenFeedbackCount = 0,
+    this.readFeedbackIds = const [],
     this.revisionCount = 0,
     this.updatedAt,
   });
@@ -85,6 +86,10 @@ class ResumeModel {
   final ResumeContent content;
   final int feedbackCount;
   final int lastSeenFeedbackCount;
+
+  /// 학생이 **전문을 열어 본** 피드백. 종을 열거나 배너를 닫는 것으로는 늘지 않는다.
+  /// 목록만 훑고 지나간 것을 읽었다고 세면, 정작 읽어야 할 말이 숫자와 함께 사라진다.
+  final List<String> readFeedbackIds;
   final int revisionCount;
   final DateTime? updatedAt;
 
@@ -94,7 +99,12 @@ class ResumeModel {
       totalCount == 0 ? 0 : completedCount / totalCount;
 
   int get unreadFeedbackCount {
-    final unread = feedbackCount - lastSeenFeedbackCount;
+    // 예전에는 화면을 열기만 해도 lastSeenFeedbackCount 를 채워 두었다. 그 기록이 남은
+    // 이력서가 갑자기 안 읽음으로 돌아가지 않도록 둘 중 큰 쪽을 읽은 것으로 본다.
+    final read = lastSeenFeedbackCount > readFeedbackIds.length
+        ? lastSeenFeedbackCount
+        : readFeedbackIds.length;
+    final unread = feedbackCount - read;
     return unread < 0 ? 0 : unread;
   }
 
@@ -118,6 +128,8 @@ class ResumeModel {
       content: content,
       feedbackCount: data['feedbackCount'] as int? ?? 0,
       lastSeenFeedbackCount: data['lastSeenFeedbackCount'] as int? ?? 0,
+      readFeedbackIds:
+          (data['readFeedbackIds'] as List?)?.cast<String>() ?? const [],
       revisionCount: data['revisionCount'] as int? ?? 0,
       updatedAt: AppDateUtils.timestampToDateTime(data['updatedAt']),
     );
@@ -133,6 +145,7 @@ class ResumeModel {
       'content': content.toMap(),
       'feedbackCount': feedbackCount,
       'lastSeenFeedbackCount': lastSeenFeedbackCount,
+      'readFeedbackIds': readFeedbackIds,
       'revisionCount': revisionCount,
       'updatedAt': FieldValue.serverTimestamp(),
       if (isCreate) 'createdAt': FieldValue.serverTimestamp(),
@@ -167,6 +180,7 @@ class ResumeModel {
     ResumeContent? content,
     int? feedbackCount,
     int? lastSeenFeedbackCount,
+    List<String>? readFeedbackIds,
     int? revisionCount,
   }) {
     return ResumeModel(
@@ -178,6 +192,7 @@ class ResumeModel {
       content: content ?? this.content,
       feedbackCount: feedbackCount ?? this.feedbackCount,
       lastSeenFeedbackCount: lastSeenFeedbackCount ?? this.lastSeenFeedbackCount,
+      readFeedbackIds: readFeedbackIds ?? this.readFeedbackIds,
       revisionCount: revisionCount ?? this.revisionCount,
       updatedAt: updatedAt,
     );
