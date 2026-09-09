@@ -42,6 +42,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final Map<String, GlobalKey> _previewSectionKeys = {};
   bool _busy = false, _changed = false, _undone = false;
   bool _mutationPending = false;
+  Map<String, dynamic>? _pendingQuestion;
   String? _error;
   String? _focusedFieldPath;
   late ResumeContent _preview;
@@ -118,11 +119,6 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _preview = content;
         _changed = true;
         _mutationPending = false;
-        _messages.add(
-          const _ReviewChatMessage.assistant(
-            '수정안이 왼쪽 이력서에 반영되었습니다. 다음 질문에 답하면 수정된 내용 기준으로 첨삭을 계속합니다.',
-          ),
-        );
       });
     }
   }
@@ -132,6 +128,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     required bool isFirstReview,
     String? answeredFieldPath,
   }) {
+    _pendingQuestion = null;
     if (isFirstReview) {
       _messages.add(
         _ReviewChatMessage.assistant(
@@ -191,8 +188,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     final questions = (review['questions'] as List? ?? []).cast<Map>();
     if (questions.isNotEmpty) {
       final question = Map<String, dynamic>.from(questions.first);
-      _messages.add(_ReviewChatMessage.question(question));
-      _focusPreviewField(question['field_path'] as String?);
+      if (displayedSuggestions > 0) {
+        // The user should decide whether to apply the current revision before
+        // moving on. Show this question after the revised resume is reloaded.
+        _pendingQuestion = question;
+      } else {
+        _messages.add(_ReviewChatMessage.question(question));
+        _focusPreviewField(question['field_path'] as String?);
+      }
     } else if (!isFirstReview && displayedSuggestions > 0) {
       _messages.add(
         const _ReviewChatMessage.assistant(
@@ -320,6 +323,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       setState(() => _appliedSuggestionIndices.addAll(_selected));
     }
     await _reload();
+    if (mounted && _pendingQuestion != null) {
+      final question = _pendingQuestion!;
+      setState(() {
+        _pendingQuestion = null;
+        _messages.add(_ReviewChatMessage.question(question));
+      });
+      _focusPreviewField(question['field_path'] as String?);
+    }
   });
 
   Future<void> _undo() => _run(() async {
@@ -342,6 +353,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _applyRequest = null;
         _application = null;
         _undone = true;
+        _pendingQuestion = null;
         _messages.add(
           const _ReviewChatMessage.assistant(
             '수정안을 되돌렸습니다. 현재 이력서 기준으로 첨삭을 다시 시작할 수 있습니다.',
