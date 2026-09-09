@@ -792,6 +792,23 @@ class DemoLmsRepository {
     );
   }
 
+  Future<void> markResumeFeedbackRead({
+    required String cohortId,
+    required String resumeId,
+    required List<String> feedbackIds,
+    required bool asReviewer,
+  }) async {
+    final i = _resumes.indexWhere((r) => r.id == resumeId);
+    if (i < 0 || feedbackIds.isEmpty) return;
+    final before = asReviewer
+        ? _resumes[i].reviewerReadFeedbackIds
+        : _resumes[i].readFeedbackIds;
+    final after = {...before, ...feedbackIds}.toList();
+    _resumes[i] = asReviewer
+        ? _resumes[i].copyWith(reviewerReadFeedbackIds: after)
+        : _resumes[i].copyWith(readFeedbackIds: after);
+  }
+
   Future<void> markResumeFeedbackSeen({
     required String cohortId,
     required String resumeId,

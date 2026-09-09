@@ -114,11 +114,15 @@ abstract final class RoutePaths {
     String resumeId, {
     String? section,
     String? cohortId,
+    bool openFeedback = false,
   }) {
     final path = '/resume/$resumeId/edit';
     final params = <String, String>{};
     if (section != null && section.isNotEmpty) params['section'] = section;
     if (cohortId != null && cohortId.isNotEmpty) params['cohortId'] = cohortId;
+    // 목록의 「읽으러 가기」로 들어오면 종이 펼쳐진 채로 연다. 가는 곳은 같고
+    // 도착 상태가 다르다.
+    if (openFeedback) params['feedback'] = '1';
     if (params.isEmpty) return path;
     final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
     return '$path?$query';
