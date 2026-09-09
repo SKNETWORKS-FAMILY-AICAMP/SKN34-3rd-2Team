@@ -94,6 +94,31 @@ def test_existing_numbers_do_not_become_negative_via_formatting():
     assert 'quantity_sign_changed' in result.validation_issues
 
 
+def test_factual_technology_anchors_are_returned_for_a_safe_revision():
+    result = review('Python API 개발을 진행했습니다.', 'Python으로 API를 개발했습니다.', edit_type='clarity')
+    assert result.suggested_revision == 'Python으로 API를 개발했습니다.'
+    assert {'Python', 'api'} <= set(result.fact_anchors)
+    assert result.change_rate is not None
+
+
+def test_removing_a_technology_anchor_requires_confirmation():
+    result = review('Python API 개발을 진행했습니다.', '기능을 개발했습니다.', edit_type='clarity')
+    assert result.suggested_revision is None
+    assert result.status == 'needs_confirmation'
+    assert 'missing_fact_anchor' in result.validation_issues
+
+
+def test_large_safe_rewrite_has_a_change_rate_notice():
+    result = review(
+        'Python API 개발을 진행했습니다.',
+        'Python을 활용해 사용자 요청을 처리하는 API를 구현하고 예외 상황을 점검했습니다.',
+        edit_type='content',
+    )
+    assert result.suggested_revision is not None
+    assert result.change_rate is not None and result.change_rate > 0.3
+    assert result.change_rate_notice
+
+
 def test_quality_result_passes_through_review_service():
     from app.config import Settings
     from app.models import FirestoreResumeReviewRequest

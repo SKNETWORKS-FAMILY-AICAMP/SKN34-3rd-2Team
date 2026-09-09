@@ -76,17 +76,17 @@ class LoadTest(unittest.TestCase):
 
 
 class LocationTest(unittest.TestCase):
-    def test_default_path_points_at_functions_env(self):
-        # Functions와 파이프라인이 같은 키 파일을 쓴다.
-        self.assertEqual("functions", DEFAULT_ENV_PATH.parent.name)
+    def test_default_path_points_at_repository_env(self):
+        # Python 서비스의 단일 원본은 레포 루트 환경 파일이다.
+        self.assertEqual("SKN34-3rd-2Team", DEFAULT_ENV_PATH.parent.name)
         self.assertEqual(".env", DEFAULT_ENV_PATH.name)
 
     def test_env_file_is_gitignored(self):
-        gitignore = (DEFAULT_ENV_PATH.parent.parent / ".gitignore").read_text(
+        gitignore = (DEFAULT_ENV_PATH.parent / ".gitignore").read_text(
             encoding="utf-8", errors="replace"
         )
         # 키 파일이 커밋되면 안 된다.
-        self.assertIn("functions/.env", gitignore)
+        self.assertIn(".env", gitignore)
 
 
 if __name__ == "__main__":

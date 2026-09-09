@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -244,6 +244,10 @@ class SentenceReview(StrictModel):
     evidence_sources: list[str] = Field(default_factory=list)
     edit_type: Literal['none', 'spelling', 'tone', 'clarity', 'content'] = 'content'
     validation_issues: list[str] = Field(default_factory=list)
+    # Server-derived evidence anchors. The model must not decide which facts are protected.
+    fact_anchors: list[str] = Field(default_factory=list)
+    change_rate: float | None = Field(default=None, ge=0, le=1)
+    change_rate_notice: str | None = None
 
 
 class FirestoreResumeReviewRequest(StrictModel):
@@ -270,6 +274,35 @@ class FirestoreResumeReviewRequest(StrictModel):
     def normalize_optional_text(cls, value: str | None) -> str | None:
         normalized = value.strip() if value else ""
         return normalized or None
+
+
+class TailoredResumeCreateRequest(StrictModel):
+    cohort_id: str = Field(min_length=1, max_length=200)
+    resume_id: str = Field(min_length=1, max_length=200)
+    selected_job_id: str = Field(min_length=1, max_length=200)
+
+    @field_validator("cohort_id", "resume_id", "selected_job_id")
+    @classmethod
+    def reject_unsafe_identifier(cls, value: str) -> str:
+        value = value.strip()
+        if not value or '/' in value or value in {'.', '..'}:
+            raise ValueError("identifier must not be blank")
+        return value
+
+
+class TailoredResumeSummary(StrictModel):
+    tailored_resume_id: str
+    base_resume_id: str
+    job_id: str
+    company_name: str
+    job_title: str
+    source_resume_hash: str
+    job_snapshot_hash: str
+    status: Literal['draft', 'ready', 'archived']
+
+
+class TailoredResumeResponse(TailoredResumeSummary):
+    content: dict[str, Any]
 
 
 class ResumeSectionReview(StrictModel):

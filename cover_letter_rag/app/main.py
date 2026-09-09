@@ -19,6 +19,9 @@ from app.models import (
     ReviewResponse,
     ResumeProfileRequest,
     ResumeProfileResponse,
+    TailoredResumeCreateRequest,
+    TailoredResumeResponse,
+    TailoredResumeSummary,
 )
 from app.firebase_gateway import (
     FirebaseAuthenticationError,
@@ -33,6 +36,7 @@ from google.api_core.exceptions import GoogleAPIError
 from google.auth.exceptions import GoogleAuthError
 from app.service import CoverLetterService
 from app.vector_store import JobRepository
+from app.tailored_resumes import TailoredResumeService
 
 
 app = FastAPI(
@@ -85,6 +89,48 @@ def review_context(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (RuntimeError, GoogleAPIError, GoogleAuthError) as exc:
         raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
+
+
+@app.post('/api/v1/resumes/tailored', response_model=TailoredResumeResponse)
+def create_tailored_resume(
+    request: TailoredResumeCreateRequest,
+    authorization: str | None = Header(default=None),
+    gateway: FirebaseGateway = Depends(get_context_gateway),
+    settings: Settings = Depends(get_settings),
+):
+    from app.matching_handoff import load_selected_job
+    try:
+        uid = gateway.verify_id_token(extract_bearer_token(authorization))
+        service = TailoredResumeService(gateway, lambda job_id: load_selected_job(settings.matching_job_store_path, job_id))
+        return service.create(uid, request)
+    except FirebaseAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
+    except ResumeAccessError as exc:
+        raise HTTPException(status_code=403, detail='Resume access denied') from exc
+    except ResumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Resume or job was not found') from exc
+    except (ReviewConflict, ReviewInputError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (RuntimeError, GoogleAPIError, GoogleAuthError) as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
+
+
+@app.get('/api/v1/resumes/{resume_id}/tailored', response_model=list[TailoredResumeSummary])
+def list_tailored_resumes(
+    resume_id: str,
+    cohort_id: str = Query(min_length=1, max_length=200, pattern=r'^[^/]+$'),
+    authorization: str | None = Header(default=None),
+    gateway: FirebaseGateway = Depends(get_context_gateway),
+):
+    try:
+        uid = gateway.verify_id_token(extract_bearer_token(authorization))
+        return TailoredResumeService(gateway, lambda _: {}).list(uid, cohort_id, resume_id)
+    except FirebaseAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
+    except ResumeAccessError as exc:
+        raise HTTPException(status_code=403, detail='Resume access denied') from exc
+    except ResumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Resume was not found') from exc
 
 
 @lru_cache

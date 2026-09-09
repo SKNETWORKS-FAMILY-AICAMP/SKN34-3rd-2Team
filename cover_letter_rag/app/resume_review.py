@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import json
 import hashlib
+from difflib import SequenceMatcher
 from collections.abc import Callable
 from typing import Any
 
@@ -229,11 +230,34 @@ def _meaning_risks(original, revision):
     return issues
 
 
+def _fact_anchors(text: str) -> list[str]:
+    """Return only deterministic anchors that must survive a sentence rewrite.
+
+    Korean free text is intentionally not tokenized here: an imprecise tokenizer could
+    label ordinary wording as a protected fact. Numbers and technology/English tokens
+    are stable enough to verify locally.
+    """
+    numbers = set(NUMBER_PATTERN.findall(text))
+    terms = {term.removeprefix('tech:') for term in comparison_terms(text)}
+    return sorted(numbers | terms, key=str.casefold)
+
+
+def _change_rate(original: str, revision: str) -> float:
+    source = re.sub(r'\s+', '', original)
+    target = re.sub(r'\s+', '', revision)
+    if not source and not target:
+        return 0.0
+    return round(1 - SequenceMatcher(a=source, b=target, autojunk=False).ratio(), 3)
+
+
 def ground_sentences(fields, answers, generation):
     warnings, valid = [], []
     spans = {}
     for item in generation.sentence_reviews:
         item.validation_issues = []
+        item.fact_anchors = []
+        item.change_rate = None
+        item.change_rate_notice = None
         original = fields.get(item.field_path, "")
         if not item.original_quote.strip() or item.original_quote not in original:
             warnings.append(f"문장 원문 위치 불일치: {item.field_path}")
@@ -259,6 +283,11 @@ def ground_sentences(fields, answers, generation):
         evidence = "\n".join(quotes)
         new_numbers = set(NUMBER_PATTERN.findall(revision)) - set(NUMBER_PATTERN.findall(evidence))
         new_terms = comparison_terms(revision) - comparison_terms(evidence)
+        original_terms = comparison_terms(item.original_quote)
+        # A user-confirmed replacement can legitimately restate the field without
+        # repeating every token in the abbreviated original quote.
+        answer_restates_revision = any(revision.strip() and revision.strip() in answer.answer for answer in answers)
+        missing_terms = set() if answer_restates_revision else original_terms - comparison_terms(revision)
         role_expansion = any(term in revision and term not in evidence for term in ("주도", "총괄", "리드", "책임", "달성"))
         if item.suggested_revision is not None and not revision.strip():
             item.validation_issues.append('empty_revision')
@@ -268,6 +297,8 @@ def ground_sentences(fields, answers, generation):
                 item.validation_issues.append('unsupported_number')
             if new_terms:
                 item.validation_issues.append('unsupported_term')
+            if missing_terms:
+                item.validation_issues.append('missing_fact_anchor')
             if role_expansion:
                 item.validation_issues.append('unsupported_role')
             if '[연락처 삭제]' in revision or '[연락처 삭제]' in item.original_quote:
@@ -303,6 +334,11 @@ def ground_sentences(fields, answers, generation):
             if item.edit_type == 'none':
                 item.edit_type = 'content'
         if item.suggested_revision:
+            item.fact_anchors = _fact_anchors(item.original_quote)
+            item.change_rate = _change_rate(item.original_quote, item.suggested_revision)
+            # A warning is informational only. The user still chooses whether to apply it.
+            if item.change_rate > 0.3:
+                item.change_rate_notice = '원문 대비 변경 폭이 큽니다. 적용 전 문장 의미와 사실 앵커를 다시 확인해 주세요.'
             spans.setdefault(item.field_path, []).append((start, end))
         valid.append(item)
     generation.sentence_reviews = valid
