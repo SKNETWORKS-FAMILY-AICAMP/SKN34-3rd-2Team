@@ -100,6 +100,25 @@ def health() -> schemas.HealthResponse:
     )
 
 
+@app.post("/api/v1/resume/profile", response_model=schemas.ResumeProfileOut)
+def resume_profile(request: schemas.ProfileRequest) -> schemas.ResumeProfileOut:
+    """이력서를 검색용으로 구조화한다. **저장할 때 미리 불러 두라고 낸 창구다.**
+
+    추천이 이걸 다시 만들면 두 가지를 잃는다. 매번 2.7초를 기다리고, 검색어가 조금씩
+    달라져 같은 이력서인데도 추천 목록이 흔들린다. 앱이 저장 시점에 한 번 받아 두었다가
+    추천 요청에 `profile`로 실어 보내면 둘 다 사라진다.
+
+    이력서를 고쳤으면 다시 부르면 된다. 안 보내면 서버가 그때 만든다.
+    """
+    warnings: list[str] = []
+    profile = _service.build_profile(
+        schemas.RecommendRequest(resume_text=request.resume_text), warnings
+    )
+    if warnings:
+        raise HTTPException(status_code=503, detail=warnings[0])
+    return profile
+
+
 @app.post("/api/v1/jobs/recommend", response_model=schemas.RecommendResponse)
 def recommend(request: schemas.RecommendRequest) -> schemas.RecommendResponse:
     try:

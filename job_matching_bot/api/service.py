@@ -32,9 +32,12 @@ from job_matching_bot.schemas.resume import ResumeProfile
 
 # 검색으로 가져올 후보 수. 하드 필터에서 일부가 떨어지므로 최종 표시분보다 넉넉히.
 SEARCH_TOP_K = 25
-# LLM에 넘길 상위 후보 수. 재정렬이 전체 응답 시간의 3분의 2를 차지하므로,
-# 최종 표시할 건수보다 조금만 크게 둔다.
-RERANK_TOP_K = 6
+# LLM에 넘길 상위 후보 수. 공고마다 따로, 동시에 판정하므로 늘려도 가장 느린 한 건만큼만
+# 기다린다. 6건에서 12건으로 올렸을 때 실측(이력서 4종): 시간은 6.6초에서 7.0초로 0.4초
+# 늘고, "높음" 판정은 9건에서 18건으로 늘었다. 벡터 검색이 위로 올린 순서가 사람이 보기에
+# 늘 맞지는 않아, 적게 보면 좋은 공고를 판정도 못 해 보고 버리게 된다.
+# 하드 필터를 통과하는 것이 보통 13~18건이라 12건은 그 안에 든다.
+RERANK_TOP_K = 12
 # 같은 회사가 목록을 채우지 않게 하는 상한.
 MAX_PER_COMPANY = 2
 # 재정렬에 넘길 공고 본문 길이. 메타데이터 excerpt와 같게 두어 자르지 않는다.
@@ -99,6 +102,10 @@ class RecommendService:
     def build_profile(
         self, request: schemas.RecommendRequest, warnings: list[str]
     ) -> schemas.ResumeProfileOut:
+        # 앱이 저장할 때 미리 만들어 보냈으면 그대로 쓴다. 다시 만들면 검색어가 달라져
+        # 같은 이력서인데도 추천이 흔들린다.
+        if request.profile is not None:
+            return request.profile
         cached = self._profiles.get(request.resume_text)
         if cached is not None:
             self._profiles.move_to_end(request.resume_text)

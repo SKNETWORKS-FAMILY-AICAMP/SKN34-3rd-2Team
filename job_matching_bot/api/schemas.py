@@ -32,6 +32,23 @@ class RecommendRequest(StrictModel):
     majors: list[str] = Field(default_factory=list, max_length=10)
     certifications: list[str] = Field(default_factory=list, max_length=30)
     top_k: int = Field(default=10, ge=1, le=20)
+    # 앱이 이력서를 저장할 때 미리 만들어 둔 구조화 결과. 있으면 서버는 다시 만들지 않는다.
+    # 대기 시간이 2.7초 줄고, 무엇보다 **검색어가 고정되어 추천이 매번 흔들리지 않는다.**
+    # 이력서를 고쳤으면 앱이 보내지 않으면 된다 — 그때는 서버가 새로 만든다.
+    profile: "ResumeProfileOut | None" = None
+
+    @field_validator("resume_text")
+    @classmethod
+    def reject_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("resume_text must not be blank")
+        return value.strip()
+
+
+class ProfileRequest(StrictModel):
+    """구조화만 요청한다. 이력서를 저장할 때 미리 불러 두는 용도다."""
+
+    resume_text: str = Field(min_length=20, max_length=50_000)
 
     @field_validator("resume_text")
     @classmethod
@@ -58,6 +75,10 @@ class ResumeProfileOut(StrictModel):
     skills: list[str] = Field(description="이력서에 근거가 있는 기술만", max_length=30)
     career_years: float = Field(description="이력서 경력사항으로 계산한 연차. 없으면 0", ge=0)
     summary: str = Field(description="이 지원자를 한 문장으로")
+
+
+# RecommendRequest 가 위에서 이 형을 이름으로만 가리켰다. 여기서 이어 준다.
+RecommendRequest.model_rebuild()
 
 
 # ── LLM ② 재정렬 ────────────────────────────────────────
