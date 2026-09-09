@@ -4,7 +4,7 @@ import json
 import re
 import time
 
-from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion
+from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion, SentenceReview
 
 PROMPT_VERSION = 'resume-v3-quality'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
@@ -55,6 +55,64 @@ def review_job_prompt_text(job_text, job_source):
         '[공고 원문]\n'
         f'{job_text}'
     )
+
+
+_IDENTITY_QUESTION_PATTERN = re.compile(r'(회사명|회사\s*이름|지원\s*회사|직무명|직무\s*이름|지원\s*직무)')
+
+
+def apply_selected_job_identity_revisions(generation, fields, job_source):
+    """Replace resume placeholders from the selected job without asking the user.
+
+    Company and role are selected-job facts, not resume facts. They are safe to use
+    only for the literal placeholders, and must not depend on an LLM following a
+    prompt instruction.
+    """
+    company = str(job_source.get('company') or '').strip()
+    title = str(job_source.get('title') or '').strip()
+    replacements = {}
+    for field_path, original in fields.items():
+        revised = original
+        changed = []
+        if company and '[회사명]' in revised:
+            revised = revised.replace('[회사명]', company)
+            changed.append('회사명')
+        if title and '[직무명]' in revised:
+            revised = revised.replace('[직무명]', title)
+            changed.append('직무명')
+        if changed:
+            replacements[field_path] = (original, revised, '·'.join(changed))
+    if not replacements:
+        return
+
+    # The deterministic replacement is the only edit for its field. Otherwise a
+    # model-generated whole-field rewrite could overwrite it during apply.
+    generation.sentence_reviews = [
+        review for review in generation.sentence_reviews
+        if review.field_path not in replacements
+    ]
+    for field_path, (original, revised, changed) in replacements.items():
+        generation.sentence_reviews.append(SentenceReview(
+            field_path=field_path,
+            original_quote=original,
+            suggested_revision=revised,
+            reason=f'선택한 공고의 {changed} 확정값을 자리표시자에 반영했습니다.',
+            evidence_quotes=[original],
+            status='improved',
+            edit_type='content',
+        ))
+
+    # The company/title are already supplied above; never ask the user for them.
+    generation.questions = [
+        question for question in generation.questions
+        if not _IDENTITY_QUESTION_PATTERN.search(question.question)
+    ]
+    generation.confirmation_questions = [
+        question for question in generation.confirmation_questions
+        if not _IDENTITY_QUESTION_PATTERN.search(question)
+    ]
+    for review in generation.sentence_reviews:
+        if review.confirmation_question and _IDENTITY_QUESTION_PATTERN.search(review.confirmation_question):
+            review.confirmation_question = None
 
 
 def group(path):
@@ -212,6 +270,7 @@ def run_review(service, id_token, request):
             generated = generated['parsed']
         grounded, warnings = enforce_resume_review_grounding('\n'.join(fields.values()), generated)
         warnings.extend(ground_sentences(fields, answers, grounded))
+        apply_selected_job_identity_revisions(grounded, fields, job_source)
         changes = normalize_diagnostics(grounded, fields, bool(job_text), previous)
         normalize_questions(grounded, fields, answers, request.request_id)
         telemetry.update(status='complete', elapsed_ms=round((time.monotonic() - started) * 1000))

@@ -139,6 +139,10 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       );
     }
     final reviews = (review['sentence_reviews'] as List? ?? []).cast<Map>();
+    final job = Map<String, dynamic>.from(
+      review['job_source'] as Map? ??
+          {'company': widget.jobCompany, 'title': widget.jobTitle},
+    );
     var displayedSuggestions = 0;
     for (var index = 0; index < reviews.length; index++) {
       final sentence = Map<String, dynamic>.from(reviews[index]);
@@ -149,7 +153,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       if (sentence['suggested_revision'] is String &&
           (sentence['suggested_revision'] as String).trim().isNotEmpty) {
         sentence['_index'] = index;
-        _messages.add(_ReviewChatMessage.suggestion(sentence));
+        if (_isIdentityPlaceholderSuggestion(sentence)) {
+          sentence['_company'] = job['company'] ?? widget.jobCompany;
+          sentence['_title'] = job['title'] ?? widget.jobTitle;
+          _messages.add(_ReviewChatMessage.identityConfirmation(sentence));
+          _focusPreviewField(sentence['field_path'] as String?);
+        } else {
+          _messages.add(_ReviewChatMessage.suggestion(sentence));
+        }
         displayedSuggestions++;
       }
     }
@@ -181,6 +192,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         );
       }
     });
+  }
+
+  bool _isIdentityPlaceholderSuggestion(Map<String, dynamic> sentence) {
+    final original = sentence['original_quote'] as String? ?? '';
+    return original.contains('[회사명]') || original.contains('[직무명]');
   }
 
   String _sectionForFieldPath(String fieldPath) =>
@@ -810,6 +826,45 @@ class _ReviewChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.identitySuggestion != null) {
+      final item = message.identitySuggestion!;
+      final index = item['_index'] as int;
+      final company = item['_company'] as String? ?? '';
+      final title = item['_title'] as String? ?? '';
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          constraints: const BoxConstraints(maxWidth: 410),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFFBBF7D0)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '회사명을 $company, 직무명을 $title(으)로 변경할까요?',
+                style: const TextStyle(fontSize: 12.5, height: 1.45),
+              ),
+              const SizedBox(height: 9),
+              FilledButton.icon(
+                onPressed: applicationDone ? null : () => onApply(index),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.check, size: 15),
+                label: const Text('네, 변경할게요'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (message.suggestion != null) {
       final item = message.suggestion!;
       final index = item['_index'] as int;
@@ -898,22 +953,32 @@ class _ReviewChatMessage {
   const _ReviewChatMessage.assistant(this.text)
     : isUser = false,
       question = null,
-      suggestion = null;
+      suggestion = null,
+      identitySuggestion = null;
   const _ReviewChatMessage.user(this.text)
     : isUser = true,
       question = null,
-      suggestion = null;
+      suggestion = null,
+      identitySuggestion = null;
   const _ReviewChatMessage.question(this.question)
     : text = '',
       isUser = false,
-      suggestion = null;
+      suggestion = null,
+      identitySuggestion = null;
   const _ReviewChatMessage.suggestion(this.suggestion)
     : text = '',
       isUser = false,
-      question = null;
+      question = null,
+      identitySuggestion = null;
+  const _ReviewChatMessage.identityConfirmation(this.identitySuggestion)
+    : text = '',
+      isUser = false,
+      question = null,
+      suggestion = null;
 
   final String text;
   final bool isUser;
   final Map<String, dynamic>? question;
   final Map<String, dynamic>? suggestion;
+  final Map<String, dynamic>? identitySuggestion;
 }

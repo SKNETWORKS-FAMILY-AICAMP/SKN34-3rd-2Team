@@ -116,6 +116,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   }
 
   Future<void> _reviewJob(JobRecommendation job) async {
+    if (job.bodyIsImage) {
+      setState(
+        () =>
+            _error = '이 공고는 상세 내용이 이미지뿐이라 원문 근거 첨삭을 할 수 없습니다. 텍스트 공고를 선택해 주세요.',
+      );
+      return;
+    }
     // 저장하는 동안 사용자가 패널을 닫을 수 있다. 그러면 대화창을 띄우지 않는다.
     if (widget.hasUnsavedChanges && !await _saveBeforeReview()) return;
     if (!mounted) return;
@@ -924,22 +931,28 @@ class _RecommendationCardState extends State<_RecommendationCard> {
   }
 
   Widget _reviewButton() {
-    return FilledButton.icon(
-      onPressed: () => widget.onReview!(item),
-      style: FilledButton.styleFrom(
-        backgroundColor: AppColors.success,
-        foregroundColor: Colors.white,
-        minimumSize: const Size(0, 32),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+    final unavailable = item.bodyIsImage;
+    return Tooltip(
+      message: unavailable
+          ? '상세 공고가 이미지뿐이라 원문 근거 첨삭을 할 수 없습니다.'
+          : '선택 공고와 이력서를 비교해 첨삭합니다.',
+      child: FilledButton.icon(
+        onPressed: unavailable ? null : () => widget.onReview!(item),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.success,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
-      ),
-      icon: const Icon(Icons.auto_fix_high, size: 14),
-      label: const Text(
-        '공고 맞춤 첨삭',
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        icon: const Icon(Icons.auto_fix_high, size: 14),
+        label: Text(
+          unavailable ? '원문 확인 불가' : '공고 맞춤 첨삭',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
