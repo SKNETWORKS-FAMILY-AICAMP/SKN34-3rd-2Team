@@ -210,6 +210,60 @@ def build_resume_text(content: dict) -> str:
     return "\n\n".join(parts).strip()
 
 
+# 하드 필터의 `EDUCATION_RANK` 와 같은 순서. 뒤로 갈수록 높다.
+EDUCATION_ORDER = ["미기재", "고졸", "초대졸", "대졸", "석사", "박사"]
+
+# 학위를 못 받았을 때 실제로 인정되는 수준. 한 칸씩 내리면 안 된다.
+# 대학교 중퇴는 초대졸이 아니라 고졸이다.
+_BEFORE_DEGREE = {"박사": "석사", "석사": "대졸", "대졸": "고졸", "초대졸": "고졸", "고졸": "미기재"}
+
+
+def _degree_of(item: dict) -> str:
+    """학교 이름·전공에서 학위 수준을 읽는다. 못 읽으면 빈 문자열."""
+    text = re.sub(r"\s", "", f"{_text(item.get('school'))} {_text(item.get('major'))}")
+    if "박사" in text:
+        return "박사"
+    if "대학원" in text or "석사" in text:
+        return "석사"
+    # `전문대학`은 `대학`을 품고 있다. 반드시 먼저 본다.
+    if "전문대" in text or re.search(r"\([23]년제\)", text):
+        return "초대졸"
+    if "대학" in text:
+        return "대졸"
+    if "고등학교" in text or "고교" in text:
+        return "고졸"
+    return ""
+
+
+def _has_degree(status: str) -> str:
+    """학위를 실제로 받았는가. 상태 칸은 자유 입력이라 정해진 목록이 없다.
+
+    `졸업예정`도 대졸 공고에 지원할 수 있으니 포함한다. `재학`·`중퇴`·`수료`에는
+    `졸업`이 없어 자연히 걸러진다. 비워 둔 것은 받은 것으로 본다 — 학교만 적고
+    상태를 안 쓴 이력서가 흔하고, 안 썼다고 깎으면 멀쩡한 공고가 사라진다.
+    """
+    s = _text(status)
+    return not s or "졸업" in s or "학위취득" in s
+
+
+def education_level_of(education: Iterable[dict]) -> str:
+    """학력사항에서 가장 높은 학력을 고른다.
+
+    예전에는 학력 항목이 한 줄이라도 있으면 무조건 `대졸`이었다. 전공을 적었다는 것과
+    그 학위를 받았다는 것은 다른 이야기인데 둘을 같이 봤다.
+    """
+    best = 0
+    for item in education or []:
+        if not _text(item.get("school")):
+            continue
+        degree = _degree_of(item)
+        if not degree:
+            continue
+        level = degree if _has_degree(item.get("status")) else _BEFORE_DEGREE.get(degree, "미기재")
+        best = max(best, EDUCATION_ORDER.index(level))
+    return EDUCATION_ORDER[best]
+
+
 def _parse_month(value: Any) -> date | None:
     text = _text(value)
     if not text:
@@ -243,7 +297,7 @@ def profile_from_content(content: dict, today: date | None = None) -> dict:
     education = [e for e in content.get("education") or [] if _text(e.get("school"))]
     experience = [e for e in content.get("experience") or [] if _text(e.get("company"))]
     return {
-        "education_level": "대졸" if education else "미기재",
+        "education_level": education_level_of(education),
         "career_years": estimate_career_years(experience, today),
         "majors": [_text(e.get("major")) for e in education if _text(e.get("major"))],
         "certifications": [

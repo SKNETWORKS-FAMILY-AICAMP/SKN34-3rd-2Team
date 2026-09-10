@@ -7,11 +7,11 @@
 이제 원본은 앱과 같은 `scripts/resume_mocks.json` 하나다. 여기서는 파이썬 판이
 `resume_text_builder.dart`와 **한 글자도 다르지 않은지** 본다.
 
-Dart 정답지는 `test/dump_mock_resume_text_test.dart`가 만든다. 그 파일이 없으면
+Dart 정답지는 `test/resume_mock_text_dump_test.dart`가 만든다. 그 파일이 없으면
 대조 테스트는 건너뛴다 — Flutter 없이도 나머지는 돌아야 한다. 앱 쪽 직렬화를
 고쳤다면 이렇게 다시 만든다.
 
-    flutter test test/dump_mock_resume_text_test.dart
+    flutter test test/resume_mock_text_dump_test.dart
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from pathlib import Path
 from job_matching_bot.evaluation.app_resume import (
     MOCKS,
     build_resume_text,
+    education_level_of,
     estimate_career_years,
     load_personas,
     profile_from_content,
@@ -109,6 +110,67 @@ class ProfileTest(unittest.TestCase):
 
     def test_no_education_reads_as_unstated(self):
         self.assertEqual("미기재", profile_from_content({})["education_level"])
+
+
+class EducationLevelTest(unittest.TestCase):
+    """`resume_profile.dart` 의 `educationLevelOf` 와 같은 규칙이어야 한다.
+
+    값은 하드 필터의 `EDUCATION_RANK` 와 같다. 예전에는 학력 항목이 한 줄이라도 있으면
+    무조건 `대졸`이었다. 전공을 적었다는 것과 학위를 받았다는 것은 다른 이야기다.
+    """
+
+    def level(self, school, major="", status="졸업"):
+        return education_level_of([{"school": school, "major": major, "status": status}])
+
+    def test_a_junior_college_is_not_a_bachelor(self):
+        """모집 중 대졸 필수 공고 6,877건을 전문학사가 그대로 통과하고 있었다."""
+        self.assertEqual("초대졸", self.level("경기전문대학", "빅데이터과"))
+
+    def test_the_three_year_note_in_the_major_counts_too(self):
+        self.assertEqual("초대졸", self.level("경기대학", "빅데이터과(3년제)"))
+
+    def test_a_graduate_school_is_a_masters(self):
+        self.assertEqual("석사", self.level("한국대학교 대학원", "컴퓨터공학과"))
+
+    def test_a_doctoral_course_is_a_doctorate(self):
+        self.assertEqual("박사", self.level("한국대학교 대학원", "컴퓨터공학 박사과정"))
+
+    def test_still_studying_is_not_a_degree(self):
+        self.assertEqual("고졸", self.level("한국대학교", status="재학"))
+
+    def test_dropping_out_falls_to_high_school_not_one_step_down(self):
+        """한 칸씩 내리면 초대졸이 된다. 대학교 중퇴는 초대졸이 아니다."""
+        self.assertEqual("고졸", self.level("한국대학교", status="중퇴"))
+
+    def test_finishing_coursework_is_not_a_masters(self):
+        self.assertEqual("대졸", self.level("한국대학교 대학원", status="수료"))
+
+    def test_about_to_graduate_counts(self):
+        self.assertEqual("대졸", self.level("한국대학교", status="졸업예정"))
+
+    def test_a_blank_status_counts_as_graduated(self):
+        """학교만 적고 상태를 안 쓴 이력서가 흔하다. 안 썼다고 깎으면 공고가 사라진다."""
+        self.assertEqual("대졸", self.level("한국대학교", status=""))
+
+    def test_the_highest_one_wins_whatever_the_order(self):
+        rows = [
+            {"school": "한국대학교 대학원", "major": "컴퓨터공학과", "status": "졸업"},
+            {"school": "서울고등학교", "major": "", "status": "졸업"},
+        ]
+        self.assertEqual("석사", education_level_of(rows))
+        self.assertEqual("석사", education_level_of(list(reversed(rows))))
+
+    def test_an_unfinished_higher_degree_does_not_pull_down_a_finished_one(self):
+        self.assertEqual("대졸", education_level_of([
+            {"school": "한국대학교", "major": "컴퓨터공학과", "status": "졸업"},
+            {"school": "한국대학교 대학원", "major": "", "status": "재학"},
+        ]))
+
+    def test_something_unreadable_is_not_counted(self):
+        self.assertEqual("미기재", self.level("어딘가 교육원"))
+
+    def test_nothing_at_all(self):
+        self.assertEqual("미기재", education_level_of([]))
 
 
 class LoadPersonasTest(unittest.TestCase):
