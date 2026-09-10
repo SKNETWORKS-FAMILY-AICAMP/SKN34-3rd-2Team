@@ -41,6 +41,11 @@ class Job:
     required_major_terms: list[str] = field(default_factory=list)
     required_certifications: list[str] = field(default_factory=list)
     military_required: bool = False
+    # 우대사항 구간에서 뽑은 전공·자격증. 없어도 지원에 지장이 없으므로 조건으로 걸지
+    # 않는다. 지금은 화면과 채점에 보여 쓸모가 있는지 재는 용도다.
+    preferred_majors: list[str] = field(default_factory=list)
+    preferred_major_terms: list[str] = field(default_factory=list)
+    preferred_certifications: list[str] = field(default_factory=list)
 
     def matching_text(self) -> str:
         return " ".join(

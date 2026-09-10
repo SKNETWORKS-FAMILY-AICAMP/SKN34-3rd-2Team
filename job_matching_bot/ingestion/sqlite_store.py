@@ -50,6 +50,7 @@ _JSON_FIELDS = frozenset(
     {
         "required_skills", "preferred_skills", "tech_stack", "keywords",
         "required_majors", "required_major_terms", "required_certifications",
+        "preferred_majors", "preferred_major_terms", "preferred_certifications",
         "field_provenance",
     }
 )
@@ -186,6 +187,15 @@ class SqliteJobStore:
             if column not in have:
                 with self.conn:
                     self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+
+        # `Job`에 필드를 더하면 여기서 저절로 따라온다. 옛 행은 NULL로 남고 읽을 때
+        # 빈 값이 된다. 24,762건을 다시 만들지 않아도 새 필드를 쓸 수 있다.
+        have = {row[1] for row in self.conn.execute("PRAGMA table_info(jobs)")}
+        for column in _COLUMNS:
+            if column in have:
+                continue
+            with self.conn:
+                self.conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
 
     # ── JobStore 호환 ──────────────────────────────────────────
     def load(self) -> "SqliteJobStore":

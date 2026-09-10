@@ -129,6 +129,8 @@ def job_details(job_ids: set[str]) -> dict[str, dict[str, str]]:
                 "우대사항": sections.preferred[:MAX_REQUIREMENT_LINES],
                 "공고_자격증": ", ".join(job.required_certifications),
                 "공고_전공": ", ".join(job.required_majors),
+                "공고_우대자격증": ", ".join(job.preferred_certifications),
+                "공고_우대전공": ", ".join(job.preferred_majors),
             }
         return details
     finally:
@@ -221,6 +223,8 @@ def build_items(raw: dict, personas: dict) -> list[dict]:
                     ),
                     "공고_자격증": detail.get("공고_자격증", ""),
                     "공고_전공": detail.get("공고_전공", ""),
+                    "공고_우대자격증": detail.get("공고_우대자격증", ""),
+                    "공고_우대전공": detail.get("공고_우대전공", ""),
                     "이력서_기술": resume_skills(persona.get("resume_text", "")),
                     "이력서_자격증": ", ".join(persona.get("certifications") or []),
                     "이력서_전공": ", ".join(persona.get("majors") or []),

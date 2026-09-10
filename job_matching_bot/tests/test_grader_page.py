@@ -38,6 +38,8 @@ ITEM = {
     "조건": "서울 강남구 · 신입 · 대졸 · 정규직",
     "공고_자격증": "정보처리기사",
     "공고_전공": "컴퓨터·소프트웨어",
+    "공고_우대자격증": "SQLD",
+    "공고_우대전공": "통계·수학",
     "이력서_기술": "React, TypeScript",
     "이력서_자격증": "웹디자인기능사",
     "이력서_전공": "시각디자인학과",
@@ -123,6 +125,13 @@ class ApplicantTermsTest(unittest.TestCase):
         self.assertEqual("웹디자인기능사", data["이력서_자격증"])
         self.assertEqual("컴퓨터·소프트웨어", data["공고_전공"])
         self.assertEqual("시각디자인학과", data["이력서_전공"])
+
+    def test_preferred_qualifications_are_kept_apart_from_required(self):
+        """우대 자격증을 필수처럼 보여주면 지원 가능한 공고를 포기하게 만든다."""
+        data = _payload(build_page([ITEM], PERSONAS, "s"))[0]
+        self.assertEqual("SQLD", data["공고_우대자격증"])
+        self.assertEqual("통계·수학", data["공고_우대전공"])
+        self.assertNotEqual(data["공고_자격증"], data["공고_우대자격증"])
 
     def test_a_missing_persona_does_not_crash_the_page(self):
         terms = _payload(build_page([ITEM], {}, "s"))[0]["이력서_조건"]

@@ -95,13 +95,26 @@ def normalize_term(text: str) -> str:
     return re.sub(r"[\s\-_/·.()\[\]]", "", text).lower()
 
 
-def extract_qualifications(required_lines: list[str]) -> Qualifications:
-    """자격요건 구간의 줄 목록에서 전공·자격증·병역 조건을 뽑는다. '우대' 줄은 건너뛴다."""
+def extract_qualifications(lines: list[str], *, preferred: bool = False) -> Qualifications:
+    """구간의 줄 목록에서 전공·자격증·병역 조건을 뽑는다.
+
+    기본은 **자격요건 구간**이다. 그 안에 섞여 든 '우대' 줄은 건너뛴다.
+
+    `preferred=True`는 **우대사항 구간**을 읽을 때다. 두 가지가 달라진다.
+
+    - '우대'라는 글자로 거르지 않는다. 그 구간은 원래 다 우대다.
+    - **전공과 자격증만 담는다.** 연차·병역은 없어도 지원할 수 있는 것이 아니므로
+      우대사항에서 끌어오면 안 된다. 그걸 조건으로 걸면 우대 한 줄 때문에 지원
+      가능한 공고가 사라진다.
+
+    우대 자격증·전공은 아직 순위에 쓰지 않는다. 지금은 화면과 채점에 보여
+    쓸모가 있는지 재기 위한 것이다.
+    """
     result = Qualifications()
     seen_groups: list[str] = []
-    for raw in required_lines:
+    for raw in lines:
         line = raw.strip()
-        if not line or "우대" in line:
+        if not line or (not preferred and "우대" in line):
             continue
         lowered = line.lower()
 
@@ -131,6 +144,9 @@ def extract_qualifications(required_lines: list[str]) -> Qualifications:
                     result.certifications.append(cert)
             if found:
                 result.evidence["certifications"].append(line)
+
+        if preferred:
+            continue
 
         if _MILITARY.search(line) and _MILITARY_DONE.search(line) and "무관" not in line:
             result.military_required = True

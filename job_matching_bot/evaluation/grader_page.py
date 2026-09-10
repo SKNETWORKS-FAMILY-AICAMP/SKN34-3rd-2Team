@@ -107,6 +107,8 @@ function draw() {
         ${it.공고_기술 ? '<p class="tags">기술 ' + esc(it.공고_기술) + '</p>' : ''}
         ${it.공고_자격증 ? '<p class="tags">자격증 ' + esc(it.공고_자격증) + '</p>' : ''}
         ${it.공고_전공 ? '<p class="tags">전공 ' + esc(it.공고_전공) + '</p>' : ''}
+        ${it.공고_우대자격증 ? '<p class="tags">자격증 (우대) ' + esc(it.공고_우대자격증) + '</p>' : ''}
+        ${it.공고_우대전공 ? '<p class="tags">전공 (우대) ' + esc(it.공고_우대전공) + '</p>' : ''}
         <h3 style="margin-top:12px">자격요건</h3>
         ${list(it.자격요건, '공고에 자격요건 구간이 없습니다')}
         ${it.우대사항 && it.우대사항.length ? '<h3 style="margin-top:12px">우대사항</h3>' + list(it.우대사항, '') : ''}
@@ -220,6 +222,7 @@ def build_page(items: list[dict[str, Any]], personas: dict[str, Any], stamp: str
                     "번호", "이력서", "순위", "회사", "공고", "공고링크",
                     "모델_등급", "근거", "우려", "공고_기술", "자격요건",
                     "우대사항", "조건", "공고_자격증", "공고_전공",
+                    "공고_우대자격증", "공고_우대전공",
                     "이력서_기술", "이력서_자격증", "이력서_전공",
                 )
             },
