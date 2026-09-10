@@ -11,6 +11,8 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/resume_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/instructor/instructor_onboarding_keys.dart';
 
 const _kResumeContentMaxWidth = 1100.0;
 
@@ -108,41 +110,48 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      _StatCard(
-                        label: '전체',
-                        value: '${resumes.length}',
-                        selected: _filter == _ResumeFilter.all,
-                        onTap: () => _select(_ResumeFilter.all),
-                      ),
-                      const SizedBox(width: 8),
-                      if (!canReview) ...[
+                  // develop이 붙인 온보딩 안내 대상 표시를 그대로 두고, 우리 쪽
+                  // 필터 버튼(누르면 해당 상태만 보이는 것)도 함께 살린다.
+                  KeyedSubtree(
+                    key: OnboardingTargetRegistry.keyOf(
+                      InstructorOnboardingTargets.resumesStats,
+                    ),
+                    child: Row(
+                      children: [
                         _StatCard(
-                          label: '작성 중',
-                          value: '$writing',
-                          color: AppColors.warning,
-                          selected: _filter == _ResumeFilter.writing,
-                          onTap: () => _select(_ResumeFilter.writing),
+                          label: '전체',
+                          value: '${resumes.length}',
+                          selected: _filter == _ResumeFilter.all,
+                          onTap: () => _select(_ResumeFilter.all),
                         ),
                         const SizedBox(width: 8),
+                        if (!canReview) ...[
+                          _StatCard(
+                            label: '작성 중',
+                            value: '$writing',
+                            color: AppColors.warning,
+                            selected: _filter == _ResumeFilter.writing,
+                            onTap: () => _select(_ResumeFilter.writing),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        _StatCard(
+                          label: '피드백 요청',
+                          value: '$submitted',
+                          color: AppColors.primary,
+                          selected: _filter == _ResumeFilter.requested,
+                          onTap: () => _select(_ResumeFilter.requested),
+                        ),
+                        const SizedBox(width: 8),
+                        _StatCard(
+                          label: '승인',
+                          value: '$approved',
+                          color: AppColors.success,
+                          selected: _filter == _ResumeFilter.approved,
+                          onTap: () => _select(_ResumeFilter.approved),
+                        ),
                       ],
-                      _StatCard(
-                        label: '피드백 요청',
-                        value: '$submitted',
-                        color: AppColors.primary,
-                        selected: _filter == _ResumeFilter.requested,
-                        onTap: () => _select(_ResumeFilter.requested),
-                      ),
-                      const SizedBox(width: 8),
-                      _StatCard(
-                        label: '승인',
-                        value: '$approved',
-                        color: AppColors.success,
-                        selected: _filter == _ResumeFilter.approved,
-                        onTap: () => _select(_ResumeFilter.approved),
-                      ),
-                    ],
+                    ),
                   ),
                   if (!canReview) ...[
                     const SizedBox(height: 12),

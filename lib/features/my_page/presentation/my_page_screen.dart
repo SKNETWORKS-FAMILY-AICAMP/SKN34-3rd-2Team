@@ -15,6 +15,10 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../auth/presentation/widgets/password_change_panel.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../../shared/models/job_preferences.dart';
+import '../../onboarding/admin/admin_onboarding_steps.dart';
+import '../../onboarding/instructor/instructor_onboarding_steps.dart';
+import '../../onboarding/presentation/onboarding_controller.dart';
+import '../../onboarding/student/student_onboarding_steps.dart';
 
 /// 마이페이지 — 프로필 요약, 개인 정보, 비밀번호 변경
 class MyPageScreen extends ConsumerStatefulWidget {
@@ -272,6 +276,50 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
                     userEmail: user.email,
                     initiallyExpanded: user.mustChangePassword,
                   ),
+                  if (user.isInstructor ||
+                      user.isStudent ||
+                      user.isAdmin) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          final notifier =
+                              ref.read(onboardingTourProvider.notifier);
+                          if (user.isInstructor) {
+                            await notifier.restart(
+                              tourId: InstructorOnboarding.tourId,
+                              version: InstructorOnboarding.version,
+                              uid: user.uid,
+                              steps: InstructorOnboarding.steps,
+                            );
+                            if (!context.mounted) return;
+                            context.go(RoutePaths.instructor);
+                          } else if (user.isAdmin) {
+                            await notifier.restart(
+                              tourId: AdminOnboarding.tourId,
+                              version: AdminOnboarding.version,
+                              uid: user.uid,
+                              steps: AdminOnboarding.steps,
+                            );
+                            if (!context.mounted) return;
+                            context.go(RoutePaths.admin);
+                          } else {
+                            await notifier.restart(
+                              tourId: StudentOnboarding.tourId,
+                              version: StudentOnboarding.version,
+                              uid: user.uid,
+                              steps: StudentOnboarding.steps,
+                            );
+                            if (!context.mounted) return;
+                            context.go(RoutePaths.dashboard);
+                          }
+                        },
+                        icon: const Icon(Icons.tour_outlined, size: 18),
+                        label: const Text('온보딩 다시 보기'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

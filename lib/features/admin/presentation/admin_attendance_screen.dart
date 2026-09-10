@@ -11,6 +11,8 @@ import '../../../shared/models/domain_models.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../onboarding/admin/admin_onboarding_keys.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
 
 /// 관리자 — 기수별 당일 출석 전체 조회/수정
 class AdminAttendanceScreen extends ConsumerStatefulWidget {
@@ -242,22 +244,27 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
                                 : const Icon(Icons.logout_rounded, size: 16),
                             label: const Text('예시 퇴실 채우기'),
                           ),
-                          OutlinedButton.icon(
-                            onPressed:
-                                _ensuringNotice ? null : _ensureNotice,
-                            icon: _ensuringNotice
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                          KeyedSubtree(
+                            key: OnboardingTargetRegistry.keyOf(
+                              AdminOnboardingTargets.attendanceDailyNotice,
+                            ),
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  _ensuringNotice ? null : _ensureNotice,
+                              icon: _ensuringNotice
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.campaign_outlined,
+                                      size: 16,
                                     ),
-                                  )
-                                : const Icon(
-                                    Icons.campaign_outlined,
-                                    size: 16,
-                                  ),
-                            label: const Text('매일 08:30 공지 등록'),
+                              label: const Text('매일 08:30 공지 등록'),
+                            ),
                           ),
                         ],
                       ),
