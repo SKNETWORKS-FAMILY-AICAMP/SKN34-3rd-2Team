@@ -21,7 +21,7 @@ import re
 from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from job_matching_bot.api import prompts, schemas
 from job_matching_bot.matching.hard_filter import hard_filter
@@ -46,6 +46,29 @@ JOB_EXCERPT_CHARS = 1200
 REASONING_EFFORT = "medium"
 # 구조화 결과를 몇 벌까지 들고 있을지. 이력서 한 건이 몇 KB라 넉넉해도 가볍다.
 PROFILE_CACHE_SIZE = 64
+
+
+# 추천이 거치는 단계. 앱이 이 순서대로 줄을 세운다. 이름을 바꾸면 앱도 같이 고쳐야 한다.
+RECOMMEND_STAGES = ("resume", "search", "filter", "judge")
+
+
+def _progress_reporter(
+    progress: Callable[[str, str | None], None] | None,
+) -> Callable[..., None]:
+    """진행 알림을 부르되 실패는 삼킨다.
+
+    알림은 곁다리다. 듣는 쪽이 끊겼다고 추천까지 실패하면 본말이 뒤집힌다.
+    """
+    if progress is None:
+        return lambda *_args: None
+
+    def say(stage: str, detail: str | None = None) -> None:
+        try:
+            progress(stage, detail)
+        except Exception:  # noqa: BLE001 — 알림 실패가 추천을 막을 이유는 없다
+            pass
+
+    return say
 
 
 class StoreUnavailable(RuntimeError):
@@ -332,10 +355,28 @@ class RecommendService(_LivenessMixin):
         return fit
 
     # ── 전체 ─────────────────────────────────────────
-    def recommend(self, request: schemas.RecommendRequest) -> schemas.RecommendResponse:
-        warnings: list[str] = []
-        profile = self.build_profile(request, warnings)
+    def recommend(
+        self,
+        request: schemas.RecommendRequest,
+        progress: Callable[[str, str | None], None] | None = None,
+    ) -> schemas.RecommendResponse:
+        """`progress`를 주면 단계가 바뀔 때마다 부른다.
 
+        추천은 15초쯤 걸린다. 그동안 앱이 보여 줄 것이 막대 하나뿐이라 무엇이 진행 중인지
+        알 수 없었다. 단계마다 알려 주면 앱이 그대로 보여 줄 수 있다.
+
+        부르는 규칙은 둘뿐이다. 단계를 **시작**할 때 `progress(이름, None)`, **끝낼** 때
+        `progress(이름, 결과 한 줄)`. 결과 줄은 그대로 화면에 나가므로 숫자를 담는다.
+        진행 알림이 추천을 막으면 안 되므로 실패는 삼킨다.
+        """
+        say = _progress_reporter(progress)
+        warnings: list[str] = []
+
+        say("resume")
+        profile = self.build_profile(request, warnings)
+        say("resume", f"기술 {len(profile.skills)}개 · 직무 {len(profile.target_roles)}개를 뽑았어요")
+
+        say("search")
         try:
             hits = retrieval.search(
                 profile.search_query,
@@ -348,6 +389,7 @@ class RecommendService(_LivenessMixin):
             )
         except Exception as error:
             raise SearchUnavailable(f"공고 검색에 실패했습니다: {type(error).__name__}") from error
+        say("search", f"열린 공고에서 {len(hits)}건을 추렸어요")
         if not hits:
             return schemas.RecommendResponse(
                 recommendations=[],
@@ -357,6 +399,7 @@ class RecommendService(_LivenessMixin):
                 warnings=[*warnings, "조건에 맞는 공고를 찾지 못했습니다."],
             )
 
+        say("filter")
         resume_profile = self.to_resume_profile(request, profile)
         candidates: list[tuple[retrieval.Hit, Job, dict]] = []
         try:
@@ -375,6 +418,9 @@ class RecommendService(_LivenessMixin):
         if len(alive) < len(candidates):
             warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
             candidates = [c for c in candidates if c[0].job_id in alive]
+        say("filter", f"조건을 통과한 {len(candidates)}건이 남았어요")
+
+        say("judge")
         fits, reranked = self.rerank(request.resume_text, candidates, warnings)
 
         order = {"높음": 0, "보통": 1, "낮음": 2}
@@ -411,6 +457,7 @@ class RecommendService(_LivenessMixin):
                 )
             )
 
+        say("judge", f"{len(rows)}건의 근거를 맞대어 봤어요")
         rows.sort(key=lambda r: (r[0], r[1]))
         limited = _limit_per_company(row[2] for row in rows)
         return schemas.RecommendResponse(

@@ -19,12 +19,15 @@ CORS는 개발용이다. 저장소 루트 `.env`의 두 값으로 켠다. 둘 �
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from job_matching_bot.api import schemas
 from job_matching_bot.api.service import (
@@ -149,6 +152,59 @@ def recommend(request: schemas.RecommendRequest) -> schemas.RecommendResponse:
     except SearchUnavailable as error:
         # 검색이나 조건 판정이 실패하면 추천하지 않는다. 근거 없는 목록을 보여 주지 않는다.
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/api/v1/jobs/recommend/stream")
+async def recommend_stream(request: schemas.RecommendRequest) -> StreamingResponse:
+    """추천을 하면서 단계를 흘려보낸다. 마지막 줄에 결과가 온다.
+
+    추천은 15초쯤 걸린다. 한 번에 돌려주면 앱은 그동안 무엇이 진행 중인지 알 수 없어
+    막대만 돌린다. 여기서는 단계가 바뀔 때마다 한 줄씩 내보낸다.
+
+    형식은 Server-Sent Events다. 줄마다 `data: {json}` 이고 이벤트는 셋이다.
+
+        {"event": "progress", "stage": "search", "detail": null}   단계 시작
+        {"event": "progress", "stage": "search", "detail": "..."}  단계 끝, 결과 한 줄
+        {"event": "done", "result": {...}}                         추천 결과 (기존 응답 그대로)
+        {"event": "error", "detail": "..."}                        실패
+
+    추천 자체는 동기 코드라 스레드에서 돌리고, 알림은 큐로 받아 넘긴다. 앱이 이 경로를
+    모르거나 실패하면 기존 `/api/v1/jobs/recommend`로 물러나면 된다 — 그쪽은 그대로다.
+    """
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def push(payload: dict | None) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, payload)
+
+    def progress(stage: str, detail: str | None) -> None:
+        push({"event": "progress", "stage": stage, "detail": detail})
+
+    def work() -> None:
+        try:
+            result = _service.recommend(request, progress=progress)
+            push({"event": "done", "result": result.model_dump(mode="json")})
+        except SearchUnavailable as error:
+            push({"event": "error", "detail": str(error)})
+        except Exception as error:  # noqa: BLE001 — 끊긴 응답보다 이유 한 줄이 낫다
+            push({"event": "error", "detail": f"추천에 실패했습니다: {type(error).__name__}"})
+        finally:
+            push(None)
+
+    async def stream():
+        threading.Thread(target=work, daemon=True).start()
+        while True:
+            payload = await queue.get()
+            if payload is None:
+                return
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        # 프록시가 모아 두었다가 한꺼번에 보내면 단계 표시가 의미를 잃는다.
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/v1/jobs/chat", response_model=schemas.JobChatResponse)
