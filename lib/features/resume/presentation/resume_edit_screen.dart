@@ -98,6 +98,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// 타이핑이 멎은 뒤 파생 표시를 따라잡게 하는 타이머.
   Timer? _derivedRefresh;
 
+  /// 마지막으로 그린 파생 값의 지문. [_derivedSignature] 참고.
+  String? _lastDerived;
+
   /// 닫혀 있는 동안 다시 만들지 않으려고 들고 있는 AI 코치 위젯.
   Widget? _coachPanel;
 
@@ -223,6 +226,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     _markDirty();
     if (structural) {
       _derivedRefresh?.cancel();
+      _lastDerived = _derivedSignature();
       setState(() {});
     } else {
       _scheduleDerivedRefresh();
@@ -241,11 +245,29 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
       a.projects.length != b.projects.length;
 
   /// 타이핑이 멎으면 한 번 다시 그린다. 작성 현황 개수처럼 즉시가 아니어도 되는 것들.
+  ///
+  /// 다만 **보이는 것이 그대로면 그리지 않는다.** 이미 채워진 항목에 글자를 더하는
+  /// 동안에는 작성 현황도 제목도 바뀌지 않는다. 그때마다 화면을 다시 만들면 타이핑을
+  /// 잠깐 멈출 때마다 한 번씩 끊긴다.
+  ///
+  /// 코치가 열려 있으면 건너뛰지 않는다. 코치는 지금 이력서를 들고 있어야 추천을
+  /// 누른 순간 최신 글로 보낸다.
   void _scheduleDerivedRefresh() {
     _derivedRefresh?.cancel();
     _derivedRefresh = Timer(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      final next = _derivedSignature();
+      if (!_showAiCoach && next == _lastDerived) return;
+      _lastDerived = next;
+      setState(() {});
     });
+  }
+
+  /// 화면에 보이는 파생 값의 지문. 이게 그대로면 다시 그려도 달라질 것이 없다.
+  String _derivedSignature() {
+    final sections = _content.computeSections();
+    final filled = sections.values.where((done) => done).length;
+    return '$filled|${_title.trim()}';
   }
 
   void _markDirty() {
