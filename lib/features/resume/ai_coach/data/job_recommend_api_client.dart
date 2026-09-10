@@ -331,6 +331,85 @@ class JobRecommendApiClient {
     );
   }
 
+  /// 추천을 받으면서 진행 단계를 [onProgress]로 흘려 준다.
+  ///
+  /// 추천은 15초쯤 걸린다. 그동안 화면에 막대만 돌리면 무엇이 진행 중인지 알 수 없다.
+  /// 서버가 단계마다 한 줄씩 보내 주므로 그대로 넘긴다. [detail]이 null이면 그 단계를
+  /// **시작**한 것이고, 문자열이 오면 그 단계를 **끝내며** 남긴 결과다.
+  ///
+  /// 서버가 이 경로를 모르거나(옛 버전) 스트림이 깨지면 조용히 기존 경로로 물러난다.
+  /// 진행 표시가 없어질 뿐 추천은 그대로 나온다.
+  Future<JobRecommendResponse> recommendWithProgress(
+    JobRecommendRequest request, {
+    required void Function(String stage, String? detail) onProgress,
+  }) async {
+    try {
+      return await _stream(request, onProgress);
+    } on JobRecommendApiException {
+      rethrow; // 서버가 이유를 말해 준 실패는 그대로 올린다.
+    } catch (_) {
+      // 스트림만 못 쓰는 상황이다. 추천 자체를 포기할 이유는 아니다.
+      return recommend(request);
+    }
+  }
+
+  Future<JobRecommendResponse> _stream(
+    JobRecommendRequest request,
+    void Function(String stage, String? detail) onProgress,
+  ) async {
+    final http.Request outgoing =
+        http.Request('POST', Uri.parse('$_baseUrl/api/v1/jobs/recommend/stream'))
+          ..headers.addAll(const {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          })
+          ..body = jsonEncode(request.toJson());
+
+    final response = await _client
+        .send(outgoing)
+        .timeout(JobRecommendApiConfig.timeout);
+    if (response.statusCode == 404) {
+      // 옛 서버다. 예외로 빠져 기존 경로를 타게 한다.
+      throw const FormatException('스트림 경로 없음');
+    }
+    if (response.statusCode != 200) {
+      throw JobRecommendApiException(
+        '추천 서버 오류(HTTP ${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+
+    JobRecommendResponse? result;
+    final lines = response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+    await for (final line in lines.timeout(JobRecommendApiConfig.timeout)) {
+      if (!line.startsWith('data: ')) continue;
+      final decoded = jsonDecode(line.substring(6));
+      if (decoded is! Map) continue;
+      switch (decoded['event']) {
+        case 'progress':
+          onProgress(
+            decoded['stage'] as String? ?? '',
+            decoded['detail'] as String?,
+          );
+        case 'done':
+          result = JobRecommendResponse.fromMap(
+            Map<String, dynamic>.from(decoded['result'] as Map),
+          );
+        case 'error':
+          throw JobRecommendApiException(
+            decoded['detail'] as String? ?? '추천에 실패했습니다.',
+          );
+      }
+    }
+    if (result == null) {
+      // 결과 없이 끊겼다. 다시 받는 편이 빈손보다 낫다.
+      throw const FormatException('결과 없이 끊김');
+    }
+    return result;
+  }
+
   /// 채용에 대해 묻고 답을 받는다. 서버가 세 갈래로 나눠 처리한다.
   ///
   /// - 직전 조건(`filters`)을 함께 보내야 "서울만" 같은 말이 이어진다.

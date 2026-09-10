@@ -199,6 +199,12 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   bool _loading = false;
   String? _error;
 
+  /// 지금 진행 중인 추천 단계의 이름. 서버가 알려 준다. 아직 안 왔으면 null이다.
+  String? _stage;
+
+  /// 끝난 단계가 남긴 결과 한 줄. {단계 이름: "열린 공고에서 40건을 추렸어요"}
+  final Map<String, String> _stageResults = {};
+
   ResumeReadiness get _readiness => ResumeReadiness.of(widget.draftContent);
 
   /// 취업 희망 조건은 이력서가 아니라 프로필(`users/{uid}.jobPreferences`)에 있다.
@@ -511,6 +517,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     setState(() {
       _loading = true;
       _error = null;
+      _stage = null;
+      _stageResults.clear();
     });
     try {
       final result = await ref
@@ -518,6 +526,16 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           .analyzeAndMatch(
             draftContent: requestedContent,
             preferences: _preferences,
+            onProgress: (stage, detail) {
+              if (!mounted) return;
+              setState(() {
+                if (detail == null) {
+                  _stage = stage;
+                } else {
+                  _stageResults[stage] = detail;
+                }
+              });
+            },
           );
       if (mounted) {
         setState(() {
@@ -625,14 +643,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                   ),
                   if (_loading) ...[
                     const SizedBox(height: 20),
-                    const LinearProgressIndicator(minHeight: 3),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '이력서 근거와 채용 조건을 비교하고 있습니다…',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
+                    _RecommendProgress(
+                      current: _stage,
+                      results: _stageResults,
                     ),
                   ],
                   if (_error != null) ...[
@@ -787,6 +800,168 @@ class _ActionButton extends StatelessWidget {
     return Tooltip(
       message: disabledTooltip!,
       child: button,
+    );
+  }
+}
+
+/// 추천이 어디까지 갔는지 보여준다.
+///
+/// 추천은 15초쯤 걸린다. 막대 하나만 돌리면 멈춘 것과 구별되지 않고, 기다리는 사람은
+/// 무엇을 기다리는지 모른다. 서버가 단계마다 알려 주므로 그대로 세워 놓고, 끝난 단계에는
+/// 서버가 준 결과 한 줄을 남긴다.
+///
+/// 서버가 옛 버전이라 알림이 오지 않으면 [current]가 계속 null이다. 그때는 줄만 흐리게
+/// 서 있고 맨 위 막대가 돈다 — 예전과 같은 모습이라 나빠지지 않는다.
+class _RecommendProgress extends StatelessWidget {
+  const _RecommendProgress({required this.current, required this.results});
+
+  /// 진행 중인 단계 이름. 서버의 `RECOMMEND_STAGES`와 같은 값이다.
+  final String? current;
+
+  /// 끝난 단계가 남긴 결과 한 줄.
+  final Map<String, String> results;
+
+  /// 서버가 보내는 이름과 화면에 쓸 말. 순서가 곧 표시 순서다.
+  static const _steps = <(String, String)>[
+    ('resume', '이력서 읽기'),
+    ('search', '공고 찾기'),
+    ('filter', '조건 맞춰 보기'),
+    ('judge', '근거 맞대어 보기'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final index = current == null
+        ? -1
+        : _steps.indexWhere((step) => step.$1 == current);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (index < 0) ...[
+          const LinearProgressIndicator(minHeight: 3),
+          const SizedBox(height: 10),
+        ],
+        const Text(
+          '공고를 고르고 있어요',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          '보통 15초쯤 걸려요',
+          style: TextStyle(fontSize: 11, color: AppColors.textHint),
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < _steps.length; i++)
+          _ProgressStep(
+            label: _steps[i].$2,
+            detail: results[_steps[i].$1],
+            // 진행 중인 것보다 앞이면 끝난 것이다. 알림이 안 오면 전부 대기 상태다.
+            state: index < 0
+                ? _StepState.waiting
+                : i < index
+                ? _StepState.done
+                : i == index
+                ? (results.containsKey(_steps[i].$1)
+                      ? _StepState.done
+                      : _StepState.running)
+                : _StepState.waiting,
+            last: i == _steps.length - 1,
+          ),
+      ],
+    );
+  }
+}
+
+enum _StepState { done, running, waiting }
+
+class _ProgressStep extends StatelessWidget {
+  const _ProgressStep({
+    required this.label,
+    required this.detail,
+    required this.state,
+    required this.last,
+  });
+
+  final String label;
+  final String? detail;
+  final _StepState state;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (state) {
+      _StepState.done => AppColors.success,
+      _StepState.running => AppColors.primary,
+      _StepState.waiting => AppColors.textHint,
+    };
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: switch (state) {
+                _StepState.done => Icon(
+                  Icons.check_circle,
+                  size: 16,
+                  color: color,
+                ),
+                _StepState.running => const Padding(
+                  padding: EdgeInsets.all(1.5),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                _StepState.waiting => Icon(
+                  Icons.circle_outlined,
+                  size: 16,
+                  color: color,
+                ),
+              },
+            ),
+            if (!last)
+              Container(
+                width: 2,
+                height: detail == null ? 14 : 26,
+                margin: const EdgeInsets.symmetric(vertical: 2),
+                color: state == _StepState.done
+                    ? AppColors.success
+                    : AppColors.border,
+              ),
+          ],
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: last ? 0 : 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: state == _StepState.waiting
+                        ? AppColors.textHint
+                        : AppColors.textPrimary,
+                  ),
+                ),
+                if (detail case final line?) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    line,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
