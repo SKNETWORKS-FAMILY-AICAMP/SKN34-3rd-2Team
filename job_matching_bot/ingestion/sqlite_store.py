@@ -304,6 +304,42 @@ class SqliteJobStore:
                 found[(row["source"], row["source_job_id"])] = row
         return found
 
+    def refresh(self, collected: Iterable[Job], *, as_of: datetime = AS_OF) -> dict[str, list[str]]:
+        """이미 저장된 공고를 **다시 파싱한 내용으로만** 덮어쓴다.
+
+        `upsert`와 다른 점은 "이번에 안 보인 공고"를 세지 않는다는 것이다. 파서를
+        고친 뒤 영향받은 몇백 건만 다시 받을 때 `upsert`를 쓰면, 이번 목록에 없는
+        나머지 수만 건이 전부 "안 보임" 한 번으로 세여 결국 REMOVED로 넘어간다.
+        다시 파싱하는 일은 크롤 한 바퀴가 아니므로 그 셈에 넣으면 안 된다.
+
+        `first_seen_at`과 `revisions`는 이어받는다. 저장소에 없는 공고는 건너뛴다 —
+        새 공고를 들이는 것은 `upsert`가 할 일이다.
+        """
+        collected = list(collected)
+        timestamp = as_of.isoformat()
+        keys = [(job.source, job.source_job_id) for job in collected]
+        existing = self._existing_light(list(dict.fromkeys(keys)))
+        result: dict[str, list[str]] = {"changed": [], "same": [], "unknown": []}
+        with self.conn:
+            for job in collected:
+                previous = existing.get((job.source, job.source_job_id))
+                if previous is None:
+                    result["unknown"].append(job.job_id)
+                    continue
+                changed = previous["content_hash"] != job.content_hash
+                self._write_record(
+                    JobRecord(
+                        job=job,
+                        first_seen_at=previous["first_seen_at"],
+                        last_seen_at=timestamp,
+                        status=resolve_status(job, as_of),
+                        missing_runs=0,
+                        revisions=int(previous["revisions"]) + (1 if changed else 0),
+                    )
+                )
+                result["changed" if changed else "same"].append(job.job_id)
+        return result
+
     def upsert(
         self,
         collected: Iterable[Job],
