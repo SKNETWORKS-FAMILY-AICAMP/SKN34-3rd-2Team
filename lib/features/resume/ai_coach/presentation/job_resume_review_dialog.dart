@@ -22,7 +22,12 @@ class JobResumeReviewDialog extends StatefulWidget {
     this.generalReview = false,
   });
   final ResumeReviewApiClient client;
-  final String cohortId, resumeId, jobId, jobCompany, jobTitle, tailoredResumeId;
+  final String cohortId,
+      resumeId,
+      jobId,
+      jobCompany,
+      jobTitle,
+      tailoredResumeId;
   final ResumeContent draft;
   final ValueChanged<ResumeContent> onChanged;
   final bool generalReview;
@@ -44,6 +49,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final List<_ReviewChatMessage> _messages = [];
   final Set<String> _answeredQuestionIds = {};
   final List<Map<String, dynamic>> _questionQueue = [];
+  final List<_ReviewChatMessage> _suggestionQueue = [];
   final Map<String, GlobalKey> _previewSectionKeys = {};
   bool _busy = false, _changed = false, _undone = false;
   bool _mutationPending = false;
@@ -172,13 +178,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   }) {
     _pendingQuestion = null;
     if (isFirstReview) {
-      _messages.add(
-        _ReviewChatMessage.assistant(
+      final summary =
           review['summary'] as String? ??
-              (widget.generalReview
-                  ? '이력서 문장을 검토했습니다.'
-                  : '이력서와 선택 공고를 비교했습니다.'),
-        ),
+          (widget.generalReview ? '이력서 문장을 검토했습니다.' : '이력서와 선택 공고를 비교했습니다.');
+      _messages.add(
+        _ReviewChatMessage.assistant(_formatInitialSummary(summary)),
       );
     }
     final reviews = (review['sentence_reviews'] as List? ?? []).cast<Map>();
@@ -197,13 +201,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       if (sentence['suggested_revision'] is String &&
           (sentence['suggested_revision'] as String).trim().isNotEmpty) {
         sentence['_index'] = index;
-        if (!widget.generalReview && _isIdentityPlaceholderSuggestion(sentence)) {
+        if (!widget.generalReview &&
+            _isIdentityPlaceholderSuggestion(sentence)) {
           sentence['_company'] = job['company'] ?? widget.jobCompany;
           sentence['_title'] =
               job['role_title'] ?? job['title'] ?? widget.jobTitle;
           identitySuggestions.add(sentence);
         } else {
-          _messages.add(_ReviewChatMessage.suggestion(sentence));
+          _suggestionQueue.add(_ReviewChatMessage.suggestion(sentence));
         }
         displayedSuggestions++;
       }
@@ -211,22 +216,36 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     if (identitySuggestions.isNotEmpty) {
       // 회사명·직무명 자리표시자는 같은 선택 공고의 확정값으로 바뀝니다.
       // 항목마다 같은 질문을 반복하지 않고 한 번의 확인으로 묶어 적용합니다.
-      final groupedIdentitySuggestion = Map<String, dynamic>.from(
-        identitySuggestions.first,
-      )..['_indices'] = identitySuggestions
-          .map((suggestion) => suggestion['_index'] as int)
-          .toList();
-      _messages.add(
+      final groupedIdentitySuggestion =
+          Map<String, dynamic>.from(
+              identitySuggestions.first,
+            )
+            ..['_indices'] = identitySuggestions
+                .map((suggestion) => suggestion['_index'] as int)
+                .toList();
+      _suggestionQueue.add(
         _ReviewChatMessage.identityConfirmation(groupedIdentitySuggestion),
       );
-      _focusPreviewField(
-        groupedIdentitySuggestion['field_path'] as String?,
-      );
+    }
+    final queuedSuggestion = _takeNextSuggestion();
+    if (queuedSuggestion != null) {
+      _messages.add(queuedSuggestion);
+      final fieldPath =
+          queuedSuggestion.suggestion?['field_path'] as String? ??
+          queuedSuggestion.identitySuggestion?['field_path'] as String?;
+      _focusPreviewField(fieldPath);
     }
     if (!isFirstReview && displayedSuggestions == 0) {
+      final warnings = (review['grounding_warnings'] as List? ?? const [])
+          .whereType<String>();
+      final answerAlreadyPresent = warnings.any(
+        (warning) => warning.startsWith('answer_already_present:'),
+      );
       _messages.add(
-        const _ReviewChatMessage.assistant(
-          '방금 답변을 반영한 안전한 수정안을 만들지 못했습니다. 확인되지 않은 내용은 넣지 않고 다음 항목을 살펴봅니다.',
+        _ReviewChatMessage.assistant(
+          answerAlreadyPresent
+              ? '방금 답변한 내용은 이미 이력서에 반영되어 있어 같은 수정안을 다시 만들지 않았습니다. 다음 항목을 살펴봅니다.'
+              : '방금 답변을 반영한 안전한 수정안을 만들지 못했습니다. 확인되지 않은 내용은 넣지 않고 다음 항목을 살펴봅니다.',
         ),
       );
     }
@@ -234,7 +253,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _enqueueQuestions(questions);
     final nextQuestion = _takeNextQuestion();
     if (nextQuestion != null) {
-      if (displayedSuggestions > 0) {
+      if (displayedSuggestions > 0 || _suggestionQueue.isNotEmpty) {
         // The user should decide whether to apply the current revision before
         // moving on. Show the next unanswered question after the revised
         // resume is reloaded.
@@ -261,6 +280,17 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     });
   }
 
+  String _formatInitialSummary(String summary) {
+    final sentences = summary
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .map((sentence) => sentence.trim())
+        .where((sentence) => sentence.isNotEmpty)
+        .take(3)
+        .toList();
+    if (sentences.isEmpty) return '검토 요약\n\n• 이력서와 공고를 비교했습니다.';
+    return '검토 요약\n\n${sentences.map((sentence) => '• $sentence').join('\n\n')}';
+  }
+
   String _questionKey(Map<String, dynamic> question) {
     // A follow-up response gets a new question_id.  Deduplicate by the target
     // and intent instead, so wording changes cannot ask the same thing again.
@@ -274,7 +304,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     return _questionQueue.any((question) => _questionKey(question) == key) ||
         _messages.any(
           (message) =>
-              message.question != null && _questionKey(message.question!) == key,
+              message.question != null &&
+              _questionKey(message.question!) == key,
         );
   }
 
@@ -290,7 +321,19 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         continue;
       }
       final key = _questionKey(question);
-      if (!_hasQuestionKey(key)) _questionQueue.add(question);
+      final queuedIndex = _questionQueue.indexWhere(
+        (queuedQuestion) => _questionKey(queuedQuestion) == key,
+      );
+      if (queuedIndex >= 0) {
+        // A follow-up review reissues this queued question with its latest
+        // review_id. Keep its position, but submit the current server-owned ID.
+        _questionQueue[queuedIndex] = question;
+      } else if (_pendingQuestion != null &&
+          _questionKey(_pendingQuestion!) == key) {
+        _pendingQuestion = question;
+      } else if (!_hasQuestionKey(key)) {
+        _questionQueue.add(question);
+      }
     }
   }
 
@@ -303,6 +346,76 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       }
     }
     return null;
+  }
+
+  _ReviewChatMessage? _takeNextSuggestion() {
+    if (_suggestionQueue.isEmpty) return null;
+    return _suggestionQueue.removeAt(0);
+  }
+
+  void _markAppliedSuggestionMessages(Set<int> appliedIndices) {
+    for (final message in _messages) {
+      final suggestion = message.suggestion;
+      if (suggestion != null && appliedIndices.contains(suggestion['_index'])) {
+        suggestion['_applied'] = true;
+      }
+      final identitySuggestion = message.identitySuggestion;
+      if (identitySuggestion != null) {
+        final indices = (identitySuggestion['_indices'] as List? ?? const [])
+            .whereType<int>()
+            .toList();
+        if (indices.isNotEmpty && indices.every(appliedIndices.contains)) {
+          identitySuggestion['_applied'] = true;
+        }
+      }
+    }
+  }
+
+  void _skipSuggestion(List<int> indices) {
+    if (_busy || indices.isEmpty) return;
+    setState(() {
+      for (final message in _messages.reversed) {
+        final suggestion = message.suggestion;
+        if (suggestion != null &&
+            suggestion['_applied'] != true &&
+            suggestion['_skipped'] != true &&
+            indices.contains(suggestion['_index'])) {
+          suggestion['_skipped'] = true;
+          break;
+        }
+        final identitySuggestion = message.identitySuggestion;
+        if (identitySuggestion != null &&
+            identitySuggestion['_applied'] != true &&
+            identitySuggestion['_skipped'] != true) {
+          final suggestionIndices =
+              (identitySuggestion['_indices'] as List? ?? const [])
+                  .whereType<int>()
+                  .toList();
+          if (suggestionIndices.length == indices.length &&
+              suggestionIndices.every(indices.contains)) {
+            identitySuggestion['_skipped'] = true;
+            break;
+          }
+        }
+      }
+    });
+    final nextSuggestion = _takeNextSuggestion();
+    if (nextSuggestion != null) {
+      setState(() => _messages.add(nextSuggestion));
+      final fieldPath =
+          nextSuggestion.suggestion?['field_path'] as String? ??
+          nextSuggestion.identitySuggestion?['field_path'] as String?;
+      _focusPreviewField(fieldPath);
+      return;
+    }
+    if (_pendingQuestion != null) {
+      final question = _pendingQuestion!;
+      setState(() {
+        _pendingQuestion = null;
+        _messages.add(_ReviewChatMessage.question(question));
+      });
+      _focusPreviewField(question['field_path'] as String?);
+    }
   }
 
   bool _isIdentityPlaceholderSuggestion(Map<String, dynamic> sentence) {
@@ -361,7 +474,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           'tailored_resume_id': _tailoredResumeId,
         if (!widget.generalReview) ...{
           'selected_job_id': widget.jobId,
-          'expected_job_hash': (previous['job_source'] as Map?)?['snapshot_hash'],
+          'expected_job_hash':
+              (previous['job_source'] as Map?)?['snapshot_hash'],
         },
         'previous_review_id': previous['review_id'],
         'expected_input_hash': previous['input_hash'],
@@ -396,7 +510,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   }
 
   Future<void> _applySuggestion(List<int> indices) async {
-    if (_busy || indices.isEmpty || indices.every(_appliedSuggestionIndices.contains)) {
+    if (_busy ||
+        indices.isEmpty ||
+        indices.every(_appliedSuggestionIndices.contains)) {
       return;
     }
     setState(() {
@@ -417,18 +533,30 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       'review_id': _result!['review_id'],
       'expected_input_hash': _result!['input_hash'],
       'selected_indices': _selected.toList()..sort(),
-      if (_tailoredResumeId != null)
-        'tailored_resume_id': _tailoredResumeId,
+      if (_tailoredResumeId != null) 'tailored_resume_id': _tailoredResumeId,
     };
     _application = await _mutate(() => widget.client.apply(_applyRequest!));
     // The server has rebased this review to the persisted content.  Keep the
     // next answer on the current snapshot rather than the pre-apply hash.
     _result!['input_hash'] = _application!['input_hash'];
     if (mounted) {
-      setState(() => _appliedSuggestionIndices.addAll(_selected));
+      setState(() {
+        _appliedSuggestionIndices.addAll(_selected);
+        _markAppliedSuggestionMessages(_selected);
+      });
     }
     await _reload();
-    if (mounted && _pendingQuestion != null) {
+    if (!mounted) return;
+    final nextSuggestion = _takeNextSuggestion();
+    if (nextSuggestion != null) {
+      setState(() => _messages.add(nextSuggestion));
+      final fieldPath =
+          nextSuggestion.suggestion?['field_path'] as String? ??
+          nextSuggestion.identitySuggestion?['field_path'] as String?;
+      _focusPreviewField(fieldPath);
+      return;
+    }
+    if (_pendingQuestion != null) {
       final question = _pendingQuestion!;
       setState(() {
         _pendingQuestion = null;
@@ -446,8 +574,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       'request_id': _id(),
       'application_id': _application!['operation_id'],
       'expected_input_hash': _application!['input_hash'],
-      if (_tailoredResumeId != null)
-        'tailored_resume_id': _tailoredResumeId,
+      if (_tailoredResumeId != null) 'tailored_resume_id': _tailoredResumeId,
     };
     await _mutate(() => widget.client.undo(_undoRequest!));
     await _reload();
@@ -462,6 +589,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _undone = true;
         _pendingQuestion = null;
         _questionQueue.clear();
+        _suggestionQueue.clear();
         _messages.add(
           const _ReviewChatMessage.assistant(
             '수정안을 되돌렸습니다. 현재 이력서 기준으로 첨삭을 다시 시작할 수 있습니다.',
@@ -513,14 +641,13 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           child: Column(
             children: [
               _ReviewDialogHeader(
-                job:
-                    widget.generalReview
-                        ? null
-                        : _result?['job_source'] as Map? ??
-                    {
-                      'company': widget.jobCompany,
-                      'title': widget.jobTitle,
-                    },
+                job: widget.generalReview
+                    ? null
+                    : _result?['job_source'] as Map? ??
+                          {
+                            'company': widget.jobCompany,
+                            'title': widget.jobTitle,
+                          },
                 generalReview: widget.generalReview,
                 canUndo: _application != null && !_undone,
                 busy: _busy,
@@ -556,6 +683,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                           ? null
                           : () => _submitAnswer(activeQuestion!),
                       onApply: _applySuggestion,
+                      onSkip: _skipSuggestion,
                       onClose: () => Navigator.pop(context),
                     );
                     if (!horizontal) {
@@ -917,6 +1045,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.onStart,
     required this.onAnswer,
     required this.onApply,
+    required this.onSkip,
     required this.onClose,
   });
 
@@ -934,6 +1063,7 @@ class _ReviewChatPane extends StatelessWidget {
   final Future<void> Function() onStart;
   final VoidCallback? onAnswer;
   final ValueChanged<List<int>> onApply;
+  final ValueChanged<List<int>> onSkip;
   final VoidCallback onClose;
 
   @override
@@ -985,6 +1115,7 @@ class _ReviewChatPane extends StatelessWidget {
                     message: message,
                     appliedSuggestionIndices: appliedSuggestionIndices,
                     onApply: onApply,
+                    onSkip: onSkip,
                   ),
                 if (busy)
                   const Padding(
@@ -1042,8 +1173,8 @@ class _ReviewChatPane extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: activeQuestion == null
                       ? awaitingSuggestionApply
-                          ? '수정안을 반영하면 다음 질문을 이어갑니다.'
-                          : '현재 추가 확인 질문이 없습니다.'
+                            ? '수정안을 반영하면 다음 질문을 이어갑니다.'
+                            : '현재 추가 확인 질문이 없습니다.'
                       : '답변을 입력하세요. (Enter 전송 · Shift+Enter 줄바꿈)',
                   isDense: true,
                   border: OutlineInputBorder(
@@ -1091,14 +1222,21 @@ class _ReviewCompletedNotice extends StatelessWidget {
             children: [
               const Text(
                 '첨삭 완료',
-                style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF166534)),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF166534),
+                ),
               ),
               const SizedBox(height: 2),
               Text(
                 hasSuggestions
                     ? '추가 확인 질문이 없습니다. 표시된 수정안은 원하는 것만 반영한 뒤 마칠 수 있습니다.'
                     : '추가 확인 질문과 적용할 수정안이 없습니다. 첨삭을 마칠 수 있습니다.',
-                style: const TextStyle(fontSize: 11, height: 1.4, color: Color(0xFF166534)),
+                style: const TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: Color(0xFF166534),
+                ),
               ),
             ],
           ),
@@ -1133,9 +1271,7 @@ class _ChatIntro extends StatelessWidget {
           const Icon(Icons.auto_awesome, size: 34, color: Color(0xFF16A34A)),
           const SizedBox(height: 12),
           Text(
-            generalReview
-                ? '이력서 문장과 경험 근거를 확인합니다.'
-                : '선택 공고 기준으로 이력서를 확인합니다.',
+            generalReview ? '이력서 문장과 경험 근거를 확인합니다.' : '선택 공고 기준으로 이력서를 확인합니다.',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
@@ -1167,11 +1303,13 @@ class _ReviewChatBubble extends StatelessWidget {
     required this.message,
     required this.appliedSuggestionIndices,
     required this.onApply,
+    required this.onSkip,
   });
 
   final _ReviewChatMessage message;
   final Set<int> appliedSuggestionIndices;
   final ValueChanged<List<int>> onApply;
+  final ValueChanged<List<int>> onSkip;
 
   static const _revisionTextStyle = TextStyle(
     fontSize: 12,
@@ -1182,12 +1320,20 @@ class _ReviewChatBubble extends StatelessWidget {
   /// 수정안에 실제로 새로 들어간 글자만 굵게 표시한다.
   /// 원문과 수정안을 LCS로 비교하므로 앞·뒤에 여러 수정이 있어도
   /// 변경되지 않은 중간 문장이 함께 굵어지지 않는다.
-  static List<InlineSpan> _changedRevisionSpans(String original, String revision) {
+  static List<InlineSpan> _changedRevisionSpans(
+    String original,
+    String revision,
+  ) {
     if (original == revision) return [TextSpan(text: revision)];
     final before = original.runes.toList();
     final after = revision.runes.toList();
     if (before.isEmpty) {
-      return [TextSpan(text: revision, style: const TextStyle(fontWeight: FontWeight.w700))];
+      return [
+        TextSpan(
+          text: revision,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ];
     }
     if (after.isEmpty) return const [];
 
@@ -1247,7 +1393,8 @@ class _ReviewChatBubble extends StatelessWidget {
     var suffix = 0;
     while (suffix < before.length - prefix &&
         suffix < after.length - prefix &&
-        before[before.length - 1 - suffix] == after[after.length - 1 - suffix]) {
+        before[before.length - 1 - suffix] ==
+            after[after.length - 1 - suffix]) {
       suffix++;
     }
     final characters = <String>[];
@@ -1271,10 +1418,14 @@ class _ReviewChatBubble extends StatelessWidget {
       while (end < characters.length && changed[end] == isChanged) {
         end++;
       }
-      spans.add(TextSpan(
-        text: characters.sublist(start, end).join(),
-        style: isChanged ? const TextStyle(fontWeight: FontWeight.w700) : null,
-      ));
+      spans.add(
+        TextSpan(
+          text: characters.sublist(start, end).join(),
+          style: isChanged
+              ? const TextStyle(fontWeight: FontWeight.w700)
+              : null,
+        ),
+      );
       start = end;
     }
     return spans;
@@ -1289,8 +1440,16 @@ class _ReviewChatBubble extends StatelessWidget {
           .toList();
       final company = item['_company'] as String? ?? '';
       final title = item['_title'] as String? ?? '';
-      final applied = indices.isNotEmpty &&
-          indices.every(appliedSuggestionIndices.contains);
+      final applied =
+          indices.isNotEmpty &&
+          (item['_applied'] == true ||
+              indices.every(appliedSuggestionIndices.contains));
+      if (applied) {
+        return const _AppliedSuggestionNotice(text: '회사명·직무명 수정안을 반영했습니다.');
+      }
+      if (item['_skipped'] == true) {
+        return const _AppliedSuggestionNotice(text: '회사명·직무명 수정안을 건너뛰었습니다.');
+      }
       return Align(
         alignment: Alignment.centerLeft,
         child: Container(
@@ -1312,15 +1471,24 @@ class _ReviewChatBubble extends StatelessWidget {
                 style: const TextStyle(fontSize: 12.5, height: 1.45),
               ),
               const SizedBox(height: 9),
-              FilledButton.icon(
-                onPressed: applied ? null : () => onApply(indices),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
-                  foregroundColor: Colors.white,
-                  visualDensity: VisualDensity.compact,
-                ),
-                icon: const Icon(Icons.check, size: 15),
-                label: Text(applied ? '반영됨' : '네, 변경할게요'),
+              Row(
+                children: [
+                  OutlinedButton(
+                    onPressed: () => onSkip(indices),
+                    child: const Text('건너뛰기'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => onApply(indices),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.check, size: 15),
+                    label: const Text('네, 변경할게요'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1330,7 +1498,14 @@ class _ReviewChatBubble extends StatelessWidget {
     if (message.suggestion != null) {
       final item = message.suggestion!;
       final index = item['_index'] as int;
-      final applied = appliedSuggestionIndices.contains(index);
+      final applied =
+          item['_applied'] == true || appliedSuggestionIndices.contains(index);
+      if (applied) {
+        return const _AppliedSuggestionNotice(text: '수정안을 이력서에 반영했습니다.');
+      }
+      if (item['_skipped'] == true) {
+        return const _AppliedSuggestionNotice(text: '수정안을 건너뛰었습니다.');
+      }
       return Card(
         margin: const EdgeInsets.only(bottom: 12),
         color: const Color(0xFFF0FDF4),
@@ -1358,7 +1533,11 @@ class _ReviewChatBubble extends StatelessWidget {
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 9),
-                child: Divider(height: 1, thickness: 0.6, color: Color(0x33000000)),
+                child: Divider(
+                  height: 1,
+                  thickness: 0.6,
+                  color: Color(0x33000000),
+                ),
               ),
               const Text(
                 '수정안',
@@ -1385,15 +1564,24 @@ class _ReviewChatBubble extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 9),
-              FilledButton.icon(
-                onPressed: applied ? null : () => onApply([index]),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
-                  foregroundColor: Colors.white,
-                  visualDensity: VisualDensity.compact,
-                ),
-                icon: const Icon(Icons.check, size: 15),
-                label: Text(applied ? '반영됨' : '이 문장으로 바꾸기'),
+              Row(
+                children: [
+                  OutlinedButton(
+                    onPressed: () => onSkip([index]),
+                    child: const Text('건너뛰기'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => onApply([index]),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.check, size: 15),
+                    label: const Text('이 문장으로 바꾸기'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1425,6 +1613,33 @@ class _ReviewChatBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AppliedSuggestionNotice extends StatelessWidget {
+  const _AppliedSuggestionNotice({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    child: Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Text(
+        '✓ $text',
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF166534),
+        ),
+      ),
+    ),
+  );
 }
 
 class _ReviewChatMessage {

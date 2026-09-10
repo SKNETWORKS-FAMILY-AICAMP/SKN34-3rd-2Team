@@ -45,7 +45,7 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-루트 `.env`의 `OPENAI_API_KEY`, `PINECONE_API_KEY1`에 실제 키를 넣습니다. 채용공고 인덱스는 공지·정책 인덱스와 계정이 달라 키 이름을 나눴습니다 — 공지용은 `PINECONE_API_KEY`입니다. 키는 Flutter 앱이나 요청 본문에 넣지 않습니다. 공지 검색과 채용공고 추천은 데이터와 검색 목적이 다르므로, 이 서비스는 공지용 `student` 인덱스와 분리된 채용공고 전용 `job-postings` 인덱스를 사용합니다.
+루트 `.env`의 `OPENAI_API_KEY`, `PINECONE_API_KEY1`에 실제 키를 넣습니다. 채용공고 인덱스는 공지·정책 인덱스와 계정이 달라 키 이름을 나눴습니다 — 공지·학생 챗봇용은 `PINECONE_API_KEY2`입니다. 키는 Flutter 앱이나 요청 본문에 넣지 않습니다. 공지 검색과 채용공고 추천은 데이터와 검색 목적이 다르므로, 이 서비스는 공지용 `student` 인덱스와 분리된 채용공고 전용 `job-postings` 인덱스를 사용합니다.
 
 ## 1. 정적 공고 인덱싱
 

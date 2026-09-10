@@ -209,7 +209,7 @@ class LmsStudentChatbot:
     """`invoke({question, thread_id, cohort?})`로 실행하는 LMS LangGraph."""
 
     def __init__(self, *, checkpointer: Any | None = None, k: int = 4) -> None:
-        missing = [name for name in ("OPENAI_API_KEY", "PINECONE_API_KEY") if not os.getenv(name)]
+        missing = [name for name in ("OPENAI_API_KEY", "PINECONE_API_KEY2") if not os.getenv(name)]
         if missing:
             raise RuntimeError(f"필수 환경변수가 없습니다: {', '.join(missing)}")
         if not 1 <= k <= 8:
@@ -227,7 +227,7 @@ class LmsStudentChatbot:
             model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
             dimensions=int(os.getenv("OPENAI_EMBEDDING_DIMENSION", "1536")),
         )
-        self.index = Pinecone(api_key=os.environ["PINECONE_API_KEY"]).Index(
+        self.index = Pinecone(api_key=os.environ["PINECONE_API_KEY2"]).Index(
             os.getenv("PINECONE_INDEX_NAME", "student"),
         )
         self.supervisor_chain = (
