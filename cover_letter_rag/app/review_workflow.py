@@ -6,7 +6,7 @@ import time
 
 from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion, SentenceReview
 
-PROMPT_VERSION = 'resume-v3-quality'
+PROMPT_VERSION = 'resume-v5-natural-korean-proofread'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 
 
@@ -319,6 +319,8 @@ def run_review(service, id_token, request):
         raise ReviewConflict('resume_version_changed')
     job_source = {}
     job_text = request.job_posting_text
+    if request.review_mode == 'general' and (request.selected_job_id or job_text):
+        raise ReviewInputError('general_review_cannot_include_job')
     if request.selected_job_id:
         from app.matching_handoff import load_selected_job
         if request.job_posting_text:
@@ -349,6 +351,11 @@ def run_review(service, id_token, request):
             ),
             'job_posting_text': redact(review_job_prompt_text(job_text, job_source)),
             'resume_time_context': time_context,
+            'review_mode': (
+                '일반 이력서 첨삭 — 공고 없이 문장·경험·역할·성과 근거를 검토'
+                if request.review_mode == 'general'
+                else '공고 맞춤 첨삭 — 선택 공고와 이력서 원문을 비교'
+            ),
             'review_focus': redact(request.review_focus or '전체 검토'),
         })
         # Structured output with include_raw preserves usage without logging content.

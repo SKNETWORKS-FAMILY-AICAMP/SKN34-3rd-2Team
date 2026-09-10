@@ -14,8 +14,6 @@ import 'job_resume_review_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
-import '../data/resume_analysis_repository.dart';
-import '../data/resume_analyzer.dart';
 import '../models/ai_job_coach_result.dart';
 import '../models/resume_readiness.dart';
 
@@ -150,7 +148,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             if (mounted)
               setState(() {
                 _result = null;
-                _resumeAnalysis = null;
               });
           },
         ),
@@ -168,7 +165,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       oldWidget.draftContent.toMap(),
     )) {
       _result = null;
-      _resumeAnalysis = null;
     }
   }
 
@@ -198,7 +194,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// 기다리는 동안 보여줄 말. 추천은 11초쯤 걸리므로 무엇을 하는 중인지 밝힌다.
   String? _chatBusyLabel;
   AiJobCoachResult? _result;
-  ResumeAnalysis? _resumeAnalysis;
   bool _chatMode = false;
   bool _loading = false;
   String? _error;
@@ -222,30 +217,43 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (reason == null) return true;
     setState(() {
       _result = null;
-      _resumeAnalysis = null;
       _error = reason;
     });
     return false;
   }
 
-  /// 이력서 분석. 앱 안의 규칙으로 필수 항목과 근거 유무를 점검한다.
-  Future<void> _analyzeResumeOnly() async {
+  /// 공고와 무관하게 문장 자체의 맞춤법·문법·표현을 다듬는다.
+  Future<void> _reviewResume() async {
     if (!_guard(AiCoachFeature.resumeAnalysis)) return;
-    setState(() {
-      _error = null;
-      _result = null;
-      _resumeAnalysis = null;
-      _loading = true;
-    });
+    if (widget.hasUnsavedChanges && !await _saveBeforeReview()) return;
+    if (!mounted) return;
+    final cohort = ref.read(effectiveCohortIdProvider);
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (cohort == null || user == null) {
+      setState(() => _error = '첨삭에는 실제 Firebase 로그인이 필요합니다.');
+      return;
+    }
+    final client = ResumeReviewApiClient(token: () => user.getIdToken());
     try {
-      final analysis = await ref
-          .read(resumeAnalysisRepositoryProvider)
-          .analyze(widget.draftContent);
-      if (mounted) setState(() => _resumeAnalysis = analysis);
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => JobResumeReviewDialog(
+          client: client,
+          cohortId: cohort,
+          resumeId: widget.resumeId,
+          draft: widget.draftContent,
+          generalReview: true,
+          onChanged: (content) {
+            widget.onResumeChanged?.call(content);
+            if (mounted) setState(() => _result = null);
+          },
+        ),
+      );
     } catch (error) {
-      if (mounted) setState(() => _error = '이력서 분석 실패: $error');
+      if (mounted) setState(() => _error = '이력서 첨삭을 시작하지 못했습니다: $error');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      client.close();
     }
   }
 
@@ -497,7 +505,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (!_guard(AiCoachFeature.jobRecommendation)) return;
     final requestedContent = widget.draftContent;
     setState(() {
-      _resumeAnalysis = null;
       _loading = true;
       _error = null;
     });
@@ -580,15 +587,15 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                     runSpacing: 8,
                     children: [
                       _ActionButton(
-                        icon: Icons.description_outlined,
-                        label: '이력서 분석',
-                        loading: _loading,
-                        // 분석할 내용이 하나라도 있으면 실행할 수 있다.
+                        icon: Icons.spellcheck_outlined,
+                        label: '이력서 첨삭',
+                        loading: false,
+                        // 첨삭할 내용이 하나라도 있으면 실행할 수 있다.
                         enabled: _readiness.canAnalyzeResume,
                         disabledTooltip: _readiness.blockedReason(
                           AiCoachFeature.resumeAnalysis,
                         ),
-                        onPressed: _analyzeResumeOnly,
+                        onPressed: _reviewResume,
                       ),
                       _ActionButton(
                         icon: Icons.track_changes_outlined,
@@ -628,12 +635,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                     const SizedBox(height: 14),
                     _ErrorCard(message: _error!),
                   ],
-                  if (_resumeAnalysis case final analysis?) ...[
-                    const SizedBox(height: 18),
-                    _ResumeAnalysisSection(analysis: analysis),
-                  ],
                   if (_result == null &&
-                      _resumeAnalysis == null &&
                       !_loading &&
                       _error == null) ...[
                     const SizedBox(height: 26),
@@ -1716,86 +1718,6 @@ class _ReadinessCard extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-/// 공고 없이 이력서 자체만 본 분석 결과.
-class _ResumeAnalysisSection extends StatelessWidget {
-  const _ResumeAnalysisSection({required this.analysis});
-
-  final ResumeAnalysis analysis;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Section(
-      title: '이력서 분석',
-      subtitle: 'AI가 문장을 대신 고치지 않고 보완할 지점만 알려줍니다.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (analysis.strengths.isNotEmpty) ...[
-            const _AnalysisLabel('강점', AppColors.success),
-            for (final item in analysis.strengths) _AnalysisBullet(item),
-            const SizedBox(height: 10),
-          ],
-          if (analysis.improvements.isNotEmpty) ...[
-            const _AnalysisLabel('보완 필요', AppColors.warning),
-            for (final item in analysis.improvements) _AnalysisBullet(item),
-            const SizedBox(height: 10),
-          ],
-          if (analysis.nextSteps.isNotEmpty) ...[
-            const _AnalysisLabel('다음 단계', AppColors.primary),
-            for (final item in analysis.nextSteps) _BulletText(item),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// 분석 소견 한 줄. 이력서 원문 인용이 있으면 아래에 작게 보여준다.
-class _AnalysisBullet extends StatelessWidget {
-  const _AnalysisBullet(this.item);
-
-  final ResumeAnalysisItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final quote = item.quote?.trim() ?? '';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 5),
-          child: Icon(Icons.circle, size: 5, color: AppColors.info),
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.text,
-                style: const TextStyle(fontSize: 11, height: 1.4),
-              ),
-              if (quote.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 4),
-                  child: Text(
-                    '“$quote”',
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      height: 1.35,
-                      fontStyle: FontStyle.italic,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
