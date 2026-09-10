@@ -664,6 +664,7 @@ class DemoLmsRepository {
     required String cohortId,
     required String userId,
     required String title,
+    bool isBaseResume = false,
   }) async {
     final id = 'r${_resumes.length}';
     _resumes.add(
@@ -673,9 +674,24 @@ class DemoLmsRepository {
         title: title,
         status: 'writing',
         sections: const {},
+        isBaseResume: isBaseResume,
       ),
     );
     return id;
+  }
+
+  Future<void> setBaseResume({
+    required String cohortId,
+    required String userId,
+    required String resumeId,
+  }) async {
+    for (var index = 0; index < _resumes.length; index++) {
+      final resume = _resumes[index];
+      if (resume.userId == userId) {
+        _resumes[index] = resume.copyWith(isBaseResume: resume.id == resumeId);
+      }
+    }
+    _emit();
   }
 
   Future<void> updateResumeSections({

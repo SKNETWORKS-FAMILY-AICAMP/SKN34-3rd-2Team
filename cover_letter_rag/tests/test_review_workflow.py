@@ -6,7 +6,8 @@ from app.config import Settings
 from app.resume_review import ResumeReviewService, ground_sentences
 from app.review_workflow import (ReviewConflict, ReviewInputError, redact, prepare_answers,
                                  normalize_diagnostics, normalize_questions, item_references, digest,
-                                 focused_followup_context, focused_time_context)
+                                 focused_followup_context, focused_time_context,
+                                 add_short_self_introduction_questions)
 from test_resume_review import FakeFirebase, SAMPLE_CONTENT
 
 
@@ -109,6 +110,22 @@ def test_fixed_diagnostics_and_priority_questions():
     result.questions.append(result.questions[0].model_copy(update={'priority': 3}))
     normalize_questions(result, {'projects[0].description': '설명'}, [], 'r')
     assert len(result.questions) == 1
+
+
+def test_short_self_introduction_sections_receive_followup_questions():
+    result = ResumeReviewGeneration(summary='검토', section_reviews=[])
+    fields = {
+        'selfIntroduction.intro.body': '데이터를 다루는 일이 좋습니다.',
+        'selfIntroduction.motivation.body': 'AI 엔지니어로 성장하고 싶습니다.',
+        'selfIntroduction.growth.body': '프로젝트를 통해 배웠습니다.' * 30,
+    }
+
+    add_short_self_introduction_questions(result, fields)
+
+    assert [question.field_path for question in result.questions] == [
+        'selfIntroduction.intro.body',
+        'selfIntroduction.motivation.body',
+    ]
 
 
 def test_general_review_sends_no_job_and_keeps_content_questions():

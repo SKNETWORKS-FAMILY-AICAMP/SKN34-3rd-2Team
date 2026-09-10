@@ -403,6 +403,46 @@ def normalize_questions(generation, fields, answers, review_id):
     generation.confirmation_questions = [q.question for q in generation.questions[:3]]
 
 
+def add_short_self_introduction_questions(generation, fields):
+    """Guarantee follow-up for unusually thin self-introduction answers.
+
+    A model can return one strong project question and miss several short
+    자기소개서 문항.  Those fields must not silently turn the whole review into
+    "complete".  We add grounded, fact-seeking questions only for non-empty
+    short bodies that the model did not already target.
+    """
+    existing_paths = {question.field_path for question in generation.questions}
+    followups = []
+    for path, body in fields.items():
+        if not re.fullmatch(r'selfIntroduction\.[^.]+\.body', path):
+            continue
+        if len(re.sub(r'\s+', '', body)) >= 180 or path in existing_paths:
+            continue
+        section = path.split('.')[1]
+        label = {
+            'intro': '자기소개',
+            'motivation': '지원동기',
+            'challenge': '어려움 극복 경험',
+            'growth': '성장과정',
+            'strengthsWeaknesses': '성격의 장단점',
+            'aspiration': '입사 후 포부',
+        }.get(section, '자기소개서')
+        followups.append(ReviewQuestion(
+            field_path=path,
+            topic='action',
+            question=(
+                f'{label} 문항에서 본인이 직접 한 행동이나 경험을 조금 더 '
+                '구체적으로 알려 주세요. 결과·배운 점이 있다면 함께 적어 주세요.'
+            ),
+            reason='문항 내용이 짧아 경험의 근거와 직무 연관성을 확인하기 어렵습니다.',
+            priority=1,
+        ))
+        existing_paths.add(path)
+    # Preserve these coverage questions when the model already used its full
+    # question budget for another section.
+    generation.questions = followups + generation.questions
+
+
 def run_review(service, id_token, request):
     # Import here to keep pure helpers independent of model/provider construction.
     from app.resume_review import extract_review_fields, enforce_resume_review_grounding, ground_sentences, require_answer_reflection
@@ -540,6 +580,8 @@ def run_review(service, id_token, request):
         warnings.extend(require_answer_reflection(grounded, current_answers))
         apply_selected_job_identity_revisions(grounded, fields, job_source)
         changes = normalize_diagnostics(grounded, fields, bool(job_text), previous)
+        if not is_focused_followup:
+            add_short_self_introduction_questions(grounded, fields)
         normalize_questions(grounded, fields, answers, request.request_id)
         filter_verified_project_time_questions(grounded, time_context)
         telemetry.update(status='complete', elapsed_ms=round((time.monotonic() - started) * 1000))

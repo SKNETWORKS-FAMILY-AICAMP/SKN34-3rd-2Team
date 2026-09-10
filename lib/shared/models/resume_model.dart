@@ -71,6 +71,7 @@ class ResumeModel {
     required this.status,
     required this.sections,
     this.content = const ResumeContent(),
+    this.isBaseResume = false,
     this.feedbackCount = 0,
     this.lastSeenFeedbackCount = 0,
     this.readFeedbackIds = const [],
@@ -85,6 +86,8 @@ class ResumeModel {
   final String status;
   final Map<String, bool> sections;
   final ResumeContent content;
+  /// 공고별 첨삭의 출발점으로 쓰는 사용자의 기본 이력서다.
+  final bool isBaseResume;
   final int feedbackCount;
   final int lastSeenFeedbackCount;
 
@@ -131,6 +134,7 @@ class ResumeModel {
       status: data['status'] as String? ?? 'writing',
       sections: sections,
       content: content,
+      isBaseResume: data['isBaseResume'] as bool? ?? false,
       feedbackCount: data['feedbackCount'] as int? ?? 0,
       lastSeenFeedbackCount: data['lastSeenFeedbackCount'] as int? ?? 0,
       readFeedbackIds:
@@ -150,6 +154,7 @@ class ResumeModel {
       'status': status,
       'sections': computedSections,
       'content': content.toMap(),
+      'isBaseResume': isBaseResume,
       'feedbackCount': feedbackCount,
       'lastSeenFeedbackCount': lastSeenFeedbackCount,
       'readFeedbackIds': readFeedbackIds,
@@ -189,6 +194,7 @@ class ResumeModel {
     String? status,
     Map<String, bool>? sections,
     ResumeContent? content,
+    bool? isBaseResume,
     int? feedbackCount,
     int? lastSeenFeedbackCount,
     List<String>? readFeedbackIds,
@@ -202,6 +208,7 @@ class ResumeModel {
       status: status ?? this.status,
       sections: sections ?? this.sections,
       content: content ?? this.content,
+      isBaseResume: isBaseResume ?? this.isBaseResume,
       feedbackCount: feedbackCount ?? this.feedbackCount,
       lastSeenFeedbackCount: lastSeenFeedbackCount ?? this.lastSeenFeedbackCount,
       readFeedbackIds: readFeedbackIds ?? this.readFeedbackIds,
