@@ -1,10 +1,21 @@
 import 'dart:math' as math;
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 
 /// 로그인 시네마틱 브랜드 스테이지 (다크 궤도)
 class LoginBrandStage extends StatefulWidget {
-  const LoginBrandStage({super.key});
+  const LoginBrandStage({
+    super.key,
+    this.exiting = false,
+    this.exitProgress,
+  });
+
+  /// 로그인 성공 퇴장 중
+  final bool exiting;
+
+  /// 0→1: PLAYDATA 패널 확대(속으로 진입) 진행도
+  final Animation<double>? exitProgress;
 
   @override
   State<LoginBrandStage> createState() => _LoginBrandStageState();
@@ -30,6 +41,15 @@ class _LoginBrandStageState extends State<LoginBrandStage>
   }
 
   @override
+  void didUpdateWidget(covariant LoginBrandStage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.exiting && !oldWidget.exiting) {
+      _pulse.stop();
+      _orbit.stop();
+    }
+  }
+
+  @override
   void dispose() {
     _pulse.dispose();
     _orbit.dispose();
@@ -39,23 +59,33 @@ class _LoginBrandStageState extends State<LoginBrandStage>
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onHover: (e) {
-        final size = MediaQuery.sizeOf(context);
-        setState(() {
-          _pointer = Offset(
-            (e.localPosition.dx / size.width - 0.5).clamp(-0.5, 0.5),
-            (e.localPosition.dy / size.height - 0.5).clamp(-0.5, 0.5),
-          );
-        });
-      },
-      onExit: (_) => setState(() => _pointer = Offset.zero),
+      onHover: widget.exiting
+          ? null
+          : (e) {
+              final size = MediaQuery.sizeOf(context);
+              setState(() {
+                _pointer = Offset(
+                  (e.localPosition.dx / size.width - 0.5).clamp(-0.5, 0.5),
+                  (e.localPosition.dy / size.height - 0.5).clamp(-0.5, 0.5),
+                );
+              });
+            },
+      onExit: widget.exiting
+          ? null
+          : (_) => setState(() => _pointer = Offset.zero),
       child: AnimatedBuilder(
-        animation: Listenable.merge([_pulse, _orbit]),
+        animation: Listenable.merge([
+          _pulse,
+          _orbit,
+          if (widget.exitProgress != null) widget.exitProgress!,
+        ]),
         builder: (context, _) {
           return _DarkOrbitStage(
             pulse: Curves.easeInOut.transform(_pulse.value),
             orbit: _orbit.value,
-            pointer: _pointer,
+            pointer: widget.exiting ? Offset.zero : _pointer,
+            exiting: widget.exiting,
+            exitT: widget.exitProgress?.value ?? 0,
           );
         },
       ),
@@ -68,11 +98,15 @@ class _DarkOrbitStage extends StatelessWidget {
     required this.pulse,
     required this.orbit,
     required this.pointer,
+    required this.exiting,
+    required this.exitT,
   });
 
   final double pulse;
   final double orbit;
   final Offset pointer;
+  final bool exiting;
+  final double exitT;
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +132,18 @@ class _DarkOrbitStage extends StatelessWidget {
     final hubW = wide ? 260.0 : 180.0;
     final hubH = wide ? 150.0 : 108.0;
 
+    // 패널 중심 → 화면 중심으로 이동하며 확대
+    final zoomT = Curves.easeInCubic.transform(exitT.clamp(0.0, 1.0));
+    final hubLeft0 = cx - hubW / 2;
+    final hubTop0 = cy - hubH / 2 + (exiting ? 0 : pulse * 6);
+    final hubLeft1 = (size.width - hubW) / 2;
+    final hubTop1 = (size.height - hubH) / 2;
+    final hubLeft = lerpDouble(hubLeft0, hubLeft1, zoomT)!;
+    final hubTop = lerpDouble(hubTop0, hubTop1, zoomT)!;
+    final hubScale = lerpDouble(1, 22, zoomT)!;
+    final washOpacity = Curves.easeIn.transform(((exitT - 0.45) / 0.55).clamp(0.0, 1.0));
+    final satelliteOpacity = (1 - exitT * 1.6).clamp(0.0, 1.0);
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -106,17 +152,20 @@ class _DarkOrbitStage extends StatelessWidget {
           left: cx - 160,
           top: cy - 160,
           child: IgnorePointer(
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF00C2D4).withValues(alpha: 0.18),
-                    const Color(0xFF7B5CFF).withValues(alpha: 0.08),
-                    Colors.transparent,
-                  ],
+            child: Opacity(
+              opacity: satelliteOpacity,
+              child: Container(
+                width: 320,
+                height: 320,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFF00C2D4).withValues(alpha: 0.18),
+                      const Color(0xFF7B5CFF).withValues(alpha: 0.08),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -125,22 +174,56 @@ class _DarkOrbitStage extends StatelessWidget {
         Positioned(
           left: cx - rx,
           top: cy - ry,
-          child: CustomPaint(
-            size: Size(rx * 2, ry * 2),
-            painter: _OrbitRingPainter(progress: orbit),
+          child: Opacity(
+            opacity: satelliteOpacity,
+            child: CustomPaint(
+              size: Size(rx * 2, ry * 2),
+              painter: _OrbitRingPainter(progress: orbit),
+            ),
           ),
         ),
-        _BrandPanel(
-          left: cx - hubW / 2,
-          top: cy - hubH / 2 + pulse * 6,
-          width: hubW,
-          height: hubH,
-          rotation: -0.06 + pulse * 0.02,
-          elevation: 28,
-          glow: const Color(0xFF00C2D4),
-          child: const _LogoFace(
-            asset: 'assets/brand/playdata.jpg',
-            padding: 20,
+        // PLAYDATA — 확대되며 화면으로 진입
+        Positioned(
+          left: hubLeft,
+          top: hubTop,
+          child: Transform.scale(
+            scale: hubScale,
+            alignment: Alignment.center,
+            child: Container(
+              width: hubW,
+              height: hubH,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(
+                  lerpDouble(22, 4, zoomT)!,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00C2D4).withValues(
+                      alpha: lerpDouble(0.32, 0.55, zoomT)!,
+                    ),
+                    blurRadius: lerpDouble(28, 80, zoomT)!,
+                    spreadRadius: lerpDouble(1, 12, zoomT)!,
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  const _LogoFace(
+                    asset: 'assets/brand/playdata.jpg',
+                    padding: 20,
+                  ),
+                  // 진입 말미: 화이트 워시로 "속으로" 느낌
+                  IgnorePointer(
+                    child: ColoredBox(
+                      color: Colors.white.withValues(alpha: washOpacity),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
         _BrandPanel(
@@ -151,6 +234,7 @@ class _DarkOrbitStage extends StatelessWidget {
           rotation: 0.2 + orbit * 0.4,
           elevation: 16,
           glow: const Color(0xFFF15A22),
+          opacity: satelliteOpacity,
           child: const _LogoFace(
             asset: 'assets/brand/sk_networks.jpg',
             padding: 14,
@@ -164,34 +248,55 @@ class _DarkOrbitStage extends StatelessWidget {
           rotation: -0.12 - orbit * 0.3,
           elevation: 14,
           glow: const Color(0xFF2BBBAD),
+          opacity: satelliteOpacity,
           child: const _LogoFace(
             asset: 'assets/brand/encore.jpg',
             padding: 12,
           ),
         ),
-        ...List.generate(6, (i) {
-          final p = onOrbit(i * (math.pi * 2 / 6) + 0.4, radiusScale: 1.25);
-          return Positioned(
-            left: p.dx,
-            top: p.dy,
-            child: Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: i.isEven
-                    ? const Color(0xFF00C2D4).withValues(alpha: 0.7)
-                    : const Color(0xFF7B5CFF).withValues(alpha: 0.65),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF00C2D4).withValues(alpha: 0.35),
-                    blurRadius: 8,
+        if (satelliteOpacity > 0.05)
+          ...List.generate(6, (i) {
+            final p = onOrbit(i * (math.pi * 2 / 6) + 0.4, radiusScale: 1.25);
+            return Positioned(
+              left: p.dx,
+              top: p.dy,
+              child: Opacity(
+                opacity: satelliteOpacity,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: i.isEven
+                        ? const Color(0xFF00C2D4).withValues(alpha: 0.7)
+                        : const Color(0xFF7B5CFF).withValues(alpha: 0.65),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00C2D4).withValues(alpha: 0.35),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              ),
+            );
+          }),
+        // 전체 시안 글로우 마무리
+        if (washOpacity > 0)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFF00C2D4).withValues(alpha: washOpacity * 0.35),
+                      Colors.white.withValues(alpha: washOpacity * 0.85),
+                    ],
+                  ),
+                ),
               ),
             ),
-          );
-        }),
+          ),
       ],
     );
   }
@@ -263,6 +368,7 @@ class _BrandPanel extends StatelessWidget {
     required this.child,
     this.elevation = 12,
     this.glow,
+    this.opacity = 1,
   });
 
   final double left;
@@ -273,44 +379,48 @@ class _BrandPanel extends StatelessWidget {
   final Widget child;
   final double elevation;
   final Color? glow;
+  final double opacity;
 
   @override
   Widget build(BuildContext context) {
     return Positioned(
       left: left,
       top: top,
-      child: Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.identity()
-          ..setEntry(3, 2, 0.0012)
-          ..rotateZ(rotation)
-          ..rotateY(-0.18)
-          ..rotateX(0.12),
-        child: Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.9),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.28),
-                blurRadius: elevation,
-                offset: Offset(elevation * 0.2, elevation * 0.45),
+      child: Opacity(
+        opacity: opacity,
+        child: Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.0012)
+            ..rotateZ(rotation)
+            ..rotateY(-0.18)
+            ..rotateX(0.12),
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.9),
               ),
-              if (glow != null)
+              boxShadow: [
                 BoxShadow(
-                  color: glow!.withValues(alpha: 0.32),
-                  blurRadius: 28,
-                  spreadRadius: 1,
+                  color: Colors.black.withValues(alpha: 0.28),
+                  blurRadius: elevation,
+                  offset: Offset(elevation * 0.2, elevation * 0.45),
                 ),
-            ],
+                if (glow != null)
+                  BoxShadow(
+                    color: glow!.withValues(alpha: 0.32),
+                    blurRadius: 28,
+                    spreadRadius: 1,
+                  ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: child,
           ),
-          clipBehavior: Clip.antiAlias,
-          child: child,
         ),
       ),
     );
