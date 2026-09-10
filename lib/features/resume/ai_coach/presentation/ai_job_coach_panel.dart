@@ -14,6 +14,7 @@ import 'job_resume_review_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
+import '../data/resume_text_builder.dart';
 import '../models/ai_job_coach_result.dart';
 import '../models/resume_readiness.dart';
 
@@ -422,9 +423,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return '$source을 읽었지만 조건에 맞는 공고를 찾지 못했어요.\n'
           '희망 지역이나 고용형태를 넓혀 보시겠어요?';
     }
-    final high = found.where((job) => job.grade == '높음').length;
-    final counted = high > 0 ? ' 그중 잘 맞는 건 $high건이에요.' : '';
-    return '$source을 읽고 ${found.length}건을 골랐어요.$counted';
+    return '$source을 읽고 ${found.length}건을 골랐어요.';
   }
 
   /// 공고 하나를 놓고 묻기 시작한다. 그만둘 때까지 모든 말이 이 공고로 간다.
@@ -474,6 +473,11 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         message: text,
         filters: _chatFilters,
         jobId: _askingAbout?.jobId,
+        // 공고를 놓고 물을 때만 보낸다. 공고를 안 고른 검색·질문은 이력서가
+        // 필요 없고, 보내 봐야 쓰이지 않는다.
+        resumeText: _askingAbout == null
+            ? null
+            : buildResumeText(widget.draftContent),
       );
       if (!mounted) return;
       setState(() {
@@ -1046,18 +1050,18 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  Text(
-                    item.isFromServer ? '적합도 ${item.grade}' : item.grade,
-                    style: TextStyle(
-                      fontSize: item.isFromServer ? 11 : 10,
-                      fontWeight: item.isFromServer
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                      color: item.grade == '높음'
-                          ? AppColors.success
-                          : AppColors.textSecondary,
+                  // 서버 적합도는 사람 정답으로 검증된 적이 없다. 순서에만 쓰고
+                  // 화면에는 내지 않는다. 근거 문장이 그 자리를 대신한다.
+                  if (!item.isFromServer)
+                    Text(
+                      item.grade,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: item.grade == '높음'
+                            ? AppColors.success
+                            : AppColors.textSecondary,
+                      ),
                     ),
-                  ),
                   if (hasLink)
                     IconButton(
                       onPressed: _open,
@@ -1087,6 +1091,17 @@ class _RecommendationCardState extends State<_RecommendationCard> {
               height: 1.4,
             ),
           ),
+          // 마감은 조건 표 안쪽이 아니라 여기 있어야 한다. 지원할지 정할 때
+          // 근무지·고용형태 다음으로 보는 것이 언제까지냐인데, 표는 펼쳐야 보인다.
+          if (item.deadline case final deadline?)
+            Text(
+              '~ ${_deadlineDate(deadline)}',
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
           if (item.unknownConditions.isNotEmpty) ...[
             const SizedBox(height: 3),
             Text(
@@ -1235,8 +1250,6 @@ class _RecommendationRationale extends StatelessWidget {
               ok: military.$1,
               note: military.$2,
             ),
-          if (item.deadline case final deadline?)
-            _ConditionRow(label: '마감', value: deadline, ok: null, note: null),
           const SizedBox(height: 8),
           if (item.reasons.isNotEmpty) ...[
             const _AnalysisLabel('추천 근거 — 이력서 문장 ↔ 공고 문장', AppColors.success),
@@ -2007,12 +2020,6 @@ class _ChatRecommendCard extends StatelessWidget {
     }
   }
 
-  Color get _gradeColor => switch (job.grade) {
-    '높음' => const Color(0xFF7C3AED),
-    '보통' => AppColors.textSecondary,
-    _ => AppColors.textHint,
-  };
-
   @override
   Widget build(BuildContext context) {
     final hasLink = job.sourceUrl.startsWith('http');
@@ -2033,39 +2040,14 @@ class _ChatRecommendCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _gradeColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: Text(
-                    job.grade.isEmpty ? '판단 없음' : job.grade,
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: _gradeColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    job.company,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              job.company,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 3),
             Text(
@@ -2164,7 +2146,7 @@ class _ChatJobCard extends StatelessWidget {
             ),
             if (job.deadline case final deadline?)
               Text(
-                '마감 $deadline',
+                '마감 ${_deadlineDate(deadline)}',
                 style: const TextStyle(fontSize: 10, color: AppColors.textHint),
               ),
             if (skills.isNotEmpty) ...[
@@ -2354,4 +2336,13 @@ class _QuoteLine extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 마감은 날짜까지만 보여준다. 서버는 `2026-10-08T23:59:59+09:00` 처럼 시각과
+/// 시간대를 붙여 주는데, 마감은 그 날 하루가 통째로 남았느냐의 문제라 뒤쪽은
+/// 읽는 사람에게 쓸모가 없다. 시간대를 옮기지 않고 앞 열 글자만 쓴다 —
+/// 한국 공고의 마감일은 한국 날짜 그대로 보여야 한다.
+String _deadlineDate(String value) {
+  final date = RegExp(r'^\d{4}-\d{2}-\d{2}').stringMatch(value);
+  return date ?? value;
 }

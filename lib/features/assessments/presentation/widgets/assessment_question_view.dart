@@ -113,7 +113,7 @@ class AssessmentQuestionView extends StatelessWidget {
                 Expanded(
                   child: Text(
                     explanation!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
                       height: 1.4,
@@ -206,7 +206,7 @@ class _PromptCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '$typeLabel · $points점',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
@@ -240,7 +240,7 @@ class _PromptCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             prompt,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -329,7 +329,7 @@ class _ChoiceCard extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: AppColors.textPrimary,
@@ -394,11 +394,11 @@ class _ShortAnswerBlock extends StatelessWidget {
               fillColor: const Color(0xFFF9FAFB),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -421,7 +421,7 @@ class _ShortAnswerBlock extends StatelessWidget {
                   mode == AssessmentQuestionViewMode.preview
                       ? '정답 후보'
                       : '내 답',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textSecondary,

@@ -56,7 +56,7 @@ class InflearnPackageCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -71,7 +71,7 @@ class InflearnPackageCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   package.summary!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     height: 1.5,
                     color: AppColors.textSecondary,
@@ -115,11 +115,11 @@ class _Header extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
             if (!package.isPublished && showDraft)
-              const _Badge(label: '임시저장', color: AppColors.textSecondary),
+              _Badge(label: '임시저장', color: AppColors.textSecondary),
             if (package.publishedAtLabel != null)
               Text(
                 '배정일 ${package.publishedAtLabel}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
                 ),
@@ -129,7 +129,7 @@ class _Header extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           package.title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -138,7 +138,7 @@ class _Header extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           '총 ${package.totalCourseCount}개 강의',
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
       ],
     );
@@ -193,7 +193,7 @@ class _UnitSection extends StatelessWidget {
         ),
         subtitle: Text(
           '${unit.courses.length}개 강의',
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         children: unit.courses.map((c) => _CourseTile(course: c)).toList(),
       ),
@@ -209,7 +209,7 @@ class _FlatCourseList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (courses.isEmpty) {
-      return const Text(
+      return Text(
         '등록된 강의가 없습니다.',
         style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
       );
@@ -254,7 +254,7 @@ class _CourseTile extends StatelessWidget {
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.open_in_new,
                 size: 16,
                 color: AppColors.textSecondary,
@@ -287,7 +287,7 @@ class InflearnPackageListTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
       ),
       child: ListTile(
         onTap: onTap,

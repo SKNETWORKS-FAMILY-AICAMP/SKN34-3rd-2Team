@@ -161,7 +161,7 @@ class _InstructorAssessmentSubmissionScreenState
                         color: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
-                          side: const BorderSide(color: AppColors.border),
+                          side: BorderSide(color: AppColors.border),
                         ),
                         child: ListTile(
                           title: Text(
@@ -205,7 +205,7 @@ class _InstructorAssessmentSubmissionScreenState
                                     children: [
                                       Text(
                                         '자동 ${ans?.autoScore ?? 0} / 배점 ${q.points}',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 12,
                                           color: AppColors.textSecondary,
                                         ),

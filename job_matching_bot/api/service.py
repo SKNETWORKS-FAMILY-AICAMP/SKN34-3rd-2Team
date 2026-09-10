@@ -740,8 +740,15 @@ class ChatService(_LivenessMixin):
                 total=0,
             )
 
+        # 이력서를 함께 받았으면 넘긴다. 이력서 화면에서 "나한테 맞아?"라고 물었는데
+        # 공고만 읽고 "이력서를 볼 수 없어요"라고 답하던 것을 고친다.
+        resume = (request.resume_text or "").strip()
         answer = self.job_asker(
-            {"job": _job_text(record.job), "question": request.message}
+            {
+                "job": _job_text(record.job),
+                "resume": resume or "(없음)",
+                "question": request.message,
+            }
         )
         return schemas.JobChatResponse(
             mode="공고",
@@ -752,9 +759,16 @@ class ChatService(_LivenessMixin):
         )
 
     def _peek(self, filters, top_k: int) -> list[schemas.JobChatJob]:
-        """센 조건에 맞는 공고 몇 건. 답에 붙여 숫자를 눈으로 확인하게 한다."""
-        result = store_search.search(self.store_path, filters, limit=min(top_k, 3))
-        return [_to_chat_job(hit) for hit in result.jobs]
+        """센 조건에 맞는 공고 몇 건. 답에 붙여 숫자를 눈으로 확인하게 한다.
+
+        여기도 내려간 공고를 뺀다. 저장소가 OPEN이라고 해도 사이트에서는 이미
+        접수마감일 수 있고, 근거로 붙인 공고가 마감이면 답의 숫자까지 못 믿게 된다.
+        빠진 자리를 채우려고 보여 줄 것보다 넉넉히 가져온 뒤 자른다.
+        """
+        want = min(top_k, 3)
+        result = store_search.search(self.store_path, filters, limit=want * 2)
+        alive = self.drop_dead([hit.job_id for hit in result.jobs])
+        return [_to_chat_job(hit) for hit in result.jobs if hit.job_id in alive][:want]
 
     @staticmethod
     def _reply(understood: str, filters, result, by_meaning: bool = False) -> str:

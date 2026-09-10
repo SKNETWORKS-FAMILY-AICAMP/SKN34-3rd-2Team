@@ -47,7 +47,7 @@ class AppShellHeader extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Text(
                   AppConstants.appName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary,
                   ),
@@ -223,7 +223,7 @@ class _CohortTrigger extends StatelessWidget {
                 child: Text(
                   label,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,

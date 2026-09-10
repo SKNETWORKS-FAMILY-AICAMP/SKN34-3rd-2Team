@@ -420,7 +420,7 @@ class _HeroBanner extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [Color(0xFF0B2A6F), Color(0xFF0055FF)],
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color: AppColors.shadow,
             blurRadius: 18,
@@ -572,7 +572,7 @@ class _UnassignedPool extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color: AppColors.shadow,
             blurRadius: 12,
@@ -601,7 +601,7 @@ class _UnassignedPool extends StatelessWidget {
                     const Spacer(),
                     Text(
                       '${students.length}명',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
@@ -628,7 +628,7 @@ class _UnassignedPool extends StatelessWidget {
           ),
           const Divider(height: 1),
           if (students.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 28),
               child: Center(
                 child: Text(
@@ -768,7 +768,7 @@ class _TeamCard extends StatelessWidget {
               color: hovering ? accent : AppColors.border,
               width: hovering ? 2 : 1,
             ),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
                 color: AppColors.shadow,
                 blurRadius: 12,
@@ -905,7 +905,7 @@ class _TeamCard extends StatelessWidget {
                                 ),
                                 color: AppColors.surfaceVariant,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.add,
                                 size: 14,
                                 color: AppColors.textHint,
@@ -946,7 +946,7 @@ class _EmptyTeamsHint extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '오른쪽 위 「팀 추가」로 시작해 보세요',
             style: TextStyle(color: AppColors.textSecondary),
           ),

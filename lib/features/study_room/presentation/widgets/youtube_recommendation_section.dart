@@ -54,7 +54,7 @@ class _YoutubeRecommendationSectionState
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 '이번 주 커리큘럼 추천',
                 style: TextStyle(
@@ -80,7 +80,7 @@ class _YoutubeRecommendationSectionState
                 : '「${sheet.title}」 기준으로 이번 주 주제 영상을 추천합니다.',
             orElse: () => '커리큘럼 일정에 맞는 YouTube 강의가 표시됩니다.',
           ),
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 12),
         async.when(
@@ -129,7 +129,7 @@ class _YoutubeRecommendationSectionState
                 ],
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       '좌우로 밀어 더 보기',
                       style: TextStyle(
                         fontSize: 11,
@@ -227,7 +227,7 @@ class _EmptyCard extends StatelessWidget {
       child: Text(
         message,
         textAlign: TextAlign.center,
-        style: const TextStyle(color: AppColors.textSecondary),
+        style: TextStyle(color: AppColors.textSecondary),
       ),
     );
   }
@@ -254,7 +254,7 @@ class _ErrorCard extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 12),
           TextButton.icon(
@@ -322,7 +322,7 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppColors.border),
-              boxShadow: const [
+              boxShadow: [
                 BoxShadow(
                   color: AppColors.shadow,
                   blurRadius: 12,
@@ -391,7 +391,7 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
                           video.channelTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             color: AppColors.textSecondary,
                           ),

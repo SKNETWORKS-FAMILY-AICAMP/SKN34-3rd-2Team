@@ -128,7 +128,7 @@ class _InstructorTopNav extends StatelessWidget {
     return Material(
       color: AppColors.surface,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: AppColors.border)),
         ),
         child: LayoutBuilder(

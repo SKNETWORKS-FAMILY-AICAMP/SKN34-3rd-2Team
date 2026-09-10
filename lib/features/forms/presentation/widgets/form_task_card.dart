@@ -57,7 +57,7 @@ class FormTaskCard extends StatelessWidget {
                             task.description,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
                             ),

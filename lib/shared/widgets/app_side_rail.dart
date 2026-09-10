@@ -183,8 +183,9 @@ class AppSideRail extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                     child: _RailThemeToggle(
                       isDark: isDark,
-                      onToggle: () =>
-                          ref.read(sideRailDarkModeProvider.notifier).toggle(),
+                      onToggle: () => ref
+                          .read(sideRailDarkModeProvider.notifier)
+                          .toggle(),
                     ),
                   ),
                   Expanded(

@@ -56,7 +56,7 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '구글폼 제출 시 이 이메일로 LMS 계정과 자동 매칭됩니다.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
@@ -389,7 +389,7 @@ class _InfoRow extends StatelessWidget {
           width: 88,
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
             ),
@@ -483,7 +483,7 @@ class _PersonalInfoCard extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textHint),
+                    Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textHint),
                     const SizedBox(width: 8),
                     Text(
                       birthLabel,
@@ -574,7 +574,7 @@ class _LinkRow extends StatelessWidget {
                       )
                     : Text(
                         url!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textPrimary,
                         ),
@@ -582,7 +582,7 @@ class _LinkRow extends StatelessWidget {
               else
                 Text(
                   emptyLabel,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textHint),
+                  style: TextStyle(fontSize: 12, color: AppColors.textHint),
                 ),
             ],
           ),
@@ -631,7 +631,7 @@ class _JobPreferencesCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '이력서에는 표시되지 않고 AI 코치의 맞춤 공고 추천에만 쓰입니다.',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
@@ -665,7 +665,7 @@ class _PreferenceRow extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         if (values.isEmpty)
-          const Text(
+          Text(
             '미입력',
             style: TextStyle(fontSize: 12, color: AppColors.textHint),
           )
@@ -736,7 +736,7 @@ class _JobPreferencesDialogState extends State<_JobPreferencesDialog> {
                 onChanged: (next) => setState(() => _employmentTypes = next),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '비워 두면 해당 조건으로 거르지 않습니다.',
                 style: TextStyle(fontSize: 11, color: AppColors.textHint),
               ),

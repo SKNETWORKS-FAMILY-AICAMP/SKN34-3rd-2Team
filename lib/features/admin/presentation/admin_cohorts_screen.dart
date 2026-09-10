@@ -122,7 +122,7 @@ class _CohortList extends ConsumerWidget {
       return Center(
         child: Text(
           emptyMessage,
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: AppColors.textSecondary),
         ),
       );
     }
@@ -203,7 +203,7 @@ class _CohortList extends ConsumerWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     c.periodLabel,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
                                     ),
@@ -220,7 +220,7 @@ class _CohortList extends ConsumerWidget {
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const Text(
+                                Text(
                                   '학생',
                                   style: TextStyle(
                                     fontSize: 11,

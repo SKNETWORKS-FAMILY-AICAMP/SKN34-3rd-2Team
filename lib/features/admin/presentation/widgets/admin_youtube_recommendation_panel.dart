@@ -95,7 +95,7 @@ class AdminYoutubeRecommendationPanel extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           '선택적 수동 큐레이션입니다. 학생 학습실 추천은 커리큘럼 주차 + YouTube API로 자동 표시됩니다.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
@@ -115,7 +115,7 @@ class AdminYoutubeRecommendationPanel extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: const Text(
+                child: Text(
                   '등록된 추천 영상이 없습니다. 「영상 등록」으로 추가하세요.',
                   style: TextStyle(color: AppColors.textSecondary),
                 ),

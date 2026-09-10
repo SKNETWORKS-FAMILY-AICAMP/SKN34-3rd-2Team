@@ -113,9 +113,10 @@ class ChatTestCase(unittest.TestCase):
         )
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
-            job_id=None, answered=None):
+            job_id=None, answered=None, resume_text=None):
         request = schemas.JobChatRequest(
-            message=message, filters=filters, top_k=top_k, job_id=job_id
+            message=message, filters=filters, top_k=top_k, job_id=job_id,
+            resume_text=resume_text,
         )
         return self.service(out, answered=answered).chat(request)
 
@@ -480,6 +481,38 @@ class AdviceTest(ChatTestCase):
         self.assertIn("서울은 몇 건이야?", response.suggestions)
 
 
+class AdviceEvidenceTest(ChatTestCase):
+    """질문 답에 붙는 근거 공고. 여기도 내려간 공고는 빼야 한다.
+
+    검색 답에서는 빼면서 질문 답의 근거에서는 빼지 않아, 저장소가 아직 OPEN으로
+    아는 접수마감 공고가 그대로 화면에 붙어 나갔다.
+    """
+
+    class _Liveness:
+        """맨 앞 공고 하나만 내려간 것으로 본다."""
+
+        def __init__(self) -> None:
+            self.asked: list[str] = []
+
+        def alive(self, job_ids: list[str]) -> list[str]:
+            self.asked = list(job_ids)
+            return list(job_ids[1:])
+
+    def test_closed_jobs_do_not_become_evidence(self):
+        service = self.service(turn(intent="질문", roles=["백엔드"]))
+        liveness = self._Liveness()
+        service._liveness = liveness
+
+        response = service.chat(
+            schemas.JobChatRequest(message="요즘 뭘 많이 뽑아?", top_k=5)
+        )
+
+        self.assertTrue(liveness.asked, "근거로 붙일 공고도 열어 본다")
+        shown = [job.job_id for job in response.jobs]
+        self.assertNotIn(liveness.asked[0], shown, "내려간 공고는 근거가 될 수 없다")
+        self.assertEqual(3, len(shown), "빠진 자리는 다음 공고가 채운다")
+
+
 class JobQuestionTest(ChatTestCase):
     """공고 하나를 놓고 묻기. **그 공고 원문만** 근거로 쓴다."""
 
@@ -490,6 +523,23 @@ class JobQuestionTest(ChatTestCase):
         )
         self.assertEqual("공고", response.mode)
         self.assertEqual(0, self.calls, "조건 추출 LLM은 부르지 않는다")
+
+    def test_the_resume_goes_with_the_question(self):
+        """이력서 화면에서 물었으면 이력서를 함께 넘긴다.
+
+        안 넘기던 때에는 "이 공고 나한테 맞아?"에 "현재 이력서 내용을 볼 수 없어
+        판단하기는 어렵다"고 답했다. 이력서는 바로 옆 화면에 열려 있었다.
+        """
+        self.ask(
+            turn(), message="나한테 맞는 공고야?", job_id="J1",
+            resume_text="Python으로 FastAPI 추천 API를 만들었습니다.",
+        )
+        self.assertIn("FastAPI", self.asked["resume"])
+
+    def test_without_a_resume_the_model_is_told_so(self):
+        """안 받았으면 없다고 분명히 알린다. 빈 칸을 주면 지어내 채운다."""
+        self.ask(turn(), message="뭘 요구해?", job_id="J1")
+        self.assertEqual("(없음)", self.asked["resume"])
 
     def test_the_posting_text_is_handed_to_the_model(self):
         self.ask(turn(), message="뭘 요구해?", job_id="J1")

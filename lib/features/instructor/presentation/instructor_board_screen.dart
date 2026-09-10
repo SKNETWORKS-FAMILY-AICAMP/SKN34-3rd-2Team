@@ -84,7 +84,7 @@ class InstructorBoardScreen extends ConsumerWidget {
                                 ? IconButton(
                                     tooltip: '수정',
                                     visualDensity: VisualDensity.compact,
-                                    icon: const Icon(
+                                    icon: Icon(
                                       Icons.edit_outlined,
                                       size: 18,
                                       color: AppColors.textHint,

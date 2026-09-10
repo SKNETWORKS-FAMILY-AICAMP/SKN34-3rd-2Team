@@ -546,7 +546,7 @@ class _Header extends StatelessWidget {
           Text(
             '${cohortName ?? '담당 기수'} · 교시마다 자리에 있는지 확인합니다. '
             '학생 조작은 없고, 확인·보류만 기록됩니다. (출석 상태는 변경되지 않음)',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
             ),
@@ -617,7 +617,7 @@ class _Header extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '선택 교시: ${period.rangeLabel}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
             ),
@@ -654,7 +654,7 @@ class _SeatingPane extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: layout == null || assignment == null || !assignment!.isPublished
-          ? const Center(
+          ? Center(
               child: Padding(
                 padding: EdgeInsets.all(20),
                 child: Text(
@@ -863,7 +863,7 @@ class _RollCallPaneState extends State<_RollCallPane> {
           const Divider(height: 1),
           Expanded(
             child: widget.students.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       '이 기수에 재원 학생이 없습니다.',
                       style: TextStyle(color: AppColors.textSecondary),
@@ -937,7 +937,7 @@ class _RollCallPaneState extends State<_RollCallPane> {
                                         seatId == null
                                             ? '좌석 없음'
                                             : '$seatId번',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textSecondary,
                                         ),
@@ -1020,7 +1020,7 @@ class _HeldPane extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   '${students.length}명',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),
@@ -1031,7 +1031,7 @@ class _HeldPane extends StatelessWidget {
           const Divider(height: 1),
           Expanded(
             child: students.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       '보류된 학생이 없습니다.',
                       style: TextStyle(
@@ -1078,7 +1078,7 @@ class _HeldPane extends StatelessWidget {
                                         seatId == null
                                             ? '좌석 없음'
                                             : '$seatId번',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textSecondary,
                                         ),
@@ -1163,7 +1163,7 @@ class _AttendanceTable extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(
               children: [
@@ -1189,7 +1189,7 @@ class _AttendanceTable extends StatelessWidget {
           _headerRow(),
           const Divider(height: 1),
           if (students.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(

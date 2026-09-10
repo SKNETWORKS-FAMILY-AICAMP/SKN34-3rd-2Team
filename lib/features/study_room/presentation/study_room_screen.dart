@@ -60,7 +60,7 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                   const SizedBox(height: 20),
                   const YoutubeRecommendationSection(),
                   const SizedBox(height: 28),
-                  const Text(
+                  Text(
                     '배정된 인프런 강의',
                     style: TextStyle(
                       fontSize: 16,
@@ -103,7 +103,7 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                       }).toList();
 
                       if (filtered.isEmpty) {
-                        return const Padding(
+                        return Padding(
                           padding: EdgeInsets.symmetric(vertical: 48),
                           child: Center(
                             child: Column(

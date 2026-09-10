@@ -185,7 +185,7 @@ class _AdminAlertPopupFormScreenState
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const Text(
+          Text(
             '활성 팝업은 학생 대시보드에 바로 뜹니다. 시간 구간을 끄면 하루 종일 표시됩니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),

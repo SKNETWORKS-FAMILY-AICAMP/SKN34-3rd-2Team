@@ -47,6 +47,17 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: '뒤로',
+          onPressed: () => context.pop(),
+        ),
+        title: const Text('마일리지 교환소'),
+      ),
       floatingActionButton: cartCount > 0
           ? FloatingActionButton.extended(
               backgroundColor: MileageColors.primary,
@@ -243,20 +254,6 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: MileageLayout.pagePaddingH,
-                    ),
-                    child: TextButton.icon(
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: () => context.pop(),
-                      icon: const Icon(Icons.arrow_back, size: 16),
-                      label: const Text('뒤로', style: TextStyle(fontSize: 13)),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -387,7 +384,7 @@ class _CategoryLimitCard extends StatelessWidget {
               const Spacer(),
               Text(
                 '한도 ${formatMileageM(usage.limit)}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   color: AppColors.textSecondary,
                 ),
@@ -402,7 +399,7 @@ class _CategoryLimitCard extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const Text(
+          Text(
             '추가 신청 가능',
             style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
@@ -411,7 +408,7 @@ class _CategoryLimitCard extends StatelessWidget {
             '승인 ${formatMileageM(usage.approved)} · '
             '대기 ${formatMileageM(usage.pending)} · '
             '수정요청 ${formatMileageM(usage.modifyRequested)}',
-            style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -512,7 +509,7 @@ class _ProductCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   '잔여 ${formatMileageM(usage!.remaining)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
                     color: AppColors.textSecondary,
                   ),

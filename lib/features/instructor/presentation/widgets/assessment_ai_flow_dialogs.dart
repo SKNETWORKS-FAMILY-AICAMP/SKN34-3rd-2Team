@@ -316,7 +316,7 @@ class _CurriculumAiGenerateDialogState
                       _ErrorBanner(message: _error!),
                     ],
                     if (sheet == null)
-                      const Expanded(
+                      Expanded(
                         child: Center(
                           child: Text(
                             '등록된 커리큘럼이 없습니다.\n커리큘럼 메뉴에서 CSV를 업로드하세요.',
@@ -350,7 +350,7 @@ class _CurriculumAiGenerateDialogState
                                     sheet.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: AppColors.textSecondary,
                                       fontWeight: FontWeight.w600,
@@ -419,7 +419,7 @@ class _CurriculumAiGenerateDialogState
                                                   ),
                                         ),
                                       ),
-                                      const Padding(
+                                      Padding(
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 8,
                                         ),
@@ -587,7 +587,7 @@ class _CurriculumAiGenerateDialogState
                                       children: [
                                         Text(
                                           '시험 $_targetCount문항 · $mixLabel',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w800,
                                             color: AppColors.textPrimary,
@@ -600,7 +600,7 @@ class _CurriculumAiGenerateDialogState
                                                   ' (직접 지정 · 총 ${plan.mc + plan.sa}개)'
                                               : 'AI 초안 객관식 ${plan.mc} · 단답 ${plan.sa}'
                                                   ' (여유분 포함 총 ${plan.mc + plan.sa}개)',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 12,
                                             height: 1.4,
                                             color: AppColors.textSecondary,
@@ -632,7 +632,7 @@ class _CurriculumAiGenerateDialogState
                                     ),
                                   ),
                                   if (_showAdvanced) ...[
-                                    const Text(
+                                    Text(
                                       '비우면 위 비중으로 자동 계산합니다.',
                                       style: TextStyle(
                                         fontSize: 12,
@@ -649,7 +649,7 @@ class _CurriculumAiGenerateDialogState
                                                 TextInputType.number,
                                             enabled: !_generating,
                                             onChanged: (_) => setState(() {}),
-                                            decoration: const InputDecoration(
+                                            decoration: InputDecoration(
                                               labelText: '객관식 생성 수',
                                               hintText: '예: 24',
                                               helperText: 'AI가 만들 객관식 개수',
@@ -668,7 +668,7 @@ class _CurriculumAiGenerateDialogState
                                                 TextInputType.number,
                                             enabled: !_generating,
                                             onChanged: (_) => setState(() {}),
-                                            decoration: const InputDecoration(
+                                            decoration: InputDecoration(
                                               labelText: '단답 생성 수',
                                               hintText: '예: 8',
                                               helperText: 'AI가 만들 단답 개수',
@@ -696,7 +696,7 @@ class _CurriculumAiGenerateDialogState
                               ),
                             ),
                             if (filtered.isEmpty)
-                              const SliverToBoxAdapter(
+                              SliverToBoxAdapter(
                                 child: Padding(
                                   padding: EdgeInsets.symmetric(vertical: 24),
                                   child: Text(
@@ -791,7 +791,7 @@ class _CurriculumAiGenerateDialogState
                                                     maxLines: 1,
                                                     overflow: TextOverflow
                                                         .ellipsis,
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       fontSize: 12,
                                                       color: AppColors
                                                           .textSecondary,
@@ -1226,10 +1226,10 @@ class _AssessmentAiReviewDialogState
                                             text: q.sourceTopic!,
                                           ),
                                         if (busy)
-                                          const _TinyBadge(
+                                          _TinyBadge(
                                             text: '다시 만드는 중…',
-                                            color: Color(0xFFFFF7ED),
-                                            textColor: Color(0xFF9A3412),
+                                            color: const Color(0xFFFFF7ED),
+                                            textColor: const Color(0xFF9A3412),
                                           ),
                                       ],
                                     ),
@@ -1238,7 +1238,7 @@ class _AssessmentAiReviewDialogState
                                       q.prompt,
                                       maxLines: 4,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         height: 1.45,
                                         color: AppColors.textPrimary,
@@ -1258,7 +1258,7 @@ class _AssessmentAiReviewDialogState
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.white,
                 border: Border(
                   top: BorderSide(color: AppColors.border),
@@ -1465,7 +1465,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                 ),
               ),
               const SizedBox(height: 28),
-              const Text(
+              Text(
                 'AI가 문제를 만들고 있어요',
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -1483,7 +1483,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                   _phases[_phaseIndex],
                   key: ValueKey(_phaseIndex),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     height: 1.45,
                     color: AppColors.textSecondary,
@@ -1503,7 +1503,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
               const SizedBox(height: 10),
               Text(
                 '${(_progress * 100).round()}% · $_elapsedLabel',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textHint,
@@ -1524,14 +1524,14 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                     Text(
                       widget.summaryHint ??
                           '시험 ${widget.targetCount}문항 · 초안 객관식 ${widget.mcCount} · 단답 ${widget.saCount}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       '보통 20~60초 정도 걸려요. 창을 닫지 말고 기다려 주세요.',
                       style: TextStyle(
                         fontSize: 12,
@@ -1584,7 +1584,7 @@ class _StepHeader extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.3,
@@ -1594,7 +1594,7 @@ class _StepHeader extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           subtitle,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             height: 1.45,
             color: AppColors.textSecondary,
@@ -1691,7 +1691,7 @@ class _RangeSlot extends StatelessWidget {
                   topic!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
@@ -1760,11 +1760,12 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _TinyBadge extends StatelessWidget {
-  const _TinyBadge({
+  _TinyBadge({
     required this.text,
-    this.color = const Color(0xFFF3F4F6),
-    this.textColor = AppColors.textSecondary,
-  });
+    Color? color,
+    Color? textColor,
+  })  : color = color ?? const Color(0xFFF3F4F6),
+        textColor = textColor ?? AppColors.textSecondary;
 
   final String text;
   final Color color;

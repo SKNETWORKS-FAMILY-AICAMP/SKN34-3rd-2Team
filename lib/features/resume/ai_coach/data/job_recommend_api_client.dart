@@ -341,12 +341,15 @@ class JobRecommendApiClient {
     JobChatFilters? filters,
     int topK = 5,
     String? jobId,
+    // 공고 하나를 놓고 물을 때만 쓴다. "나한테 맞아?"는 이력서를 봐야 답이 된다.
+    String? resumeText,
   }) async {
     final decoded = await _post('/api/v1/jobs/chat', {
       'message': message,
       'filters': filters?.toJson(),
       'top_k': topK,
       'job_id': jobId,
+      'resume_text': resumeText,
     });
     return JobChatResponse.fromMap(decoded);
   }

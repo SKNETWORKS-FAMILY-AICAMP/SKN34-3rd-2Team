@@ -78,6 +78,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// 끌기를 시작한 순간의 너비. 커서까지의 거리를 여기서 뺀다.
   double? _dragStartWidth;
 
+  /// AI 코치가 트리의 어느 자리에 있든 같은 것으로 알아보게 하는 열쇠.
+  ///
+  /// 창을 좁히면 좌우 배치가 상하 배치로 바뀌면서 패널이 `Row` 밑에서 `Column` 밑으로
+  /// 옮겨 간다. 열쇠가 없으면 Flutter가 다른 위젯으로 보고 상태를 새로 만들어, 받아 둔
+  /// 맞춤 공고와 대화가 사라진다. 전역 열쇠는 한 프레임 안에서 자리를 옮겨도 상태를
+  /// 그대로 들고 간다.
+  final GlobalKey _coachKey = GlobalKey();
+
   String _title = '';
   ResumeContent _content = ResumeContent.empty();
   bool _initialized = false;
@@ -809,6 +817,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                           Offstage(
                             offstage: !_showAiCoach,
                             child: AiJobCoachPanel(
+                              key: _coachKey,
                               resumeId: widget.resumeId,
                               draftContent: _content,
                               hasUnsavedChanges: _dirty || _isSaving,
@@ -833,11 +842,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       // 오른쪽은 이제 AI 코치만 쓴다. 피드백은 항목 아래 댓글로 옮겼다.
                       final hasRightPanel = _showAiCoach;
 
+                      // 닫아도 트리에서 빼지 않는다. 빼면 상태가 버려져 받아 둔
+                      // 맞춤 공고가 사라지고, 다시 열면 빈 화면이 나온다. `Offstage`가
+                      // 이미 안쪽에 있어 닫힌 동안에는 자리를 차지하지 않는다.
                       if (!wide) {
                         return Column(
                           children: [
                             Expanded(child: resumeScroll),
-                            if (hasRightPanel) rightPanel,
+                            rightPanel,
                           ],
                         );
                       }
@@ -854,20 +866,23 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: resumeScroll),
-                          if (hasRightPanel)
-                            ValueListenableBuilder<double>(
-                              valueListenable: _panelWidth,
-                              // 패널 자체는 여기 그대로 넘어와 다시 만들어지지 않는다.
-                              child: rightPanel,
-                              builder: (context, raw, panel) {
-                                final width =
-                                    raw.clamp(_panelMinWidth, panelMaxWidth);
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    _PanelResizeHandle(
+                          // 닫혀 있어도 같은 자리·같은 깊이로 남는다. 트리에서 빼거나
+                          // 감싸는 위젯 수를 바꾸면 패널 상태가 버려져 받아 둔 맞춤
+                          // 공고가 사라진다. 닫을 때는 폭을 0으로 만들 뿐이다.
+                          ValueListenableBuilder<double>(
+                            valueListenable: _panelWidth,
+                            // 패널 자체는 여기 그대로 넘어와 다시 만들어지지 않는다.
+                            child: rightPanel,
+                            builder: (context, raw, panel) {
+                              final width =
+                                  raw.clamp(_panelMinWidth, panelMaxWidth);
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Offstage(
+                                    offstage: !hasRightPanel,
+                                    child: _PanelResizeHandle(
                                       onStart: () => _dragStartWidth = width,
                                       onUpdate: (dx) {
                                         // 왼쪽으로 끌면(거리가 음수) 넓어진다.
@@ -879,23 +894,26 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                       onReset: () => _panelWidth.value =
                                           _panelDefaultWidth,
                                     ),
-                                    SizedBox(
-                                      width: width,
-                                      child: DecoratedBox(
-                                        decoration: const BoxDecoration(
-                                          border: Border(
-                                            left: BorderSide(
-                                              color: AppColors.border,
-                                            ),
+                                  ),
+                                  SizedBox(
+                                    width: hasRightPanel ? width : 0,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          left: BorderSide(
+                                            color: hasRightPanel
+                                                ? AppColors.border
+                                                : Colors.transparent,
                                           ),
                                         ),
-                                        child: panel,
                                       ),
+                                      child: panel,
                                     ),
-                                  ],
-                                );
-                              },
-                            ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                         ],
                       );
                     },

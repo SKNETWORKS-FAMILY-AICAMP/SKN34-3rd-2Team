@@ -44,7 +44,7 @@ class AdminFormSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -78,7 +78,7 @@ class AdminDetailRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w600,
@@ -87,7 +87,7 @@ class AdminDetailRow extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               color: AppColors.textPrimary,
             ),

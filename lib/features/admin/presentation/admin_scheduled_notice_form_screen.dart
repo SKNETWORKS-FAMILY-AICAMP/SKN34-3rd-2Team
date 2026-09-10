@@ -173,7 +173,7 @@ class _AdminScheduledNoticeFormScreenState
           _isEdit ? '예약 수정' : '예약 공지 등록',
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
-        bottom: const PreferredSize(
+        bottom: PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.border),
         ),
@@ -214,7 +214,7 @@ class _AdminScheduledNoticeFormScreenState
             children: [
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: '예약 공지 제목을 입력하세요',
                   border: InputBorder.none,
                   enabledBorder: UnderlineInputBorder(
@@ -306,7 +306,7 @@ class _AdminScheduledNoticeFormScreenState
                     '예약 활성화',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: const Text(
+                  subtitle: Text(
                     '비활성화하면 자동 게시가 중지됩니다.',
                     style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
@@ -348,7 +348,7 @@ class _SchedulePickerTile extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
                     ),

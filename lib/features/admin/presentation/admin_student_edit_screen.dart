@@ -180,7 +180,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
+                    Text(
                       '학생 정보 수정',
                       style: TextStyle(
                         fontSize: 22,
@@ -191,7 +191,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                     const SizedBox(height: 6),
                     Text(
                       '${intake.displayName} · ${intake.cohortName}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
                       ),

@@ -51,7 +51,8 @@ abstract final class AppTheme {
         filled: true,
         fillColor: AppColors.surface,
         hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
-        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        labelStyle:
+            const TextStyle(color: AppColors.textSecondary, fontSize: 13),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.border),

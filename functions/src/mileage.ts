@@ -26,7 +26,7 @@ interface CartItem {
   pricingType: string;
   unitPrice: number;
   quantity: number;
-  purchaseLink?: string;
+  purchaseLink?: string | null;
   subtotal?: number;
 }
 
@@ -189,7 +189,8 @@ async function resolveCartItemsAgainstCatalog(
         `상품을 찾을 수 없습니다: ${item.productName || item.productId}`,
       );
     }
-    if (product.isActive !== true) {
+    // Dart 모델과 동일: isActive 누락 시 활성으로 간주
+    if (product.isActive === false) {
       throw new HttpsError(
         "failed-precondition",
         `비활성 상품입니다: ${(product.name as string) ?? item.productId}`,
@@ -234,6 +235,10 @@ async function resolveCartItemsAgainstCatalog(
       );
     }
 
+    const link =
+      typeof item.purchaseLink === "string" ? item.purchaseLink.trim() : "";
+
+    // Firestore는 undefined 필드를 거부하므로 링크가 없으면 null로 저장
     return {
       productId: item.productId,
       productName: (product.name as string) ?? item.productName,
@@ -241,7 +246,7 @@ async function resolveCartItemsAgainstCatalog(
       pricingType,
       unitPrice,
       quantity,
-      purchaseLink: item.purchaseLink,
+      purchaseLink: link.length > 0 ? link : null,
       subtotal: unitPrice * quantity,
     };
   });
@@ -251,79 +256,94 @@ async function resolveCartItemsAgainstCatalog(
  * 학생 — 장바구니 → 구매 요청 제출
  */
 export const submitPurchaseRequest = onCall({region: REGION}, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "인증이 필요합니다.");
+  try {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "인증이 필요합니다.");
+    }
+
+    const uid = request.auth.uid;
+    const userData = await assertActiveUser(uid);
+    const {cohortId, studentNote} = request.data as {
+      cohortId?: string;
+      studentNote?: string;
+    };
+
+    if (!cohortId) {
+      throw new HttpsError("invalid-argument", "cohortId는 필수입니다.");
+    }
+    if (userData.cohortId !== cohortId) {
+      throw new HttpsError("permission-denied", "해당 기수 소속이 아닙니다.");
+    }
+
+    const cartRef = db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("mileageCart")
+      .doc(uid);
+    const cartDoc = await cartRef.get();
+    const rawItems = (cartDoc.data()?.items as CartItem[]) ?? [];
+
+    if (rawItems.length === 0) {
+      throw new HttpsError("failed-precondition", "장바구니가 비어 있습니다.");
+    }
+
+    const items = await resolveCartItemsAgainstCatalog(cohortId, rawItems);
+    const totalAmount = items.reduce((sum, i) => sum + (i.subtotal ?? 0), 0);
+    if (totalAmount <= 0) {
+      throw new HttpsError("invalid-argument", "유효하지 않은 요청 금액입니다.");
+    }
+
+    const balance = Number(userData.mileageBalance ?? 0);
+    if (!Number.isFinite(balance) || balance < totalAmount) {
+      throw new HttpsError(
+        "failed-precondition",
+        `마일리지 잔액이 부족합니다. (잔액: ${Number(balance || 0).toLocaleString()}M, 필요: ${totalAmount.toLocaleString()}M)`,
+      );
+    }
+
+    const settings = await getMileageSettings(cohortId);
+    const usage = await computeUserCategoryUsage(cohortId, uid);
+    validateCategoryLimits(usage, items, settings.categoryLimits);
+
+    const requestRef = db
+      .collection("cohorts")
+      .doc(cohortId)
+      .collection("purchaseRequests")
+      .doc();
+
+    const batch = db.batch();
+    batch.set(requestRef, {
+      userId: uid,
+      userDisplayName: userData.displayName ?? "",
+      items,
+      totalAmount,
+      status: "pending",
+      studentNote: studentNote ?? null,
+      managerMemo: null,
+      managerPurchaseLink: null,
+      processedAt: null,
+      processedBy: null,
+      processedByName: null,
+      createdAt: fieldValue.serverTimestamp(),
+      updatedAt: fieldValue.serverTimestamp(),
+    });
+    batch.set(cartRef, {
+      items: [],
+      updatedAt: fieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    return {
+      message: "구매 요청이 접수되었습니다.",
+      requestId: requestRef.id,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("submitPurchaseRequest failed", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new HttpsError("internal", `구매 요청 처리 중 오류가 발생했습니다. (${msg})`);
   }
-
-  const uid = request.auth.uid;
-  const userData = await assertActiveUser(uid);
-  const {cohortId, studentNote} = request.data as {
-    cohortId?: string;
-    studentNote?: string;
-  };
-
-  if (!cohortId) {
-    throw new HttpsError("invalid-argument", "cohortId는 필수입니다.");
-  }
-  if (userData.cohortId !== cohortId) {
-    throw new HttpsError("permission-denied", "해당 기수 소속이 아닙니다.");
-  }
-
-  const cartRef = db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("mileageCart")
-    .doc(uid);
-  const cartDoc = await cartRef.get();
-  const rawItems = (cartDoc.data()?.items as CartItem[]) ?? [];
-
-  if (rawItems.length === 0) {
-    throw new HttpsError("failed-precondition", "장바구니가 비어 있습니다.");
-  }
-
-  const items = await resolveCartItemsAgainstCatalog(cohortId, rawItems);
-  const totalAmount = items.reduce((sum, i) => sum + (i.subtotal ?? 0), 0);
-  if (totalAmount <= 0) {
-    throw new HttpsError("invalid-argument", "유효하지 않은 요청 금액입니다.");
-  }
-
-  const settings = await getMileageSettings(cohortId);
-  const usage = await computeUserCategoryUsage(cohortId, uid);
-  validateCategoryLimits(usage, items, settings.categoryLimits);
-
-  const requestRef = db
-    .collection("cohorts")
-    .doc(cohortId)
-    .collection("purchaseRequests")
-    .doc();
-
-  const batch = db.batch();
-  batch.set(requestRef, {
-    userId: uid,
-    userDisplayName: userData.displayName ?? "",
-    items,
-    totalAmount,
-    status: "pending",
-    studentNote: studentNote ?? null,
-    managerMemo: null,
-    managerPurchaseLink: null,
-    processedAt: null,
-    processedBy: null,
-    processedByName: null,
-    createdAt: fieldValue.serverTimestamp(),
-    updatedAt: fieldValue.serverTimestamp(),
-  });
-  batch.set(cartRef, {
-    items: [],
-    updatedAt: fieldValue.serverTimestamp(),
-  });
-
-  await batch.commit();
-
-  return {
-    message: "구매 요청이 접수되었습니다.",
-    requestId: requestRef.id,
-  };
 });
 
 /**
