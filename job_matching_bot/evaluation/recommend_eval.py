@@ -11,15 +11,19 @@
 
 ## 쓰는 법
 
-1. `--run` 으로 이력서 6종의 추천을 받는다. 파일 두 개가 만들어진다.
-   - `<시각>-읽기.md` — 공고 요건과 이력서를 나란히 놓고 **읽는** 문서
-   - `<시각>-채점표.csv` — 번호별로 **채우는** 표 (칸이 짧아 엑셀에서 편하다)
-2. 읽기 문서를 보며 판단하고, 채점표의 같은 번호 줄에 적는다.
-   - `사람_추천여부`: 이 공고가 이 사람에게 추천할 만한가 (예 / 아니오)
-   - `사람_등급`: 추천할 만하다면 높음 / 보통 (아니면 비워 둔다)
-   모델의 등급과 근거는 읽기 문서 각 항목 **맨 아래에 접혀** 있다. 먼저 스스로 정한 뒤 펼친다.
-3. 채운 파일을 `fixtures/eval_labels.csv` 로 저장하고 `--score` 를 돌린다.
+1. `--run` 으로 이력서 6종의 추천을 받는다. `<시각>-채점.html` 을 브라우저로 연다.
+2. 공고 요건과 이력서가 나란히 나온다. 키 하나로 매기고 다음으로 넘어간다.
+   - `1` 추천·높음 (직무가 같고 주된 기술이 겹친다)
+   - `2` 추천·보통 (직무는 같은데 주된 기술이 다르다)
+   - `3` 추천 안 함
+   모델의 등급과 근거는 **접혀** 있다. 먼저 스스로 정한 뒤 펼친다.
+   중간에 꺼도 된다 — 매긴 값은 브라우저에 남고 실행마다 따로 저장된다.
+3. 30건을 다 매기면 내려받기 단추가 나온다. 받은 파일을 `fixtures/eval_labels.csv` 로
+   옮기고 `--score` 를 돌린다.
 4. 이후 프롬프트·모델·추론 강도를 바꿀 때마다 `--run` 후 `--score` 로 비교한다.
+
+엑셀로 채우고 싶으면 함께 만들어지는 `<시각>-채점표.csv` 와 `<시각>-읽기.md` 를 쓴다.
+번호로 이어지는 예전 방식이다.
 
 정답은 사람이 매긴다. 모델이 낸 등급을 정답으로 쓰면 자기 답안을 자기가 채점하는 셈이라
 아무것도 검증하지 못한다.
@@ -39,6 +43,7 @@ from collections import Counter
 from pathlib import Path
 
 from job_matching_bot.config import ARTIFACTS_DIR, FIXTURES_DIR
+from job_matching_bot.evaluation.grader_page import write_page
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 RESUMES = FIXTURES_DIR / "eval_resumes.json"
@@ -156,8 +161,10 @@ def run(base_url: str, top_k: int) -> Path:
     rows = items
     print(f"\n{len(rows)}건 · {time.time() - started:.0f}초")
     print(f"결과 원본: {raw_path}")
-    print(f"읽기 문서: {doc}   ← 여기서 판단")
-    print(f"채점표:   {sheet}   ← 여기에 번호별로 적기")
+    page = write_page(raw_path.with_name(raw_path.stem + "-채점.html"), items, personas)
+    print(f"채점 페이지: {page}   ← 열어서 여기서 매기면 끝난다")
+    print(f"읽기 문서:  {doc}   (페이지 대신 문서로 보고 싶을 때)")
+    print(f"빈 채점표:  {sheet}   (엑셀로 채우고 싶을 때)")
     if not LABELS.exists():
         print(f"\n채점표를 엑셀로 열어 {LABEL_COLUMNS[0]}·{LABEL_COLUMNS[1]} 칸을 채운 뒤")
         print(f"{LABELS} 로 저장하세요. 그다음 --score 로 점수를 냅니다.")
@@ -418,8 +425,10 @@ def main() -> int:
         _write_sheet(sheet, sheet_rows(items))
         doc = path.with_name(path.stem + "-읽기.md")
         _write_review_doc(doc, items, personas)
-        print(f"읽기 문서: {doc}")
-        print(f"채점표:   {sheet}")
+        page = write_page(path.with_name(path.stem + "-채점.html"), items, personas)
+        print(f"채점 페이지: {page}   ← 열어서 여기서 매기면 끝난다")
+        print(f"읽기 문서:  {doc}")
+        print(f"빈 채점표:  {sheet}")
         return 0
 
     if args.score:
