@@ -43,6 +43,7 @@ import '../../features/instructor/shell/instructor_shell_screen.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/providers/auth_providers.dart';
+import '../../features/auth/providers/login_exit_hold_provider.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/dashboard/presentation/qual_exam_schedules_screen.dart';
 import '../../features/forms/presentation/form_tasks_screen.dart';
@@ -64,6 +65,7 @@ import '../../features/seating/presentation/admin_seating_screen.dart';
 import '../../features/seating/presentation/seating_screen.dart';
 import '../../features/shell/main_shell_screen.dart';
 import '../../features/study_room/presentation/study_room_screen.dart';
+import 'fade_page.dart';
 import 'route_paths.dart';
 
 /// Auth 상태 변화 시 go_router redirect 재실행용
@@ -71,6 +73,7 @@ class _RouterRefresh extends ChangeNotifier {
   _RouterRefresh(this._ref) {
     _ref.listen(sessionUidProvider, (_, _) => notifyListeners());
     _ref.listen(currentUserProvider, (_, _) => notifyListeners());
+    _ref.listen(loginExitHoldProvider, (_, _) => notifyListeners());
   }
 
   final Ref _ref;
@@ -145,6 +148,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       if (isLoggingIn) {
+        // 로그인 성공 퇴장 연출 중에는 redirect 보류
+        if (ref.read(loginExitHoldProvider)) return null;
         final user = currentUser.value;
         if (user != null && user.mustChangePassword) {
           return RoutePaths.changePassword;
@@ -189,7 +194,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: RoutePaths.login,
-        builder: (_, _) => const LoginScreen(),
+        pageBuilder: (context, state) => fadePage(
+          key: state.pageKey,
+          child: const LoginScreen(),
+        ),
       ),
       GoRoute(
         path: RoutePaths.changePassword,
@@ -218,7 +226,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       ShellRoute(
-        builder: (context, state, child) => MainShellScreen(child: child),
+        pageBuilder: (context, state, child) => fadePage(
+          key: state.pageKey,
+          child: MainShellScreen(child: child),
+        ),
         routes: [
           GoRoute(
             path: RoutePaths.dashboard,
@@ -325,7 +336,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
       ShellRoute(
-        builder: (context, state, child) => AdminShellScreen(child: child),
+        pageBuilder: (context, state, child) => fadePage(
+          key: state.pageKey,
+          child: AdminShellScreen(child: child),
+        ),
         routes: [
           GoRoute(
             path: RoutePaths.admin,
@@ -585,8 +599,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
       ShellRoute(
-        builder: (context, state, child) =>
-            InstructorShellScreen(child: child),
+        pageBuilder: (context, state, child) => fadePage(
+          key: state.pageKey,
+          child: InstructorShellScreen(child: child),
+        ),
         routes: [
           GoRoute(
             path: RoutePaths.instructor,

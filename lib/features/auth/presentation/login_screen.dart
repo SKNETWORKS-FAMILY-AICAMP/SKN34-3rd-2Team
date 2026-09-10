@@ -6,6 +6,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/utils/validators.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../providers/auth_providers.dart';
+import '../providers/login_exit_hold_provider.dart';
 import 'widgets/login_brand_stage.dart';
 
 /// 폐쇄형 로그인 화면 — 시네마틱 다크 스테이지
@@ -16,16 +17,42 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _showQuickLogin = false;
+  bool _loginSucceeded = false;
+
+  late final AnimationController _exitCtrl;
+  late final Animation<double> _fadeOut;
+  late final Animation<double> _scaleDown;
+
+  @override
+  void initState() {
+    super.initState();
+    _exitCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 820),
+    );
+    _fadeOut = CurvedAnimation(
+      parent: _exitCtrl,
+      curve: const Interval(0, 0.45, curve: Curves.easeInCubic),
+    );
+    _scaleDown = Tween<double>(begin: 1, end: 0.94).animate(
+      CurvedAnimation(
+        parent: _exitCtrl,
+        curve: const Interval(0, 0.4, curve: Curves.easeInOutCubic),
+      ),
+    );
+  }
 
   @override
   void dispose() {
+    _exitCtrl.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -39,26 +66,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isLoading || _loginSucceeded) return;
 
     setState(() => _isLoading = true);
+    ref.read(loginExitHoldProvider.notifier).hold();
+
     try {
-      await ref
+      final user = await ref
           .read(signInProvider.notifier)
           .signIn(_emailController.text, _passwordController.text);
+      if (!mounted) return;
+
+      // 비밀번호 변경 강제면 연출 생략하고 바로 이동
+      if (user.mustChangePassword) {
+        ref.read(loginExitHoldProvider.notifier).release();
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _loginSucceeded = true;
+      });
+      await _exitCtrl.forward();
+      if (!mounted) return;
+      ref.read(loginExitHoldProvider.notifier).release();
     } on AuthException catch (e) {
+      ref.read(loginExitHoldProvider.notifier).release();
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
+      ref.read(loginExitHoldProvider.notifier).release();
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('로그인 중 오류: $e')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -71,33 +118,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: const Color(0xFF05070F),
       body: Stack(
         children: [
-          const Positioned.fill(child: LoginBrandStage()),
+          Positioned.fill(
+            child: LoginBrandStage(
+              exiting: _loginSucceeded,
+              exitProgress: _exitCtrl,
+            ),
+          ),
           SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: wide ? 48 : 24,
-                  vertical: 24,
-                ),
-                child: Align(
-                  alignment: wide ? Alignment.centerLeft : Alignment.center,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    child: _LoginCard(
-                      formKey: _formKey,
-                      emailController: _emailController,
-                      passwordController: _passwordController,
-                      obscurePassword: _obscurePassword,
-                      isLoading: _isLoading,
-                      showQuickLogin: _showQuickLogin,
-                      onToggleObscure: () => setState(
-                        () => _obscurePassword = !_obscurePassword,
+            child: AnimatedBuilder(
+              animation: _exitCtrl,
+              builder: (context, child) {
+                return Opacity(
+                  opacity: 1 - _fadeOut.value,
+                  child: Transform.scale(
+                    scale: _scaleDown.value,
+                    alignment: wide ? Alignment.centerLeft : Alignment.center,
+                    child: child,
+                  ),
+                );
+              },
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: wide ? 48 : 24,
+                    vertical: 24,
+                  ),
+                  child: Align(
+                    alignment: wide ? Alignment.centerLeft : Alignment.center,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 400),
+                      child: _LoginCard(
+                        formKey: _formKey,
+                        emailController: _emailController,
+                        passwordController: _passwordController,
+                        obscurePassword: _obscurePassword,
+                        isLoading: _isLoading,
+                        loginSucceeded: _loginSucceeded,
+                        showQuickLogin: _showQuickLogin,
+                        onToggleObscure: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                        onToggleQuickLogin: () => setState(
+                          () => _showQuickLogin = !_showQuickLogin,
+                        ),
+                        onLogin: _handleLogin,
+                        onQuickLogin: _quickLogin,
                       ),
-                      onToggleQuickLogin: () => setState(
-                        () => _showQuickLogin = !_showQuickLogin,
-                      ),
-                      onLogin: _handleLogin,
-                      onQuickLogin: _quickLogin,
                     ),
                   ),
                 ),
@@ -117,6 +183,7 @@ class _LoginCard extends StatelessWidget {
     required this.passwordController,
     required this.obscurePassword,
     required this.isLoading,
+    required this.loginSucceeded,
     required this.showQuickLogin,
     required this.onToggleObscure,
     required this.onToggleQuickLogin,
@@ -129,6 +196,7 @@ class _LoginCard extends StatelessWidget {
   final TextEditingController passwordController;
   final bool obscurePassword;
   final bool isLoading;
+  final bool loginSucceeded;
   final bool showQuickLogin;
   final VoidCallback onToggleObscure;
   final VoidCallback onToggleQuickLogin;
@@ -275,10 +343,16 @@ class _LoginCard extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: isLoading ? null : onLogin,
+                onPressed: (isLoading || loginSucceeded) ? null : onLogin,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00C2D4),
+                  backgroundColor: loginSucceeded
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFF00C2D4),
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: loginSucceeded
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFF00C2D4).withValues(alpha: 0.55),
+                  disabledForegroundColor: Colors.white,
                 ),
                 child: isLoading
                     ? const SizedBox(
@@ -289,11 +363,23 @@ class _LoginCard extends StatelessWidget {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text('로그인'),
+                    : loginSucceeded
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_rounded, size: 20),
+                              SizedBox(width: 8),
+                              Text('로그인 성공'),
+                            ],
+                          )
+                        : const Text('로그인'),
               ),
               const SizedBox(height: 16),
               TextButton(
-                onPressed: onToggleQuickLogin,
+                onPressed: (isLoading || loginSucceeded)
+                    ? null
+                    : onToggleQuickLogin,
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFF00C2D4),
                 ),
