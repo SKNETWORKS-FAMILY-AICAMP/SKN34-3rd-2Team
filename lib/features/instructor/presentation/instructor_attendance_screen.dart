@@ -12,6 +12,8 @@ import '../../../shared/models/domain_models.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/instructor/instructor_onboarding_keys.dart';
 import '../../seating/models/seating_assignment_model.dart';
 import '../../seating/models/seating_layout_model.dart';
 import '../../seating/providers/seating_providers.dart';
@@ -563,29 +565,34 @@ class _Header extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: onPickDate,
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(dateKey),
-              ),
-              TextButton(
-                onPressed: onToday,
-                child: const Text('오늘'),
-              ),
-              _CountChip(
-                label: '확인 $confirmedCount / $total',
-                color: AppColors.success,
-              ),
-              _CountChip(
-                label: '보류 $heldCount',
-                color: const Color(0xFFEA580C),
-              ),
-            ],
+          KeyedSubtree(
+            key: OnboardingTargetRegistry.keyOf(
+              InstructorOnboardingTargets.attendanceSummary,
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onPickDate,
+                  icon: const Icon(Icons.calendar_today, size: 16),
+                  label: Text(dateKey),
+                ),
+                TextButton(
+                  onPressed: onToday,
+                  child: const Text('오늘'),
+                ),
+                _CountChip(
+                  label: '확인 $confirmedCount / $total',
+                  color: AppColors.success,
+                ),
+                _CountChip(
+                  label: '보류 $heldCount',
+                  color: const Color(0xFFEA580C),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           SingleChildScrollView(
@@ -824,15 +831,21 @@ class _RollCallPaneState extends State<_RollCallPane> {
                   icon: const Icon(Icons.chevron_left),
                 ),
                 Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 34),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: KeyedSubtree(
+                    key: OnboardingTargetRegistry.keyOf(
+                      InstructorOnboardingTargets.attendanceConfirm,
                     ),
-                    onPressed: current == null
-                        ? null
-                        : () => widget.onConfirm(current, !currentConfirmed),
-                    child: Text(currentConfirmed ? '확인 취소' : '확인'),
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 34),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      onPressed: current == null
+                          ? null
+                          : () =>
+                              widget.onConfirm(current, !currentConfirmed),
+                      child: Text(currentConfirmed ? '확인 취소' : '확인'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),

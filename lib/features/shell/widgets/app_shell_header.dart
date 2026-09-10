@@ -10,6 +10,8 @@ import '../../../core/widgets/app_dropdown.dart';
 import '../../../shared/models/cohort_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../shared/providers/side_rail_theme_provider.dart';
+import '../../../core/theme/shell_chrome.dart';
 
 /// AppBar — PLAYDATA 홈 이동 + 관리자 기수 선택
 class AppShellHeader extends ConsumerWidget {
@@ -20,6 +22,7 @@ class AppShellHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isAdmin = ref.watch(isAdminProvider);
+    final railDark = ref.watch(sideRailDarkModeProvider);
 
     return Row(
       children: [
@@ -49,7 +52,7 @@ class AppShellHeader extends ConsumerWidget {
                   AppConstants.appName,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: ShellChrome.appBarForeground(railDark),
                   ),
                 ),
               ],
@@ -58,7 +61,7 @@ class AppShellHeader extends ConsumerWidget {
         ),
         if (isAdmin) ...[
           const SizedBox(width: 12),
-          const Flexible(child: _CohortSelector()),
+          Flexible(child: _CohortSelector(isDark: railDark)),
         ],
       ],
     );
@@ -66,7 +69,9 @@ class AppShellHeader extends ConsumerWidget {
 }
 
 class _CohortSelector extends ConsumerStatefulWidget {
-  const _CohortSelector();
+  const _CohortSelector({required this.isDark});
+
+  final bool isDark;
 
   @override
   ConsumerState<_CohortSelector> createState() => _CohortSelectorState();
@@ -124,6 +129,7 @@ class _CohortSelectorState extends ConsumerState<_CohortSelector> {
                 child: _CohortTrigger(
                   label: _cohortLabel(selected),
                   isOpen: controller.isOpen,
+                  isDark: widget.isDark,
                   onPressed: () {
                     if (controller.isOpen) {
                       controller.close();
@@ -194,17 +200,21 @@ class _CohortTrigger extends StatelessWidget {
   const _CohortTrigger({
     required this.label,
     required this.isOpen,
+    required this.isDark,
     required this.onPressed,
   });
 
   final String label;
   final bool isOpen;
+  final bool isDark;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surfaceVariant,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.1)
+          : AppColors.surfaceVariant,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onPressed,
@@ -214,7 +224,7 @@ class _CohortTrigger extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: ShellChrome.appBarBorder(isDark)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -226,7 +236,7 @@ class _CohortTrigger extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: ShellChrome.appBarForeground(isDark),
                     height: 1.2,
                   ),
                 ),
@@ -235,7 +245,7 @@ class _CohortTrigger extends StatelessWidget {
               Icon(
                 isOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                 size: 18,
-                color: AppColors.textSecondary,
+                color: ShellChrome.appBarMuted(isDark),
               ),
             ],
           ),

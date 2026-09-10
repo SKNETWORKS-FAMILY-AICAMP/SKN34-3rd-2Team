@@ -18,6 +18,8 @@ import '../../auth/providers/auth_providers.dart';
 import '../../curriculum/presentation/widgets/curriculum_dashboard_section.dart';
 import '../../curriculum/providers/curriculum_providers.dart';
 import '../../forms/presentation/form_tasks_screen.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/student/student_onboarding_keys.dart';
 import '../../seating/providers/seating_providers.dart';
 import '../../study_room/providers/curriculum_youtube_providers.dart';
 import 'widgets/attendance_calendar_card.dart';
@@ -171,7 +173,12 @@ class _DashboardSidebar extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AttendanceCalendarCard(user: user, compact: compactCalendar),
+        KeyedSubtree(
+          key: OnboardingTargetRegistry.keyOf(
+            StudentOnboardingTargets.dashboardCalendar,
+          ),
+          child: AttendanceCalendarCard(user: user, compact: compactCalendar),
+        ),
         const SizedBox(height: 20),
         const MissionProgressDashboardCard(compact: true),
         const SizedBox(height: 20),

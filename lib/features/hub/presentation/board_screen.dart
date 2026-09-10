@@ -6,6 +6,8 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/post_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/student/student_onboarding_keys.dart';
 import 'widgets/board_ui.dart';
 import 'widgets/notice_list_widgets.dart';
 
@@ -183,37 +185,42 @@ class _NoticesTab extends ConsumerWidget {
             child: ConstrainedBox(
               constraints:
                   const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-                children: [
-                  if (favorites.isNotEmpty) ...[
-                    const _SectionHeader(
-                      icon: Icons.star_rounded,
-                      iconColor: BoardUi.favorite,
-                      title: '중요 공지',
-                    ),
-                    const SizedBox(height: 8),
-                    StudentNoticeRowList(
-                      notices: favorites,
-                      onTap: (notice) =>
-                          NoticeDetailSheet.show(context, notice),
-                    ),
-                    const SizedBox(height: 20),
+              child: KeyedSubtree(
+                key: OnboardingTargetRegistry.keyOf(
+                  StudentOnboardingTargets.boardNotices,
+                ),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                  children: [
+                    if (favorites.isNotEmpty) ...[
+                      const _SectionHeader(
+                        icon: Icons.star_rounded,
+                        iconColor: BoardUi.favorite,
+                        title: '중요 공지',
+                      ),
+                      const SizedBox(height: 8),
+                      StudentNoticeRowList(
+                        notices: favorites,
+                        onTap: (notice) =>
+                            NoticeDetailSheet.show(context, notice),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    if (regular.isNotEmpty) ...[
+                      const _SectionHeader(
+                        icon: Icons.campaign_outlined,
+                        title: '전체 공지',
+                      ),
+                      const SizedBox(height: 8),
+                      StudentNoticeRowList(
+                        notices: regular,
+                        onTap: (notice) =>
+                            NoticeDetailSheet.show(context, notice),
+                      ),
+                    ],
                   ],
-                  if (regular.isNotEmpty) ...[
-                    const _SectionHeader(
-                      icon: Icons.campaign_outlined,
-                      title: '전체 공지',
-                    ),
-                    const SizedBox(height: 8),
-                    StudentNoticeRowList(
-                      notices: regular,
-                      onTap: (notice) =>
-                          NoticeDetailSheet.show(context, notice),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           );

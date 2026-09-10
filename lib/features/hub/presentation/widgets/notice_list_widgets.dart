@@ -21,10 +21,12 @@ class StudentNoticeRow extends StatelessWidget {
     super.key,
     required this.notice,
     this.onTap,
+    this.trailing,
   });
 
   final NoticeModel notice;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +74,7 @@ class StudentNoticeRow extends StatelessWidget {
                   color: AppColors.textHint,
                 ),
               ),
+              if (trailing != null) trailing!,
               Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
@@ -92,12 +95,14 @@ class StudentNoticeRowList extends StatelessWidget {
     required this.notices,
     required this.onTap,
     this.maxVisibleRows,
+    this.trailingBuilder,
   });
 
   final List<NoticeModel> notices;
   final ValueChanged<NoticeModel> onTap;
   /// 지정 시 이 개수만큼만 박스 높이를 고정하고 내부 스크롤
   final int? maxVisibleRows;
+  final Widget? Function(NoticeModel notice)? trailingBuilder;
 
   static const _rowHeight = 42.0;
   static const _dividerHeight = 1.0;
@@ -120,6 +125,7 @@ class StudentNoticeRowList extends StatelessWidget {
           child: StudentNoticeRow(
             notice: notices[i],
             onTap: () => onTap(notices[i]),
+            trailing: trailingBuilder?.call(notices[i]),
           ),
         ),
       ],

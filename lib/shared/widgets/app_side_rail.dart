@@ -9,11 +9,13 @@ class AppSideRailItem {
     required this.icon,
     required this.label,
     required this.path,
+    this.itemKey,
   });
 
   final IconData icon;
   final String label;
   final String path;
+  final Key? itemKey;
 }
 
 /// 사이드바 그룹 — [title]이 null이면 헤더 없이 항상 표시
@@ -74,18 +76,20 @@ class SideRailStyle extends InheritedWidget {
   factory SideRailStyle.palette({
     required bool isDark,
     required Widget child,
+    SideRailDarkPalette? darkPalette,
   }) {
     if (isDark) {
+      final dark = darkPalette ?? kSideRailDarkPalettes.first;
       return SideRailStyle(
         isDark: true,
-        background: AppColors.sidebar,
-        border: const Color(0xFF1E3A8A),
+        background: dark.background,
+        border: dark.border,
         textPrimary: Colors.white,
-        textSecondary: AppColors.sidebarIconInactive,
-        selectedBg: Colors.white.withValues(alpha: 0.18),
+        textSecondary: dark.muted,
+        selectedBg: dark.accent.withValues(alpha: 0.18),
         selectedFg: Colors.white,
         danger: const Color(0xFFFCA5A5),
-        avatarBg: Colors.white.withValues(alpha: 0.2),
+        avatarBg: Colors.white.withValues(alpha: 0.14),
         avatarFg: Colors.white,
         child: child,
       );
@@ -160,9 +164,11 @@ class AppSideRail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(sideRailDarkModeProvider);
+    final darkPalette = ref.watch(sideRailDarkPaletteProvider);
 
     return SideRailStyle.palette(
       isDark: isDark,
+      darkPalette: darkPalette,
       child: Builder(
         builder: (context) {
           final style = SideRailStyle.of(context);
@@ -188,6 +194,16 @@ class AppSideRail extends ConsumerWidget {
                           .toggle(),
                     ),
                   ),
+                  if (isDark)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                      child: _RailPaletteSwitcher(
+                        palette: darkPalette,
+                        onCycle: () => ref
+                            .read(sideRailDarkPaletteIndexProvider.notifier)
+                            .cycle(),
+                      ),
+                    ),
                   Expanded(
                     child: _SideRailSectionList(
                       sections: _resolvedSections,
@@ -292,6 +308,7 @@ class _SideRailSectionListState extends State<_SideRailSectionList> {
           if (!section.isGroup || _expanded.contains(section.id))
             for (final item in section.items)
               _RailNavTile(
+                key: item.itemKey,
                 icon: item.icon,
                 label: item.label,
                 selected: widget.isPathSelected(item.path),
@@ -414,8 +431,65 @@ class _RailThemeToggle extends StatelessWidget {
   }
 }
 
+/// 다크 팔레트 후보 순환 (테스트용)
+class _RailPaletteSwitcher extends StatelessWidget {
+  const _RailPaletteSwitcher({
+    required this.palette,
+    required this.onCycle,
+  });
+
+  final SideRailDarkPalette palette;
+  final VoidCallback onCycle;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = SideRailStyle.of(context);
+    return Material(
+      color: Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onCycle,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: palette.background,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: palette.accent, width: 2),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  palette.label,
+                  style: TextStyle(
+                    color: style.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.palette_outlined,
+                size: 16,
+                color: palette.accent,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RailNavTile extends StatelessWidget {
   const _RailNavTile({
+    super.key,
     required this.icon,
     required this.label,
     required this.selected,
