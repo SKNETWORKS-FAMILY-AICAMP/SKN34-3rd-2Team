@@ -23,6 +23,8 @@ JSON 파일 저장소(`job_store.JobStore`)는 전량을 메모리에 올렸다 
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import json
 import sqlite3
 from datetime import datetime, timedelta
@@ -146,6 +148,15 @@ def _chunks(items: list[Any], size: int) -> Iterator[list[Any]]:
         yield items[start : start + size]
 
 
+def _effective_image_flag(description: str | None, flagged: object) -> bool:
+    """크롤러가 이미지라고 표시했어도 글에 요건이 있으면 이미지 공고가 아니다.
+
+    읽기와 쓰기가 **같은 함수**를 거친다. 둘 중 한쪽만 뒤집으면 같은 행의 지문이
+    쓸 때와 읽을 때 달라진다.
+    """
+    return bool(flagged) and not has_requirement_text(description or "")
+
+
 class SqliteJobStore:
     """`JobStore`와 같은 겉모습(`load` / `save` / `upsert` / `active_jobs` / `stats`)을 가진 SQLite 저장소."""
 
@@ -239,6 +250,12 @@ class SqliteJobStore:
     # ── 쓰기 ──────────────────────────────────────────────────
     def _write_record(self, record: JobRecord) -> None:
         job = record.job
+        # 읽을 때 뒤집을 값이면 쓸 때 미리 뒤집는다. 쓴 지문과 읽은 지문이 같아야
+        # 적재가 "바뀐 것 없음"을 믿을 수 있다. 읽을 때만 뒤집던 동안 4,316건의
+        # 지문이 어긋나 바뀐 것이 없는데도 다시 올릴 대상으로 잡혔다.
+        flag = _effective_image_flag(job.description, job.body_is_image)
+        if flag != job.body_is_image:
+            job = replace(job, body_is_image=flag)
         values = {name: _encode(name, getattr(job, name)) for name in JOB_FIELDS}
         values["status"] = record.status
         # 인덱스에 올라갈 내용의 지문. indexed_embed_hash는 여기서 건드리지 않는다 —

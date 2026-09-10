@@ -58,6 +58,25 @@ class SplitSectionsTest(unittest.TestCase):
         self.assertEqual(["PostgreSQL 사용 경험이 필요합니다."], sections.required)
         self.assertEqual(["Docker 기반 배포 경험이 있으면 좋습니다."], sections.preferred)
 
+    def test_startup_style_headings(self):
+        """'자격요건'이란 말 없이 말하듯 나눈 공고. 실제 공고(파스토로보틱스)의 구조다.
+
+        이런 공고가 저장소에 665건 있었고 IT만 151건이 요건 0자로 잡혀 인덱스에
+        못 올랐다. 제목만 알려주면 나머지 규칙은 그대로 맞는다.
+        """
+        body = (
+            "팀 소개\n물류 로봇을 만듭니다.\n"
+            "이런 일을 해요\n• 물류 ERP 운영 및 신규 기능 개발\n• WMS 고도화 개발\n"
+            "이런 분을 찾습니다\n• Java, Spring Boot 사용 경험\n"
+            "이런 분이면 더욱 좋아요\n• 물류 도메인 경험\n"
+            "채용 프로세스\n서류 → 면접"
+        )
+        sections = split_sections(body)
+        self.assertEqual(["• 물류 ERP 운영 및 신규 기능 개발", "• WMS 고도화 개발"], sections.duties)
+        self.assertEqual(["• Java, Spring Boot 사용 경험"], sections.required)
+        self.assertEqual(["• 물류 도메인 경험"], sections.preferred)
+        self.assertFalse(any("서류" in line for line in sections.preferred), "채용 프로세스에서 끝난다")
+
     def test_no_headings_returns_empty(self):
         self.assertFalse(split_sections("이미지 공고입니다.\n자세한 내용은 이미지를 참고하세요.").found)
 

@@ -192,5 +192,27 @@ class IncrementalPlanTest(unittest.TestCase):
         self.assertEqual([job.job_id], [j.job_id for j in self._plan(force=True)[0]])
 
 
+class WriteReadFingerprintTest(unittest.TestCase):
+    """쓴 지문과 읽은 지문이 같아야 한다.
+
+    저장소는 읽을 때 "글에 요건이 있으면 이미지 공고가 아니다"로 값을 뒤집는다. 쓰는
+    쪽이 다른 값을 넣으면 같은 행의 지문이 쓸 때와 읽을 때 달라진다. 그러면 바뀐 것이
+    없는데도 적재가 다시 올릴 대상으로 잡는다 — 실제로 4,316건이 그렇게 잡혀 있었다.
+    """
+
+    def test_load_time_image_rule_does_not_move_the_fingerprint(self):
+        base = mock_jobs()[0]
+        long_text = "자격요건 " + "Python으로 서비스를 만들어 본 분. " * 60
+        job = replace(base, job_id="J-IMG", source_job_id="J-IMG", description=long_text, body_is_image=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SqliteJobStore(Path(tmp) / "store.sqlite")
+            store.upsert([job], source="MOCK", as_of=AS_OF)
+            stored = store.index_state()["J-IMG"][0]
+            loaded = next(r.job for r in store.all_records() if r.job.job_id == "J-IMG")
+            self.assertFalse(loaded.body_is_image, "읽을 때는 글이 있으니 이미지 공고가 아니다")
+            self.assertEqual(stored, doc.embed_hash(loaded), "쓴 지문과 읽은 지문이 같아야 한다")
+            store.close()
+
+
 if __name__ == "__main__":
     unittest.main()
