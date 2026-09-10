@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +12,7 @@ import '../../shared/widgets/app_side_rail.dart';
 import '../../shared/widgets/profile_avatar.dart';
 import '../../shared/widgets/profile_nav_chip.dart';
 import '../auth/providers/auth_providers.dart';
+import '../chatbot/presentation/student_chatbot_host.dart';
 import 'widgets/alert_popup_host.dart';
 import 'widgets/app_shell_header.dart';
 
@@ -155,7 +154,14 @@ class MainShellScreen extends ConsumerWidget {
                       ),
                     ),
             ),
-          Expanded(child: AlertPopupHost(child: child)),
+          Expanded(
+            child: user?.isStudent == true
+                ? StudentChatbotHost(
+                    user: user!,
+                    child: AlertPopupHost(child: child),
+                  )
+                : AlertPopupHost(child: child),
+          ),
         ],
       ),
     );
