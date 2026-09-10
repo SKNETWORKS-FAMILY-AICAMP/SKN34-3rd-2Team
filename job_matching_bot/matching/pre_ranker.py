@@ -28,11 +28,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence, TypeVar
 
+from job_matching_bot.ingestion.qualifications import normalize_term
 from job_matching_bot.matching.skill_normalize import canonical_set
 from job_matching_bot.schemas.job_posting import Job
 
 # 기술 겹침에 줄 비중. 나머지는 벡터 유사도 몫이다.
 SKILL_WEIGHT = 0.5
+
+# 공고가 우대한다고 적은 자격증·전공을 이력서가 가졌을 때 얹는 몫.
+#
+# 우대사항은 없어도 지원에 지장이 없다. 그래서 **더하기만 하고 빼지 않는다.** 우대
+# 요건이 아예 없는 공고(표본의 약 89%)와, 있지만 못 맞춘 공고는 똑같이 0을 받는다.
+# 못 맞췄다고 뒤로 밀면 그건 조건으로 거는 것이지 우대가 아니다.
+#
+# 값이 작다. 기술 겹침(0.5)의 십분의 일이다. 순위를 뒤집는 힘이 아니라 비슷할 때
+# 앞에 세우는 정도다. 사람이 매긴 43건에서 우대 요건이 맞은 경우가 5건뿐이라
+# 효과를 재지 못했다. 이 숫자는 측정한 값이 아니라 "작게 두자"는 판단이다.
+BONUS_WEIGHT = 0.05
 
 
 @dataclass(frozen=True)
@@ -62,6 +74,37 @@ def skill_match(job: Job, resume_skills: Sequence[str]) -> SkillMatch:
     return SkillMatch(matched=tuple(sorted(pool & mine)), pool_size=len(pool))
 
 
+@dataclass(frozen=True)
+class PreferredMatch:
+    """공고가 우대한다고 적은 것 중 이력서가 실제로 가진 것."""
+
+    certifications: tuple[str, ...] = ()
+    majors: tuple[str, ...] = ()
+
+    @property
+    def hit(self) -> bool:
+        return bool(self.certifications or self.majors)
+
+
+def preferred_match(job: Job, certifications: Sequence[str], majors: Sequence[str]) -> PreferredMatch:
+    """우대 자격증·전공을 이력서와 맞대어 본다. 대조 규칙은 하드 필터와 같다.
+
+    자격증은 양쪽을 정규화해 한쪽이 다른 쪽을 품으면 같은 것으로 본다
+    (`정보처리기사` ↔ `정보처리기사 1급`). 전공은 갈래 용어가 이력서 전공 문자열에
+    들어 있으면 맞은 것으로 본다 (`데이터` ⊂ `빅데이터과`).
+    """
+    mine = [normalize_term(c) for c in certifications if c.strip()]
+    certs = tuple(
+        cert for cert in job.preferred_certifications
+        if (key := normalize_term(cert)) and any(key in c or c in key for c in mine)
+    )
+    my_majors = [normalize_term(m) for m in majors if m.strip()]
+    hit_major = any(
+        term and any(term in m for m in my_majors) for term in job.preferred_major_terms
+    )
+    return PreferredMatch(certs, tuple(job.preferred_majors) if hit_major else ())
+
+
 def _normalized(values: list[float]) -> list[float]:
     """0~1로 편다. 전부 같으면 가운데(0.5)로 — 순서를 만들어내지 않는다."""
     low, high = min(values), max(values)
@@ -77,16 +120,23 @@ def pre_rank(
     candidates: Sequence[T],
     scores: Sequence[float],
     matches: Sequence[SkillMatch],
+    preferred: Sequence[PreferredMatch] | None = None,
     *,
     weight: float = SKILL_WEIGHT,
+    bonus: float = BONUS_WEIGHT,
 ) -> list[T]:
     """섞은 점수가 높은 순으로 다시 세운다. 같으면 들어온 순서를 지킨다.
 
     `scores`는 벡터 유사도(클수록 좋다), `matches`는 같은 자리의 기술 겹침이다.
-    셋의 길이가 같아야 한다.
+    길이가 같아야 한다.
+
+    `preferred`를 주면 우대 자격증·전공을 맞춘 공고에 `bonus`만큼 얹는다. **빼지는
+    않는다.** 못 맞춘 공고와 우대 요건이 아예 없는 공고는 똑같이 0이다.
     """
     if len(candidates) != len(scores) or len(candidates) != len(matches):
         raise ValueError("후보·점수·겹침의 개수가 다릅니다")
+    if preferred is not None and len(preferred) != len(candidates):
+        raise ValueError("후보와 우대 대조의 개수가 다릅니다")
     if len(candidates) < 2:
         return list(candidates)
 
@@ -95,9 +145,10 @@ def pre_rank(
     neutral = sum(known) / len(known) if known else 0.0
 
     vectors = _normalized(list(scores))
+    lifts = [bonus if p.hit else 0.0 for p in preferred] if preferred else [0.0] * len(candidates)
     blended = [
-        (1 - weight) * v + weight * (m.coverage if m.coverage is not None else neutral)
-        for v, m in zip(vectors, matches)
+        (1 - weight) * v + weight * (m.coverage if m.coverage is not None else neutral) + lift
+        for v, m, lift in zip(vectors, matches, lifts)
     ]
     order = sorted(range(len(candidates)), key=lambda i: (-blended[i], i))
     return [candidates[i] for i in order]

@@ -25,7 +25,7 @@ from typing import Any, Callable
 
 from job_matching_bot.api import prompts, schemas
 from job_matching_bot.matching.hard_filter import hard_filter
-from job_matching_bot.matching.pre_ranker import pre_rank, skill_match
+from job_matching_bot.matching.pre_ranker import pre_rank, preferred_match, skill_match
 from job_matching_bot.retrieval import search as retrieval
 from job_matching_bot.retrieval import market_stats, store_search
 from job_matching_bot.schemas.job_posting import Job
@@ -432,8 +432,14 @@ class RecommendService(_LivenessMixin):
         # 평평해서(실측 폭 0.042~0.140) 그 순서만으로는 누구를 LLM에 보낼지 가리기
         # 어렵다. 기술 정보가 없는 공고는 제자리에 남는다 — `pre_ranker` 참고.
         matches = [skill_match(job, profile.skills) for _, job, _ in candidates]
+        # 공고가 우대한다고 적은 자격증·전공을 가졌으면 조금 얹는다. 못 맞췄다고
+        # 빼지는 않는다 — 우대사항은 없어도 지원에 지장이 없다.
+        preferred = [
+            preferred_match(job, resume_profile.certifications, resume_profile.majors)
+            for _, job, _ in candidates
+        ]
         candidates = pre_rank(
-            candidates, [hit.score for hit, _, _ in candidates], matches
+            candidates, [hit.score for hit, _, _ in candidates], matches, preferred
         )
         candidates = candidates[:RERANK_TOP_K]
         say("filter", f"조건을 통과한 {len(candidates)}건이 남았어요")

@@ -17,7 +17,13 @@ import unittest
 from dataclasses import replace
 
 from job_matching_bot.ingestion.mock_source import mock_jobs
-from job_matching_bot.matching.pre_ranker import SkillMatch, pre_rank, skill_match
+from job_matching_bot.matching.pre_ranker import (
+    PreferredMatch,
+    SkillMatch,
+    pre_rank,
+    preferred_match,
+    skill_match,
+)
 
 MINE = ["React", "TypeScript", "Next.js"]
 
@@ -112,3 +118,91 @@ class PreRankTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _pref(job_id: str, *, certs: list[str] | None = None, majors: list[str] | None = None,
+          terms: list[str] | None = None):
+    return replace(
+        mock_jobs()[0],
+        job_id=job_id,
+        source_job_id=job_id,
+        preferred_certifications=certs or [],
+        preferred_majors=majors or [],
+        preferred_major_terms=terms or [],
+    )
+
+
+class PreferredMatchTest(unittest.TestCase):
+    """우대 자격증·전공은 조건이 아니라 가점이다. 대조 규칙은 하드 필터와 같다."""
+
+    def test_a_certification_matches_by_normalized_containment(self):
+        match = preferred_match(_pref("j1", certs=["정보처리기사"]), ["정보처리기사 1급"], [])
+        self.assertEqual(("정보처리기사",), match.certifications)
+        self.assertTrue(match.hit)
+
+    def test_an_unrelated_certification_does_not_match(self):
+        self.assertFalse(preferred_match(_pref("j2", certs=["정보보안기사"]), ["SQLD"], []).hit)
+
+    def test_a_major_matches_by_group_term_not_by_name(self):
+        """`빅데이터과`는 `컴퓨터·소프트웨어`와 이름이 다르지만 `데이터`로 걸린다."""
+        job = _pref("j3", majors=["컴퓨터·소프트웨어"], terms=["컴퓨터", "데이터"])
+        self.assertTrue(preferred_match(job, [], ["빅데이터과(3년제)"]).hit)
+        self.assertFalse(preferred_match(job, [], ["시각디자인학과"]).hit)
+
+    def test_a_job_with_no_preferred_terms_matches_nothing(self):
+        self.assertFalse(preferred_match(_pref("j4"), ["정보처리기사"], ["컴퓨터공학과"]).hit)
+
+
+class BonusTest(unittest.TestCase):
+    def test_matching_a_preferred_qualification_breaks_a_tie(self):
+        """가점은 접전을 가르는 몫이다. 벌어진 순위를 뒤집지 않는다.
+
+        후보 열둘 사이에서 벡터·기술 겹침이 같아지는 일은 흔하다. 그때 우대 자격증을
+        가진 쪽이 앞에 선다.
+        """
+        ranked = pre_rank(
+            ["앞에 있던 것", "우대 맞춤"],
+            [0.50, 0.50],
+            [SkillMatch((), 2)] * 2,
+            [PreferredMatch(), PreferredMatch(certifications=("정보처리기사",))],
+        )
+        self.assertEqual(["우대 맞춤", "앞에 있던 것"], ranked)
+
+    def test_the_bonus_is_too_small_to_overturn_a_clear_vector_gap(self):
+        """0.05는 기술 겹침(0.5)의 십분의 일이다. 확실히 앞선 것을 못 이긴다."""
+        ranked = pre_rank(
+            ["벡터 1위", "가운데", "우대 맞춤 꼴찌"],
+            [0.60, 0.50, 0.40],
+            [SkillMatch((), 2)] * 3,
+            [PreferredMatch(), PreferredMatch(), PreferredMatch(certifications=("SQLD",))],
+        )
+        self.assertEqual(["벡터 1위", "가운데", "우대 맞춤 꼴찌"], ranked)
+
+    def test_a_job_without_preferred_terms_is_not_pushed_down(self):
+        """우대 요건이 아예 없는 공고(표본의 89%)를 벌주면 안 된다.
+
+        못 맞춘 것과 우대 요건이 없는 것은 둘 다 0이다. 빼지 않으니 서로의 순서는
+        벡터·기술 겹침이 정한 그대로 남는다.
+        """
+        args = (["우대 없음", "우대 있는데 못 맞춤"], [0.50, 0.48], [SkillMatch((), 2)] * 2)
+        without = pre_rank(*args)
+        with_bonus = pre_rank(*args, [PreferredMatch(), PreferredMatch()])
+        self.assertEqual(without, with_bonus)
+
+    def test_the_bonus_does_not_overturn_a_real_gap(self):
+        """가점은 비슷할 때 앞에 세우는 정도다. 기술이 확실히 겹치는 쪽을 못 이긴다."""
+        ranked = pre_rank(
+            ["기술 겹침 큼", "우대만 맞춤"],
+            [0.50, 0.50],
+            [SkillMatch(("react", "typescript"), 2), SkillMatch((), 4)],
+            [PreferredMatch(), PreferredMatch(certifications=("SQLD",))],
+        )
+        self.assertEqual(["기술 겹침 큼", "우대만 맞춤"], ranked)
+
+    def test_the_count_must_line_up(self):
+        with self.assertRaises(ValueError):
+            pre_rank(["a", "b"], [0.1, 0.2], [SkillMatch((), 0)] * 2, [PreferredMatch()])
+
+    def test_passing_none_is_the_old_behaviour(self):
+        args = (["a", "b", "c"], [0.9, 0.5, 0.1], [SkillMatch((), 0)] * 3)
+        self.assertEqual(pre_rank(*args), pre_rank(*args, None))
