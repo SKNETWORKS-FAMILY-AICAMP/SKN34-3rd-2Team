@@ -328,8 +328,10 @@ def main() -> int:
     parser.add_argument("--categories", default=None, help="훑을 대분류 코드. 쉼표 구분(예: 2,15)")
     parser.add_argument("--max-minutes", type=float, default=DEFAULT_MAX_MINUTES, help="전체 시간 한도")
     parser.add_argument("--link-check-limit", type=int, default=LINK_CHECK_LIMIT)
-    parser.add_argument("--min-delay", type=float, default=3.0)
-    parser.add_argument("--max-delay", type=float, default=5.0)
+    # 평균 3초. 예전에는 3~5초(평균 4초)였고 건당 4.65초가 들었다. 폭을 좁히되
+    # 고정값으로는 두지 않는다 — 간격이 자로 잰 듯 일정하면 오히려 눈에 띈다.
+    parser.add_argument("--min-delay", type=float, default=2.5)
+    parser.add_argument("--max-delay", type=float, default=3.5)
     parser.add_argument("--dry-run", action="store_true", help="목록만 훑고 상세·기록·적재는 하지 않는다")
     parser.add_argument("--no-share", action="store_true", help="공유 파일을 만들지 않는다")
     args = parser.parse_args()
@@ -375,7 +377,11 @@ def main() -> int:
     known_ids = store.source_job_ids(SOURCE)
     detail_file = DETAIL_DIR / f"{stamp}.jsonl"
     already_today = set(latest_by_id(read_records(detail_file)))
-    queue, queue_stats = build_queue(result.records, known_ids | already_today, now)
+    # 목록에서 처음 본 시각을 함께 넘긴다. 인기순 줄에 오래 기다린 공고를
+    # 끼워 넣어, 순위가 밀린 공고도 매일 조금씩 차례가 오게 한다.
+    queue, queue_stats = build_queue(
+        result.records, known_ids | already_today, now, store.waiting_since()
+    )
     queue = prioritize(queue)
     summary["new"] = {"queued": len(queue), **{k: v for k, v in queue_stats.items()}}
     print(f"[신규] 저장소에 없는 공고 {len(queue):,}건 (제외 직종 {queue_stats.get('제외 직종(배달·배송·운전)', 0):,})")

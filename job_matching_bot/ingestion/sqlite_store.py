@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS list_seen (
     source_job_id TEXT NOT NULL,
     cat_mcls TEXT NOT NULL,
     seen_at TEXT NOT NULL,
+    first_seen_at TEXT,
     PRIMARY KEY (source_job_id, cat_mcls)
 );
 CREATE INDEX IF NOT EXISTS list_seen_at ON list_seen(seen_at);
@@ -161,6 +162,19 @@ class SqliteJobStore:
         self.conn.execute("PRAGMA foreign_keys=ON")
         job_columns = ",\n    ".join(f"{name} {_column_type(name)}" for name in JOB_FIELDS if name != "job_id")
         self.conn.executescript(_SCHEMA.format(job_columns=job_columns))
+        self._add_missing_columns()
+
+    def _add_missing_columns(self) -> None:
+        """이미 만들어진 표에 뒤늦게 생긴 컬럼을 붙인다.
+
+        `CREATE TABLE IF NOT EXISTS`는 표가 있으면 아무것도 하지 않아서, 컬럼만
+        늘리면 기존 저장소에는 반영되지 않는다. 값이 없는 옛 행은 NULL로 남는다.
+        """
+        for table, column, kind in (("list_seen", "first_seen_at", "TEXT"),):
+            have = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+            if column not in have:
+                with self.conn:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
     # ── JobStore 호환 ──────────────────────────────────────────
     def load(self) -> "SqliteJobStore":
@@ -176,10 +190,9 @@ class SqliteJobStore:
     def _row_to_record(self, row: sqlite3.Row) -> JobRecord:
         job_fields = {name: _decode(name, row[name]) for name in JOB_FIELDS}
         # 구 버전은 상세 영역 안의 보조 이미지가 하나라도 있으면 image 플래그를
-        # 남겼다. 실제 요구사항 텍스트가 저장돼 있으면 카드·첨삭에서는 텍스트
-        # 공고로 복구한다. DB를 읽는 과정만 보정하므로 원본 레코드는 훼손하지 않는다.
-        if job_fields["body_is_image"] and has_requirement_text(job_fields["description"]):
-            job_fields["body_is_image"] = False
+        # 남겼다. 실제 요구사항 텍스트가 저장돼 있으면 텍스트 공고로 복구한다.
+        # 옛 행을 위해 읽을 때도 한 번 더 적용한다 — 쓰는 쪽과 같은 규칙이다.
+        job_fields["body_is_image"] = _effective_image_flag(job_fields["description"], job_fields["body_is_image"])
         return JobRecord(
             job=Job(**job_fields),
             first_seen_at=row["first_seen_at"],
@@ -412,6 +425,20 @@ class SqliteJobStore:
     # "오늘 목록에 없었다"만으로는 사라졌다고 할 수 없다. 여기 남긴 기록으로,
     # 나중에 끝까지 훑은 대분류에서 안 보인 공고만 사라진 것으로 친다.
 
+    def waiting_since(self) -> dict[str, str]:
+        """{공고 id: 목록에서 처음 본 시각}. 상세 큐 순서를 정할 때 쓴다.
+
+        같은 공고가 여러 대분류에 걸리면 가장 이른 것을 쓴다. 옛 행은 값이 없어
+        빠지는데, 부르는 쪽이 그런 공고를 **가장 오래 기다린 것**으로 본다.
+        """
+        return {
+            row["source_job_id"]: row["first_seen"]
+            for row in self.conn.execute(
+                "SELECT source_job_id, MIN(first_seen_at) AS first_seen FROM list_seen "
+                "WHERE first_seen_at IS NOT NULL GROUP BY source_job_id"
+            )
+        }
+
     def record_list_seen(
         self, seen: dict[str, set[str]], complete: dict[str, int], at: datetime, *, keep_days: int = 60
     ) -> None:
@@ -419,9 +446,12 @@ class SqliteJobStore:
         stamp = at.isoformat()
         with self.conn:
             self.conn.executemany(
-                "INSERT INTO list_seen (source_job_id, cat_mcls, seen_at) VALUES (?, ?, ?) "
+                # seen_at은 갱신하고 first_seen_at은 처음 값을 지킨다. 상세를 아직
+                # 못 받은 공고가 얼마나 기다렸는지 재는 근거가 된다.
+                "INSERT INTO list_seen (source_job_id, cat_mcls, seen_at, first_seen_at) "
+                "VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(source_job_id, cat_mcls) DO UPDATE SET seen_at = excluded.seen_at",
-                [(job_id, cat, stamp) for cat, ids in seen.items() for job_id in ids],
+                [(job_id, cat, stamp, stamp) for cat, ids in seen.items() for job_id in ids],
             )
             self.conn.executemany(
                 "INSERT INTO list_sweeps (cat_mcls, swept_at, total_count, seen) VALUES (?, ?, ?, ?) "
