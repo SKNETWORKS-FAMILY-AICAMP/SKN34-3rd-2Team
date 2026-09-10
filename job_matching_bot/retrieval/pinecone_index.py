@@ -1,7 +1,8 @@
 """Pinecone 인덱스 생성과 접속.
 
-인덱스 하나를 팀이 같이 쓴다. 키는 저장소 루트 `.env`의 `PINECONE_API_KEY`에서 읽고
-코드나 로그에 남기지 않는다.
+인덱스 하나를 팀이 같이 쓴다. 키는 저장소 루트 `.env`의 `PINECONE_API_KEY1`에서 읽고
+코드나 로그에 남기지 않는다. 공지·정책 인덱스는 다른 계정을 쓰므로 키 이름을 나눴다
+— 그쪽은 `PINECONE_API_KEY`다.
 
 차원은 임베딩 모델에 묶여 있다. `text-embedding-3-small`은 1536이고, 모델을 바꾸면
 인덱스를 새로 만들어야 한다. 그래서 상수로 고정하고 적재할 때 한 번 더 확인한다.
@@ -24,9 +25,9 @@ REGION = "us-east-1"
 
 def api_key() -> str:
     ensure_loaded()
-    key = os.environ.get("PINECONE_API_KEY", "").strip()
+    key = os.environ.get("PINECONE_API_KEY1", "").strip()
     if not key:
-        raise RuntimeError("PINECONE_API_KEY가 없습니다. 저장소 루트 .env를 확인하세요.")
+        raise RuntimeError("PINECONE_API_KEY1이 없습니다. 저장소 루트 .env를 확인하세요.")
     return key
 
 

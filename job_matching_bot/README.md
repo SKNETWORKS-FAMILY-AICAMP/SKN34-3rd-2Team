@@ -81,7 +81,7 @@ API 키와 로컬 서버 설정은 레포 루트 `.env` 한 곳에 둔다. Fireb
 
 ```
 OPENAI_API_KEY=
-PINECONE_API_KEY=
+PINECONE_API_KEY1=                # 채용공고 인덱스 키. 공지·정책 쪽은 PINECONE_API_KEY다
 PINECONE_INDEX=job-posting        # 생략하면 job-posting
 PINECONE_NAMESPACE=               # 생략하면 기본 namespace
 OPENAI_MODEL=                     # 생략하면 코드 기본값
