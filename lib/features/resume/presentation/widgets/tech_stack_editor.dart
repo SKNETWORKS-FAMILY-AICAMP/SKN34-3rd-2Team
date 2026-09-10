@@ -251,7 +251,13 @@ class _SkillTag extends StatelessWidget {
     if (onTap == null && onDeleted == null) {
       return Chip(
         label: Text(label),
-        labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        // `height`를 비워 두면 줄 높이가 글꼴 몫대로 잡혀, 받침 있는 한글이
+        // 위아래로 잘린다. 기본값(12)보다 큰 글씨를 쓰므로 더 도드라진다.
+        labelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          height: 1.35,
+        ),
         backgroundColor: AppColors.primaryLight,
         side: BorderSide.none,
         visualDensity: VisualDensity.compact,
@@ -262,8 +268,10 @@ class _SkillTag extends StatelessWidget {
       labelStyle: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
+        height: 1.35,
         color: selected ? Colors.white : AppColors.textPrimary,
       ),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       selected: selected,
       showCheckmark: false,
       selectedColor: AppColors.primary,

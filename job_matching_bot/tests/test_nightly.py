@@ -24,6 +24,7 @@ from job_matching_bot.crawling.nightly import (
     categories_for,
     is_closed_page,
     link_check,
+    link_check_budget,
     prioritize,
     sweep,
     sweep_category,
@@ -223,3 +224,18 @@ class SweepResultTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LinkCheckBudgetTest(unittest.TestCase):
+    """남은 시간을 전부 링크 확인에 쓴다. 미리 떼어 둔 몫 아래로는 내려가지 않는다."""
+
+    def test_uses_remaining_minutes(self) -> None:
+        # 60분, 한 건 6초(응답 1초 + 쉬는 시간 5초) → 600건
+        self.assertEqual(link_check_budget(60, max_delay=5.0), 600)
+
+    def test_floor_when_time_ran_out(self) -> None:
+        self.assertEqual(link_check_budget(-10, max_delay=5.0, floor=200), 200)
+        self.assertEqual(link_check_budget(0, max_delay=5.0), 0)
+
+    def test_more_than_floor_when_time_allows(self) -> None:
+        self.assertEqual(link_check_budget(200, max_delay=5.0, floor=200), 2000)

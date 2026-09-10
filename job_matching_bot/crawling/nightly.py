@@ -77,7 +77,11 @@ OBSERVED_WINDOW_DAYS = 15
 PAGE_COUNT = 100
 DEFAULT_MAX_MINUTES = 420.0  # 23:00 → 06:00
 SYNC_RESERVE_MINUTES = 30.0  # 적재에 남겨 두는 시간
-LINK_CHECK_LIMIT = 200
+# 삭제 후보를 실제로 열어 보는 상한. 200일 때는 후보 3,000건을 한 바퀴 도는 데
+# 15일이 걸려, 마감된 공고가 인덱스에 오래 남았다(확인한 200건 중 65%가 마감이었다).
+# 800이면 4일에 한 바퀴다. 그만큼 상세 수집 시간이 줄지만, 마감 공고가 추천에
+# 섞이는 쪽이 더 눈에 띄는 문제라 이쪽에 시간을 준다.
+LINK_CHECK_LIMIT = 800
 SWEEP_KEEP_DAYS = 14
 
 SWEEP_DIR = RAW_DIR / "sweeps"
@@ -85,7 +89,33 @@ DETAIL_DIR = RAW_DIR / "details"
 NIGHTLY_DIR = ARTIFACTS_DIR / "nightly"
 
 # 상세 페이지가 이 문구를 담으면 공고가 내려간 것으로 본다.
-CLOSED_MARKERS = ("마감된 공고", "마감된 채용공고", "종료된 공고", "삭제된 공고", "존재하지 않는 공고", "채용이 마감")
+#
+# 2026-09-08 실제 페이지로 검증했다. 그전 문구("마감된 공고", "채용이 마감" 등)는
+# **하나도 맞지 않았다** — 마감된 공고 10건을 열어 0건을 잡았다. 사이트는 이렇게 쓴다.
+#
+#     "본 채용정보는 마감 되었습니다"      ← 띄어쓰기가 있다
+#     "접수기간 및 방법 마감되었습니다"
+#     "공고가 마감되어 작성할 수 없습니다"
+#
+# 열린 공고에도 "마감"은 많이 나온다("마감일은 기업의 사정, 조기마감 등으로 변경될 수
+# 있습니다", "채용시 마감", "마감일 2026-09-30"). 그래서 "마감"만 보면 안 되고 **끝났다고
+# 말하는 문장**을 봐야 한다.
+#
+# 표본 20건(마감 9 / 열림 11)으로 양쪽을 다 쟀다. 아래 문구는 마감 페이지 9건을 모두
+# 잡고 열린 페이지 11건에서 하나도 걸리지 않았다.
+#
+# "접수마감"도 같은 성적이었지만 넣지 않았다. 위 문구가 이미 다 잡는데 상태 배지까지
+# 보면 표기가 바뀌었을 때 왜 지워졌는지 알기 어려워진다.
+# "지원하기"는 열린 페이지의 신호처럼 보이지만 마감 페이지에도 11/11 나와 쓸 수 없다.
+CLOSED_MARKERS = (
+    "채용정보는 마감",     # 본 채용정보는 마감 되었습니다
+    "마감되었습니다",
+    "마감 되었습니다",
+    "마감되어 작성할 수 없습니다",
+    # 페이지 자체가 사라진 경우. 예전부터 있던 것을 남긴다.
+    "삭제된 공고",
+    "존재하지 않는 공고",
+)
 
 
 def categories_for(today: date, full: bool = False) -> list[str]:
@@ -198,10 +228,18 @@ def site_fetcher(session: requests.Session, page_count: int = PAGE_COUNT) -> Fet
 
 # ── 4. 링크 확인 ───────────────────────────────────────────────
 def is_closed_page(html: str) -> bool:
-    if any(marker in html for marker in CLOSED_MARKERS):
+    """마감 문구는 **원본 HTML이 아니라 뽑아낸 글에서** 찾는다.
+
+    화면의 "본 채용정보는 마감되었습니다."는 실제 HTML에서 `채용정보는 <span>마감</span>
+    되었습니다` 처럼 태그로 끊겨 있다. 원본 문자열에서 찾으면 글자가 이어지지 않아
+    하나도 걸리지 않는다. 실제로 마감된 공고 4건에서 0건이 걸렸다.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(" ", strip=True)
+    if any(marker in text for marker in CLOSED_MARKERS):
         return True
     # 본문 섹션(.jv_cont)이 하나도 없으면 공고 페이지가 아니다.
-    return not BeautifulSoup(html, "html.parser").select(".jv_cont")
+    return not soup.select(".jv_cont")
 
 
 def check_alive(session: requests.Session, rec_idx: str, timeout: int = 30) -> bool | None:
@@ -218,6 +256,17 @@ def check_alive(session: requests.Session, rec_idx: str, timeout: int = 30) -> b
     except requests.HTTPError:
         return None
     return not is_closed_page(response.text)
+
+
+def link_check_budget(minutes: float, max_delay: float, floor: int = 0) -> int:
+    """남은 시간에 몇 건을 열어 볼 수 있나. 한 건에 응답 1초 + 쉬는 시간이 든다.
+
+    목록에서 안 보이는 것은 마감 신호가 아니다(한 번 못 본 12건을 열어 보니 8건이 살아
+    있었다). 그래서 링크 확인이 유일한 판정이고, 상세 수집이 끝나고 남은 시간은 전부
+    여기에 쓴다. `floor`는 상세 수집 전에 미리 떼어 둔 몫이라 그 아래로는 내려가지 않는다.
+    """
+    fits = int(max(0.0, minutes) * 60 / (max_delay + 1))
+    return max(floor, fits)
 
 
 def link_check(
@@ -386,11 +435,13 @@ def main() -> int:
             crawl_counts = crawl_details(queue, detail_file, args.min_delay, args.max_delay, max_minutes=budget)
     summary["detail"] = crawl_counts
 
-    # 4. 링크 확인
+    # 4. 링크 확인 — 상세 수집이 끝나고 남은 시간을 전부 쓴다. 못 본 건 다음 밤으로.
     if candidates and not result.blocked:
-        print(f"[링크 확인] 삭제 후보 {len(candidates):,}건 중 {min(len(candidates), args.link_check_limit)}건")
+        reserved = min(len(candidates), args.link_check_limit)
+        limit = min(len(candidates), link_check_budget(minutes_left() - SYNC_RESERVE_MINUTES, args.max_delay, floor=reserved))
+        print(f"[링크 확인] 삭제 후보 {len(candidates):,}건 중 {limit:,}건 (남은 시간 기준)")
         alive, check_counts = link_check(
-            session, candidates, limit=args.link_check_limit, min_delay=args.min_delay, max_delay=args.max_delay
+            session, candidates, limit=limit, min_delay=args.min_delay, max_delay=args.max_delay
         )
         observed |= alive
         summary["link_check"] = dict(check_counts)

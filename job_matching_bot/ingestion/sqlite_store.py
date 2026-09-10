@@ -31,10 +31,12 @@ from typing import Any, Iterable, Iterator
 
 from job_matching_bot.config import AS_OF
 from job_matching_bot.ingestion.job_store import REQUIRED_FIELDS, _is_expired, resolve_status
+from job_matching_bot.ingestion.detail_quality import has_requirement_text
 from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import (
     DEFAULT_MISSING_RUN_LIMIT,
+    STATUS_CLOSED,
     STATUS_OPEN,
     STATUS_REMOVED,
     CollectionReport,
@@ -97,6 +99,11 @@ CREATE TABLE IF NOT EXISTS list_seen (
     PRIMARY KEY (source_job_id, cat_mcls)
 );
 CREATE INDEX IF NOT EXISTS list_seen_at ON list_seen(seen_at);
+CREATE TABLE IF NOT EXISTS link_checks (
+    job_id TEXT PRIMARY KEY,
+    checked_at TEXT NOT NULL,
+    alive INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS list_sweeps (
     cat_mcls TEXT PRIMARY KEY,
     swept_at TEXT NOT NULL,
@@ -168,6 +175,11 @@ class SqliteJobStore:
     # ── 읽기 ──────────────────────────────────────────────────
     def _row_to_record(self, row: sqlite3.Row) -> JobRecord:
         job_fields = {name: _decode(name, row[name]) for name in JOB_FIELDS}
+        # 구 버전은 상세 영역 안의 보조 이미지가 하나라도 있으면 image 플래그를
+        # 남겼다. 실제 요구사항 텍스트가 저장돼 있으면 카드·첨삭에서는 텍스트
+        # 공고로 복구한다. DB를 읽는 과정만 보정하므로 원본 레코드는 훼손하지 않는다.
+        if job_fields["body_is_image"] and has_requirement_text(job_fields["description"]):
+            job_fields["body_is_image"] = False
         return JobRecord(
             job=Job(**job_fields),
             first_seen_at=row["first_seen_at"],
@@ -471,6 +483,43 @@ class SqliteJobStore:
             for row in rows
             if row["source_job_id"] not in observed and int(row["missing_runs"]) + 1 >= missing_run_limit
         )
+
+    # ── 링크 확인 기록 ────────────────────────────────────────
+    def recent_link_checks(self, job_ids: Iterable[str], since: datetime) -> dict[str, bool]:
+        """`since` 이후에 열어 본 공고 → 살아 있었나. 낮 확인이 같은 공고를 되풀이해 열지 않게."""
+        ids = list(job_ids)
+        if not ids:
+            return {}
+        placeholders = ", ".join("?" for _ in ids)
+        rows = self.conn.execute(
+            f"SELECT job_id, alive FROM link_checks WHERE checked_at >= ? AND job_id IN ({placeholders})",
+            (since.isoformat(), *ids),
+        )
+        return {row["job_id"]: bool(row["alive"]) for row in rows}
+
+    def record_link_checks(self, results: dict[str, bool], at: datetime) -> list[str]:
+        """확인 결과를 남기고, 내려간 공고는 CLOSED로 넘긴다. 넘어간 job_id 목록을 돌려준다.
+
+        OPEN인 것만 넘긴다. EXPIRED·REMOVED는 이미 인덱스 밖이라 건드릴 이유가 없다.
+        """
+        stamp = at.isoformat()
+        closed = [job_id for job_id, alive in results.items() if not alive]
+        with self.conn:
+            self.conn.executemany(
+                "INSERT OR REPLACE INTO link_checks (job_id, checked_at, alive) VALUES (?, ?, ?)",
+                [(job_id, stamp, int(alive)) for job_id, alive in results.items()],
+            )
+            if closed:
+                placeholders = ", ".join("?" for _ in closed)
+                rows = self.conn.execute(
+                    f"SELECT job_id FROM jobs WHERE status = ? AND job_id IN ({placeholders})", (STATUS_OPEN, *closed)
+                ).fetchall()
+                moved = [row["job_id"] for row in rows]
+                self.conn.executemany(
+                    "UPDATE jobs SET status = ? WHERE job_id = ?", [(STATUS_CLOSED, job_id) for job_id in moved]
+                )
+                return moved
+        return []
 
     # ── 실행 기록 ─────────────────────────────────────────────
     def record_run(self, report: CollectionReport, *, started_at: datetime, finished_at: datetime,

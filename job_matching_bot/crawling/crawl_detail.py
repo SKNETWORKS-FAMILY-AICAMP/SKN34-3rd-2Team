@@ -70,6 +70,12 @@ from job_matching_bot.ingestion.record_files import (
     latest_by_id,
     read_records,
 )
+from job_matching_bot.ingestion.detail_quality import (
+    REQUIREMENT_MARKERS,
+    REQUIREMENT_MIN_CHARS,
+    TEXT_BODY_MIN_CHARS,
+    has_requirement_text,
+)
 
 BASE_URL = "https://www.saramin.co.kr"
 DETAIL_URL = f"{BASE_URL}/zf_user/jobs/view"
@@ -80,10 +86,6 @@ SOURCE = "SARAMIN_POC"
 SKIP_URL_MARKERS = ("innerCampaign=headhuntingView", "/zf_user/jobs/view/etc")
 
 
-
-# 상세요강 텍스트가 이 길이 미만이면 본문이 이미지에 있다고 본다.
-# 표본에서 텍스트만 있는 공고는 중앙값 1,391자, 이미지형은 400~700자대였다.
-TEXT_BODY_MIN_CHARS = 800
 
 # 일시 오류(5xx, 연결 끊김)는 이만큼 쉬고 한 번 더 시도한다.
 RETRY_DELAY_RANGE = (15.0, 30.0)
@@ -152,7 +154,7 @@ def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
         }
         for src in dict.fromkeys(body_images)
     ]
-    has_text_body = len(body_text) >= TEXT_BODY_MIN_CHARS
+    has_text_body = has_requirement_text(body_text)
 
     # 페이지 하단의 해시태그 블록. 기업이 등록 때 고른 직무·전문분야·기술스택·지역
     # 분류가 전부 들어 있고 모든 공고에 있다. 3,100건 실측에서 숨김 분류 블록은

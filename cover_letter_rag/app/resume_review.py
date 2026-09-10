@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import json
 import hashlib
+from difflib import SequenceMatcher
 from collections.abc import Callable
 from typing import Any
 
@@ -229,11 +230,151 @@ def _meaning_risks(original, revision):
     return issues
 
 
+def _fact_anchors(text: str) -> list[str]:
+    """Return only deterministic anchors that must survive a sentence rewrite.
+
+    Korean free text is intentionally not tokenized here: an imprecise tokenizer could
+    label ordinary wording as a protected fact. Numbers and technology/English tokens
+    are stable enough to verify locally.
+    """
+    numbers = set(NUMBER_PATTERN.findall(text))
+    terms = {term.removeprefix('tech:') for term in comparison_terms(text)}
+    return sorted(numbers | terms, key=str.casefold)
+
+
+def _change_rate(original: str, revision: str) -> float:
+    source = re.sub(r'\s+', '', original)
+    target = re.sub(r'\s+', '', revision)
+    if not source and not target:
+        return 0.0
+    return round(1 - SequenceMatcher(a=source, b=target, autojunk=False).ratio(), 3)
+
+
+_DUPLICATE_TOKEN_SUFFIX = re.compile(
+    r'(?:으로|에서|에게|까지|부터|처럼|보다|하고|하며|해서|하여|되는|되던|되도록|'
+    r'했습니다|하였다|합니다|된다|되며|되어|된|하는|한|할|했던|했다|을|를|은|는|이|가|과|와|의|에|로)$'
+)
+_DUPLICATE_TOKEN_STOPWORDS = {
+    '사용자', '내용', '기능', '과정', '결과', '문장', '이력서', '프로젝트',
+    '개발', '구현', '확인', '수정', '적용', '통해', '위해', '대한', '관련',
+    '있습니다', '했습니다', '합니다', '것입니다', '수있습니다',
+}
+
+
+def _duplicate_content_tokens(text: str) -> set[str]:
+    tokens = set()
+    for token in re.findall(r'[가-힣A-Za-z][가-힣A-Za-z0-9·-]{1,}', text.lower()):
+        normalized = _DUPLICATE_TOKEN_SUFFIX.sub('', token).strip('·-')
+        if len(normalized) >= 2 and normalized not in _DUPLICATE_TOKEN_STOPWORDS:
+            tokens.add(normalized)
+    return tokens
+
+
+def _paragraphs(text: str) -> list[str]:
+    return [part.strip() for part in re.split(r'\n\s*\n', text) if len(part.strip()) >= 40]
+
+
+def _adds_duplicate_paragraph(original: str, revision: str) -> bool:
+    """Detect a newly appended paragraph that merely repeats an existing one.
+
+    This intentionally targets long additions. Short wording corrections and a
+    single new fact remain eligible for review.
+    """
+    source_paragraphs = _paragraphs(original)
+    revised_paragraphs = _paragraphs(revision)
+    if not source_paragraphs or len(revised_paragraphs) < 2:
+        return False
+    for candidate in revised_paragraphs:
+        if len(candidate) < 100:
+            continue
+        compact_candidate = re.sub(r'\s+', '', candidate)
+        candidate_tokens = _duplicate_content_tokens(candidate)
+        if len(candidate_tokens) < 8:
+            continue
+        for source in source_paragraphs:
+            # Retaining an unchanged source paragraph in a whole-field edit is
+            # normal. Only inspect a genuinely new paragraph.
+            if SequenceMatcher(
+                a=compact_candidate,
+                b=re.sub(r'\s+', '', source),
+                autojunk=False,
+            ).ratio() >= 0.88:
+                continue
+            shared = candidate_tokens & _duplicate_content_tokens(source)
+            if len(shared) >= 6 and len(shared) / len(candidate_tokens) >= 0.32:
+                return True
+    return False
+
+
+def require_answer_reflection(generation, answers):
+    """Reject a follow-up edit that ignores the fact the user just confirmed.
+
+    A confirmation question is for adding/verifying a fact, not a trigger for
+    an unrelated grammar rewrite.  We deliberately use a conservative lexical
+    check: if no newly supplied factual token survives in the revision, do not
+    offer it as an answer-derived suggestion.
+    """
+    warnings = []
+    if not answers:
+        return warnings
+
+    generic_korean = {
+        '저는', '제가', '직접', '담당', '담당한', '기능', '구현', '구현한',
+        '구현했습니다', '개발', '개발한', '개발했습니다', '설계', '설계한',
+        '진행', '진행한', '했습니다', '프로젝트', '역할', '범위', '팀원', '팀원의',
+    }
+    by_path = {}
+    for answer in answers:
+        by_path.setdefault(answer.field_path, []).append(answer.answer)
+    for item in generation.sentence_reviews:
+        revision = (item.suggested_revision or '').strip()
+        provided = by_path.get(item.field_path, [])
+        if not revision or not provided:
+            continue
+        answer_text = ' '.join(provided)
+        answer_tokens = comparison_terms(answer_text) | set(NUMBER_PATTERN.findall(answer_text))
+        answer_tokens |= set(re.findall(r'[가-힣]{2,}', answer_text)) - generic_korean
+        original_tokens = (
+            comparison_terms(item.original_quote)
+            | set(NUMBER_PATTERN.findall(item.original_quote))
+            | set(re.findall(r'[가-힣]{2,}', item.original_quote))
+        )
+        new_tokens = answer_tokens - original_tokens
+        revision_tokens = comparison_terms(revision) | set(NUMBER_PATTERN.findall(revision))
+        revision_tokens |= set(re.findall(r'[가-힣]{2,}', revision)) - generic_korean
+        cites_answer = any(
+            source.startswith('answer:') for source in item.evidence_sources
+        )
+        role_boundary_question = any(
+            re.search(r'(팀원|담당\s*범위|역할\s*구분)', answer.question)
+            for answer in answers
+            if answer.field_path == item.field_path
+        )
+        exposes_team_detail = bool(
+            role_boundary_question
+            and re.search(r'(팀원은|팀원이|팀원의\s*담당|다른\s*팀원)', revision)
+        )
+        if exposes_team_detail or (
+            new_tokens and (not cites_answer or not (new_tokens & revision_tokens))
+        ):
+            item.suggested_revision = None
+            item.status = 'unchanged'
+            item.edit_type = 'none'
+            item.confirmation_question = None
+            issue = 'team_scope_exposed' if exposes_team_detail else 'answer_not_reflected'
+            item.validation_issues = [*item.validation_issues, issue]
+            warnings.append(f'답변 근거를 반영하지 않은 수정안을 제외했습니다: {item.field_path}')
+    return warnings
+
+
 def ground_sentences(fields, answers, generation):
     warnings, valid = [], []
     spans = {}
     for item in generation.sentence_reviews:
         item.validation_issues = []
+        item.fact_anchors = []
+        item.change_rate = None
+        item.change_rate_notice = None
         original = fields.get(item.field_path, "")
         if not item.original_quote.strip() or item.original_quote not in original:
             warnings.append(f"문장 원문 위치 불일치: {item.field_path}")
@@ -259,22 +400,35 @@ def ground_sentences(fields, answers, generation):
         evidence = "\n".join(quotes)
         new_numbers = set(NUMBER_PATTERN.findall(revision)) - set(NUMBER_PATTERN.findall(evidence))
         new_terms = comparison_terms(revision) - comparison_terms(evidence)
+        original_terms = comparison_terms(item.original_quote)
+        # A user-confirmed replacement can legitimately restate the field without
+        # repeating every token in the abbreviated original quote.
+        answer_restates_revision = any(revision.strip() and revision.strip() in answer.answer for answer in answers)
+        missing_terms = set() if answer_restates_revision else original_terms - comparison_terms(revision)
         role_expansion = any(term in revision and term not in evidence for term in ("주도", "총괄", "리드", "책임", "달성"))
         if item.suggested_revision is not None and not revision.strip():
             item.validation_issues.append('empty_revision')
         if revision.strip():
+            if _adds_duplicate_paragraph(original, revision):
+                item.validation_issues.append('duplicate_existing_content')
             item.validation_issues.extend(_meaning_risks(item.original_quote, revision))
             if new_numbers:
                 item.validation_issues.append('unsupported_number')
             if new_terms:
                 item.validation_issues.append('unsupported_term')
+            if missing_terms:
+                item.validation_issues.append('missing_fact_anchor')
             if role_expansion:
                 item.validation_issues.append('unsupported_role')
             if '[연락처 삭제]' in revision or '[연락처 삭제]' in item.original_quote:
                 item.validation_issues.append('redacted_content')
         if item.validation_issues:
             item.suggested_revision = None
-            if 'work_status_changed' in item.validation_issues:
+            if 'duplicate_existing_content' in item.validation_issues:
+                # Repeating an existing paragraph is not a missing-fact problem.
+                item.confirmation_question = None
+                warnings.append(f"기존 문단과 중복된 수정안을 제외했습니다: {item.field_path}")
+            elif 'work_status_changed' in item.validation_issues:
                 item.confirmation_question = "이 작업은 진행 중인가요, 완료된 상태인가요? 원문 상태를 바꿀 근거를 확인해 주세요."
             elif 'ownership_changed' in item.validation_issues or 'unsupported_role' in item.validation_issues:
                 item.confirmation_question = "팀 전체의 작업과 구분하여 본인이 직접 맡은 범위를 알려 주세요."
@@ -282,7 +436,8 @@ def ground_sentences(fields, answers, generation):
                 item.confirmation_question = "원문의 수행 여부와 수정안의 의미가 달라질 수 있습니다. 실제 수행 여부를 확인해 주세요."
             else:
                 item.confirmation_question = "원문 의미를 유지하기 위해 직접 수행한 행동과 확인 가능한 결과를 알려 주세요. 수치는 없어도 됩니다."
-            warnings.append(f"문장 근거 검증 보류: {item.field_path}")
+            if 'duplicate_existing_content' not in item.validation_issues:
+                warnings.append(f"문장 근거 검증 보류: {item.field_path}")
         item.evidence_quotes = quotes
         item.evidence_sources = [p for p, value in source_map.items() if any(q in value for q in quotes)]
         if item.suggested_revision is None:
@@ -303,6 +458,11 @@ def ground_sentences(fields, answers, generation):
             if item.edit_type == 'none':
                 item.edit_type = 'content'
         if item.suggested_revision:
+            item.fact_anchors = _fact_anchors(item.original_quote)
+            item.change_rate = _change_rate(item.original_quote, item.suggested_revision)
+            # A warning is informational only. The user still chooses whether to apply it.
+            if item.change_rate > 0.3:
+                item.change_rate_notice = '원문 대비 변경 폭이 큽니다. 적용 전 문장 의미와 사실 앵커를 다시 확인해 주세요.'
             spans.setdefault(item.field_path, []).append((start, end))
         valid.append(item)
     generation.sentence_reviews = valid

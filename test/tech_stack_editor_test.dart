@@ -22,6 +22,28 @@ void main() {
       expect(results.indexOf('Python'), lessThan(results.indexOf('NumPy')));
     });
 
+    test('같은 기술의 다른 표기는 하나만 남는다', () {
+      // 기본 목록은 영문, 공고 태그는 한글이라 그대로 두면 둘 다 선택지에 나온다.
+      // 이력서에 적히는 이름이라 영문을 남긴다. 추천은 벡터라 표기가 달라도 걸린다.
+      expect(SkillCatalog.all, contains('Deep Learning'));
+      expect(SkillCatalog.all, isNot(contains('딥러닝')));
+      expect(SkillCatalog.all, contains('Machine Learning'));
+      expect(SkillCatalog.all, isNot(contains('머신러닝')));
+    });
+
+    test('한글로 적어도 영문 표기로 맞춰 준다', () {
+      // 예전에 저장된 이력서나 직접 입력한 값이 선택지에 없는 채로 남지 않게 한다.
+      expect(SkillCatalog.canonical('딥러닝'), 'Deep Learning');
+      expect(SkillCatalog.canonical('머신러닝'), 'Machine Learning');
+      expect(SkillCatalog.canonical('NLP(자연어처리)'), 'NLP');
+    });
+
+    test('이름만 비슷하고 다른 제품은 합치지 않는다', () {
+      // Power BI(시각화)와 파워빌더(개발도구)는 다른 것이다.
+      expect(SkillCatalog.all, contains('Power BI'));
+      expect(SkillCatalog.all, contains('파워빌더'));
+    });
+
     test('대소문자만 다른 입력은 후보 표기로 맞춘다', () {
       expect(SkillCatalog.canonical('python'), 'Python');
       expect(SkillCatalog.canonical('  Neo4j '), 'Neo4j');

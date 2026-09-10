@@ -595,13 +595,13 @@ export const adjustAssessmentScores = onCall(callOptions, async (request) => {
 });
 
 function resolveOpenaiApiKey(): string {
-  // functions/.env → firebase deploy 시 Cloud Functions 환경변수로 주입됨
+  // 루트 .env를 동기화해 생성한 functions/.env → firebase deploy 시 환경변수로 주입됨
   const fromEnv = process.env.OPENAI_API_KEY?.trim();
   if (fromEnv) return fromEnv;
 
   throw new HttpsError(
     "failed-precondition",
-    "OPENAI_API_KEY가 없습니다. functions/.env 에 OPENAI_API_KEY=... 를 넣고 " +
+    "OPENAI_API_KEY가 없습니다. 루트 .env에 OPENAI_API_KEY=... 를 넣고 동기화한 뒤 " +
       "firebase deploy --only functions 로 배포하세요. (Flutter R만으로는 반영되지 않습니다)",
   );
 }

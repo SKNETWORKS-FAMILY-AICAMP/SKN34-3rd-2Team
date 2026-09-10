@@ -303,7 +303,9 @@ service cloud.firestore {
             && resource.data.userId == request.auth.uid)
           || (isInstructorOfCohort(cohortId)
             && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['feedbackCount', 'updatedAt']));
+                // 검토자가 읽은 표시는 학생 것과 다른 자리에 적는다. 이게 빠져 있어
+                // 검토자 쪽 읽음 처리가 조용히 거부됐다.
+                .hasOnly(['feedbackCount', 'updatedAt', 'reviewerReadFeedbackIds']));
         allow delete: if belongsToCohort(cohortId)
           && resource.data.userId == request.auth.uid;
 
@@ -313,7 +315,14 @@ service cloud.firestore {
             || (belongsToCohort(cohortId)
               && get(/databases/$(database)/documents/cohorts/$(cohortId)/resumes/$(resumeId)).data.userId
                 == request.auth.uid);
-          allow create: if isAdmin() || isInstructorOfCohort(cohortId);
+          // 검토자가 피드백을 남기고, 학생은 자기 이력서의 실에 답글을 단다.
+          // 남의 이름으로는 못 쓰고, 남의 이력서에도 못 단다.
+          allow create: if isAdmin()
+            || isInstructorOfCohort(cohortId)
+            || (belongsToCohort(cohortId)
+              && request.resource.data.authorId == request.auth.uid
+              && get(/databases/$(database)/documents/cohorts/$(cohortId)/resumes/$(resumeId)).data.userId
+                == request.auth.uid);
           allow update, delete: if isAdmin();
         }
 

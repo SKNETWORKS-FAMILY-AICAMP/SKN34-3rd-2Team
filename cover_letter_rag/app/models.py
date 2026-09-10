@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -244,9 +244,16 @@ class SentenceReview(StrictModel):
     evidence_sources: list[str] = Field(default_factory=list)
     edit_type: Literal['none', 'spelling', 'tone', 'clarity', 'content'] = 'content'
     validation_issues: list[str] = Field(default_factory=list)
+    # Server-derived evidence anchors. The model must not decide which facts are protected.
+    fact_anchors: list[str] = Field(default_factory=list)
+    change_rate: float | None = Field(default=None, ge=0, le=1)
+    change_rate_notice: str | None = None
 
 
 class FirestoreResumeReviewRequest(StrictModel):
+    # 일반 첨삭은 공고와 분리해 이력서 원문 자체를 검토한다. 기존 공고 첨삭 호출은
+    # 호환성을 위해 job 모드를 기본값으로 유지한다.
+    review_mode: Literal['general', 'job'] = 'job'
     selected_job_id: str | None = Field(default=None, min_length=1, max_length=200)
     expected_job_hash: str | None = None
     request_id: str = Field(default_factory=lambda: __import__('uuid').uuid4().hex, pattern=r'^[A-Za-z0-9_-]{1,100}$')
@@ -254,6 +261,8 @@ class FirestoreResumeReviewRequest(StrictModel):
     expected_input_hash: str | None = None
     cohort_id: str = Field(min_length=1, max_length=200)
     resume_id: str = Field(min_length=1, max_length=200)
+    # 공고 맞춤 첨삭은 기본 이력서가 아닌 공고별 사본을 대상으로 한다.
+    tailored_resume_id: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{1,100}$')
     job_posting_text: str | None = Field(default=None, max_length=50_000)
     review_focus: str | None = Field(default=None, max_length=2_000)
     answers: list[ConfirmationAnswer] = Field(default_factory=list, max_length=10)
@@ -265,11 +274,50 @@ class FirestoreResumeReviewRequest(StrictModel):
             raise ValueError("identifier must not be blank")
         return value.strip()
 
+    @field_validator("tailored_resume_id")
+    @classmethod
+    def normalize_tailored_resume_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value or '/' in value or value in {'.', '..'}:
+            raise ValueError("tailored resume identifier must not be blank")
+        return value
+
     @field_validator("job_posting_text", "review_focus")
     @classmethod
     def normalize_optional_text(cls, value: str | None) -> str | None:
         normalized = value.strip() if value else ""
         return normalized or None
+
+
+class TailoredResumeCreateRequest(StrictModel):
+    cohort_id: str = Field(min_length=1, max_length=200)
+    resume_id: str = Field(min_length=1, max_length=200)
+    selected_job_id: str = Field(min_length=1, max_length=200)
+
+    @field_validator("cohort_id", "resume_id", "selected_job_id")
+    @classmethod
+    def reject_unsafe_identifier(cls, value: str) -> str:
+        value = value.strip()
+        if not value or '/' in value or value in {'.', '..'}:
+            raise ValueError("identifier must not be blank")
+        return value
+
+
+class TailoredResumeSummary(StrictModel):
+    tailored_resume_id: str
+    base_resume_id: str
+    job_id: str
+    company_name: str
+    job_title: str
+    source_resume_hash: str
+    job_snapshot_hash: str
+    status: Literal['draft', 'ready', 'archived']
+
+
+class TailoredResumeResponse(TailoredResumeSummary):
+    content: dict[str, Any]
 
 
 class ResumeSectionReview(StrictModel):
@@ -318,6 +366,7 @@ class FirestoreResumeReviewResponse(ResumeReviewGeneration):
     review_id: str
     cohort_id: str
     resume_id: str
+    tailored_resume_id: str | None = None
     grounding_warnings: list[str] = Field(default_factory=list)
     input_fields: dict[str, str] = Field(default_factory=dict)
     input_hash: str = ""

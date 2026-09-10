@@ -19,6 +19,7 @@ ID = r'^[A-Za-z0-9_-]{1,100}$'
 class ApplyRequest(StrictModel):
     cohort_id: str = Field(pattern=ID)
     resume_id: str = Field(pattern=ID)
+    tailored_resume_id: str | None = Field(default=None, pattern=ID)
     request_id: str = Field(pattern=ID)
     review_id: str = Field(pattern=ID)
     expected_input_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
@@ -28,6 +29,7 @@ class ApplyRequest(StrictModel):
 class UndoRequest(StrictModel):
     cohort_id: str = Field(pattern=ID)
     resume_id: str = Field(pattern=ID)
+    tailored_resume_id: str | None = Field(default=None, pattern=ID)
     request_id: str = Field(pattern=ID)
     application_id: str = Field(pattern=ID)
     expected_input_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
@@ -85,11 +87,43 @@ def build_application(content, review, request):
     return updated, sorted(spans)
 
 
+def rebase_review_response(response, content):
+    """Move an existing chat review onto an edit it just applied.
+
+    Applying one suggestion changes the Firestore resume.  The remaining
+    questions are still useful, but their review snapshot must point at that
+    new content; otherwise the next answer is rejected as a stale request.
+    No LLM call is made here.
+    """
+    from app.resume_review import extract_review_fields
+    from app.review_workflow import redact
+
+    rebased = deepcopy(response)
+    fields, _ = extract_review_fields(content)
+    rebased['input_hash'] = digest(content)
+    rebased['input_fields'] = {path: redact(value) for path, value in fields.items()}
+    return rebased
+
+
 def mutate(gateway, uid, request, undo=False):
-    resume_ref = gateway._resume_ref(request.cohort_id, request.resume_id)
+    # 공고 맞춤 첨삭은 기본 이력서 하위의 공고별 사본만 변경한다.
+    resume_ref = (
+        gateway._tailored_ref(request.cohort_id, request.resume_id, request.tailored_resume_id)
+        if request.tailored_resume_id
+        else gateway._resume_ref(request.cohort_id, request.resume_id)
+    )
     operations = resume_ref.collection('aiApplications')
     op_ref = operations.document(request.request_id)
-    source_ref = operations.document(request.application_id) if undo else gateway._review_ref(request.cohort_id, request.resume_id, request.review_id)
+    source_ref = (
+        operations.document(request.application_id)
+        if undo
+        else gateway._review_ref(
+            request.cohort_id,
+            request.resume_id,
+            request.review_id,
+            request.tailored_resume_id,
+        )
+    )
     fingerprint = digest([uid, 'undo' if undo else 'apply', request.model_dump()])
 
     @firestore.transactional
@@ -125,6 +159,11 @@ def mutate(gateway, uid, request, undo=False):
                                    'source_id': request.application_id if undo else request.review_id,
                                    'createdAt': firestore.SERVER_TIMESTAMP})
         transaction.update(resume_ref, {'content': after, 'updatedAt': firestore.SERVER_TIMESTAMP})
+        if not undo:
+            # Keep the same chat session usable after a selected revision is
+            # applied.  The review itself was already generated; only its
+            # snapshot is rebased to the just-persisted resume content.
+            transaction.update(source_ref, {'response': rebase_review_response(source['response'], after)})
         if undo:
             transaction.update(source_ref, {'undoneBy': request.request_id})
         return result

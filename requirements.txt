@@ -4,8 +4,11 @@
 #   playdata_venv\Scripts\activate
 #   pip install -r requirements.txt
 #
-# 첨삭 모듈(cover_letter_rag)과 한 가상환경에서 함께 실행한다.
-# 통합 서버가 두 모듈을 함께 띄우므로, 공통 패키지 버전 범위를 맞춘다.
+# 첨삭 모듈(cover_letter_rag)과 한 가상환경에서 함께 실행한다. 통합 서버가 두 모듈을
+# 한 프로세스로 띄우므로, 공통 패키지는 cover_letter_rag/pyproject.toml 과 버전 범위를
+# 맞춘다. 한쪽만 올리면 다른 쪽이 깨진다.
+#
+#   python -m uvicorn app.integrated:app --app-dir cover_letter_rag --port 8000
 
 # LLM 추출 — OpenAI. CLOVA Studio도 OpenAI 호환 엔드포인트라 같은 패키지를 쓴다.
 openai>=1.60
@@ -29,9 +32,35 @@ langchain-openai>=1.4.1,<2
 # 벡터 검색·적재. langchain-pinecone은 Pinecone 버전 제약 충돌을 피해 사용하지 않는다.
 pinecone>=9,<11
 
+# 정책 XLS/XLSX 수집
+openpyxl>=3.1
+xlrd>=2
+
 # 공고 데이터 공유 (Firebase Storage)
 firebase-admin>=7,<8
 
 # 첨삭 API 설정 및 .env 로딩
 pydantic-settings>=2.7,<3
 python-dotenv>=1.0,<2
+
+# ── 여기까지가 통합 서버를 띄우는 데 필요한 전부다 ───────────
+#
+# 첨삭 모듈을 editable 로 설치하지 않는다(`pip install -e ./cover_letter_rag`).
+# 그러면 chromadb 와 그 딸린 것들(kubernetes, tokenizers, huggingface-hub …)까지
+# 들어온다. chroma 는 **Pinecone 대신** 쓰는 로컬 벡터 저장소이고(오프라인 개발·테스트용),
+# 벡터 저장소 기본값이 pinecone 이라 서버 실행에는 쓰이지 않는다. `langchain-chroma` 는
+# provider=chroma 일 때만 지연 import 된다.
+#
+# 공고 파일을 나누는 Firebase Storage 와는 무관하다. 이름이 비슷할 뿐 다른 것이다.
+#
+# 첨삭 모듈의 인덱싱 스크립트나 테스트를 돌릴 때만 따로 설치한다.
+#
+#   pip install -e ./cover_letter_rag        # + chromadb (Pinecone 대신 쓰는 로컬 벡터 저장소)
+#   pip install -e ./cover_letter_rag[dev]   # + pytest-cov, httpx
+
+# 기타 랭체인 라이브러리
+langchain
+langchain_classic
+langchain_community
+langgraph
+lark

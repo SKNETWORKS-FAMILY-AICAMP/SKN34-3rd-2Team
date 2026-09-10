@@ -202,6 +202,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             resumeId: state.pathParameters['resumeId']!,
             initialSection: state.uri.queryParameters['section'],
             cohortId: state.uri.queryParameters['cohortId'],
+            openFeedback: state.uri.queryParameters['feedback'] == '1',
           ),
         ),
       ),

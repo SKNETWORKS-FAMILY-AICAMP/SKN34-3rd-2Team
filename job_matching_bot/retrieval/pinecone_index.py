@@ -1,6 +1,6 @@
 """Pinecone 인덱스 생성과 접속.
 
-인덱스 하나를 팀이 같이 쓴다. 키는 `functions/.env`의 `PINECONE_API_KEY`에서 읽고
+인덱스 하나를 팀이 같이 쓴다. 키는 저장소 루트 `.env`의 `PINECONE_API_KEY`에서 읽고
 코드나 로그에 남기지 않는다.
 
 차원은 임베딩 모델에 묶여 있다. `text-embedding-3-small`은 1536이고, 모델을 바꾸면
@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 
 from job_matching_bot.env import ensure_loaded
 
@@ -25,7 +26,7 @@ def api_key() -> str:
     ensure_loaded()
     key = os.environ.get("PINECONE_API_KEY", "").strip()
     if not key:
-        raise RuntimeError("PINECONE_API_KEY가 없습니다. functions/.env를 확인하세요.")
+        raise RuntimeError("PINECONE_API_KEY가 없습니다. 저장소 루트 .env를 확인하세요.")
     return key
 
 
@@ -45,10 +46,30 @@ def namespace() -> str:
     return os.environ.get("PINECONE_NAMESPACE", "").strip()
 
 
+@lru_cache(maxsize=1)
 def client():
+    """Pinecone 클라이언트. **한 번 만들어 두고 재사용한다.**
+
+    매번 새로 만들면 HTTP 연결을 새로 맺어 질의가 1.4초씩 걸린다. 재사용하면 0.25초다.
+    프로세스가 사는 동안 키가 바뀌지 않으므로 캐시해도 된다. 바뀌었다면 서버를
+    다시 띄우는 상황이다.
+    """
     from pinecone import Pinecone
 
     return Pinecone(api_key=api_key())
+
+
+@lru_cache(maxsize=4)
+def index(name: str | None = None):
+    """인덱스 손잡이. **이것도 재사용한다.**
+
+    `Pinecone.Index(name)` 은 호스트를 알아내려고 `describe_index` 를 부른다.
+    네트워크 왕복이라 1.2초쯤 걸리는데, 검색할 때마다 되풀이하고 있었다.
+    이름은 인자로 받아 캐시 키로 쓴다(적재 스크립트가 다른 인덱스를 볼 수 있다).
+
+    질의는 읽기라 여러 스레드가 같은 손잡이를 나눠 써도 된다.
+    """
+    return client().Index(name or index_name())
 
 
 def ensure_index(name: str | None = None) -> dict:

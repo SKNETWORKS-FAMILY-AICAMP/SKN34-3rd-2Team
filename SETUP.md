@@ -152,11 +152,12 @@ cd ..
 ### 환경 변수 설정
 
 ```powershell
-copy functions\.env.example functions\.env
-# functions\.env 에서 DISCORD_COHORT_ID 등 수정
+copy .env.example .env
+# 루트 .env에서 DISCORD_COHORT_ID 등 수정
+powershell -ExecutionPolicy Bypass -File scripts\sync-functions-env.ps1
 ```
 
-> `.env` 파일은 Git에 올라가지 않습니다. 팀 리더에게 값을 받으세요.
+> 루트 `.env`가 유일한 수동 설정 파일입니다. `functions/.env`는 배포 전 동기화 스크립트가 만드는 복사본이며 직접 수정하지 않습니다. `.env` 파일은 Git에 올라가지 않습니다. 팀 리더에게 값을 받으세요.
 
 ### Functions 배포 (Blaze 플랜 필요)
 
@@ -234,11 +235,13 @@ firebase functions:secrets:set DISCORD_BOT_TOKEN
 
 ### 2. 기수 ID 설정
 
-`functions/.env.example` → `functions/.env` 복사 후:
+루트 `.env.example` → 루트 `.env` 복사 후:
 
 ```
 DISCORD_COHORT_ID=cohort_34
 ```
+
+그 다음 Functions 배포 전에 `powershell -ExecutionPolicy Bypass -File scripts\sync-functions-env.ps1`를 실행한다.
 
 ### 3. 배포
 
@@ -298,7 +301,7 @@ Webhook URL:
 <details>
 <summary><b>국가자격 시험일정 API</b></summary>
 
-`functions/.env`에 공공데이터포털 인증키 설정:
+루트 `.env`에 공공데이터포털 인증키 설정 (Functions 배포 전 동기화):
 
 ```
 DATA_GO_KR_SERVICE_KEY=발급받은_키
@@ -379,11 +382,12 @@ SKN34-3rd-2Team/
 강사가 구글시트를 CSV로 내려받아 업로드하면, 일수 구간을 골라 AI가 객관식/단답 초안을 만듭니다.
 Google Sheets API / Notion Integration은 사용하지 않습니다.
 
-### 1) OpenAI API 키 (`functions/.env`)
+### 1) OpenAI API 키 (루트 `.env`)
 
 ```powershell
-copy functions\.env.example functions\.env
+copy .env.example .env
 # OPENAI_API_KEY=sk-... 입력 (Git에 올리지 말 것)
+powershell -ExecutionPolicy Bypass -File scripts\sync-functions-env.ps1
 ```
 
 앱은 **배포된 Cloud Functions**를 호출합니다. `.env`는 Flutter `R`로는 안 먹고, 아래처럼 Functions를 다시 배포해야 반영됩니다.
@@ -437,7 +441,7 @@ python -m uvicorn job_matching_bot.api.main:app --host 127.0.0.1 --port 8000
 ```
 
 `http://127.0.0.1:8000/health` 가 `{"status":"ok", ...}` 를 주면 됩니다. Pinecone·OpenAI 키는
-`functions/.env`에서 읽습니다.
+루트 `.env`에서 읽습니다. Functions 배포 전에는 `scripts/sync-functions-env.ps1`로 생성된 `functions/.env`가 사용됩니다.
 
 ### 2. 앱 실행
 
@@ -448,7 +452,7 @@ flutter run -d windows                                  # 데스크톱: 그대�
 flutter run -d chrome                                   # 웹: 포트가 매번 달라도 됩니다
 ```
 
-- Chrome에서 "Failed to fetch"가 나오면 서버가 꺼져 있거나 `functions/.env`에 `CORS_ALLOW_ORIGIN_REGEX=http://(localhost|127\.0\.0\.1)(:\d+)?` 가 없는 경우입니다. 이 값이 로컬호스트의 아무 포트나 허용하므로 `--web-port`를 고정하지 않아도 됩니다.
+- Chrome에서 "Failed to fetch"가 나오면 서버가 꺼져 있거나 루트 `.env`에 `CORS_ALLOW_ORIGIN_REGEX=http://(localhost|127\.0\.0\.1)(:\d+)?` 가 없는 경우입니다. 이 값이 로컬호스트의 아무 포트나 허용하므로 `--web-port`를 고정하지 않아도 됩니다.
 - 다른 주소를 쓰려면 `--dart-define=JOB_RECOMMEND_API_URL=http://호스트:포트`. 빈 값이면 추천 버튼이 안내 오류를 냅니다.
 - 응답은 LLM 재정렬 때문에 평균 30초쯤 걸립니다. 화면의 진행 표시가 그동안 돕니다.
 - 지금은 내 컴퓨터에서만 됩니다. 팀원 환경·실제 폰은 서버를 클라우드에 올린 뒤에 됩니다.

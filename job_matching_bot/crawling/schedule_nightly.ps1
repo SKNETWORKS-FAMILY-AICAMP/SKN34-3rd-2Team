@@ -37,8 +37,15 @@ if ($Register) {
     }
     New-Item -ItemType Directory -Force $logDir | Out-Null
     # cmd로 감싸서 표준 출력·오류를 날짜별 로그로 보낸다.
-    $command = "`"$python`" -m job_matching_bot.crawling.nightly >> `"$logDir\%DATE:~0,10%.log`" 2>&1"
-    $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c $command" -WorkingDirectory $repoRoot
+    #
+    # 명령 전체를 따옴표로 한 번 더 감싼다. `cmd /c`는 인자가 따옴표로 시작하면 바깥
+    # 따옴표 한 쌍을 벗겨 내므로, 감싸지 않으면 python 경로 앞과 로그 경로 뒤의 따옴표가
+    # 사라져 리다이렉션 대상이 반쪽짜리 경로가 된다. 실제로 첫 밤 배치가 이것 때문에
+    # 로그 한 줄 남기지 못하고 죽었다(작업 결과 1).
+    # -u 로 출력 버퍼를 끈다. 없으면 파이썬이 8KB씩 모아 뒀다 쓰므로 한 시간짜리 배치가
+    # 끝날 때까지 로그가 0바이트다. 도는 중에 어디까지 갔는지 볼 수 없다.
+    $command = "`"$python`" -u -m job_matching_bot.crawling.nightly >> `"$logDir\%DATE:~0,10%.log`" 2>&1"
+    $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$command`"" -WorkingDirectory $repoRoot
     $trigger = New-ScheduledTaskTrigger -Daily -At $At
     $settings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
@@ -71,4 +78,17 @@ if ($Status -or -not ($Register -or $Unregister -or $RunNow)) {
     Write-Host "  마지막 실행: $($info.LastRunTime) (결과 코드 $($info.LastTaskResult))"
     $latest = Get-ChildItem $logDir -Filter *.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
     if ($latest) { Write-Host "  최근 로그: $($latest.FullName)" }
+
+    # 실패를 조용히 넘기지 않는다. 첫 밤 배치가 결과 1로 죽었는데 아무도 몰랐다.
+    if ($info.LastTaskResult -ne 0 -and $info.LastRunTime) {
+        Write-Warning "마지막 실행이 실패했습니다 (결과 코드 $($info.LastTaskResult))."
+        if (-not $latest -or $latest.LastWriteTime -lt $info.LastRunTime) {
+            Write-Warning "그 실행의 로그가 없습니다. 배치가 시작조차 못 한 것입니다 - 등록된 명령을 확인하세요:"
+            Write-Host "  $($task.Actions[0].Execute) $($task.Actions[0].Arguments)"
+        }
+        else {
+            Write-Host "  로그 끝부분:"
+            Get-Content $latest.FullName -Tail 15 | ForEach-Object { Write-Host "    $_" }
+        }
+    }
 }

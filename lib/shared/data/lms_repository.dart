@@ -520,6 +520,7 @@ class LmsRepository {
     required String cohortId,
     required String userId,
     required String title,
+    bool isBaseResume = false,
   }) async {
     final doc = await cohortSub(cohortId, 'resumes').add({
       ...ResumeModel(
@@ -528,9 +529,33 @@ class LmsRepository {
         title: title,
         status: 'writing',
         sections: const {},
+        isBaseResume: isBaseResume,
       ).toFirestore(isCreate: true),
     });
     return doc.id;
+  }
+
+  /// 사용자당 기본 이력서는 하나만 유지한다. 공고별 첨삭본은 이 문서의
+  /// 하위 tailoredResumes에 저장되므로 여기 목록에 섞이지 않는다.
+  Future<void> setBaseResume({
+    required String cohortId,
+    required String userId,
+    required String resumeId,
+  }) async {
+    final resumes = await cohortSub(cohortId, 'resumes')
+        .where('userId', isEqualTo: userId)
+        .get();
+    if (!resumes.docs.any((document) => document.id == resumeId)) {
+      throw StateError('내 이력서만 기본 이력서로 등록할 수 있습니다.');
+    }
+    final batch = _firestore.batch();
+    for (final document in resumes.docs) {
+      batch.update(document.reference, {
+        'isBaseResume': document.id == resumeId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
   }
 
   Future<void> updateResumeSections({
@@ -589,6 +614,41 @@ class LmsRepository {
     }
   }
 
+  /// 마이페이지의 생년월일은 사실 정보이므로, 같은 기수의 승인 전 이력서에도
+  /// 함께 반영한다. 승인된 이력서는 제출 당시의 기록을 보존한다.
+  Future<int> syncBirthDateToMyResumes({
+    required String cohortId,
+    required String userId,
+    required String birthDate,
+  }) async {
+    final normalized = birthDate.trim();
+    if (cohortId.isEmpty || normalized.isEmpty) return 0;
+
+    final resumes = await cohortSub(cohortId, 'resumes')
+        .where('userId', isEqualTo: userId)
+        .get();
+    final targets = resumes.docs.where((doc) {
+      final resume = ResumeModel.fromFirestore(doc);
+      return !resume.isApproved &&
+          resume.content.basicInfo.birthDate != normalized;
+    }).toList();
+
+    // Firestore batch는 최대 500개 쓰기다. 사용자 이력서는 보통 훨씬 적지만
+    // 안전하게 여유를 둔 단위로 나눈다.
+    for (var start = 0; start < targets.length; start += 450) {
+      final end = (start + 450).clamp(0, targets.length);
+      final batch = _firestore.batch();
+      for (final doc in targets.sublist(start, end)) {
+        batch.update(doc.reference, {
+          'content.basicInfo.birthDate': normalized,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+    return targets.length;
+  }
+
   Future<void> approveResume({
     required String cohortId,
     required String resumeId,
@@ -635,6 +695,23 @@ class LmsRepository {
       'feedbackCount': FieldValue.increment(1),
     });
     await batch.commit();
+  }
+
+  /// 피드백을 화면에서 읽었다. **여기서만** 읽음으로 넘어간다.
+  ///
+  /// 보는 사람에 따라 다른 자리에 적는다. 학생이 읽은 것과 검토자가 읽은 것이
+  /// 섞이면, 한쪽이 읽었다고 다른 쪽 숫자까지 줄어든다.
+  Future<void> markResumeFeedbackRead({
+    required String cohortId,
+    required String resumeId,
+    required List<String> feedbackIds,
+    required bool asReviewer,
+  }) async {
+    if (feedbackIds.isEmpty) return;
+    final field = asReviewer ? 'reviewerReadFeedbackIds' : 'readFeedbackIds';
+    await cohortSub(cohortId, 'resumes').doc(resumeId).update({
+      field: FieldValue.arrayUnion(feedbackIds),
+    });
   }
 
   Future<void> markResumeFeedbackSeen({

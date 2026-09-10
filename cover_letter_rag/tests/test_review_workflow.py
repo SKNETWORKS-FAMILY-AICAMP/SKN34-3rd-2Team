@@ -5,7 +5,9 @@ from app.models import ConfirmationAnswer, FirestoreResumeReviewRequest, ResumeR
 from app.config import Settings
 from app.resume_review import ResumeReviewService, ground_sentences
 from app.review_workflow import (ReviewConflict, ReviewInputError, redact, prepare_answers,
-                                 normalize_diagnostics, normalize_questions, item_references, digest)
+                                 normalize_diagnostics, normalize_questions, item_references, digest,
+                                 focused_followup_context, focused_time_context,
+                                 add_short_self_introduction_questions)
 from test_resume_review import FakeFirebase, SAMPLE_CONTENT
 
 
@@ -46,6 +48,32 @@ def test_followup_is_bound_to_question_and_version():
         prepare_answers(request.model_copy(update={'answers': [answer.model_copy(update={'question_id': 'fake'})]}), first.model_dump(), first.input_hash, first.item_refs)
 
 
+def test_followup_prompt_is_limited_to_the_answered_resume_item():
+    fields = {
+        'projects[0].description': '첫 번째 프로젝트 설명',
+        'projects[0].techStack': 'Python',
+        'projects[1].description': '두 번째 프로젝트 설명',
+        'selfIntroduction.aspiration.body': '지원 동기',
+    }
+    current = ConfirmationAnswer(
+        question_id='q1', field_path='projects[0].description', question='무엇을 했나요?', answer='API를 구현했습니다.',
+    )
+    prior_other_item = ConfirmationAnswer(
+        question_id='q2', field_path='projects[1].description', question='무엇을 했나요?', answer='다른 답변',
+    )
+    scoped_fields, scoped_answers, focused = focused_followup_context(
+        fields, [prior_other_item, current], [current],
+    )
+    assert focused
+    assert set(scoped_fields) == {'projects[0].description', 'projects[0].techStack'}
+    assert scoped_answers == [current]
+    assert focused_time_context(
+        'projects[0] 첫 프로젝트: 2025.01 ~ 2025.02 (이력서 기록값)\n'
+        'projects[1] 둘째 프로젝트: 2025.03 ~ 2025.04 (이력서 기록값)',
+        [current],
+    ) == 'projects[0] 첫 프로젝트: 2025.01 ~ 2025.02 (이력서 기록값)'
+
+
 def test_legacy_ids_block_answers_and_reordering_changes_version():
     content = deepcopy(SAMPLE_CONTENT)
     del content['projects'][0]['id']
@@ -82,6 +110,70 @@ def test_fixed_diagnostics_and_priority_questions():
     result.questions.append(result.questions[0].model_copy(update={'priority': 3}))
     normalize_questions(result, {'projects[0].description': '설명'}, [], 'r')
     assert len(result.questions) == 1
+
+
+def test_short_self_introduction_sections_receive_followup_questions():
+    result = ResumeReviewGeneration(summary='검토', section_reviews=[])
+    fields = {
+        'selfIntroduction.intro.body': '데이터를 다루는 일이 좋습니다.',
+        'selfIntroduction.motivation.body': 'AI 엔지니어로 성장하고 싶습니다.',
+        'selfIntroduction.growth.body': '프로젝트를 통해 배웠습니다.' * 30,
+    }
+
+    add_short_self_introduction_questions(result, fields)
+
+    assert [question.field_path for question in result.questions] == [
+        'selfIntroduction.intro.body',
+        'selfIntroduction.motivation.body',
+    ]
+
+
+def test_general_review_sends_no_job_and_keeps_content_questions():
+    seen = []
+
+    def generate(data):
+        seen.append(data)
+        return ResumeReviewGeneration(
+            summary='문장을 검토했습니다.',
+            section_reviews=[],
+            sentence_reviews=[
+                SentenceReview(
+                    field_path='coreCompetencies.text',
+                    original_quote='Python REST API 개발',
+                    suggested_revision='Python REST API를 개발했습니다.',
+                    reason='명사형 표현을 서술형으로 정리했습니다.',
+                    edit_type='content',
+                ),
+            ],
+            questions=[
+                ReviewQuestion(
+                    field_path='coreCompetencies.text',
+                    topic='other',
+                    question='구현한 API의 범위나 검증 방식이 있나요?',
+                    reason='일반 첨삭에서도 사실 확인 질문을 반환합니다.',
+                ),
+            ],
+        )
+
+    response = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generate,
+    ).review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1',
+            resume_id='resume-1',
+            review_mode='general',
+        ),
+    )
+
+    assert seen[0]['review_mode'].startswith('일반 이력서 첨삭')
+    assert response.sentence_reviews[0].suggested_revision == 'Python REST API를 개발했습니다.'
+    assert response.questions[0].question == '구현한 API의 범위나 검증 방식이 있나요?'
+    assert all(
+        diagnostic.criterion not in {'relevance', 'company_fit'} or
+        diagnostic.status == 'not_evaluated'
+        for diagnostic in response.diagnostics
+    )
 
 
 def test_failed_call_is_not_automatically_rebilled():

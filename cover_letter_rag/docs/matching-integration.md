@@ -29,12 +29,12 @@ Flutter 기본 추천 주소는 `http://127.0.0.1:8000`, 첨삭 기본 주소는
 
 ## 필요한 로컬 설정/데이터
 
-- 매칭은 기존 `functions/.env`, 첨삭은 `cover_letter_rag/.env`를 유지한다. 통합 프로세스에서는 매칭이 읽은 환경변수가 첨삭의 BaseSettings에서도 파일보다 우선하므로 공통 키/모델을 다르게 설정하지 않는다. 두 설정을 분리해야 하면 서버를 별도 프로세스로 실행한다.
+- 매칭과 첨삭은 모두 저장소 루트 `.env`를 읽는다. Firebase Functions 배포에 필요한 `functions/.env`는 `scripts/sync-functions-env.ps1`가 루트 파일에서 생성하므로 직접 수정하지 않는다.
 - Firebase 프로젝트 ID와 서버용 Application Default Credentials, 실제 Firebase 로그인이 필요하다.
 - `MATCHING_JOB_STORE_PATH`에는 팀원이 만든 **공고 원문 SQLite**의 절대 경로를 지정한다. 생략 시 `job_matching_bot/artifacts/job_store.sqlite`.
 - Pinecone의 요건 발췌(최대 1,200자)를 원문으로 대체하지 않는다. SQLite가 없으면 503, 공고가 없거나 본문이 비었으면 422, 마감됐거나 버전이 바뀌었으면 409다.
 - SQLite WAL 모드의 실행 중 DB 파일만 복사하지 말고 팀원에게 SQLite backup 방식의 일관된 스냅샷을 요청한다.
-- 로컬 CORS는 `functions/.env`의 `CORS_ALLOW_ORIGINS` 또는 `CORS_ALLOW_ORIGIN_REGEX`로 허용한다. 운영에서는 실제 프론트엔드 출처만 허용한다.
+- 로컬 CORS는 루트 `.env`의 `CORS_ALLOW_ORIGINS` 또는 `CORS_ALLOW_ORIGIN_REGEX`로 허용한다. 운영에서는 실제 프론트엔드 출처만 허용한다.
 - Pinecone 의존성 범위를 두 백엔드 모두 `>=9,<11`로 통일했다. 오프라인 회귀 테스트는 설치된 10.0.0에서 실행했다. 실제 Pinecone 통신은 별도 검증 대상이다.
 
 ## 보호 장치

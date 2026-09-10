@@ -664,6 +664,7 @@ class DemoLmsRepository {
     required String cohortId,
     required String userId,
     required String title,
+    bool isBaseResume = false,
   }) async {
     final id = 'r${_resumes.length}';
     _resumes.add(
@@ -673,9 +674,24 @@ class DemoLmsRepository {
         title: title,
         status: 'writing',
         sections: const {},
+        isBaseResume: isBaseResume,
       ),
     );
     return id;
+  }
+
+  Future<void> setBaseResume({
+    required String cohortId,
+    required String userId,
+    required String resumeId,
+  }) async {
+    for (var index = 0; index < _resumes.length; index++) {
+      final resume = _resumes[index];
+      if (resume.userId == userId) {
+        _resumes[index] = resume.copyWith(isBaseResume: resume.id == resumeId);
+      }
+    }
+    _emit();
   }
 
   Future<void> updateResumeSections({
@@ -728,6 +744,33 @@ class DemoLmsRepository {
     );
   }
 
+  /// Firebase 구현과 동일하게 승인 전 이력서의 생년월일을 프로필 값으로 맞춘다.
+  Future<int> syncBirthDateToMyResumes({
+    required String cohortId,
+    required String userId,
+    required String birthDate,
+  }) async {
+    final normalized = birthDate.trim();
+    if (normalized.isEmpty) return 0;
+    var updated = 0;
+    for (var i = 0; i < _resumes.length; i++) {
+      final resume = _resumes[i];
+      if (resume.userId != userId ||
+          resume.isApproved ||
+          resume.content.basicInfo.birthDate == normalized) {
+        continue;
+      }
+      _resumes[i] = resume.copyWith(
+        content: resume.content.copyWith(
+          basicInfo: resume.content.basicInfo.copyWith(birthDate: normalized),
+        ),
+      );
+      updated++;
+    }
+    if (updated > 0) _emit();
+    return updated;
+  }
+
   Future<void> approveResume({
     required String cohortId,
     required String resumeId,
@@ -763,6 +806,23 @@ class DemoLmsRepository {
     _resumes[i] = current.copyWith(
       feedbackCount: current.feedbackCount + 1,
     );
+  }
+
+  Future<void> markResumeFeedbackRead({
+    required String cohortId,
+    required String resumeId,
+    required List<String> feedbackIds,
+    required bool asReviewer,
+  }) async {
+    final i = _resumes.indexWhere((r) => r.id == resumeId);
+    if (i < 0 || feedbackIds.isEmpty) return;
+    final before = asReviewer
+        ? _resumes[i].reviewerReadFeedbackIds
+        : _resumes[i].readFeedbackIds;
+    final after = {...before, ...feedbackIds}.toList();
+    _resumes[i] = asReviewer
+        ? _resumes[i].copyWith(reviewerReadFeedbackIds: after)
+        : _resumes[i].copyWith(readFeedbackIds: after);
   }
 
   Future<void> markResumeFeedbackSeen({

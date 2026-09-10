@@ -71,8 +71,11 @@ class ResumeModel {
     required this.status,
     required this.sections,
     this.content = const ResumeContent(),
+    this.isBaseResume = false,
     this.feedbackCount = 0,
     this.lastSeenFeedbackCount = 0,
+    this.readFeedbackIds = const [],
+    this.reviewerReadFeedbackIds = const [],
     this.revisionCount = 0,
     this.updatedAt,
   });
@@ -83,8 +86,18 @@ class ResumeModel {
   final String status;
   final Map<String, bool> sections;
   final ResumeContent content;
+  /// 공고별 첨삭의 출발점으로 쓰는 사용자의 기본 이력서다.
+  final bool isBaseResume;
   final int feedbackCount;
   final int lastSeenFeedbackCount;
+
+  /// 학생이 **전문을 열어 본** 피드백. 종을 열거나 배너를 닫는 것으로는 늘지 않는다.
+  /// 목록만 훑고 지나간 것을 읽었다고 세면, 정작 읽어야 할 말이 숫자와 함께 사라진다.
+  final List<String> readFeedbackIds;
+
+  /// 검토자(강사·관리자)가 읽은 학생 답글. 검토자끼리는 나눠 읽는다 —
+  /// 한 사람이 읽으면 다른 강사에게도 읽은 것으로 본다. 같은 일을 두 번 하지 않는다.
+  final List<String> reviewerReadFeedbackIds;
   final int revisionCount;
   final DateTime? updatedAt;
 
@@ -94,7 +107,12 @@ class ResumeModel {
       totalCount == 0 ? 0 : completedCount / totalCount;
 
   int get unreadFeedbackCount {
-    final unread = feedbackCount - lastSeenFeedbackCount;
+    // 예전에는 화면을 열기만 해도 lastSeenFeedbackCount 를 채워 두었다. 그 기록이 남은
+    // 이력서가 갑자기 안 읽음으로 돌아가지 않도록 둘 중 큰 쪽을 읽은 것으로 본다.
+    final read = lastSeenFeedbackCount > readFeedbackIds.length
+        ? lastSeenFeedbackCount
+        : readFeedbackIds.length;
+    final unread = feedbackCount - read;
     return unread < 0 ? 0 : unread;
   }
 
@@ -116,8 +134,13 @@ class ResumeModel {
       status: data['status'] as String? ?? 'writing',
       sections: sections,
       content: content,
+      isBaseResume: data['isBaseResume'] as bool? ?? false,
       feedbackCount: data['feedbackCount'] as int? ?? 0,
       lastSeenFeedbackCount: data['lastSeenFeedbackCount'] as int? ?? 0,
+      readFeedbackIds:
+          (data['readFeedbackIds'] as List?)?.cast<String>() ?? const [],
+      reviewerReadFeedbackIds:
+          (data['reviewerReadFeedbackIds'] as List?)?.cast<String>() ?? const [],
       revisionCount: data['revisionCount'] as int? ?? 0,
       updatedAt: AppDateUtils.timestampToDateTime(data['updatedAt']),
     );
@@ -131,8 +154,11 @@ class ResumeModel {
       'status': status,
       'sections': computedSections,
       'content': content.toMap(),
+      'isBaseResume': isBaseResume,
       'feedbackCount': feedbackCount,
       'lastSeenFeedbackCount': lastSeenFeedbackCount,
+      'readFeedbackIds': readFeedbackIds,
+      'reviewerReadFeedbackIds': reviewerReadFeedbackIds,
       'revisionCount': revisionCount,
       'updatedAt': FieldValue.serverTimestamp(),
       if (isCreate) 'createdAt': FieldValue.serverTimestamp(),
@@ -140,22 +166,39 @@ class ResumeModel {
   }
 
   String get statusLabel => switch (status) {
-        'submitted' => '제출 요청',
+        'submitted' => '피드백 요청',
         'approved' || 'completed' => '승인 완료',
         _ => '작성 중',
       };
 
+  /// 저장된 값은 'submitted' 그대로 둔다. 이미 쌓인 이력서를 옮기지 않으려는 것이고,
+  /// 바뀐 것은 학생에게 보이는 이름뿐이다.
   bool get isSubmitted => status == 'submitted';
   bool get isApproved => status == 'approved' || status == 'completed';
-  bool get canStudentEdit => !isApproved;
+
+  /// 학생이 피드백을 요청했나. 작성 중인 이력서는 아직 남의 눈에 보일 것이 아니다.
+  bool get isFeedbackRequested => isSubmitted;
+
+  /// 강사·관리자가 이 이력서를 볼 수 있나. 작성 중인 것은 목록에서 아예 뺀다.
+  bool get isVisibleToReviewer => isFeedbackRequested || isApproved;
+
+  /// 피드백을 남길 수 있나. 요청하지 않은 이력서에는 손대지 않는다.
+  bool get acceptsFeedback => isFeedbackRequested;
+  /// 승인된 뒤에도 학생은 고칠 수 있다. 승인은 "더는 손대지 말라"가 아니라
+  /// "여기까지 봤다"는 표시다. 회사마다 이력서를 손보는 것이 정상이고, 잠가 두면
+  /// 승인받은 이력서를 두고 새로 만들어야 한다.
+  bool get canStudentEdit => true;
 
   ResumeModel copyWith({
     String? title,
     String? status,
     Map<String, bool>? sections,
     ResumeContent? content,
+    bool? isBaseResume,
     int? feedbackCount,
     int? lastSeenFeedbackCount,
+    List<String>? readFeedbackIds,
+    List<String>? reviewerReadFeedbackIds,
     int? revisionCount,
   }) {
     return ResumeModel(
@@ -165,19 +208,62 @@ class ResumeModel {
       status: status ?? this.status,
       sections: sections ?? this.sections,
       content: content ?? this.content,
+      isBaseResume: isBaseResume ?? this.isBaseResume,
       feedbackCount: feedbackCount ?? this.feedbackCount,
       lastSeenFeedbackCount: lastSeenFeedbackCount ?? this.lastSeenFeedbackCount,
+      readFeedbackIds: readFeedbackIds ?? this.readFeedbackIds,
+      reviewerReadFeedbackIds:
+          reviewerReadFeedbackIds ?? this.reviewerReadFeedbackIds,
       revisionCount: revisionCount ?? this.revisionCount,
       updatedAt: updatedAt,
     );
   }
 }
+/// 안 읽은 피드백. **보는 사람에 따라 다르다.**
+///
+/// 학생은 남이 남긴 말을 읽어야 하고, 검토자는 학생이 단 답글을 읽어야 한다.
+/// 내가 쓴 글이 나에게 안 읽음으로 잡히면 숫자가 영영 줄지 않는다.
+///
+/// 예전에는 화면을 열기만 해도 읽음으로 넘겼다(`lastSeenFeedbackCount`).
+/// 그 기록이 남은 이력서가 갑자기 안 읽음으로 돌아가지 않도록, 목록이 그 수만큼
+/// 있으면 이미 다 본 것으로 친다.
+List<ResumeFeedbackModel> unreadFeedback(
+  List<ResumeFeedbackModel> items,
+  ResumeModel resume, {
+  required bool asReviewer,
+  String? viewerId,
+}) {
+  if (!asReviewer &&
+      resume.readFeedbackIds.isEmpty &&
+      resume.lastSeenFeedbackCount >= items.length) {
+    return const [];
+  }
+  final read = (asReviewer ? resume.reviewerReadFeedbackIds : resume.readFeedbackIds)
+      .toSet();
+  return [
+    for (final item in items)
+      if (!_isMine(item, viewerId) &&
+          item.isReplyOn(resume) == asReviewer &&
+          !read.contains(item.id))
+        item,
+  ];
+}
+
+/// 내가 쓴 글인가. 강사가 **자기 이력서**를 보는 경우가 있어 역할만으로는 모자란다.
+/// 그때 자기 글이 답글로 잡혀 아무리 읽어도 숫자가 줄지 않는다.
+bool _isMine(ResumeFeedbackModel item, String? viewerId) =>
+    viewerId != null &&
+    viewerId.isNotEmpty &&
+    item.authorId.isNotEmpty &&
+    item.authorId == viewerId;
+
 class ResumeFeedbackModel {
   const ResumeFeedbackModel({
     required this.id,
     required this.sectionKey,
     required this.content,
     required this.authorName,
+    this.authorId = '',
     this.createdAt,
   });
 
@@ -185,7 +271,16 @@ class ResumeFeedbackModel {
   final String sectionKey;
   final String content;
   final String authorName;
+
+  /// 누가 썼나. 이력서 주인이 쓴 것이면 답글이다.
+  /// 내가 쓴 글은 나에게 안 읽음이 아니다 — 이 구분에 쓰인다.
+  final String authorId;
   final DateTime? createdAt;
+
+  /// 이력서 주인이 쓴 글인가. 그러면 검토자가 읽어야 할 답글이다.
+  /// 글쓴이를 모르는 옛 기록은 검토자가 남긴 것으로 본다 — 그때는 답글이 없었다.
+  bool isReplyOn(ResumeModel resume) =>
+      authorId.isNotEmpty && authorId == resume.userId;
 
   factory ResumeFeedbackModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -196,6 +291,7 @@ class ResumeFeedbackModel {
       sectionKey: data['sectionKey'] as String? ?? '',
       content: data['content'] as String? ?? '',
       authorName: data['authorName'] as String? ?? '관리자',
+      authorId: data['authorId'] as String? ?? '',
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
     );
   }

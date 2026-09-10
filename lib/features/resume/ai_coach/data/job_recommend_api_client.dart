@@ -74,14 +74,21 @@ class JobRecommendRequest {
 
   /// 이력서와 프로필의 희망 조건으로 만든다. 학력·연차·전공·자격증은
   /// `RecommendResumeProfile`이 이력서에서 뽑는다.
+  /// [focus]를 주면 **읽을 글만** 그것으로 바꾼다. 학력·연차·전공·자격증은 [content]
+  /// 그대로다.
+  ///
+  /// "프로젝트 경험만 보고 추천해줘" 같은 요청을 위한 것이다. 좁혀야 하는 것은 뜻을
+  /// 뽑는 재료이지 조건이 아니다. 조건까지 좁히면 연차가 0이 되어 하드 필터가 달라지고,
+  /// 사용자가 원한 것은 "경력을 없던 셈 치자"가 아니라 "이 부분을 기준으로 보자"다.
   factory JobRecommendRequest.fromResume(
     ResumeContent content, {
     JobPreferences preferences = const JobPreferences(),
     int topK = JobRecommendApiConfig.topK,
+    ResumeContent? focus,
   }) {
     final profile = RecommendResumeProfile.fromContent(content);
     return JobRecommendRequest(
-      resumeText: buildResumeText(content),
+      resumeText: buildResumeText(focus ?? content),
       preferredRegions: preferences.regions,
       preferredEmploymentTypes: preferences.employmentTypes,
       educationLevel: profile.educationLevel,
@@ -257,12 +264,23 @@ class JobChatJob {
 
 class JobChatResponse {
   const JobChatResponse({
+    required this.mode,
+    required this.resumeScope,
     required this.reply,
     required this.filters,
     required this.jobs,
     required this.total,
     required this.suggestions,
   });
+
+  /// 서버가 어떤 갈래로 답했는지. 검색 / 질문 / 공고 / 안내.
+  ///
+  /// 답을 어떻게 보여줄지가 달라진다. 검색은 목록이 본문이고, 질문은 글이 본문이며
+  /// 공고 목록은 근거로 붙는 것이다.
+  final String mode;
+
+  /// mode가 '추천'일 때 이력서의 어디를 근거로 삼을지. 전체 / 프로젝트 / 기술스택.
+  final String resumeScope;
 
   final String reply;
   final JobChatFilters filters;
@@ -277,6 +295,8 @@ class JobChatResponse {
   factory JobChatResponse.fromMap(Map<String, dynamic> map) {
     final items = map['jobs'];
     return JobChatResponse(
+      mode: map['mode'] as String? ?? '검색',
+      resumeScope: map['resume_scope'] as String? ?? '전체',
       reply: map['reply'] as String? ?? '',
       filters: JobChatFilters.fromMap(
         Map<String, dynamic>.from(map['filters'] as Map? ?? const {}),
@@ -311,16 +331,104 @@ class JobRecommendApiClient {
     );
   }
 
-  /// 말로 공고를 찾는다. 직전 조건을 함께 보내야 대화가 이어진다.
+  /// 추천을 받으면서 진행 단계를 [onProgress]로 흘려 준다.
+  ///
+  /// 추천은 15초쯤 걸린다. 그동안 화면에 막대만 돌리면 무엇이 진행 중인지 알 수 없다.
+  /// 서버가 단계마다 한 줄씩 보내 주므로 그대로 넘긴다. [detail]이 null이면 그 단계를
+  /// **시작**한 것이고, 문자열이 오면 그 단계를 **끝내며** 남긴 결과다.
+  ///
+  /// 서버가 이 경로를 모르거나(옛 버전) 스트림이 깨지면 조용히 기존 경로로 물러난다.
+  /// 진행 표시가 없어질 뿐 추천은 그대로 나온다.
+  Future<JobRecommendResponse> recommendWithProgress(
+    JobRecommendRequest request, {
+    required void Function(String stage, String? detail) onProgress,
+  }) async {
+    try {
+      return await _stream(request, onProgress);
+    } on JobRecommendApiException {
+      rethrow; // 서버가 이유를 말해 준 실패는 그대로 올린다.
+    } catch (_) {
+      // 스트림만 못 쓰는 상황이다. 추천 자체를 포기할 이유는 아니다.
+      return recommend(request);
+    }
+  }
+
+  Future<JobRecommendResponse> _stream(
+    JobRecommendRequest request,
+    void Function(String stage, String? detail) onProgress,
+  ) async {
+    final http.Request outgoing =
+        http.Request('POST', Uri.parse('$_baseUrl/api/v1/jobs/recommend/stream'))
+          ..headers.addAll(const {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          })
+          ..body = jsonEncode(request.toJson());
+
+    final response = await _client
+        .send(outgoing)
+        .timeout(JobRecommendApiConfig.timeout);
+    if (response.statusCode == 404) {
+      // 옛 서버다. 예외로 빠져 기존 경로를 타게 한다.
+      throw const FormatException('스트림 경로 없음');
+    }
+    if (response.statusCode != 200) {
+      throw JobRecommendApiException(
+        '추천 서버 오류(HTTP ${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+
+    JobRecommendResponse? result;
+    final lines = response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+    await for (final line in lines.timeout(JobRecommendApiConfig.timeout)) {
+      if (!line.startsWith('data: ')) continue;
+      final decoded = jsonDecode(line.substring(6));
+      if (decoded is! Map) continue;
+      switch (decoded['event']) {
+        case 'progress':
+          onProgress(
+            decoded['stage'] as String? ?? '',
+            decoded['detail'] as String?,
+          );
+        case 'done':
+          result = JobRecommendResponse.fromMap(
+            Map<String, dynamic>.from(decoded['result'] as Map),
+          );
+        case 'error':
+          throw JobRecommendApiException(
+            decoded['detail'] as String? ?? '추천에 실패했습니다.',
+          );
+      }
+    }
+    if (result == null) {
+      // 결과 없이 끊겼다. 다시 받는 편이 빈손보다 낫다.
+      throw const FormatException('결과 없이 끊김');
+    }
+    return result;
+  }
+
+  /// 채용에 대해 묻고 답을 받는다. 서버가 세 갈래로 나눠 처리한다.
+  ///
+  /// - 직전 조건(`filters`)을 함께 보내야 "서울만" 같은 말이 이어진다.
+  /// - [jobId]를 주면 그 공고 하나에 대한 물음이 된다. 서버는 조건 해석을 건너뛰고
+  ///   그 공고 원문만 근거로 답한다.
   Future<JobChatResponse> chat({
     required String message,
     JobChatFilters? filters,
     int topK = 5,
+    String? jobId,
+    // 공고 하나를 놓고 물을 때만 쓴다. "나한테 맞아?"는 이력서를 봐야 답이 된다.
+    String? resumeText,
   }) async {
     final decoded = await _post('/api/v1/jobs/chat', {
       'message': message,
       'filters': filters?.toJson(),
       'top_k': topK,
+      'job_id': jobId,
+      'resume_text': resumeText,
     });
     return JobChatResponse.fromMap(decoded);
   }

@@ -18,7 +18,7 @@
     gpt-5.6-luna   대량·저비용     $0.20 / $1.20
 
 이 작업(공고 본문에서 요구역량 추출)은 판단이 단순하고 건수가 많아 기본값을
-`gpt-5.6-terra`로 둔다. `OPENAI_MODEL` 환경변수로 바꿀 수 있다.
+`gpt-5.6-luna`로 둔다. `OPENAI_MODEL` 환경변수로 바꿀 수 있다.
 
 주의: OpenAI structured outputs는 JSON Schema의 일부만 지원한다. `minimum`,
 `maxLength` 같은 제약은 스키마에서 빠지고 필드 설명으로만 전달되므로,
@@ -32,7 +32,7 @@ from typing import Any
 
 from job_matching_bot.env import ensure_loaded
 
-# 키는 functions/.env에 모여 있다. 모듈 상수를 읽기 전에 먼저 채운다.
+# 키는 저장소 루트 .env에 모여 있다. 모듈 상수를 읽기 전에 먼저 채운다.
 ensure_loaded()
 
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
@@ -80,7 +80,7 @@ class OpenAIChatModel:
             # 정확한 이유를 먼저 알려주기 위해서다.
             if not self._api_key:
                 raise RuntimeError(
-                    "OPENAI_API_KEY가 없습니다. functions/.env에 넣거나 "
+                    "OPENAI_API_KEY가 없습니다. 저장소 루트 .env에 넣거나 "
                     "환경변수로 설정해주세요."
                 )
             try:

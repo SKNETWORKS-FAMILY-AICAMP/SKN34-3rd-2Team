@@ -121,7 +121,7 @@ def test_review_reads_owned_resume_and_saves_separate_review() -> None:
     assert response.input_fields['projects[0].description'] == SAMPLE_CONTENT['projects'][0]['description']
     assert 'basicInfo' in response.excluded_fields
     assert firebase.saved is not None
-    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v3-quality'
+    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v7-focused-followup'
     assert "content" not in firebase.saved
 
 
@@ -147,6 +147,36 @@ def test_confirmed_answer_allows_grounded_revision():
     ])
     assert ground_sentences({answer.field_path: 'QA 개선'}, [answer], generated) == []
     assert generated.sentence_reviews[0].suggested_revision == answer.answer
+
+
+def test_appended_paragraph_that_repeats_existing_content_is_removed():
+    from app.models import SentenceReview
+    from app.resume_review import ground_sentences
+    original = (
+        '공고 검색에는 Pinecone 벡터 검색을 활용하고, 검색 결과를 원문 DB와 다시 대조해 텍스트 공고가 '
+        '이미지 공고로 잘못 제외되지 않도록 보완했습니다. 선택한 공고의 회사명·직무명으로만 자리표시자를 '
+        '치환해 잘못된 공고 제목 전체 삽입과 조사 오류를 방지했습니다.\n\n'
+        '자기소개서 첨삭에서는 이력서에 없는 기술·경험·성과를 생성하지 않고, 근거가 부족하면 사용자에게 '
+        '확인 질문을 반환하도록 설계했습니다.'
+    )
+    repeated_addition = (
+        '공고 검색과 원문 대조를 테스트하며 이미지 공고와 원문 누락 공고를 구분해 근거 없는 첨삭을 '
+        '막는 동작을 확인했습니다. 회사명·직무명 자리표시자가 공고 제목 전체로 잘못 치환되던 문제와 '
+        '조사 오류를 수정했고, 사용자 답변 후에는 해당 프로젝트 항목만 재첨삭했습니다.'
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[
+        SentenceReview(
+            field_path='selfIntroduction.motivation.body', original_quote=original,
+            reason='테스트 사례 보완', suggested_revision=f'{original}\n\n{repeated_addition}',
+            evidence_quotes=[original],
+        ),
+    ])
+    warnings = ground_sentences(
+        {'selfIntroduction.motivation.body': original}, [], generated,
+    )
+    assert generated.sentence_reviews[0].suggested_revision is None
+    assert 'duplicate_existing_content' in generated.sentence_reviews[0].validation_issues
+    assert any('중복된 수정안' in warning for warning in warnings)
 
 
 def test_revision_with_invented_number_is_removed() -> None:

@@ -32,6 +32,23 @@ class RecommendRequest(StrictModel):
     majors: list[str] = Field(default_factory=list, max_length=10)
     certifications: list[str] = Field(default_factory=list, max_length=30)
     top_k: int = Field(default=10, ge=1, le=20)
+    # 앱이 이력서를 저장할 때 미리 만들어 둔 구조화 결과. 있으면 서버는 다시 만들지 않는다.
+    # 대기 시간이 2.7초 줄고, 무엇보다 **검색어가 고정되어 추천이 매번 흔들리지 않는다.**
+    # 이력서를 고쳤으면 앱이 보내지 않으면 된다 — 그때는 서버가 새로 만든다.
+    profile: "ResumeProfileOut | None" = None
+
+    @field_validator("resume_text")
+    @classmethod
+    def reject_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("resume_text must not be blank")
+        return value.strip()
+
+
+class ProfileRequest(StrictModel):
+    """구조화만 요청한다. 이력서를 저장할 때 미리 불러 두는 용도다."""
+
+    resume_text: str = Field(min_length=20, max_length=50_000)
 
     @field_validator("resume_text")
     @classmethod
@@ -58,6 +75,10 @@ class ResumeProfileOut(StrictModel):
     skills: list[str] = Field(description="이력서에 근거가 있는 기술만", max_length=30)
     career_years: float = Field(description="이력서 경력사항으로 계산한 연차. 없으면 0", ge=0)
     summary: str = Field(description="이 지원자를 한 문장으로")
+
+
+# RecommendRequest 가 위에서 이 형을 이름으로만 가리켰다. 여기서 이어 준다.
+RecommendRequest.model_rebuild()
 
 
 # ── LLM ② 재정렬 ────────────────────────────────────────
@@ -167,12 +188,54 @@ class ChatFilters(StrictModel):
 
 
 class ChatTurnOut(StrictModel):
-    """LLM ①: 사용자의 말과 직전 조건을 합쳐 새 조건을 만든다."""
+    """LLM ①: 무엇을 원하는 말인지 가르고, 조건을 뽑는다.
 
+    조건은 의도와 상관없이 뽑는다. "백엔드 신입은 뭘 준비해야 해?"는 질문이지만
+    그 안에 직무·경력이 들어 있고, 그 조건으로 공고를 세어야 숫자로 답할 수 있다.
+    """
+
+    intent: Literal["검색", "질문", "추천", "잡담"] = Field(
+        description=(
+            "공고 목록을 원하면 검색, 채용에 대해 묻는 말이면 질문, "
+            "이력서를 근거로 골라 달라는 말이면 추천, 그 밖은 잡담"
+        )
+    )
     filters: ChatFilters
+    counts_jobs: bool = Field(
+        default=False,
+        description="공고를 세어서 답할 질문이면 true. 조언을 구하는 말이면 false",
+    )
+    resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(
+        default="전체",
+        description=(
+            "추천일 때 이력서의 어디를 근거로 삼을지. 사용자가 콕 집어 말했을 때만 "
+            "좁힌다. '프로젝트 경험 보고' → 프로젝트, '기술스택으로' → 기술스택"
+        ),
+    )
+    unavailable: Literal["", "급여", "복지", "합격 가능성", "회사 평판"] = Field(
+        default="",
+        description=(
+            "우리가 가지고 있지 않은 정보로 찾거나 줄 세워 달라는 요청이면 그것. "
+            "아니면 빈 문자열"
+        ),
+    )
+    requirement_query: str = Field(
+        default="",
+        description=(
+            "원하는 일을 채용공고의 자격요건·주요업무 말투로 고쳐 쓴 한두 문장. "
+            "조건으로 못 찾았을 때 뜻으로 찾는 데 쓴다"
+        ),
+    )
     understood: str = Field(description="무엇으로 찾을지 사용자에게 확인시키는 한 문장")
-    off_topic: bool = Field(
-        default=False, description="공고 찾기와 무관한 말이면 true"
+
+
+class ChatAnswerOut(StrictModel):
+    """LLM ②: 채용 질문에 대한 답. 공고 통계나 공고 원문을 근거로 쓴다."""
+
+    answer: str = Field(description="사용자에게 보여 줄 답. 여러 문단이어도 된다")
+    followups: list[str] = Field(
+        default_factory=list,
+        description="이어서 물어볼 만한 말 세 개 이내. 그대로 눌러 보낼 수 있는 문장으로",
     )
 
 
@@ -182,6 +245,13 @@ class JobChatRequest(StrictModel):
         default=None, description="직전 응답의 filters. 첫 질문이면 비운다"
     )
     top_k: int = Field(default=5, ge=1, le=20)
+    job_id: str | None = Field(
+        default=None,
+        description="이 공고를 놓고 묻는 경우의 job_id. 있으면 그 공고를 근거로 답한다",
+    )
+    # 공고를 놓고 물을 때 "나한테 맞아?"는 이력서를 봐야 답할 수 있다. 없으면 서버는
+    # 공고만 읽고 답하므로, 앱은 이력서 화면에서 물을 때 평문을 함께 보낸다.
+    resume_text: str | None = Field(default=None, max_length=50_000)
 
 
 class JobChatJob(StrictModel):
@@ -197,6 +267,13 @@ class JobChatJob(StrictModel):
 
 
 class JobChatResponse(StrictModel):
+    mode: Literal["검색", "질문", "공고", "추천", "안내"] = Field(
+        default="검색", description="앱이 답을 어떻게 보여 줄지 정하는 데 쓴다"
+    )
+    resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(
+        default="전체",
+        description="mode가 추천일 때 이력서의 어디를 근거로 삼을지. 앱이 그만큼만 보낸다",
+    )
     reply: str
     filters: ChatFilters
     jobs: list[JobChatJob] = Field(default_factory=list)

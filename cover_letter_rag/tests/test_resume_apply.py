@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.resume_apply import ApplyRequest, UndoRequest, build_application, mutate
+from app.resume_apply import ApplyRequest, UndoRequest, build_application, mutate, rebase_review_response
 from app.review_workflow import digest, ReviewConflict, ReviewInputError
 from app.firebase_gateway import ResumeAccessError, ResumeNotFoundError
 
@@ -26,6 +26,13 @@ def test_multiple_edits_preserve_unselected_fields():
     assert result['projects'][0]['techStack'] == 'Python'
     assert CONTENT['projects'][0]['description'] == 'API 개발. 테스트 작성.'
     assert fields == ['projects[0].description']
+
+
+def test_rebased_review_uses_the_applied_resume_snapshot():
+    updated, _ = build_application(CONTENT, review(), request())
+    rebased = rebase_review_response(review(), updated)
+    assert rebased['input_hash'] == digest(updated)
+    assert rebased['input_fields']['projects[0].description'] == 'Python API 개발. 테스트를 작성했습니다.'
 
 
 @pytest.mark.parametrize('mode', ['version', 'overlap', 'ambiguous', 'blocked', 'duplicate', 'quality_blocked'])
