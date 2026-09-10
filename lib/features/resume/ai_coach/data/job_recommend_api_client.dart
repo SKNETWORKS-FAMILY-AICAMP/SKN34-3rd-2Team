@@ -28,8 +28,18 @@ abstract final class JobRecommendApiConfig {
   /// LLM 재정렬이 평균 30초라 넉넉히 둔다.
   static const timeout = Duration(seconds: 90);
 
-  /// 서버 상한이 20이다. 화면에는 5~10건이면 충분하다.
-  static const topK = 10;
+  /// 화면에 보여줄 건수. 목록은 받은 만큼 다 그리므로 이 값이 곧 사용자가 보는 수다.
+  ///
+  /// 사람이 매긴 43건(이력서 5개 × 8~9건)으로 자를 자리를 재 봤다. 위에서부터
+  /// N건까지 보여줄 때 오추천율이 이렇게 움직인다.
+  ///
+  ///     5건 8%   6건 10%   7건 17%   8건 20%   9건 21%
+  ///
+  /// 7위부터 눈에 띄게 나빠진다. 6건까지가 오추천 10%로 완만하고, 그 자리에서
+  /// 사람이 좋다고 한 공고를 이력서당 5.4개 본다. 그래서 6으로 둔다.
+  ///
+  /// 등급·순위를 섞어 자르는 방법도 있었으나 규칙이 단순한 쪽을 택했다.
+  static const topK = 6;
 }
 
 class JobRecommendApiException implements Exception {

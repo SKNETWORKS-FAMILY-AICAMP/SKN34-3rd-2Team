@@ -109,7 +109,9 @@ void main() {
       expect(sent!['career_years'], 1.0);
       expect(sent!['majors'], ['컴퓨터공학']);
       expect(sent!['certifications'], ['정보처리기사']);
-      expect(sent!['top_k'], 10);
+      // 화면에 보여줄 건수. 사람이 매긴 43건으로 자를 자리를 재서 정한 값이라
+      // 무심코 바꾸면 안 된다. 6건이 오추천 10%, 7건이면 17%로 뛴다.
+      expect(sent!['top_k'], 6);
       // 서버는 이 평문 안의 문장을 그대로 인용하므로 사용자가 쓴 문장이 변형 없이 들어가야 한다.
       expect(sent!['resume_text'], contains('FastAPI로 추천 API를 개발하고 응답 속도를 개선했습니다.'));
 

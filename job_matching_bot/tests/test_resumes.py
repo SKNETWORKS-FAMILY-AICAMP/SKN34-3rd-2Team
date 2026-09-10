@@ -93,6 +93,31 @@ class CareerBranchTest(unittest.TestCase):
         self.assertIn("경력 조건 충족 (연차 미기재, 경력 보유)", result["passed"])
 
 
+    def test_an_experienced_resume_fails_an_entry_only_posting(self):
+        """방향이 반대인 경우도 봐야 한다.
+
+        연차 조건을 오래 "이 사람이 모자라지 않은가"로만 봤다. 그래서 신입만 뽑는
+        공고가 경력자에게 그대로 통과했다. 사람이 매긴 43건에서 경력 3년 이력서에
+        "백엔드 개발자 (신입)" 공고가 올라왔고 사람이 걸렀다.
+        """
+        resume = mock_resumes()["backend_experienced_3y"]
+        result = hard_filter(_saramin_job("4", career="신입"), resume)
+        self.assertEqual("FAIL", result["status"])
+        self.assertIn("신입 채용 (경력자 대상 아님)", result["failed"])
+
+    def test_an_entry_resume_still_passes_an_entry_only_posting(self):
+        resume = mock_resumes()["backend_entry"]
+        result = hard_filter(_saramin_job("4", career="신입"), resume)
+        self.assertNotEqual("FAIL", result["status"])
+        self.assertIn("경력 조건 충족", result["passed"])
+
+    def test_an_open_posting_is_not_touched(self):
+        """`경력무관`은 신입 전용이 아니다. 경력자도 지원한다."""
+        resume = mock_resumes()["backend_experienced_3y"]
+        result = hard_filter(_saramin_job("5", career="경력무관"), resume)
+        self.assertNotEqual("FAIL", result["status"])
+
+
 class EducationBranchTest(unittest.TestCase):
     def test_junior_college_fails_four_year_requirement_and_passes_two_year(self):
         resume = mock_resumes()["data_entry_junior_college"]

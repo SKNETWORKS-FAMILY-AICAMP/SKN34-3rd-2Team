@@ -14,6 +14,9 @@ from job_matching_bot.schemas.resume import ResumeProfile
 
 # 초대졸(전문대 2,3년제)은 고졸과 대졸 사이다. 이 표는
 # functions/src/jobCoachScoring.ts 의 EDUCATION_RANK 와 같아야 한다.
+# 신입 전용 공고를 걸러낼 연차 경계. 이 값 이상이면 신입 전형 대상이 아니다.
+ENTRY_ONLY_MAX_YEARS = 2
+
 EDUCATION_RANK = {"학력무관": 0, "고졸": 1, "초대졸": 2, "대졸": 3, "석사": 4, "박사": 5}
 
 
@@ -99,6 +102,17 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
             failed.append(f"최소 경력 {job.min_career_years}년")
         else:
             passed.append("경력 조건 충족")
+    elif job.career_type == "ENTRY" and resume.career_years >= ENTRY_ONLY_MAX_YEARS:
+        # 신입만 뽑는다고 적은 공고다. 경력자에게는 맞지 않는다.
+        #
+        # 예전에는 ENTRY도 무조건 통과였다. 연차 조건을 "이 사람이 모자라지 않은가"로만
+        # 봤기 때문이다. 방향이 반대인 경우를 안 봤다. 사람이 매긴 43건에서 경력 3년
+        # 이력서에 "백엔드 개발자 (신입)" 공고가 올라왔고 사람이 걸렀다.
+        #
+        # 경계는 2년으로 둔다. 신입 공고는 사실상 0~1년차를 받는다. 2년차부터는
+        # 신입 전형에 넣을 자리가 아니다. 표본에 경력 이력서가 하나뿐이라 이 숫자는
+        # 관례에서 가져온 것이지 측정한 값이 아니다.
+        failed.append("신입 채용 (경력자 대상 아님)")
     elif job.career_type in ("ENTRY", "ANY"):
         passed.append("경력 조건 충족")
     else:
