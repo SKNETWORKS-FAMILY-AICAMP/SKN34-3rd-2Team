@@ -288,7 +288,7 @@ class JobChatJob(StrictModel):
 
 
 class JobChatResponse(StrictModel):
-    mode: Literal["검색", "질문", "공고", "추천", "안내"] = Field(
+    mode: Literal["검색", "질문", "공고", "비교", "추천", "안내"] = Field(
         default="검색", description="앱이 답을 어떻게 보여 줄지 정하는 데 쓴다"
     )
     resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(

@@ -512,6 +512,20 @@ def _quote_in(quote: str, source: str) -> bool:
     return normalized in _normalize_quote(source)
 
 
+def _resolve_job_refs(refs: list[int], last_job_ids: list[str]) -> list[str]:
+    """가리킨 자리를 모두 job_id로 바꾼다. 범위를 벗어난 번호는 버린다.
+
+    같은 번호를 두 번 말해도 한 번만 담는다. "1번하고 1번 비교해줘"는 비교가 아니다.
+    """
+    found: list[str] = []
+    for ref in refs:
+        if 1 <= ref <= len(last_job_ids):
+            job_id = last_job_ids[ref - 1]
+            if job_id not in found:
+                found.append(job_id)
+    return found
+
+
 def _resolve_job_ref(refs: list[int], last_job_ids: list[str]) -> str | None:
     """"2번"을 직전 목록의 job_id로 바꾼다. 가리킨 자리가 없으면 None.
 
@@ -576,12 +590,22 @@ class ChatService(_LivenessMixin):
     """
 
     def __init__(self, generator=None, store_path: Path | None = None,
-                 adviser=None, job_asker=None, finder=None):
+                 adviser=None, job_asker=None, finder=None, comparer=None):
         self._generator = generator
         self._store_path = store_path
         self._adviser = adviser
         self._job_asker = job_asker
         self._finder = finder
+        self._comparer = comparer
+
+    @property
+    def comparer(self):
+        """공고 둘을 맞대어 답을 쓰는 함수."""
+        if self._comparer is None:
+            from job_matching_bot.api.prompts_compare import JOB_COMPARE_PROMPT
+
+            self._comparer = _build_generator(JOB_COMPARE_PROMPT, schemas.ChatAnswerOut)
+        return self._comparer
 
     @property
     def finder(self):
@@ -637,9 +661,15 @@ class ChatService(_LivenessMixin):
 
         # "2번 자세히 봐줘" — 직전 목록에서 자리를 가리킨 말. 그 공고 하나에 대한 물음이
         # 되므로 조건 검색으로 내려보내지 않는다. 사용자가 카드를 다시 누르지 않아도 된다.
-        picked = _resolve_job_ref(turn.job_refs, request.last_job_ids)
-        if picked is not None:
-            return self._ask_job(request.model_copy(update={"job_id": picked}), previous)
+        # 자리를 **둘 이상** 가리켰으면 비교다. 따로 의도를 두지 않는다 — 개수가 곧
+        # 신호이고, LLM이 한 번 더 가를 일을 만들지 않는 편이 틀릴 여지가 적다.
+        picked_many = _resolve_job_refs(turn.job_refs, request.last_job_ids)
+        if len(picked_many) >= 2:
+            return self._compare_jobs(request, previous, picked_many[:2])
+        if picked_many:
+            return self._ask_job(
+                request.model_copy(update={"job_id": picked_many[0]}), previous
+            )
         if turn.job_refs and not request.last_job_ids:
             return schemas.JobChatResponse(
                 mode="안내",
@@ -861,6 +891,50 @@ class ChatService(_LivenessMixin):
             suggestions=answer.followups[:3],
         )
 
+    def _compare_jobs(self, request, previous, job_ids: list[str]) -> schemas.JobChatResponse:
+        """공고 둘을 맞대어 답한다. 두 공고 원문과 이력서만 근거로 쓴다.
+
+        마감된 공고를 비교하면 답이 헛돈다. 사용자가 그 공고를 본 뒤 시간이 지났을 수
+        있으므로 여기서 다시 확인한다. 한쪽만 살아 있으면 비교가 아니라 그 하나에 대한
+        답으로 내려간다 — 없는 공고를 상대로 견주게 하는 것보다 낫다.
+        """
+        from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
+
+        with SqliteJobStore(self.store_path) as store:
+            records = [store.get(job_id) for job_id in job_ids]
+        alive = self.drop_dead([r.job.job_id for r in records if r is not None])
+        live = [r for r in records if r is not None and r.job.job_id in alive]
+
+        if len(live) < 2:
+            if len(live) == 1:
+                return self._ask_job(
+                    request.model_copy(update={"job_id": live[0].job.job_id}), previous
+                )
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="비교할 공고를 찾지 못했어요. 마감되어 내려갔을 수 있어요.",
+                filters=previous,
+                total=0,
+            )
+
+        resume = (request.resume_text or "").strip()
+        answer = self.comparer(
+            {
+                "job_a": _job_text(live[0].job),
+                "job_b": _job_text(live[1].job),
+                "resume": resume or "(없음)",
+                "question": request.message,
+            }
+        )
+        return schemas.JobChatResponse(
+            mode="비교",
+            reply=answer.answer,
+            filters=previous,
+            jobs=[_job_to_chat_job(r.job) for r in live],
+            total=len(live),
+            suggestions=answer.followups[:3],
+        )
+
     def _peek(self, filters, top_k: int) -> list[schemas.JobChatJob]:
         """센 조건에 맞는 공고 몇 건. 답에 붙여 숫자를 눈으로 확인하게 한다.
 
@@ -942,6 +1016,22 @@ def _to_chat_job(hit) -> schemas.JobChatJob:
         employment_type=hit.employment_type,
         deadline=hit.deadline,
         tech_stack=hit.tech_stack,
+    )
+
+
+def _job_to_chat_job(job) -> schemas.JobChatJob:
+    """저장소의 `Job`을 화면에 보여 줄 모양으로. `_to_chat_job`은 검색 결과용이라
+    `career_label`을 이미 갖고 있지만, 저장소에서 바로 꺼낸 것은 그 값을 만들어야 한다."""
+    return schemas.JobChatJob(
+        job_id=job.job_id,
+        company=job.company,
+        title=job.title,
+        source_url=job.source_url,
+        region=job.region or "",
+        career=store_search._career_label(job.career_type or "", job.min_career_years),
+        employment_type=job.employment_type or "",
+        deadline=job.deadline,
+        tech_stack=list(job.tech_stack),
     )
 
 

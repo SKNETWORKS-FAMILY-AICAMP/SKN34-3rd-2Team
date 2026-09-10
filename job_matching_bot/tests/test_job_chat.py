@@ -88,6 +88,7 @@ class ChatTestCase(unittest.TestCase):
         self.seen = {}
         self.advised = {}
         self.asked = {}
+        self.compared = {}
         self.found = {}
         self.calls = 0
         self.by_meaning = getattr(self, "by_meaning", [])
@@ -105,13 +106,17 @@ class ChatTestCase(unittest.TestCase):
             self.asked.update(values)
             return answered or answer()
 
+        def comparer(values):
+            self.compared.update(values)
+            return answered or answer()
+
         def finder(query, top_k, filter=None):
             self.found.update({"query": query, "top_k": top_k, "filter": filter})
             return [FakeHit(job_id) for job_id in self.by_meaning]
 
         return ChatService(
             generator=generator, store_path=self.path, adviser=adviser,
-            job_asker=job_asker, finder=finder,
+            job_asker=job_asker, finder=finder, comparer=comparer,
         )
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
@@ -628,3 +633,91 @@ class JobReferenceTest(ChatTestCase):
             last_job_ids=["J1", "J2", "J3"],
         )
         self.assertIn("7회사", self.asked["job"])
+
+
+class JobCompareTest(ChatTestCase):
+    """"1번하고 3번 비교해줘" — 자리를 둘 가리키면 비교다.
+
+    따로 의도를 두지 않는다. 개수가 곧 신호이고, LLM이 한 번 더 가를 일을 만들지
+    않는 편이 틀릴 여지가 적다.
+    """
+
+    def test_two_references_compare_both(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 3]),
+            message="1번하고 3번 비교해줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertEqual("비교", result.mode)
+        self.assertIn("1회사", self.compared["job_a"])
+        self.assertIn("3회사", self.compared["job_b"])
+        self.assertEqual({}, self.asked, "하나 묻기로 새면 안 된다")
+
+    def test_the_spoken_order_is_kept(self):
+        self.ask(
+            turn(intent="질문", job_refs=[3, 1]),
+            message="3번이랑 1번 중 뭐가 나아?",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertIn("3회사", self.compared["job_a"])
+        self.assertIn("1회사", self.compared["job_b"])
+
+    def test_both_jobs_come_back_for_the_screen(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 2]), last_job_ids=["J1", "J2", "J3"]
+        )
+        self.assertEqual(["J1", "J2"], [job.job_id for job in result.jobs])
+        self.assertEqual(2, result.total)
+
+    def test_the_same_number_twice_is_not_a_comparison(self):
+        """"1번하고 1번"은 비교가 아니다. 하나 묻기로 내려간다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 1]), last_job_ids=["J1", "J2"]
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertEqual({}, self.compared)
+
+    def test_a_number_past_the_end_is_dropped(self):
+        """세 건을 보여 줬는데 "2번하고 9번"이면 남는 것이 하나뿐이라 비교가 아니다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[2, 9]), last_job_ids=["J1", "J2", "J3"]
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("2회사", self.asked["job"])
+
+    def test_the_resume_is_passed_through(self):
+        self.ask(
+            turn(intent="질문", job_refs=[1, 2]),
+            message="둘 중 나한테 맞는 건?",
+            last_job_ids=["J1", "J2"],
+            resume_text="FastAPI로 추천 API를 개발했습니다.",
+        )
+        self.assertIn("FastAPI", self.compared["resume"])
+
+    def test_without_a_resume_it_says_none(self):
+        self.ask(turn(intent="질문", job_refs=[1, 2]), last_job_ids=["J1", "J2"])
+        self.assertEqual("(없음)", self.compared["resume"])
+
+    def test_a_closed_job_is_not_compared(self):
+        """비교하는 사이에 한쪽이 마감됐을 수 있다. 없는 공고를 상대로 견주지 않는다."""
+        service = self.service(turn(intent="질문", job_refs=[1, 2]))
+        service.drop_dead = lambda ids: {i for i in ids if i != "J2"}
+        result = service.chat(
+            schemas.JobChatRequest(
+                message="1번하고 2번 비교해줘", last_job_ids=["J1", "J2"]
+            )
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("1회사", self.asked["job"])
+        self.assertEqual({}, self.compared)
+
+    def test_both_closed_says_so(self):
+        service = self.service(turn(intent="질문", job_refs=[1, 2]))
+        service.drop_dead = lambda ids: set()
+        result = service.chat(
+            schemas.JobChatRequest(
+                message="1번하고 2번 비교해줘", last_job_ids=["J1", "J2"]
+            )
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("비교할 공고를 찾지 못했어요", result.reply)
