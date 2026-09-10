@@ -207,6 +207,13 @@ class ChatTurnOut(StrictModel):
         default=False,
         description="공고를 세어서 답할 질문이면 true. 조언을 구하는 말이면 false",
     )
+    job_refs: list[int] = Field(
+        default_factory=list,
+        description=(
+            "직전에 보여 준 목록에서 몇 번째를 가리켰는지. 1부터 센다. "
+            "'2번 자세히', '첫 번째 거' → [2], [1]. 가리킨 것이 없으면 빈 목록"
+        ),
+    )
     resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(
         default="전체",
         description=(
@@ -250,6 +257,18 @@ class JobChatRequest(StrictModel):
     job_id: str | None = Field(
         default=None,
         description="이 공고를 놓고 묻는 경우의 job_id. 있으면 그 공고를 근거로 답한다",
+    )
+    # 직전 답에서 보여 준 공고의 job_id를 **화면에 나온 순서 그대로** 담는다.
+    #
+    # 이게 없으면 "2번 자세히 봐줘"에 답할 수 없다. 서버는 대화를 저장하지 않으므로
+    # 직전에 무엇을 보여 줬는지 모른다. 지금까지는 사용자가 공고 카드를 눌러
+    # `job_id`를 보내야만 그 공고를 놓고 물을 수 있었다.
+    #
+    # 앱은 직전 응답의 `jobs`에서 그대로 뽑아 보내면 된다. 응답에 새 필드가 필요 없다.
+    last_job_ids: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="직전 답에 나온 공고 id를 보여 준 순서대로. '2번'을 가리킬 때 쓴다",
     )
     # 공고를 놓고 물을 때 "나한테 맞아?"는 이력서를 봐야 답할 수 있다. 없으면 서버는
     # 공고만 읽고 답하므로, 앱은 이력서 화면에서 물을 때 평문을 함께 보낸다.

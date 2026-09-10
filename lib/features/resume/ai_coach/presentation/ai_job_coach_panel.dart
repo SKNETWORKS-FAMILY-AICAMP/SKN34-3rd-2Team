@@ -195,6 +195,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// 이걸 들고 있는 동안의 말은 전부 이 공고에 대한 물음으로 간다. 그래야 "신입도
   /// 돼?"처럼 짧은 말이 어느 공고 이야기인지 흐려지지 않는다.
   JobChatJob? _askingAbout;
+
+  /// 직전 답에 보여 준 공고 id를 화면에 나온 순서 그대로. "2번"을 가리킬 때 서버가 쓴다.
+  List<String> _lastShownJobIds = const [];
   bool _chatBusy = false;
 
   /// 기다리는 동안 보여줄 말. 추천은 11초쯤 걸리므로 무엇을 하는 중인지 밝힌다.
@@ -488,10 +491,18 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         resumeText: _askingAbout == null
             ? null
             : buildResumeText(widget.draftContent),
+        // "2번 자세히 봐줘"에 답하려면 서버가 직전에 무엇을 보여 줬는지 알아야 한다.
+        // 서버는 대화를 저장하지 않으므로 앱이 되돌려 준다.
+        lastJobIds: _lastShownJobIds,
       );
       if (!mounted) return;
       setState(() {
         _chatFilters = result.filters;
+        // 목록을 보여 준 답만 기억한다. 공고 하나에 답한 턴이 목록을 지우면
+        // 그다음 "3번"이 안 걸린다.
+        if (result.jobs.isNotEmpty) {
+          _lastShownJobIds = [for (final job in result.jobs) job.jobId];
+        }
         _messages.add(
           _ChatMessage.bot(
             result.reply,

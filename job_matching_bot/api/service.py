@@ -512,6 +512,21 @@ def _quote_in(quote: str, source: str) -> bool:
     return normalized in _normalize_quote(source)
 
 
+def _resolve_job_ref(refs: list[int], last_job_ids: list[str]) -> str | None:
+    """"2번"을 직전 목록의 job_id로 바꾼다. 가리킨 자리가 없으면 None.
+
+    서버는 대화를 저장하지 않는다. 직전에 무엇을 보여 줬는지는 앱이 `last_job_ids`로
+    되돌려 줘야 안다. 그래서 목록을 안 받았거나 범위를 벗어난 번호는 조용히 넘긴다 —
+    엉뚱한 공고를 집는 것보다 못 알아들었다고 하는 편이 낫다.
+
+    여러 개를 가리켰으면 첫 번째만 쓴다. 비교는 아직 못 한다.
+    """
+    for ref in refs:
+        if 1 <= ref <= len(last_job_ids):
+            return last_job_ids[ref - 1]
+    return None
+
+
 def _career_label(job: Job) -> str:
     if job.career_type == "ENTRY":
         return "신입"
@@ -619,6 +634,20 @@ class ChatService(_LivenessMixin):
                 "message": request.message,
             }
         )
+
+        # "2번 자세히 봐줘" — 직전 목록에서 자리를 가리킨 말. 그 공고 하나에 대한 물음이
+        # 되므로 조건 검색으로 내려보내지 않는다. 사용자가 카드를 다시 누르지 않아도 된다.
+        picked = _resolve_job_ref(turn.job_refs, request.last_job_ids)
+        if picked is not None:
+            return self._ask_job(request.model_copy(update={"job_id": picked}), previous)
+        if turn.job_refs and not request.last_job_ids:
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="앞에 보여 드린 공고가 없어요. 먼저 조건을 말씀해 주시면 목록을 보여 드릴게요.",
+                filters=previous,
+                total=0,
+                suggestions=["서울 백엔드 신입", "마감 임박한 공고"],
+            )
 
         if turn.unavailable:
             return self._unavailable(turn.unavailable, previous)

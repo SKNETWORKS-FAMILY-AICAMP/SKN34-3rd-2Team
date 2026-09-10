@@ -28,11 +28,13 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
     counts_jobs = kwargs.pop("counts_jobs", True)
     requirement_query = kwargs.pop("requirement_query", "")
     unavailable = kwargs.pop("unavailable", "")
+    job_refs = kwargs.pop("job_refs", [])
     return schemas.ChatTurnOut(
         intent=intent,
         counts_jobs=counts_jobs,
         requirement_query=requirement_query,
         unavailable=unavailable,
+        job_refs=job_refs,
         filters=schemas.ChatFilters(**kwargs),
         understood=understood,
     )
@@ -113,10 +115,10 @@ class ChatTestCase(unittest.TestCase):
         )
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
-            job_id=None, answered=None, resume_text=None):
+            job_id=None, answered=None, resume_text=None, last_job_ids=None):
         request = schemas.JobChatRequest(
             message=message, filters=filters, top_k=top_k, job_id=job_id,
-            resume_text=resume_text,
+            resume_text=resume_text, last_job_ids=last_job_ids or [],
         )
         return self.service(out, answered=answered).chat(request)
 
@@ -566,3 +568,63 @@ class JobQuestionTest(ChatTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JobReferenceTest(ChatTestCase):
+    """"2번 자세히 봐줘" — 직전 목록에서 자리를 가리킨 말.
+
+    서버는 대화를 저장하지 않는다. 직전에 무엇을 보여 줬는지는 앱이 `last_job_ids`로
+    되돌려 줘야 안다. 이게 없던 때는 사용자가 공고 카드를 눌러 `job_id`를 보내야만
+    그 공고를 놓고 물을 수 있었다.
+    """
+
+    def test_the_second_one_becomes_that_job(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[2]),
+            message="2번 자세히 봐줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("2회사", self.asked["job"])
+
+    def test_the_first_one_too(self):
+        self.ask(
+            turn(intent="질문", job_refs=[1]),
+            message="첫 번째 거 자격요건 알려줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertIn("1회사", self.asked["job"])
+
+    def test_a_number_past_the_end_is_not_guessed(self):
+        """세 건을 보여 줬는데 "5번"이라고 하면 엉뚱한 공고를 집지 않는다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[5]),
+            message="5번 알려줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertNotEqual("공고", result.mode)
+        self.assertEqual({}, self.asked)
+
+    def test_without_a_previous_list_it_says_so(self):
+        """앞에 보여 준 것이 없으면 조건 검색으로 내려보내지 않고 그렇다고 말한다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[2]), message="2번 알려줘", last_job_ids=[]
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("앞에 보여 드린 공고가 없어요", result.reply)
+
+    def test_no_reference_still_searches(self):
+        """번호를 안 가리킨 말은 예전 그대로 흐른다."""
+        result = self.ask(turn(roles=["백엔드"]), last_job_ids=["J1", "J2"])
+        self.assertEqual("검색", result.mode)
+        self.assertEqual({}, self.asked)
+
+    def test_the_tapped_card_still_wins(self):
+        """카드를 눌러 물으면 그 공고다. 말 속의 번호를 따지지 않는다."""
+        self.ask(
+            turn(intent="질문", job_refs=[2]),
+            message="여기 2번 항목이 뭐야?",
+            job_id="J7",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertIn("7회사", self.asked["job"])
