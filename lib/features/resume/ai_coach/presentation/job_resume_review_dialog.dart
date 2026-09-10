@@ -43,6 +43,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final ScrollController _chatScrollController = ScrollController();
   final List<_ReviewChatMessage> _messages = [];
   final Set<String> _answeredQuestionIds = {};
+  final List<Map<String, dynamic>> _questionQueue = [];
   final Map<String, GlobalKey> _previewSectionKeys = {};
   bool _busy = false, _changed = false, _undone = false;
   bool _mutationPending = false;
@@ -230,15 +231,17 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       );
     }
     final questions = (review['questions'] as List? ?? []).cast<Map>();
-    if (questions.isNotEmpty) {
-      final question = Map<String, dynamic>.from(questions.first);
+    _enqueueQuestions(questions);
+    final nextQuestion = _takeNextQuestion();
+    if (nextQuestion != null) {
       if (displayedSuggestions > 0) {
         // The user should decide whether to apply the current revision before
-        // moving on. Show this question after the revised resume is reloaded.
-        _pendingQuestion = question;
+        // moving on. Show the next unanswered question after the revised
+        // resume is reloaded.
+        _pendingQuestion = nextQuestion;
       } else {
-        _messages.add(_ReviewChatMessage.question(question));
-        _focusPreviewField(question['field_path'] as String?);
+        _messages.add(_ReviewChatMessage.question(nextQuestion));
+        _focusPreviewField(nextQuestion['field_path'] as String?);
       }
     } else if (!isFirstReview && displayedSuggestions > 0) {
       _messages.add(
@@ -258,16 +261,67 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     });
   }
 
+  String _questionKey(Map<String, dynamic> question) {
+    // A follow-up response gets a new question_id.  Deduplicate by the target
+    // and intent instead, so wording changes cannot ask the same thing again.
+    return '${question['field_path']}|${question['topic']}';
+  }
+
+  bool _hasQuestionKey(String key) {
+    if (_pendingQuestion != null && _questionKey(_pendingQuestion!) == key) {
+      return true;
+    }
+    return _questionQueue.any((question) => _questionKey(question) == key) ||
+        _messages.any(
+          (message) =>
+              message.question != null && _questionKey(message.question!) == key,
+        );
+  }
+
+  void _enqueueQuestions(List<Map> questions) {
+    for (final rawQuestion in questions) {
+      final question = Map<String, dynamic>.from(rawQuestion);
+      final questionId = question['question_id'] as String?;
+      if (questionId != null && _answeredQuestionIds.contains(questionId)) {
+        continue;
+      }
+      if ((question['field_path'] as String? ?? '').isEmpty ||
+          (question['question'] as String? ?? '').trim().isEmpty) {
+        continue;
+      }
+      final key = _questionKey(question);
+      if (!_hasQuestionKey(key)) _questionQueue.add(question);
+    }
+  }
+
+  Map<String, dynamic>? _takeNextQuestion() {
+    while (_questionQueue.isNotEmpty) {
+      final question = _questionQueue.removeAt(0);
+      final questionId = question['question_id'] as String?;
+      if (questionId == null || !_answeredQuestionIds.contains(questionId)) {
+        return question;
+      }
+    }
+    return null;
+  }
+
   bool _isIdentityPlaceholderSuggestion(Map<String, dynamic> sentence) {
     final original = sentence['original_quote'] as String? ?? '';
     return original.contains('[회사명]') || original.contains('[직무명]');
   }
 
-  String _sectionForFieldPath(String fieldPath) =>
-      fieldPath.split(RegExp(r'[.\[]')).first;
+  String _previewTargetForFieldPath(String fieldPath) {
+    final parts = fieldPath.split('.');
+    // 자기소개서는 하나의 긴 본문이 아니라 문항별 카드로 표시한다.
+    // 따라서 body·subtitle 어느 필드를 질문해도 해당 문항 카드에 맞춘다.
+    if (parts.length >= 2 && parts.first == 'selfIntroduction') {
+      return '${parts[0]}.${parts[1]}';
+    }
+    return fieldPath.split(RegExp(r'[.\[]')).first;
+  }
 
   GlobalKey _previewKeyFor(String fieldPath) => _previewSectionKeys.putIfAbsent(
-    _sectionForFieldPath(fieldPath),
+    _previewTargetForFieldPath(fieldPath),
     GlobalKey.new,
   );
 
@@ -407,6 +461,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _application = null;
         _undone = true;
         _pendingQuestion = null;
+        _questionQueue.clear();
         _messages.add(
           const _ReviewChatMessage.assistant(
             '수정안을 되돌렸습니다. 현재 이력서 기준으로 첨삭을 다시 시작할 수 있습니다.',
@@ -440,6 +495,13 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         break;
       }
     }
+    final reviewCompleted =
+        _result != null &&
+        !_busy &&
+        _error == null &&
+        activeQuestion == null &&
+        _pendingQuestion == null &&
+        _questionQueue.isEmpty;
     return PopScope(
       canPop: !_busy && !_mutationPending,
       child: Dialog(
@@ -482,6 +544,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       busy: _busy,
                       error: _error,
                       resultAvailable: _result != null,
+                      reviewCompleted: reviewCompleted,
+                      awaitingSuggestionApply: _pendingQuestion != null,
                       generalReview: widget.generalReview,
                       answerController: _answerController,
                       scrollController: _chatScrollController,
@@ -492,6 +556,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                           ? null
                           : () => _submitAnswer(activeQuestion!),
                       onApply: _applySuggestion,
+                      onClose: () => Navigator.pop(context),
                     );
                     if (!horizontal) {
                       return Column(
@@ -661,7 +726,16 @@ class _ResumeDraftPreview extends StatelessWidget {
               ],
               const SizedBox(height: 18),
               for (final entry in _labels.entries)
-                if (_render(map[entry.key]).isNotEmpty)
+                if (entry.key == 'selfIntroduction')
+                  _SelfIntroductionPreview(
+                    key: sectionKeys[entry.key],
+                    sections: Map<String, dynamic>.from(
+                      map[entry.key] as Map? ?? const <String, dynamic>{},
+                    ),
+                    highlightedFieldPath: highlightedFieldPath,
+                    itemKeys: sectionKeys,
+                  )
+                else if (_render(map[entry.key]).isNotEmpty)
                   _PreviewSection(
                     key: sectionKeys[entry.key],
                     title: entry.value,
@@ -693,6 +767,64 @@ class _ResumeDraftPreview extends StatelessWidget {
           .join('\n');
     }
     return '';
+  }
+}
+
+class _SelfIntroductionPreview extends StatelessWidget {
+  const _SelfIntroductionPreview({
+    super.key,
+    required this.sections,
+    required this.highlightedFieldPath,
+    required this.itemKeys,
+  });
+
+  final Map<String, dynamic> sections;
+  final String? highlightedFieldPath;
+  final Map<String, GlobalKey> itemKeys;
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = ResumeSelfIntroLabels.keys
+        .map((key) {
+          final raw = sections[key];
+          final section = raw is Map
+              ? Map<String, dynamic>.from(raw)
+              : const <String, dynamic>{};
+          final body = (section['body'] as String? ?? '').trim();
+          return (key: key, body: body);
+        })
+        .where((entry) => entry.body.isNotEmpty)
+        .toList();
+    if (filled.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            '자기소개서',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1D4ED8),
+            ),
+          ),
+        ),
+        for (final entry in filled)
+          _PreviewSection(
+            key: itemKeys['selfIntroduction.${entry.key}'],
+            title: ResumeSelfIntroLabels.labels[entry.key] ?? entry.key,
+            text: entry.body,
+            highlighted:
+                highlightedFieldPath?.startsWith(
+                      'selfIntroduction.${entry.key}.',
+                    ) ==
+                    true ||
+                highlightedFieldPath == 'selfIntroduction.${entry.key}',
+          ),
+      ],
+    );
   }
 }
 
@@ -775,6 +907,8 @@ class _ReviewChatPane extends StatelessWidget {
     required this.busy,
     required this.error,
     required this.resultAvailable,
+    required this.reviewCompleted,
+    required this.awaitingSuggestionApply,
     required this.generalReview,
     required this.answerController,
     required this.scrollController,
@@ -783,12 +917,15 @@ class _ReviewChatPane extends StatelessWidget {
     required this.onStart,
     required this.onAnswer,
     required this.onApply,
+    required this.onClose,
   });
 
   final List<_ReviewChatMessage> messages;
   final bool busy;
   final String? error;
   final bool resultAvailable;
+  final bool reviewCompleted;
+  final bool awaitingSuggestionApply;
   final bool generalReview;
   final TextEditingController answerController;
   final ScrollController scrollController;
@@ -797,6 +934,7 @@ class _ReviewChatPane extends StatelessWidget {
   final Future<void> Function() onStart;
   final VoidCallback? onAnswer;
   final ValueChanged<List<int>> onApply;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -866,11 +1004,20 @@ class _ReviewChatPane extends StatelessWidget {
                       style: const TextStyle(color: Color(0xFFB91C1C)),
                     ),
                   ),
+                if (reviewCompleted)
+                  _ReviewCompletedNotice(
+                    hasSuggestions: messages.any(
+                      (message) =>
+                          message.suggestion != null ||
+                          message.identitySuggestion != null,
+                    ),
+                    onClose: onClose,
+                  ),
               ],
             ),
           ),
         ),
-        if (resultAvailable)
+        if (resultAvailable && !reviewCompleted)
           Container(
             padding: const EdgeInsets.all(14),
             decoration: const BoxDecoration(
@@ -894,7 +1041,9 @@ class _ReviewChatPane extends StatelessWidget {
                 maxLines: 3,
                 decoration: InputDecoration(
                   hintText: activeQuestion == null
-                      ? '현재 추가 확인 질문이 없습니다.'
+                      ? awaitingSuggestionApply
+                          ? '수정안을 반영하면 다음 질문을 이어갑니다.'
+                          : '현재 추가 확인 질문이 없습니다.'
                       : '답변을 입력하세요. (Enter 전송 · Shift+Enter 줄바꿈)',
                   isDense: true,
                   border: OutlineInputBorder(
@@ -912,6 +1061,61 @@ class _ReviewChatPane extends StatelessWidget {
       ],
     );
   }
+}
+
+class _ReviewCompletedNotice extends StatelessWidget {
+  const _ReviewCompletedNotice({
+    required this.hasSuggestions,
+    required this.onClose,
+  });
+
+  final bool hasSuggestions;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF0FDF4),
+      border: Border.all(color: const Color(0xFF86EFAC)),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 22),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '첨삭 완료',
+                style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF166534)),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                hasSuggestions
+                    ? '추가 확인 질문이 없습니다. 표시된 수정안은 원하는 것만 반영한 뒤 마칠 수 있습니다.'
+                    : '추가 확인 질문과 적용할 수정안이 없습니다. 첨삭을 마칠 수 있습니다.',
+                style: const TextStyle(fontSize: 11, height: 1.4, color: Color(0xFF166534)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        FilledButton(
+          onPressed: onClose,
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF16A34A),
+            foregroundColor: Colors.white,
+            visualDensity: VisualDensity.compact,
+          ),
+          child: const Text('첨삭 완료'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ChatIntro extends StatelessWidget {

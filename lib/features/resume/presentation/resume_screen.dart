@@ -78,6 +78,7 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
         resumes.where((r) => !r.isFeedbackRequested && !r.isApproved).length;
     final approved = resumes.where((r) => r.isApproved).length;
     final shown = resumes.where(_matches).toList();
+    final baseResume = _registeredBaseResume(resumes);
 
     return Center(
       child: ConstrainedBox(
@@ -149,11 +150,33 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: () => _createResume(context, ref),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('새 이력서 작성'),
+                        onPressed: () => _manageBaseResume(
+                          context,
+                          ref,
+                          baseResume,
+                          resumes,
+                        ),
+                        icon: Icon(
+                          baseResume == null ? Icons.bookmark_add_outlined : Icons.bookmark,
+                          size: 18,
+                        ),
+                        label: Text(
+                          baseResume == null ? '기본 이력서 등록' : '기본 이력서 관리',
+                        ),
                       ),
                     ),
+                    if (baseResume != null) ...[
+                      const SizedBox(height: 2),
+                      TextButton.icon(
+                        onPressed: () => _registerBaseResume(
+                          context,
+                          ref,
+                          resumes,
+                        ),
+                        icon: const Icon(Icons.swap_horiz, size: 16),
+                        label: const Text('기본 이력서 변경'),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -185,14 +208,91 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
     );
   }
 
-  Future<void> _createResume(BuildContext context, WidgetRef ref) async {
+  ResumeModel? _registeredBaseResume(List<ResumeModel> resumes) {
+    for (final resume in resumes) {
+      if (resume.isBaseResume) return resume;
+    }
+    return null;
+  }
+
+  Future<void> _manageBaseResume(
+    BuildContext context,
+    WidgetRef ref,
+    ResumeModel? baseResume,
+    List<ResumeModel> resumes,
+  ) async {
+    if (baseResume != null) {
+      context.go(RoutePaths.resumeEditPath(baseResume.id));
+      return;
+    }
+    await _registerBaseResume(context, ref, resumes);
+  }
+
+  Future<void> _registerBaseResume(
+    BuildContext context,
+    WidgetRef ref,
+    List<ResumeModel> resumes,
+  ) async {
+    const createNew = '__create_base_resume__';
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('기본 이력서 등록'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 10),
+            child: Text(
+              '공고별 첨삭은 여기서 등록한 기본 이력서를 복사해 진행합니다.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ),
+          for (final resume in resumes)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, resume.id),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(resume.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${resume.completedCount}/${resume.totalCount} 항목 작성',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, createNew),
+            child: const Row(
+              children: [
+                Icon(Icons.add, size: 18),
+                SizedBox(width: 8),
+                Text('새 기본 이력서 작성'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !context.mounted) return;
     final user = ref.read(currentUserSyncProvider)!;
     final cohortId = ref.read(effectiveCohortIdProvider)!;
-    final id = await ref.read(lmsRepositoryProvider).createResume(
-          cohortId: cohortId,
-          userId: user.uid,
-          title: '새 이력서',
-        );
+    late final String id;
+    if (choice == createNew) {
+      id = await ref.read(lmsRepositoryProvider).createResume(
+            cohortId: cohortId,
+            userId: user.uid,
+            title: '기본 이력서',
+            isBaseResume: true,
+          );
+    } else {
+      id = choice;
+      await ref.read(lmsRepositoryProvider).setBaseResume(
+            cohortId: cohortId,
+            userId: user.uid,
+            resumeId: id,
+          );
+    }
     if (context.mounted) {
       context.go(RoutePaths.resumeEditPath(id));
     }
@@ -309,6 +409,27 @@ class _ResumeCard extends ConsumerWidget {
                                 fontSize: 15,
                               ),
                             ),
+                            if (resume.isBaseResume) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.success.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '기본 이력서',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.success,
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 2),
                             Text(
                               '${resume.completedCount}/${resume.totalCount} · ${resume.statusLabel}',
@@ -346,7 +467,7 @@ class _ResumeCard extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      if (!canReview && !resume.isApproved)
+                      if (!canReview && !resume.isApproved && !resume.isBaseResume)
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.delete_outline, size: 18),

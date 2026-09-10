@@ -520,6 +520,7 @@ class LmsRepository {
     required String cohortId,
     required String userId,
     required String title,
+    bool isBaseResume = false,
   }) async {
     final doc = await cohortSub(cohortId, 'resumes').add({
       ...ResumeModel(
@@ -528,9 +529,33 @@ class LmsRepository {
         title: title,
         status: 'writing',
         sections: const {},
+        isBaseResume: isBaseResume,
       ).toFirestore(isCreate: true),
     });
     return doc.id;
+  }
+
+  /// 사용자당 기본 이력서는 하나만 유지한다. 공고별 첨삭본은 이 문서의
+  /// 하위 tailoredResumes에 저장되므로 여기 목록에 섞이지 않는다.
+  Future<void> setBaseResume({
+    required String cohortId,
+    required String userId,
+    required String resumeId,
+  }) async {
+    final resumes = await cohortSub(cohortId, 'resumes')
+        .where('userId', isEqualTo: userId)
+        .get();
+    if (!resumes.docs.any((document) => document.id == resumeId)) {
+      throw StateError('내 이력서만 기본 이력서로 등록할 수 있습니다.');
+    }
+    final batch = _db.batch();
+    for (final document in resumes.docs) {
+      batch.update(document.reference, {
+        'isBaseResume': document.id == resumeId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
   }
 
   Future<void> updateResumeSections({

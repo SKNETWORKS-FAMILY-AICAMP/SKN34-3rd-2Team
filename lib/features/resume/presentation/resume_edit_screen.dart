@@ -1098,6 +1098,8 @@ class _Field extends StatefulWidget {
     required this.readOnly,
     required this.onChanged,
     this.maxLines = 1,
+    this.minLines,
+    this.scrollPhysics,
     this.keyboardType,
     this.boxed = false,
   });
@@ -1107,7 +1109,10 @@ class _Field extends StatefulWidget {
   final String value;
   final bool readOnly;
   final ValueChanged<String> onChanged;
-  final int maxLines;
+  /// null이면 입력한 내용만큼 높이가 늘어나며 내부 스크롤을 만들지 않는다.
+  final int? maxLines;
+  final int? minLines;
+  final ScrollPhysics? scrollPhysics;
   final TextInputType? keyboardType;
   final bool boxed;
 
@@ -1140,6 +1145,8 @@ class _FieldState extends State<_Field> {
 
   @override
   Widget build(BuildContext context) {
+    final isMultiline = widget.maxLines == null || widget.maxLines! > 1;
+    final minLines = widget.minLines ?? 1;
     if (widget.readOnly) {
       final empty = widget.value.trim().isEmpty;
       return Padding(
@@ -1157,7 +1164,7 @@ class _FieldState extends State<_Field> {
               empty ? '미작성' : widget.value,
               style: TextStyle(
                 color: empty ? AppColors.textHint : AppColors.textPrimary,
-                height: widget.maxLines > 1 ? 1.5 : null,
+                height: isMultiline ? 1.5 : null,
               ),
             ),
           ],
@@ -1173,10 +1180,12 @@ class _FieldState extends State<_Field> {
           decoration: InputDecoration(
             labelText: widget.label.isEmpty ? null : widget.label,
             hintText: widget.hint,
-            alignLabelWithHint: widget.maxLines > 1,
+            alignLabelWithHint: isMultiline,
           ),
           maxLines: widget.maxLines,
-          minLines: widget.maxLines > 1 ? widget.maxLines : 1,
+          minLines: minLines,
+          scrollPhysics: widget.scrollPhysics,
+          textAlignVertical: isMultiline ? TextAlignVertical.top : null,
           keyboardType: widget.keyboardType,
           onChanged: widget.onChanged,
         ),
@@ -1199,6 +1208,9 @@ class _FieldState extends State<_Field> {
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
         ),
         maxLines: widget.maxLines,
+        minLines: minLines,
+        scrollPhysics: widget.scrollPhysics,
+        textAlignVertical: isMultiline ? TextAlignVertical.top : null,
         keyboardType: widget.keyboardType,
         onChanged: widget.onChanged,
       ),
@@ -2060,7 +2072,17 @@ class _ProjectsSection extends StatelessWidget {
                   _Field(label: '종료일', value: item.endDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(endDate: v))),
                   _Field(label: '역할', value: item.role, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(role: v))),
                   _Field(label: '기술스택', value: item.techStack, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(techStack: v))),
-                  _Field(label: '설명', value: item.description, readOnly: readOnly, maxLines: 3, onChanged: (v) => _update(i, item.copyWith(description: v))),
+                  _Field(
+                    label: '설명',
+                    value: item.description,
+                    readOnly: readOnly,
+                    // 프로젝트 설명은 긴 문장을 쓰는 자리라 내부 스크롤 대신
+                    // 내용 높이만큼 늘어나도록 한다.
+                    minLines: 3,
+                    maxLines: null,
+                    scrollPhysics: const NeverScrollableScrollPhysics(),
+                    onChanged: (v) => _update(i, item.copyWith(description: v)),
+                  ),
                   _Field(label: 'URL (선택)', value: item.url, readOnly: readOnly, keyboardType: TextInputType.url, onChanged: (v) => _update(i, item.copyWith(url: v))),
                 ],
               ),
