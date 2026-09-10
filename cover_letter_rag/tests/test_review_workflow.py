@@ -7,7 +7,8 @@ from app.resume_review import ResumeReviewService, ground_sentences
 from app.review_workflow import (ReviewConflict, ReviewInputError, redact, prepare_answers,
                                  normalize_diagnostics, normalize_questions, item_references, digest,
                                  focused_followup_context, focused_time_context,
-                                 add_short_self_introduction_questions)
+                                 add_short_self_introduction_questions,
+                                 prefer_project_evidence_over_surface_edit)
 from test_resume_review import FakeFirebase, SAMPLE_CONTENT
 
 
@@ -126,6 +127,32 @@ def test_short_self_introduction_sections_receive_followup_questions():
         'selfIntroduction.intro.body',
         'selfIntroduction.motivation.body',
     ]
+
+
+def test_short_project_description_prefers_evidence_question_to_surface_edit():
+    result = ResumeReviewGeneration(
+        summary='검토',
+        section_reviews=[],
+        sentence_reviews=[
+            SentenceReview(
+                field_path='projects[0].description',
+                original_quote='공고 크롤 결과를 정규화·중복 제거해 일 단위로 적재.',
+                suggested_revision='공고 크롤 결과를 정규화하고 중복 제거한 뒤 일 단위로 적재했습니다.',
+                reason='문장 종결을 정리했습니다.',
+                edit_type='clarity',
+            ),
+        ],
+    )
+
+    prefer_project_evidence_over_surface_edit(
+        result,
+        {'projects[0].description': '공고 크롤 결과를 정규화·중복 제거해 일 단위로 적재.'},
+        [],
+    )
+
+    review = result.sentence_reviews[0]
+    assert review.suggested_revision is None
+    assert review.confirmation_question is not None
 
 
 def test_general_review_sends_no_job_and_keeps_content_questions():

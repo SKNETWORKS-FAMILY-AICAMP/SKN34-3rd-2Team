@@ -548,7 +548,7 @@ class LmsRepository {
     if (!resumes.docs.any((document) => document.id == resumeId)) {
       throw StateError('내 이력서만 기본 이력서로 등록할 수 있습니다.');
     }
-    final batch = _db.batch();
+    final batch = _firestore.batch();
     for (final document in resumes.docs) {
       batch.update(document.reference, {
         'isBaseResume': document.id == resumeId,

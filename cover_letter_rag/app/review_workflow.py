@@ -443,6 +443,45 @@ def add_short_self_introduction_questions(generation, fields):
     generation.questions = followups + generation.questions
 
 
+def prefer_project_evidence_over_surface_edit(generation, fields, answers):
+    """Ask for missing project evidence instead of offering a cosmetic rewrite.
+
+    A one-line project description can always be made grammatically smoother,
+    but that does not make it a stronger application record.  Until the user
+    confirms the problem, personal scope, or result, job-tailored review keeps
+    the conversation focused on evidence rather than sentence endings.
+    """
+    answered_paths = {
+        answer.field_path for answer in answers if str(answer.answer).strip()
+    }
+    questioned_paths = {question.field_path for question in generation.questions}
+    for review in generation.sentence_reviews:
+        path = review.field_path
+        original = fields.get(path, '')
+        is_short_project_description = (
+            bool(re.fullmatch(r'projects\[\d+\]\.description', path)) and
+            len(re.sub(r'\s+', '', original)) < 160
+        )
+        is_surface_edit = review.edit_type in {'spelling', 'tone', 'clarity'}
+        if (
+            not is_short_project_description or
+            not is_surface_edit or
+            not review.suggested_revision or
+            path in answered_paths
+        ):
+            continue
+        review.suggested_revision = None
+        review.status = 'needs_confirmation'
+        review.edit_type = 'none'
+        review.reason = '표현 교정보다 프로젝트의 문제·담당 범위·확인 결과를 먼저 확인하는 편이 좋습니다.'
+        if path not in questioned_paths and not review.confirmation_question:
+            review.confirmation_question = (
+                '이 프로젝트에서 해결하려던 기존 문제와 본인이 맡은 구현 범위, '
+                '확인한 결과를 알려 주세요.'
+            )
+            questioned_paths.add(path)
+
+
 def run_review(service, id_token, request):
     # Import here to keep pure helpers independent of model/provider construction.
     from app.resume_review import extract_review_fields, enforce_resume_review_grounding, ground_sentences, require_answer_reflection
@@ -578,6 +617,8 @@ def run_review(service, id_token, request):
         grounded, warnings = enforce_resume_review_grounding('\n'.join(fields.values()), generated)
         warnings.extend(ground_sentences(fields, answers, grounded))
         warnings.extend(require_answer_reflection(grounded, current_answers))
+        if request.review_mode == 'job':
+            prefer_project_evidence_over_surface_edit(grounded, fields, answers)
         apply_selected_job_identity_revisions(grounded, fields, job_source)
         changes = normalize_diagnostics(grounded, fields, bool(job_text), previous)
         if not is_focused_followup:
