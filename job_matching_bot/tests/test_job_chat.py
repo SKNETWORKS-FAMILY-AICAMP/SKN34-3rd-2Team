@@ -480,6 +480,38 @@ class AdviceTest(ChatTestCase):
         self.assertIn("서울은 몇 건이야?", response.suggestions)
 
 
+class AdviceEvidenceTest(ChatTestCase):
+    """질문 답에 붙는 근거 공고. 여기도 내려간 공고는 빼야 한다.
+
+    검색 답에서는 빼면서 질문 답의 근거에서는 빼지 않아, 저장소가 아직 OPEN으로
+    아는 접수마감 공고가 그대로 화면에 붙어 나갔다.
+    """
+
+    class _Liveness:
+        """맨 앞 공고 하나만 내려간 것으로 본다."""
+
+        def __init__(self) -> None:
+            self.asked: list[str] = []
+
+        def alive(self, job_ids: list[str]) -> list[str]:
+            self.asked = list(job_ids)
+            return list(job_ids[1:])
+
+    def test_closed_jobs_do_not_become_evidence(self):
+        service = self.service(turn(intent="질문", roles=["백엔드"]))
+        liveness = self._Liveness()
+        service._liveness = liveness
+
+        response = service.chat(
+            schemas.JobChatRequest(message="요즘 뭘 많이 뽑아?", top_k=5)
+        )
+
+        self.assertTrue(liveness.asked, "근거로 붙일 공고도 열어 본다")
+        shown = [job.job_id for job in response.jobs]
+        self.assertNotIn(liveness.asked[0], shown, "내려간 공고는 근거가 될 수 없다")
+        self.assertEqual(3, len(shown), "빠진 자리는 다음 공고가 채운다")
+
+
 class JobQuestionTest(ChatTestCase):
     """공고 하나를 놓고 묻기. **그 공고 원문만** 근거로 쓴다."""
 
