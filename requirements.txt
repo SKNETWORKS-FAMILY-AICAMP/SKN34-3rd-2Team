@@ -32,6 +32,10 @@ langchain-openai>=1.4.1,<2
 # 벡터 검색·적재. langchain-pinecone은 Pinecone 버전 제약 충돌을 피해 사용하지 않는다.
 pinecone>=9,<11
 
+# 정책 XLS/XLSX 수집
+openpyxl>=3.1
+xlrd>=2
+
 # 공고 데이터 공유 (Firebase Storage)
 firebase-admin>=7,<8
 

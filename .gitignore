@@ -90,7 +90,7 @@ node_modules/
 scripts/node_modules/
 
 # ─────────────────────────────────────────────
-# 환경 변수 / 비밀값
+# 환경 변수 / 비밀값 / 가상환경
 # ─────────────────────────────────────────────
 .env
 .env.*
@@ -106,6 +106,17 @@ firestore.rules.production.bak
 # 학생 일괄 생성 계정 목록 (비밀번호 포함)
 scripts/seed-students-*.csv
 
+# Policy/FAQ VectorDB pipeline 결과물
+vectordb/policy_chunks.jsonl
+vectordb/policy_ingestion_errors.jsonl
+vectordb/.policy_ingestion_state.json
+vectordb/.policy_notion_cache.json
+
+# 가상환경
+venv/
+.venv/
+env/
+
 # ─────────────────────────────────────────────
 # 기타
 # ─────────────────────────────────────────────
@@ -119,6 +130,10 @@ migrate_working_dir/
 *.class
 *.log
 *.pyc
+.codex
+graphify-out
+AGENTS.md
+
 # Widget Preview related
 .widget_preview/
 *venv/
