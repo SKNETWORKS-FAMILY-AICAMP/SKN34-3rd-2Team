@@ -49,9 +49,13 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _dirty = false;
   bool _showAiCoach = false;
 
-  /// 화면에 들어왔을 때의 피드백 건수. 이보다 늘어난 것만 배너로 알린다.
+  /// 화면에 들어왔을 때 이미 있던 피드백의 id. 이 뒤에 온 것만 배너로 알린다.
   /// 들어올 때마다 알리면 잔소리가 된다.
-  int? _feedbackSeenOnOpen;
+  ///
+  /// 건수만 적어 두면 **내가 단 답글까지** 새 피드백으로 세어져, 답글을 쓰는 족족
+  /// "새 피드백 1건이 도착했습니다"가 떴다. 답글도 같은 곳에 쌓이기 때문이다.
+  /// id를 적어 두고 글쓴이를 보면 내 것과 남의 것을 가릴 수 있다.
+  Set<String>? _feedbackIdsOnOpen;
 
   /// 배너를 닫았나. 닫아도 배지는 그대로다 — 읽은 것이 아니기 때문이다.
   bool _bannerDismissed = false;
@@ -143,8 +147,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     // 그러면 배지가 사라진 뒤에야 무슨 말이 있었는지 찾게 된다. 이제는 전문을 연
     // 항목만 읽음이 된다(FeedbackBell).
     //
-    // 열어 둔 사이에 새로 도착한 것만 배너로 알리려고 지금 건수를 적어 둔다.
-    _feedbackSeenOnOpen = resume.feedbackCount;
+    // 열어 둔 사이에 새로 도착한 것만 배너로 알린다. 기준이 되는 목록은 스트림이
+    // 도착한 뒤에야 알 수 있으므로 배너를 그릴 때 한 번만 적어 둔다.
   }
 
   /// 승인된 뒤에도 학생은 고칠 수 있다. 승인은 "더는 손대지 말라"가 아니라
@@ -210,8 +214,16 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// 화면을 열어 둔 사이에 도착한 피드백만 알린다. 저절로 사라지지 않는다 —
   /// 글을 쓰는 중에 몇 초 만에 사라지면 못 보고 지나친다.
   Widget _feedbackBanner(ResumeModel resume) {
-    final since = _feedbackSeenOnOpen;
-    final arrived = since == null ? 0 : resume.feedbackCount - since;
+    final all = ref.watch(resumeFeedbackProvider(resume.id)).asData?.value;
+    // 스트림이 아직이면 기준을 잡을 수 없다. 여기서 빈 목록을 기준으로 삼으면
+    // 곧 도착할 예전 피드백이 전부 "새로 왔다"가 된다.
+    if (all == null) return const SizedBox.shrink();
+    _feedbackIdsOnOpen ??= {for (final f in all) f.id};
+
+    // 내가 단 답글은 나에게 온 피드백이 아니다.
+    final arrived = all
+        .where((f) => !_feedbackIdsOnOpen!.contains(f.id) && !f.isReplyOn(resume))
+        .length;
     if (arrived <= 0 || _bannerDismissed) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
