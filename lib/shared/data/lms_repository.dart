@@ -636,7 +636,7 @@ class LmsRepository {
     // Firestore batch는 최대 500개 쓰기다. 사용자 이력서는 보통 훨씬 적지만
     // 안전하게 여유를 둔 단위로 나눈다.
     for (var start = 0; start < targets.length; start += 450) {
-      final end = (start + 450).clamp(0, targets.length) as int;
+      final end = (start + 450).clamp(0, targets.length);
       final batch = _firestore.batch();
       for (final doc in targets.sublist(start, end)) {
         batch.update(doc.reference, {

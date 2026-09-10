@@ -24,6 +24,7 @@ export {
 } from "./instructors";
 export {getQualExamSchedules} from "./qualExamSchd";
 export {publishScheduledNotices, publishScheduledNoticesNow} from "./scheduledNotices";
+export {syncNoticeVector} from "./noticeVectors";
 export {
   submitPurchaseRequest,
   reviewPurchaseRequest,

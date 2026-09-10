@@ -9,6 +9,8 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../assessments/presentation/widgets/assessment_card.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/instructor/instructor_onboarding_keys.dart';
 
 Future<bool> confirmAndDeleteAssessment({
   required BuildContext context,
@@ -128,10 +130,16 @@ class InstructorAssessmentsScreen extends ConsumerWidget {
     final assessments = ref.watch(assessmentsProvider);
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(RoutePaths.instructorAssessmentsCreate),
-        icon: const Icon(Icons.add),
-        label: const Text('평가 만들기'),
+      floatingActionButton: KeyedSubtree(
+        key: OnboardingTargetRegistry.keyOf(
+          InstructorOnboardingTargets.assessmentsCreate,
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: () =>
+              context.push(RoutePaths.instructorAssessmentsCreate),
+          icon: const Icon(Icons.add),
+          label: const Text('평가 만들기'),
+        ),
       ),
       body: assessments.when(
         loading: () => const Center(child: CircularProgressIndicator()),
