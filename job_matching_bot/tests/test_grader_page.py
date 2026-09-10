@@ -3,11 +3,13 @@
 원래는 `읽기.md`로 판단하고 `채점표.csv`의 같은 번호 줄에 옮겨 적는 방식이었다.
 30줄을 매기려면 서른 번 오가야 해서 9월 7일에 두 번 만들어 두고 한 줄도 안 채워졌다.
 
-여기서 지키는 것 셋.
+여기서 지키는 것 넷.
 
 1. **파일 하나로 열린다.** 바깥에서 받아오는 것이 있으면 인터넷 없이는 못 쓴다.
 2. **공고 글이 페이지를 깨뜨리지 않는다.** 본문에 `</script>`가 들어 있어도 안전해야 한다.
 3. **내려받는 CSV가 `--score`가 읽는 형식과 같다.** 어긋나면 매긴 30줄이 버려진다.
+4. **양쪽 조건을 나란히 보여준다.** 공고가 대졸을 요구하는 것만 보이고 이 사람이
+   대졸인지는 안 보이면, 학력·연차·지역은 매길 수가 없다.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import re
 import unittest
 
 from job_matching_bot.evaluation.grader_page import build_page
-from job_matching_bot.evaluation.recommend_eval import SHEET_COLUMNS
+from job_matching_bot.evaluation.recommend_eval import SHEET_COLUMNS, resume_skills
 
 ITEM = {
     "번호": 1,
@@ -36,7 +38,15 @@ ITEM = {
     "조건": "서울 강남구 · 신입 · 대졸 · 정규직",
     "이력서_기술": "React, TypeScript",
 }
-PERSONAS = {"프론트엔드 수료생": {"resume_text": "React와 TypeScript로 화면을 만들었습니다."}}
+PERSONAS = {
+    "프론트엔드 수료생": {
+        "resume_text": "React와 TypeScript로 화면을 만들었습니다.",
+        "preferred_regions": ["서울"],
+        "preferred_employment_types": ["정규직"],
+        "education_level": "대졸",
+        "career_years": 0,
+    }
+}
 
 
 def _payload(html: str) -> list[dict]:
@@ -82,6 +92,56 @@ class GraderPageTest(unittest.TestCase):
     def test_every_item_is_included(self):
         items = [{**ITEM, "번호": n} for n in range(1, 31)]
         self.assertEqual(30, len(_payload(build_page(items, PERSONAS, "s"))))
+
+
+class ApplicantTermsTest(unittest.TestCase):
+    """공고 쪽 `학력무관 · 경력무관`과 맞대어 볼 지원자 쪽 한 줄."""
+
+    def test_education_and_years_are_shown(self):
+        terms = _payload(build_page([ITEM], PERSONAS, "s"))[0]["이력서_조건"]
+        self.assertIn("대졸", terms)
+        self.assertIn("연차 0", terms)
+        self.assertIn("서울", terms)
+        self.assertIn("정규직", terms)
+
+    def test_an_unstated_preference_reads_as_no_limit(self):
+        """희망을 안 적은 것은 '아무 데나'다. 빈칸으로 두면 못 맞춘 것처럼 보인다."""
+        bare = {"프론트엔드 수료생": {"resume_text": "", "education_level": "고졸", "career_years": 5}}
+        terms = _payload(build_page([ITEM], bare, "s"))[0]["이력서_조건"]
+        self.assertIn("지역 무관", terms)
+        self.assertIn("형태 무관", terms)
+        self.assertIn("고졸", terms)
+
+    def test_a_missing_persona_does_not_crash_the_page(self):
+        terms = _payload(build_page([ITEM], {}, "s"))[0]["이력서_조건"]
+        self.assertIn("미기재", terms)
+
+
+class ResumeSkillsTest(unittest.TestCase):
+    """채점하는 사람이 옆에 놓고 볼 값. 비어 있으면 공고와 맞대어 볼 것이 없다."""
+
+    def test_a_skill_section_wins(self):
+        text = "[기술스택]\nReact\nTypeScript\n\n[경력사항]\n- 어딘가"
+        self.assertEqual("React TypeScript", resume_skills(text))
+
+    def test_project_skill_lines_are_gathered(self):
+        text = "[프로젝트]\n- 추천 서비스\n  기술: Python, FastAPI\n- 대시보드\n  기술: Python, React"
+        self.assertEqual("Python, FastAPI, React", resume_skills(text))
+
+    def test_prose_falls_back_to_the_vocabulary(self):
+        """경력 이력서는 문장 안에 기술을 적는다. 구간만 보면 기술이 없는 것처럼 보였다."""
+        text = (
+            "[경력사항]\n"
+            "- (주)테크커머스 백엔드 개발자\n"
+            "  Java, Spring Boot 기반 주문 시스템을 개발했습니다.\n"
+            "  Kafka 기반 이벤트 처리를 도입했습니다."
+        )
+        found = resume_skills(text)
+        for name in ("Java", "Spring Boot", "Kafka"):
+            self.assertIn(name, found, f"{name} 이(가) 문장에서 안 잡혔다")
+
+    def test_nothing_to_find(self):
+        self.assertEqual("", resume_skills("[자기소개서]\n성실히 배우겠습니다."))
 
 
 if __name__ == "__main__":

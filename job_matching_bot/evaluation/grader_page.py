@@ -101,7 +101,7 @@ function draw() {
   document.querySelector('main').innerHTML = `
     <div class="who">${esc(it.번호)}번 · ${esc(it.이력서)} · 모델 순위 ${esc(it.순위)}위</div>
     <h2>${esc(it.회사)} — ${esc(it.공고)}</h2>
-    <div class="cond">${esc(it.조건)}${it.공고링크 ? ' · <a href="' + esc(it.공고링크) + '" target="_blank" rel="noopener">공고 원문</a>' : ''}</div>
+    <div class="cond">공고 요구 · ${esc(it.조건)}${it.공고링크 ? ' · <a href="' + esc(it.공고링크) + '" target="_blank" rel="noopener">공고 원문</a>' : ''}</div>
     <div class="cols">
       <div class="box"><h3>공고가 요구하는 것</h3>
         ${it.공고_기술 ? '<p class="tags">기술 ' + esc(it.공고_기술) + '</p>' : ''}
@@ -110,6 +110,7 @@ function draw() {
         ${it.우대사항 && it.우대사항.length ? '<h3 style="margin-top:12px">우대사항</h3>' + list(it.우대사항, '') : ''}
       </div>
       <div class="box"><h3>이력서에 있는 것 · ${esc(it.이력서)}</h3>
+        <div class="cond" style="margin-bottom:10px">${esc(it.이력서_조건)}</div>
         <p class="tags">${it.이력서_기술 ? esc(it.이력서_기술) : '(기술 없음)'}</p>
         <details><summary>이력서 전문 보기</summary>
           <pre style="white-space:pre-wrap;font:13px/1.7 inherit">${esc(it.이력서_전문)}</pre>
@@ -192,6 +193,19 @@ draw();
 """
 
 
+def _applicant_terms(persona: dict[str, Any]) -> str:
+    """지원자 쪽 조건 한 줄. 공고의 `학력무관 · 경력무관` 과 맞대어 보라고 둔다.
+
+    이게 없으면 공고가 대졸을 요구하는지는 보이는데 이 사람이 대졸인지가 안 보인다.
+    """
+    regions = ", ".join(persona.get("preferred_regions") or []) or "지역 무관"
+    types = ", ".join(persona.get("preferred_employment_types") or []) or "형태 무관"
+    return (
+        f"{regions} · {types} · {persona.get('education_level', '미기재')}"
+        f" · 연차 {persona.get('career_years', 0)}"
+    )
+
+
 def build_page(items: list[dict[str, Any]], personas: dict[str, Any], stamp: str) -> str:
     """채점 페이지 HTML. 바깥에서 받아오는 것 없이 파일 하나로 열린다."""
     payload = [
@@ -205,6 +219,7 @@ def build_page(items: list[dict[str, Any]], personas: dict[str, Any], stamp: str
                 )
             },
             "이력서_전문": (personas.get(item["이력서"], {}).get("resume_text") or "").strip(),
+            "이력서_조건": _applicant_terms(personas.get(item["이력서"], {})),
         }
         for item in items
     ]

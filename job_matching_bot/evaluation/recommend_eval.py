@@ -44,6 +44,7 @@ from pathlib import Path
 
 from job_matching_bot.config import ARTIFACTS_DIR, FIXTURES_DIR
 from job_matching_bot.evaluation.grader_page import write_page
+from job_matching_bot.ingestion.skill_extractor import extract_skills
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 RESUMES = FIXTURES_DIR / "eval_resumes.json"
@@ -64,6 +65,11 @@ def resume_skills(resume_text: str) -> str:
 
     `[기술스택]` 구간이 있으면 그것을 쓰고, 없으면 프로젝트·교육의 `기술:` 줄을 모은다.
     앱 이력서는 기술스택 항목이 따로 있지만, 평가용 이력서는 프로젝트 안에 적혀 있다.
+
+    둘 다 없으면 어휘 사전으로 본문에서 훑는다. 경력 이력서는 "Java, Spring Boot 기반
+    주문 시스템을 개발했습니다"처럼 문장 안에 기술을 적어서, 구간만 보면 기술이
+    하나도 없는 것처럼 보였다. 채점하는 사람이 옆에 놓고 볼 값이라 비어 있으면 곤란하다.
+    추천에는 쓰이지 않는다 — 그쪽은 LLM이 뽑은 `profile.skills` 를 쓴다.
     """
     stack: list[str] = []
     listed: list[str] = []
@@ -87,7 +93,9 @@ def resume_skills(resume_text: str) -> str:
             name = name.strip()
             if name and name not in names:
                 names.append(name)
-    return ", ".join(names)
+    if names:
+        return ", ".join(names)
+    return ", ".join(extract_skills(resume_text))
 
 
 def unescape(text: str) -> str:
