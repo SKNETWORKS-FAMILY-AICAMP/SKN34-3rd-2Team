@@ -105,13 +105,17 @@ function draw() {
     <div class="cols">
       <div class="box"><h3>공고가 요구하는 것</h3>
         ${it.공고_기술 ? '<p class="tags">기술 ' + esc(it.공고_기술) + '</p>' : ''}
+        ${it.공고_자격증 ? '<p class="tags">자격증 ' + esc(it.공고_자격증) + '</p>' : ''}
+        ${it.공고_전공 ? '<p class="tags">전공 ' + esc(it.공고_전공) + '</p>' : ''}
         <h3 style="margin-top:12px">자격요건</h3>
         ${list(it.자격요건, '공고에 자격요건 구간이 없습니다')}
         ${it.우대사항 && it.우대사항.length ? '<h3 style="margin-top:12px">우대사항</h3>' + list(it.우대사항, '') : ''}
       </div>
       <div class="box"><h3>이력서에 있는 것 · ${esc(it.이력서)}</h3>
         <div class="cond" style="margin-bottom:10px">${esc(it.이력서_조건)}</div>
-        <p class="tags">${it.이력서_기술 ? esc(it.이력서_기술) : '(기술 없음)'}</p>
+        <p class="tags">기술 ${it.이력서_기술 ? esc(it.이력서_기술) : '(없음)'}</p>
+        <p class="tags">자격증 ${it.이력서_자격증 ? esc(it.이력서_자격증) : '(없음)'}</p>
+        <p class="tags">전공 ${it.이력서_전공 ? esc(it.이력서_전공) : '(없음)'}</p>
         <details><summary>이력서 전문 보기</summary>
           <pre style="white-space:pre-wrap;font:13px/1.7 inherit">${esc(it.이력서_전문)}</pre>
         </details>
@@ -215,7 +219,8 @@ def build_page(items: list[dict[str, Any]], personas: dict[str, Any], stamp: str
                 for key in (
                     "번호", "이력서", "순위", "회사", "공고", "공고링크",
                     "모델_등급", "근거", "우려", "공고_기술", "자격요건",
-                    "우대사항", "조건", "이력서_기술",
+                    "우대사항", "조건", "공고_자격증", "공고_전공",
+                    "이력서_기술", "이력서_자격증", "이력서_전공",
                 )
             },
             "이력서_전문": (personas.get(item["이력서"], {}).get("resume_text") or "").strip(),

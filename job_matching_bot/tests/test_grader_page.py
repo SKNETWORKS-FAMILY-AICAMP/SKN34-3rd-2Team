@@ -36,7 +36,11 @@ ITEM = {
     "자격요건": ["React 경험 2년 이상"],
     "우대사항": ["Next.js 경험"],
     "조건": "서울 강남구 · 신입 · 대졸 · 정규직",
+    "공고_자격증": "정보처리기사",
+    "공고_전공": "컴퓨터·소프트웨어",
     "이력서_기술": "React, TypeScript",
+    "이력서_자격증": "웹디자인기능사",
+    "이력서_전공": "시각디자인학과",
 }
 PERSONAS = {
     "프론트엔드 수료생": {
@@ -112,6 +116,14 @@ class ApplicantTermsTest(unittest.TestCase):
         self.assertIn("형태 무관", terms)
         self.assertIn("고졸", terms)
 
+    def test_certifications_and_majors_are_shown_on_both_sides(self):
+        """공고가 정보처리기사를 요구하는데 이 사람이 뭘 가졌는지 안 보이면 못 매긴다."""
+        data = _payload(build_page([ITEM], PERSONAS, "s"))[0]
+        self.assertEqual("정보처리기사", data["공고_자격증"])
+        self.assertEqual("웹디자인기능사", data["이력서_자격증"])
+        self.assertEqual("컴퓨터·소프트웨어", data["공고_전공"])
+        self.assertEqual("시각디자인학과", data["이력서_전공"])
+
     def test_a_missing_persona_does_not_crash_the_page(self):
         terms = _payload(build_page([ITEM], {}, "s"))[0]["이력서_조건"]
         self.assertIn("미기재", terms)
@@ -122,7 +134,12 @@ class ResumeSkillsTest(unittest.TestCase):
 
     def test_a_skill_section_wins(self):
         text = "[기술스택]\nReact\nTypeScript\n\n[경력사항]\n- 어딘가"
-        self.assertEqual("React TypeScript", resume_skills(text))
+        self.assertEqual("React, TypeScript", resume_skills(text))
+
+    def test_the_proficiency_suffix_is_dropped(self):
+        """앱은 `Java (고급)` 처럼 적는다. 공고 기술과 나란히 볼 값이라 이름만 남긴다."""
+        text = "[기술스택]\nJava (고급)\nSpring Boot (중급)"
+        self.assertEqual("Java, Spring Boot", resume_skills(text))
 
     def test_project_skill_lines_are_gathered(self):
         text = "[프로젝트]\n- 추천 서비스\n  기술: Python, FastAPI\n- 대시보드\n  기술: Python, React"

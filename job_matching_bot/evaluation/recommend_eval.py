@@ -35,6 +35,7 @@ import argparse
 import csv
 import html
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -44,10 +45,11 @@ from pathlib import Path
 
 from job_matching_bot.config import ARTIFACTS_DIR, FIXTURES_DIR
 from job_matching_bot.evaluation.grader_page import write_page
+from job_matching_bot.evaluation.app_resume import load_personas
 from job_matching_bot.ingestion.skill_extractor import extract_skills
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
-RESUMES = FIXTURES_DIR / "eval_resumes.json"
+# 이력서 원본은 앱과 같은 `scripts/resume_mocks.json` 하나다. 여기서 따로 갖지 않는다.
 LABELS = FIXTURES_DIR / "eval_labels.csv"
 RUNS_DIR = ARTIFACTS_DIR / "eval"
 
@@ -80,12 +82,14 @@ def resume_skills(resume_text: str) -> str:
             inside = stripped == "[기술스택]"
             continue
         if inside and stripped:
-            stack.append(stripped)
+            # 앱은 `Java (고급)` 처럼 숙련도를 괄호로 붙인다. 공고 기술과 나란히 볼
+            # 값이라 이름만 남긴다.
+            stack.append(re.sub(r"\s*\(.*\)$", "", stripped).strip())
         elif stripped.startswith("기술:"):
             listed.append(stripped[len("기술:"):].strip())
 
     if stack:
-        return " ".join(stack)
+        return ", ".join(stack)
     # 여러 프로젝트에 같은 기술이 나오면 한 번만 둔다.
     names: list[str] = []
     for line in listed:
@@ -123,6 +127,8 @@ def job_details(job_ids: set[str]) -> dict[str, dict[str, str]]:
                 "공고_기술": ", ".join(skills),
                 "자격요건": sections.required[:MAX_REQUIREMENT_LINES],
                 "우대사항": sections.preferred[:MAX_REQUIREMENT_LINES],
+                "공고_자격증": ", ".join(job.required_certifications),
+                "공고_전공": ", ".join(job.required_majors),
             }
         return details
     finally:
@@ -142,7 +148,7 @@ def recommend(base_url: str, persona: dict, top_k: int = 5, timeout: int = 180) 
 
 
 def run(base_url: str, top_k: int) -> Path:
-    personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+    personas = load_personas()
     rows: list[dict] = []
     raw: dict[str, dict] = {}
     started = time.time()
@@ -213,7 +219,11 @@ def build_items(raw: dict, personas: dict) -> list[dict]:
                         str(conditions.get(key) or "")
                         for key in ("region", "career", "education", "employment_type")
                     ),
+                    "공고_자격증": detail.get("공고_자격증", ""),
+                    "공고_전공": detail.get("공고_전공", ""),
                     "이력서_기술": resume_skills(persona.get("resume_text", "")),
+                    "이력서_자격증": ", ".join(persona.get("certifications") or []),
+                    "이력서_전공": ", ".join(persona.get("majors") or []),
                 }
             )
     return items
@@ -352,7 +362,7 @@ def score(run_path: Path, labels_path: Path) -> int:
         return 1
 
     raw = json.loads(run_path.read_text(encoding="utf-8"))
-    personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+    personas = load_personas()
     items = build_items(raw, personas)
     checked = wrong = grade_hit = grade_total = 0
     unlabeled = 0
@@ -426,7 +436,7 @@ def main() -> int:
         if path is None:
             print("결과가 없습니다. 먼저 --run 을 실행하세요.")
             return 1
-        personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+        personas = load_personas()
         raw = json.loads(path.read_text(encoding="utf-8"))
         items = build_items(raw, personas)
         sheet = path.with_name(path.stem + "-채점표.csv")

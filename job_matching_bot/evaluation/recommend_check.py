@@ -40,10 +40,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from job_matching_bot.config import ARTIFACTS_DIR, FIXTURES_DIR
+from job_matching_bot.config import ARTIFACTS_DIR
+from job_matching_bot.evaluation.app_resume import load_personas
 
 KST = timezone(timedelta(hours=9))
-RESUMES = FIXTURES_DIR / "eval_resumes.json"
+# 이력서 원본은 앱과 같은 `scripts/resume_mocks.json` 하나다. `app_resume`가 읽는다.
 RUNS_DIR = ARTIFACTS_DIR / "eval_runs"
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 
@@ -260,7 +261,7 @@ def store_rows(job_ids: set[str]) -> dict[str, sqlite3.Row]:
 def fetch(base_url: str, top_k: int) -> dict:
     import urllib.request
 
-    personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+    personas = load_personas()
     raw: dict[str, dict] = {}
     for name, persona in personas.items():
         body = json.dumps({**persona, "top_k": top_k}, ensure_ascii=False).encode("utf-8")
@@ -276,7 +277,7 @@ def fetch(base_url: str, top_k: int) -> dict:
 
 
 def inspect(raw: dict) -> Report:
-    personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+    personas = load_personas()
     report = Report(personas=len(raw))
 
     job_ids = {

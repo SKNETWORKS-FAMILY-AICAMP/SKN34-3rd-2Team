@@ -1,0 +1,272 @@
+"""앱이 서버로 보내는 이력서를 그대로 만든다.
+
+## 왜 필요한가
+
+평가는 `fixtures/eval_resumes.json`에 손으로 쓴 이력서 여섯 개를 써 왔다. 그런데
+그 글은 앱이 만드는 양식이 아니었다. `[교육]` `[프로젝트 경험]` 두세 구간뿐이고
+**자격사항·학력사항·기술스택·핵심역량이 아예 없었다.** 요청 본문의 `certifications`와
+`majors`도 빈 채로 나갔다.
+
+앱은 `scripts/resume_mocks.json`의 열한 구간을 `resume_text_builder.dart`로 엮어
+보낸다. 평가가 그것과 다른 글을 보내면, 재고 있는 것이 실제로 사용자가 받는 추천이
+아니다. 자격증을 요구하는 공고를 걸러내는지, 전공을 보는지도 평가에 안 잡힌다.
+
+그래서 여기서는 `resume_text_builder.dart`와 `resume_profile.dart`를 파이썬으로
+옮겨 **같은 원본에서 같은 글을** 만든다. 원본이 하나이므로 앱 목업을 고치면 평가도
+따라 바뀐다.
+
+## 옮긴 원본
+
+- `lib/features/resume/ai_coach/data/resume_text_builder.dart` — 구간 순서와 줄 모양
+- `lib/features/resume/ai_coach/data/resume_profile.dart` — 학력·연차·전공·자격증
+- `lib/shared/models/resume_content.dart` — 어떤 항목을 '채워졌다'고 보는지
+
+Dart 쪽이 바뀌면 여기도 바뀌어야 한다. `tests/test_app_resume.py`가 두 파일이
+갈라졌는지 알려 준다.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import date
+from pathlib import Path
+from typing import Any, Iterable
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MOCKS = REPO_ROOT / "scripts" / "resume_mocks.json"
+
+# 자기소개서 구간의 순서와 이름. `ResumeSelfIntroLabels`와 같아야 한다.
+SELF_INTRO_LABELS: list[tuple[str, str]] = [
+    ("intro", "자기소개"),
+    ("motivation", "지원동기"),
+    ("challenge", "직무와 관련된 경험 중 어려움을 극복한 사례"),
+    ("growth", "성장과정"),
+    ("strengthsWeaknesses", "직무와 관련된 성격의 장단점"),
+    ("aspiration", "지원한 회사에 대한 포부"),
+]
+
+# 이력서에는 없는 값이다. 앱에서는 사용자가 따로 고른다. 평가용으로 여기 둔다.
+EVAL_PREFERENCES: dict[str, dict[str, list[str]]] = {
+    "backend_entry": {"regions": ["서울", "경기"], "employment_types": ["정규직"]},
+    "frontend_entry": {"regions": ["서울"], "employment_types": ["정규직"]},
+    "backend_experienced_3y": {"regions": ["서울"], "employment_types": ["정규직"]},
+    "data_entry_junior_college": {"regions": ["서울", "경기"], "employment_types": ["정규직"]},
+    "embedded_entry_regional": {"regions": ["대전"], "employment_types": ["정규직"]},
+}
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _period(start: Any, end: Any) -> str:
+    """`_period` — 둘 다 비면 아무것도 안 붙는다."""
+    s, e = _text(start), _text(end)
+    if not s and not e:
+        return ""
+    return f" ({s} ~ {e})"
+
+
+def _self_introduction(content: dict) -> str:
+    """`buildSelfIntroductionText` — 채워진 구간만 순서대로."""
+    intro = content.get("selfIntroduction") or {}
+    blocks: list[str] = []
+    for key, label in SELF_INTRO_LABELS:
+        section = intro.get(key) or {}
+        body = _text(section.get("body"))
+        if not body:
+            continue
+        subtitle = _text(section.get("subtitle"))
+        head = f"({label})" if not subtitle else f"({label}) {subtitle}"
+        blocks.append(f"{head}\n{body}")
+    return "\n\n".join(blocks)
+
+
+def _project_lines(content: dict) -> Iterable[str]:
+    for p in content.get("projects") or []:
+        if not _text(p.get("name")):
+            continue
+        yield f"- {_text(p.get('name'))}{_period(p.get('startDate'), p.get('endDate'))}"
+        if _text(p.get("role")):
+            yield f"  역할: {_text(p.get('role'))}"
+        if _text(p.get("techStack")):
+            yield f"  기술: {_text(p.get('techStack'))}"
+        if _text(p.get("description")):
+            yield f"  {_text(p.get('description'))}"
+
+
+def _experience_lines(content: dict) -> Iterable[str]:
+    for e in content.get("experience") or []:
+        if not _text(e.get("company")):
+            continue
+        role = _text(e.get("role"))
+        end = "재직 중" if e.get("isCurrent") else e.get("endDate")
+        yield (
+            f"- {_text(e.get('company'))}"
+            f"{'' if not role else f' / {role}'}"
+            f"{_period(e.get('startDate'), end)}"
+        )
+        if _text(e.get("description")):
+            yield f"  {_text(e.get('description'))}"
+
+
+def _dated_lines(items: Iterable[dict], name_key: str, org_key: str, date_key: str) -> Iterable[str]:
+    """수상내역·기타활동처럼 `이름 / 소속 (날짜)` + 설명 한 줄인 구간."""
+    for item in items or []:
+        if not _text(item.get(name_key)):
+            continue
+        org = _text(item.get(org_key)) if org_key else ""
+        when = _text(item.get(date_key)) if date_key else ""
+        yield (
+            f"- {_text(item.get(name_key))}"
+            f"{'' if not org else f' / {org}'}"
+            f"{'' if not when else f' ({when})'}"
+        )
+        if _text(item.get("description")):
+            yield f"  {_text(item.get('description'))}"
+
+
+def _activity_lines(content: dict) -> Iterable[str]:
+    for a in content.get("otherActivities") or []:
+        name = _text(a.get("name"))
+        if not name:
+            continue
+        yield f"- {name}{_period(a.get('startDate'), a.get('endDate'))}"
+        if _text(a.get("description")):
+            yield f"  {_text(a.get('description'))}"
+
+
+def _education_lines(content: dict) -> Iterable[str]:
+    for e in content.get("education") or []:
+        school = _text(e.get("school"))
+        if not school:
+            continue
+        major = _text(e.get("major"))
+        status = _text(e.get("status"))
+        tail = "" if not status else f" ({status})"
+        yield f"- {school}{'' if not major else ' ' + major}{tail}"
+
+
+def _certification_lines(content: dict) -> Iterable[str]:
+    for c in content.get("certifications") or []:
+        name = _text(c.get("name"))
+        if not name:
+            continue
+        issuer = _text(c.get("issuer"))
+        when = _text(c.get("acquiredDate"))
+        yield f"- {name}{'' if not issuer else ' / ' + issuer}{'' if not when else f' ({when})'}"
+
+
+def _training_lines(content: dict) -> Iterable[str]:
+    for t in content.get("trainingExperience") or []:
+        course = _text(t.get("course"))
+        if not course:
+            continue
+        org = _text(t.get("organization"))
+        yield f"- {course}{'' if not org else ' / ' + org}{_period(t.get('startDate'), t.get('endDate'))}"
+        if _text(t.get("description")):
+            yield f"  {_text(t.get('description'))}"
+
+
+def build_resume_text(content: dict) -> str:
+    """`buildResumeText`의 파이썬 판. 구간 순서까지 같아야 한다.
+
+    서버는 모델이 돌려준 인용문이 이 글 안에 **그대로** 있을 때만 근거로 인정한다.
+    그래서 원본 문장을 다듬지 않고 라벨만 붙인다.
+    """
+    parts: list[str] = []
+
+    def section(title: str, lines: Iterable[str]) -> None:
+        # Dart 쪽 `section`이 줄마다 trim을 건다. `  역할:` 같은 들여쓰기는
+        # 살아남지 못한다. 아쉬워도 앱이 보내는 글과 한 글자라도 달라지면 안 된다.
+        body = [s for s in (line.strip() for line in lines) if s]
+        if not body:
+            return
+        parts.append(f"[{title}]\n" + "\n".join(body))
+
+    section("핵심역량", [_text((content.get("coreCompetencies") or {}).get("text"))])
+    section(
+        "기술스택",
+        [
+            _text(t.get("name")) if not _text(t.get("level"))
+            else f"{_text(t.get('name'))} ({_text(t.get('level'))})"
+            for t in content.get("techStack") or []
+            if _text(t.get("name"))
+        ],
+    )
+    section("프로젝트 경험", _project_lines(content))
+    section("경력사항", _experience_lines(content))
+    section("학력사항", _education_lines(content))
+    section("자격사항", _certification_lines(content))
+    section("수상내역", _dated_lines(content.get("awards"), "name", "organization", "date"))
+    section("교육경험", _training_lines(content))
+    section("기타활동", _activity_lines(content))
+
+    intro = _self_introduction(content)
+    if intro:
+        parts.append("[자기소개서]\n" + intro)
+
+    return "\n\n".join(parts).strip()
+
+
+def _parse_month(value: Any) -> date | None:
+    text = _text(value)
+    if not text:
+        return None
+    if re.fullmatch(r"\d{4}-\d{2}", text):
+        text = f"{text}-01"
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def estimate_career_years(experience: Iterable[dict], today: date | None = None) -> float:
+    """`estimateCareerYears` — 재직 개월을 더해 소수 첫째 자리까지. 재직 중은 오늘까지."""
+    now = today or date.today()
+    months = 0
+    for item in experience or []:
+        if not _text(item.get("company")):
+            continue
+        start = _parse_month(item.get("startDate"))
+        end = now if item.get("isCurrent") else _parse_month(item.get("endDate"))
+        if start is None or end is None or end < start:
+            continue
+        diff = (end.year - start.year) * 12 + end.month - start.month
+        months += max(diff, 0)
+    return round(months / 12 * 10) / 10
+
+
+def profile_from_content(content: dict, today: date | None = None) -> dict:
+    """`RecommendResumeProfile.fromContent` — 학력·연차·전공·자격증."""
+    education = [e for e in content.get("education") or [] if _text(e.get("school"))]
+    experience = [e for e in content.get("experience") or [] if _text(e.get("company"))]
+    return {
+        "education_level": "대졸" if education else "미기재",
+        "career_years": estimate_career_years(experience, today),
+        "majors": [_text(e.get("major")) for e in education if _text(e.get("major"))],
+        "certifications": [
+            _text(c.get("name")) for c in content.get("certifications") or [] if _text(c.get("name"))
+        ],
+    }
+
+
+def load_personas(path: Path | None = None, today: date | None = None) -> dict[str, dict]:
+    """앱 목업을 평가가 그대로 서버에 보낼 수 있는 모양으로 읽는다.
+
+    키는 사람이 읽는 제목이다. `[목업] ` 머리말은 떼어 채점 화면에서 짧게 보이게 한다.
+    """
+    mocks = json.loads((path or MOCKS).read_text(encoding="utf-8"))["personas"]
+    out: dict[str, dict] = {}
+    for key, persona in mocks.items():
+        content = persona["content"]
+        prefs = EVAL_PREFERENCES.get(key, {"regions": [], "employment_types": []})
+        name = _text(persona["title"]).removeprefix("[목업]").strip()
+        out[name] = {
+            "resume_text": build_resume_text(content),
+            "preferred_regions": list(prefs["regions"]),
+            "preferred_employment_types": list(prefs["employment_types"]),
+            **profile_from_content(content, today),
+        }
+    return out
