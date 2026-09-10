@@ -36,6 +36,13 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
   final _input = TextEditingController();
   bool _sending = false;
 
+  /// 이미 읽음으로 넘긴 피드백. 다시 넘기지 않는다.
+  ///
+  /// 읽음 처리는 그리는 중에 예약된다. 쓰기가 막히거나(권한) 스트림이 늦으면 안 읽음이
+  /// 그대로 남아, 다시 그릴 때마다 같은 쓰기를 또 보낸다. 이력서 편집 화면은 키 입력마다
+  /// 다시 그리므로 글자 하나에 쓰기 한 번이 나간다.
+  final Set<String> _marked = {};
+
   @override
   void dispose() {
     _input.dispose();
@@ -43,13 +50,17 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
   }
 
   Future<void> _markRead(List<ResumeFeedbackModel> unread) async {
-    if (unread.isEmpty) return;
+    final ids = [
+      for (final f in unread)
+        if (_marked.add(f.id)) f.id,
+    ];
+    if (ids.isEmpty) return;
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
     await ref.read(lmsRepositoryProvider).markResumeFeedbackRead(
           cohortId: cohortId,
           resumeId: widget.resume.id,
-          feedbackIds: [for (final f in unread) f.id],
+          feedbackIds: ids,
           asReviewer: ref.read(canReviewResumesProvider),
         );
   }

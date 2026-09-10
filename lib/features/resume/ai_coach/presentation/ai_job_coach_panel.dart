@@ -162,6 +162,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   @override
   void didUpdateWidget(covariant AiJobCoachPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // 이력서가 그대로면 견줄 것도 없다. 아래 비교는 이력서 전체를 JSON으로 두 번
+    // 직렬화하는데, 편집 화면은 키 입력마다 다시 만들어지므로 그때마다 치르면 안 된다.
+    // 글자를 고치면 `copyWith`가 새 객체를 만들므로 이 지름길로는 안 빠진다.
+    if (identical(widget.draftContent, oldWidget.draftContent)) return;
     if (!sameResumeContent(
       widget.draftContent,
       oldWidget.draftContent.toMap(),
@@ -678,8 +682,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     );
 
     if (widget.isSidebar) return panel;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 430),
+    // 높이는 편집 화면이 정한다. 좁은 화면에서는 손잡이로 끌어 조절하므로 여기서
+    // 상한을 박으면 아무리 끌어도 그 위로 못 커진다.
+    return SizedBox(
+      height: double.infinity,
       child: DecoratedBox(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.border)),
@@ -848,7 +854,7 @@ class _RecommendProgress extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         const Text(
-          '보통 15초쯤 걸려요',
+          '보통 15초 정도 걸려요. 잠시만 기다려 주세요.',
           style: TextStyle(fontSize: 11, color: AppColors.textHint),
         ),
         const SizedBox(height: 12),

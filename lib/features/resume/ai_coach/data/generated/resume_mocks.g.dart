@@ -37,32 +37,32 @@ const resumeMockPersonas = <ResumeMockPersona>[
         <String, dynamic>{
           "id": "ts-1",
           "name": "Python",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-2",
           "name": "Django",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-3",
           "name": "FastAPI",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-4",
           "name": "PostgreSQL",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-5",
           "name": "Docker",
-          "level": "하",
+          "level": "초급",
         },
         <String, dynamic>{
           "id": "ts-6",
           "name": "AWS",
-          "level": "하",
+          "level": "초급",
         },
       ],
       "certifications": <dynamic>[
@@ -195,32 +195,32 @@ const resumeMockPersonas = <ResumeMockPersona>[
         <String, dynamic>{
           "id": "ts-1",
           "name": "JavaScript",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-2",
           "name": "TypeScript",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-3",
           "name": "React",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-4",
           "name": "React Native",
-          "level": "하",
+          "level": "초급",
         },
         <String, dynamic>{
           "id": "ts-5",
           "name": "Next.js",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-6",
           "name": "CSS",
-          "level": "상",
+          "level": "고급",
         },
       ],
       "certifications": <dynamic>[
@@ -356,42 +356,42 @@ const resumeMockPersonas = <ResumeMockPersona>[
         <String, dynamic>{
           "id": "ts-1",
           "name": "Java",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-2",
           "name": "Spring Boot",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-3",
           "name": "JPA",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-4",
           "name": "MySQL",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-5",
           "name": "Redis",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-6",
           "name": "AWS",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-7",
           "name": "Docker",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-8",
           "name": "Git",
-          "level": "상",
+          "level": "고급",
         },
       ],
       "certifications": <dynamic>[
@@ -510,32 +510,32 @@ const resumeMockPersonas = <ResumeMockPersona>[
         <String, dynamic>{
           "id": "ts-1",
           "name": "Python",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-2",
           "name": "SQL",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-3",
           "name": "Pandas",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-4",
           "name": "Spark",
-          "level": "하",
+          "level": "초급",
         },
         <String, dynamic>{
           "id": "ts-5",
           "name": "Airflow",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-6",
           "name": "Tensorflow",
-          "level": "하",
+          "level": "초급",
         },
       ],
       "certifications": <dynamic>[
@@ -657,32 +657,32 @@ const resumeMockPersonas = <ResumeMockPersona>[
         <String, dynamic>{
           "id": "ts-1",
           "name": "C",
-          "level": "상",
+          "level": "고급",
         },
         <String, dynamic>{
           "id": "ts-2",
           "name": "C++",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-3",
           "name": "Linux",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-4",
           "name": "임베디드 리눅스",
-          "level": "중",
+          "level": "중급",
         },
         <String, dynamic>{
           "id": "ts-5",
           "name": "RTOS",
-          "level": "하",
+          "level": "초급",
         },
         <String, dynamic>{
           "id": "ts-6",
           "name": "Git",
-          "level": "중",
+          "level": "중급",
         },
       ],
       "certifications": <dynamic>[

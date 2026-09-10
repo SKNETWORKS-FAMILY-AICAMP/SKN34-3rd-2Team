@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -71,6 +73,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// 이력서 본문에 남겨 둘 최소 폭. 이보다 좁아지면 입력칸이 읽기 어려워진다.
   static const double _minResumeWidth = 560;
 
+  /// 좁은 화면에서 아래에 붙는 코치 패널. 넓은 화면의 좌우 조절과 같은 방식으로
+  /// 위아래로 끌어 높이를 바꾼다.
+  static const double _panelMinHeight = 200;
+  static const double _panelDefaultHeight = 430;
+  static const double _minResumeHeight = 200;
+
   /// 손잡이가 차지하는 폭. 보이는 선은 1px이지만 잡히는 폭은 이만큼이다.
   static const double _handleWidth = 12;
   /// 너비만 따로 들고 있는다. `setState`로 두면 끌 때마다 이력서 화면 전체를
@@ -79,8 +87,19 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   final ValueNotifier<double> _panelWidth =
       ValueNotifier<double>(_panelDefaultWidth);
 
-  /// 끌기를 시작한 순간의 너비. 커서까지의 거리를 여기서 뺀다.
+  /// 좁은 화면에서의 패널 높이. 너비와 같은 이유로 알림값이다.
+  final ValueNotifier<double> _panelHeight =
+      ValueNotifier<double>(_panelDefaultHeight);
+
+  /// 끌기를 시작한 순간의 너비·높이. 커서까지의 거리를 여기서 뺀다.
   double? _dragStartWidth;
+  double? _dragStartHeight;
+
+  /// 타이핑이 멎은 뒤 파생 표시를 따라잡게 하는 타이머.
+  Timer? _derivedRefresh;
+
+  /// 닫혀 있는 동안 다시 만들지 않으려고 들고 있는 AI 코치 위젯.
+  Widget? _coachPanel;
 
   /// AI 코치가 트리의 어느 자리에 있든 같은 것으로 알아보게 하는 열쇠.
   ///
@@ -123,8 +142,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   @override
   void dispose() {
+    _derivedRefresh?.cancel();
     _scrollController.dispose();
     _panelWidth.dispose();
+    _panelHeight.dispose();
     super.dispose();
   }
 
@@ -184,9 +205,54 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     return true;
   }
 
+  /// 이력서 내용을 갈아 끼운다. **글자 수정에는 화면을 다시 만들지 않는다.**
+  ///
+  /// 입력칸은 저마다 컨트롤러를 들고 있어서, 화면을 다시 만들지 않아도 글자는 그대로
+  /// 보인다. 그런데 예전에는 키 입력마다 `setState`를 불러 입력칸 수십 개와 항목마다
+  /// 붙은 댓글 실을 통째로 다시 만들었다. 글자가 손가락을 못 따라온 이유다.
+  ///
+  /// 곧바로 다시 만들어야 하는 경우는 둘뿐이다.
+  ///
+  /// - **줄이 늘거나 줄었을 때.** 프로젝트를 하나 더하면 그 자리가 바로 보여야 한다.
+  /// - **처음으로 고쳐졌을 때.** 저장 버튼과 나가기 확인이 그때 깨어난다.
+  ///
+  /// 나머지(작성 현황 개수 같은 파생 표시)는 타이핑이 멎은 뒤 한 번에 따라잡는다.
+  void _updateContent(ResumeContent next) {
+    final structural = _rowCountsChanged(_content, next);
+    _content = next;
+    _markDirty();
+    if (structural) {
+      _derivedRefresh?.cancel();
+      setState(() {});
+    } else {
+      _scheduleDerivedRefresh();
+    }
+  }
+
+  /// 줄 수가 달라졌나. 글자만 고친 것과 항목을 더하고 지운 것을 가른다.
+  static bool _rowCountsChanged(ResumeContent a, ResumeContent b) =>
+      a.experience.length != b.experience.length ||
+      a.education.length != b.education.length ||
+      a.techStack.length != b.techStack.length ||
+      a.certifications.length != b.certifications.length ||
+      a.awards.length != b.awards.length ||
+      a.trainingExperience.length != b.trainingExperience.length ||
+      a.otherActivities.length != b.otherActivities.length ||
+      a.projects.length != b.projects.length;
+
+  /// 타이핑이 멎으면 한 번 다시 그린다. 작성 현황 개수처럼 즉시가 아니어도 되는 것들.
+  void _scheduleDerivedRefresh() {
+    _derivedRefresh?.cancel();
+    _derivedRefresh = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() {});
+    });
+  }
+
   void _markDirty() {
     final resume = _resume;
     if (resume == null || _isReadOnly(isReviewer: _isReviewer, resume: resume)) return;
+    // 이미 고쳐진 상태면 다시 그릴 이유가 없다. 처음 한 번만 화면이 바뀐다.
+    if (_dirty) return;
     setState(() => _dirty = true);
   }
 
@@ -616,8 +682,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   title: _title,
                                   readOnly: readOnly,
                                   onChanged: (v) {
-                                    setState(() => _title = v);
+                                    // 제목도 입력칸이 스스로 보여 준다. 화면 위쪽의
+                                    // 이력서 이름만 잠시 뒤 따라잡으면 된다.
+                                    _title = v;
                                     _markDirty();
+                                    _scheduleDerivedRefresh();
                                   },
                                 ),
                                 const SizedBox(height: 24),
@@ -627,9 +696,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     info: _content.basicInfo,
                                     readOnly: readOnly,
                                     onChanged: (info) {
-                                      setState(
-                                        () => _content = _content.copyWith(basicInfo: info),
-                                      );
+                                      _updateContent(_content.copyWith(basicInfo: info));
                                       _markDirty();
                                     },
                                     onPrefill: readOnly
@@ -659,11 +726,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     data: _content.coreCompetencies,
                                     readOnly: readOnly,
                                     onChanged: (d) {
-                                      setState(
-                                        () => _content = _content.copyWith(
+                                      _updateContent(_content.copyWith(
                                           coreCompetencies: d,
-                                        ),
-                                      );
+                                        ));
                                       _markDirty();
                                     },
                                   ),
@@ -675,9 +740,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.experience,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(experience: items),
-                                      );
+                                      _updateContent(_content.copyWith(experience: items));
                                       _markDirty();
                                     },
                                   ),
@@ -689,9 +752,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.education,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(education: items),
-                                      );
+                                      _updateContent(_content.copyWith(education: items));
                                       _markDirty();
                                     },
                                   ),
@@ -703,9 +764,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.techStack,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(techStack: items),
-                                      );
+                                      _updateContent(_content.copyWith(techStack: items));
                                       _markDirty();
                                     },
                                   ),
@@ -717,11 +776,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.certifications,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(
+                                      _updateContent(_content.copyWith(
                                           certifications: items,
-                                        ),
-                                      );
+                                        ));
                                       _markDirty();
                                     },
                                   ),
@@ -733,9 +790,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.awards,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(awards: items),
-                                      );
+                                      _updateContent(_content.copyWith(awards: items));
                                       _markDirty();
                                     },
                                   ),
@@ -747,11 +802,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.trainingExperience,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(
+                                      _updateContent(_content.copyWith(
                                           trainingExperience: items,
-                                        ),
-                                      );
+                                        ));
                                       _markDirty();
                                     },
                                   ),
@@ -763,11 +816,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.otherActivities,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(
+                                      _updateContent(_content.copyWith(
                                           otherActivities: items,
-                                        ),
-                                      );
+                                        ));
                                       _markDirty();
                                     },
                                   ),
@@ -779,9 +830,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.projects,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      setState(
-                                        () => _content = _content.copyWith(projects: items),
-                                      );
+                                      _updateContent(_content.copyWith(projects: items));
                                       _markDirty();
                                     },
                                   ),
@@ -793,11 +842,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     data: _content.selfIntroduction,
                                     readOnly: readOnly,
                                     onChanged: (d) {
-                                      setState(
-                                        () => _content = _content.copyWith(
+                                      _updateContent(_content.copyWith(
                                           selfIntroduction: d,
-                                        ),
-                                      );
+                                        ));
                                       _markDirty();
                                     },
                                   ),
@@ -823,30 +870,34 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       //
                       // `passthrough`로 지금과 같은 제약을 그대로 넘긴다(넓은 화면에서는
                       // 높이를 채우고, 좁은 화면에서는 내용만큼만 차지한다).
+                      // 닫혀 있는 동안에는 **직전에 만든 위젯을 그대로 넘긴다.**
+                      // `Offstage`는 배치·그리기만 건너뛸 뿐 자식을 만들기는 한다.
+                      // 그래서 숨어 있어도 키 입력마다 코치 화면이 다시 만들어졌다.
+                      // 같은 위젯 객체를 넘기면 Flutter가 그 아래를 통째로 건너뛴다.
+                      if (_showAiCoach || _coachPanel == null) {
+                        _coachPanel = AiJobCoachPanel(
+                          key: _coachKey,
+                          resumeId: widget.resumeId,
+                          draftContent: _content,
+                          hasUnsavedChanges: _dirty || _isSaving,
+                          onSaveRequested: isReviewer
+                              ? null
+                              : () async {
+                                  await _save(resume: resume);
+                                  return !_dirty;
+                                },
+                          onResumeChanged: isReviewer ? null : (content) => setState(() {
+                            _content = content;
+                            _dirty = false;
+                          }),
+                          isSidebar: wide,
+                          onClose: () => setState(() => _showAiCoach = false),
+                        );
+                      }
                       final rightPanel = Stack(
                         fit: StackFit.passthrough,
                         children: [
-                          Offstage(
-                            offstage: !_showAiCoach,
-                            child: AiJobCoachPanel(
-                              key: _coachKey,
-                              resumeId: widget.resumeId,
-                              draftContent: _content,
-                              hasUnsavedChanges: _dirty || _isSaving,
-                              onSaveRequested: isReviewer
-                                  ? null
-                                  : () async {
-                                      await _save(resume: resume);
-                                      return !_dirty;
-                                    },
-                              onResumeChanged: isReviewer ? null : (content) => setState(() {
-                                _content = content;
-                                _dirty = false;
-                              }),
-                              isSidebar: wide,
-                              onClose: () => setState(() => _showAiCoach = false),
-                            ),
-                          ),
+                          Offstage(offstage: !_showAiCoach, child: _coachPanel),
                         ],
                       );
 
@@ -858,10 +909,51 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       // 맞춤 공고가 사라지고, 다시 열면 빈 화면이 나온다. `Offstage`가
                       // 이미 안쪽에 있어 닫힌 동안에는 자리를 차지하지 않는다.
                       if (!wide) {
+                        // 이력서 본문을 최소 200px 남기고, 패널도 200px을 지킨다.
+                        final panelMaxHeight = (constraints.maxHeight -
+                                _minResumeHeight -
+                                _handleWidth)
+                            .clamp(_panelMinHeight, 900)
+                            .toDouble();
                         return Column(
                           children: [
                             Expanded(child: resumeScroll),
-                            rightPanel,
+                            // 닫혀 있으면 손잡이도 패널도 자리를 차지하지 않는다.
+                            // 넓은 화면과 같은 이유로 트리에서 빼지는 않는다.
+                            Offstage(
+                              offstage: !hasRightPanel,
+                              child: _PanelResizeHandle(
+                                axis: Axis.horizontal,
+                                onStart: () =>
+                                    _dragStartHeight = _panelHeight.value,
+                                onUpdate: (dy) {
+                                  // 위로 끌면(거리가 음수) 높아진다.
+                                  _panelHeight.value =
+                                      ((_dragStartHeight ??
+                                                  _panelHeight.value) -
+                                              dy)
+                                          .clamp(
+                                            _panelMinHeight,
+                                            panelMaxHeight,
+                                          );
+                                },
+                                onReset: () =>
+                                    _panelHeight.value = _panelDefaultHeight,
+                              ),
+                            ),
+                            ValueListenableBuilder<double>(
+                              valueListenable: _panelHeight,
+                              child: rightPanel,
+                              builder: (context, raw, panel) => SizedBox(
+                                height: hasRightPanel
+                                    ? raw.clamp(
+                                        _panelMinHeight,
+                                        panelMaxHeight,
+                                      )
+                                    : 0,
+                                child: panel,
+                              ),
+                            ),
                           ],
                         );
                       }
@@ -958,7 +1050,12 @@ class _PanelResizeHandle extends StatefulWidget {
     required this.onStart,
     required this.onUpdate,
     required this.onReset,
+    this.axis = Axis.vertical,
   });
+
+  /// 손잡이가 놓인 방향. [Axis.vertical]은 세로 막대라 좌우로 끈다(넓은 화면),
+  /// [Axis.horizontal]은 가로 막대라 위아래로 끈다(좁은 화면).
+  final Axis axis;
 
   final VoidCallback onStart;
   final ValueChanged<double> onUpdate;
@@ -971,7 +1068,12 @@ class _PanelResizeHandle extends StatefulWidget {
 class _PanelResizeHandleState extends State<_PanelResizeHandle> {
   bool _hovered = false;
   bool _dragging = false;
-  double _startX = 0;
+  double _start = 0;
+
+  bool get _isVertical => widget.axis == Axis.vertical;
+
+  /// 끄는 방향의 좌표만 본다. 세로 막대는 x, 가로 막대는 y다.
+  double _along(Offset position) => _isVertical ? position.dx : position.dy;
 
   void _stop() {
     if (_dragging) setState(() => _dragging = false);
@@ -980,8 +1082,11 @@ class _PanelResizeHandleState extends State<_PanelResizeHandle> {
   @override
   Widget build(BuildContext context) {
     final active = _hovered || _dragging;
+    const thickness = _ResumeEditScreenState._handleWidth;
     return MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
+      cursor: _isVertical
+          ? SystemMouseCursors.resizeColumn
+          : SystemMouseCursors.resizeRow,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
@@ -990,26 +1095,28 @@ class _PanelResizeHandleState extends State<_PanelResizeHandle> {
         child: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (event) {
-            _startX = event.position.dx;
+            _start = _along(event.position);
             widget.onStart();
             setState(() => _dragging = true);
           },
           onPointerMove: (event) {
             if (!_dragging) return;
-            widget.onUpdate(event.position.dx - _startX);
+            widget.onUpdate(_along(event.position) - _start);
           },
           onPointerUp: (_) => _stop(),
           onPointerCancel: (_) => _stop(),
           child: SizedBox(
-            width: _ResumeEditScreenState._handleWidth,
+            width: _isVertical ? thickness : double.infinity,
+            height: _isVertical ? null : thickness,
             child: Center(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
-                width: active ? 3 : 1,
-                // 높이를 안 주면 Center 안에서 0이 된다. 크기가 없는 상자는 히트
+                // 끄는 방향과 직각으로 얇게 눕는다. 두께만 커졌다 작아진다.
+                width: _isVertical ? (active ? 3 : 1) : double.infinity,
+                // 길이를 안 주면 Center 안에서 0이 된다. 크기가 없는 상자는 히트
                 // 테스트를 할 수 없어, 마우스가 지나갈 때마다 단언문이 매 프레임
                 // 터지고 화면이 눈에 띄게 버벅인다.
-                height: double.infinity,
+                height: _isVertical ? double.infinity : (active ? 3 : 1),
                 color: active ? AppColors.primary : AppColors.border,
               ),
             ),
