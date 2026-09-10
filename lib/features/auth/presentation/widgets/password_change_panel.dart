@@ -163,7 +163,7 @@ class _PasswordChangePanelState extends ConsumerState<PasswordChangePanel> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: _isLoading ? null : _skip,
-              child: const Text(
+              child: Text(
                 '나중에 변경',
                 style: TextStyle(color: AppColors.textSecondary),
               ),

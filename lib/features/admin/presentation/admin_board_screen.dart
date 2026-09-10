@@ -472,7 +472,7 @@ class _ScheduledRow extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textHint,
                       ),
@@ -607,7 +607,7 @@ class _AlertPopupCard extends ConsumerWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
@@ -658,7 +658,7 @@ class _AlertPopupCard extends ConsumerWidget {
                     item.content,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
                       height: 1.35,
@@ -668,7 +668,7 @@ class _AlertPopupCard extends ConsumerWidget {
                   Text(
                     '순서 ${item.sortOrder} · ${item.timeWindowLabel}'
                     '${item.linkUrl != null && item.linkUrl!.isNotEmpty ? ' · 링크' : ''}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: AppColors.textHint,
                     ),

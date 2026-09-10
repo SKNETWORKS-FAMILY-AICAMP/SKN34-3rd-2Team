@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/mileage_constants.dart';
 import '../../../core/routing/route_paths.dart';
@@ -229,6 +230,11 @@ class _AdminRequestCard extends StatelessWidget {
     final category = request.primaryCategory ?? MileageCategories.gifticon;
     final canProcess = request.status == PurchaseRequestStatus.pending ||
         request.status == PurchaseRequestStatus.modifyRequested;
+    final studentLinks = request.items
+        .map((e) => e.purchaseLink?.trim())
+        .whereType<String>()
+        .where((e) => e.isNotEmpty)
+        .toList();
 
     return Card(
       margin: EdgeInsets.zero,
@@ -268,23 +274,38 @@ class _AdminRequestCard extends StatelessWidget {
               '신청 금액: ${formatMileageM(request.totalAmount)}',
               style: const TextStyle(fontSize: 13),
             ),
-            if (request.createdAt != null)
-              Text(
-                '신청일: ${AppDateUtils.formatDetailDateTime(request.createdAt!)}',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-            ...request.items.map((item) {
-              if (item.purchaseLink == null || item.purchaseLink!.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              return Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '학생 링크: ${item.purchaseLink}',
-                  style: const TextStyle(fontSize: 12, color: AppColors.info),
-                ),
-              );
-            }),
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (request.createdAt != null)
+                  Text(
+                    '신청일: ${AppDateUtils.formatDetailDateTime(request.createdAt!)}',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                if (studentLinks.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 2,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          for (final link in studentLinks)
+                            _StudentLinkButton(url: link),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else
+                  const Spacer(),
+              ],
+            ),
             if (request.managerMemo != null && request.managerMemo!.isNotEmpty)
               Text('메모: ${request.managerMemo}'),
             if (canProcess) ...[
@@ -327,6 +348,52 @@ class _AdminRequestCard extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StudentLinkButton extends StatelessWidget {
+  const _StudentLinkButton({required this.url});
+
+  final String url;
+
+  Future<void> _open(BuildContext context) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('링크를 열 수 없습니다.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _open(context),
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Text.rich(
+          TextSpan(
+            style: const TextStyle(fontSize: 12, color: AppColors.info),
+            children: [
+              const TextSpan(text: '학생 링크: '),
+              TextSpan(
+                text: url,
+                style: const TextStyle(
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.info,
+                ),
+              ),
+            ],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.right,
         ),
       ),
     );

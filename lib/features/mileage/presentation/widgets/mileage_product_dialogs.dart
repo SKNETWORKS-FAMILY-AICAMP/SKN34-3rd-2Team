@@ -75,18 +75,64 @@ Future<void> showCustomProductDialog(
   required MileageCategoryUsageModel usage,
   required int mileageBalance,
   required Future<void> Function(String link, int price) onAdd,
-}) async {
-  final linkController = TextEditingController();
-  final priceController = TextEditingController();
-  final formKey = GlobalKey<FormState>();
-
-  final linkHint = product.category == MileageCategories.onlineCourse
-      ? 'https://www.inflearn.com/course/...'
-      : 'https://www.yes24.com/...';
-
-  await showDialog<void>(
+}) {
+  return showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => _CustomProductDialog(
+      product: product,
+      usage: usage,
+      mileageBalance: mileageBalance,
+      onAdd: onAdd,
+    ),
+  );
+}
+
+class _CustomProductDialog extends StatefulWidget {
+  const _CustomProductDialog({
+    required this.product,
+    required this.usage,
+    required this.mileageBalance,
+    required this.onAdd,
+  });
+
+  final MileageProductModel product;
+  final MileageCategoryUsageModel usage;
+  final int mileageBalance;
+  final Future<void> Function(String link, int price) onAdd;
+
+  @override
+  State<_CustomProductDialog> createState() => _CustomProductDialogState();
+}
+
+class _CustomProductDialogState extends State<_CustomProductDialog> {
+  final _linkController = TextEditingController();
+  final _priceController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _linkController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final link = _linkController.text.trim();
+    final price = int.parse(_priceController.text.trim());
+    Navigator.pop(context);
+    await widget.onAdd(link, price);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
+    final usage = widget.usage;
+    final linkHint = product.category == MileageCategories.onlineCourse
+        ? 'https://www.inflearn.com/course/...'
+        : 'https://www.yes24.com/...';
+
+    return AlertDialog(
       title: Row(
         children: [
           Container(
@@ -124,13 +170,13 @@ Future<void> showCustomProductDialog(
             ),
           ),
           IconButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.close, size: 20),
           ),
         ],
       ),
       content: Form(
-        key: formKey,
+        key: _formKey,
         child: SizedBox(
           width: 400,
           child: Column(
@@ -160,7 +206,7 @@ Future<void> showCustomProductDialog(
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: linkController,
+                controller: _linkController,
                 decoration: InputDecoration(
                   labelText: product.category == MileageCategories.onlineCourse
                       ? '강의 링크'
@@ -176,7 +222,7 @@ Future<void> showCustomProductDialog(
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: priceController,
+                controller: _priceController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: '가격 (M)',
@@ -191,7 +237,7 @@ Future<void> showCustomProductDialog(
                   if (price > usage.remaining) {
                     return '카테고리 잔여 한도를 초과합니다.';
                   }
-                  if (price > mileageBalance) {
+                  if (price > widget.mileageBalance) {
                     return '마일리지 잔액이 부족합니다.';
                   }
                   return null;
@@ -203,24 +249,15 @@ Future<void> showCustomProductDialog(
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(ctx),
+          onPressed: () => Navigator.pop(context),
           child: const Text('취소'),
         ),
         FilledButton(
           style: mileagePrimaryButtonStyle(),
-          onPressed: () async {
-            if (!formKey.currentState!.validate()) return;
-            final link = linkController.text.trim();
-            final price = int.parse(priceController.text.trim());
-            Navigator.pop(ctx);
-            await onAdd(link, price);
-          },
+          onPressed: _submit,
           child: const Text('장바구니에 담기'),
         ),
       ],
-    ),
-  );
-
-  linkController.dispose();
-  priceController.dispose();
+    );
+  }
 }

@@ -30,11 +30,11 @@ abstract final class BoardUi {
                 ? AppColors.primary.withValues(alpha: 0.35)
                 : AppColors.border,
       ),
-      boxShadow: const [
+      boxShadow: [
         BoxShadow(
           color: AppColors.shadow,
           blurRadius: 12,
-          offset: Offset(0, 4),
+          offset: const Offset(0, 4),
         ),
       ],
     );
@@ -82,7 +82,7 @@ class BoardPageHeader extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
@@ -91,7 +91,7 @@ class BoardPageHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
@@ -128,7 +128,7 @@ class BoardTabBar extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             border: Border(bottom: BorderSide(color: AppColors.border)),
           ),

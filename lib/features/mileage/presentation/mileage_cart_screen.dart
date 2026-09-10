@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/mileage_constants.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/models/mileage_models.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
 import '../theme/mileage_theme.dart';
@@ -19,12 +22,40 @@ class MileageCartScreen extends ConsumerStatefulWidget {
 }
 
 class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
+  static const _contentMaxWidth = AppLayout.narrow;
+
   bool _submitting = false;
+
+  String _errorMessage(Object e) {
+    if (e is FirebaseFunctionsException) {
+      final msg = e.message?.trim();
+      if (msg != null && msg.isNotEmpty) return msg;
+      return '요청에 실패했습니다. (${e.code})';
+    }
+    return '$e';
+  }
 
   Future<void> _submit() async {
     final cohortId = ref.read(effectiveCohortIdProvider);
     final user = ref.read(currentUserSyncProvider);
     if (cohortId == null || user == null) return;
+
+    final cart = ref.read(mileageCartProvider).value;
+    if (cart == null || cart.isEmpty) return;
+
+    if (user.mileageBalance < cart.totalAmount) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '마일리지 잔액이 부족합니다. '
+            '(잔액: ${formatMileageM(user.mileageBalance)}, '
+            '필요: ${formatMileageM(cart.totalAmount)})',
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -42,7 +73,7 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('요청 실패: $e')),
+          SnackBar(content: Text(_errorMessage(e))),
         );
       }
     } finally {
@@ -69,9 +100,13 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
   @override
   Widget build(BuildContext context) {
     final cartAsync = ref.watch(mileageCartProvider);
+    final balance =
+        ref.watch(currentUserSyncProvider)?.mileageBalance ?? 0;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.background,
         title: const Text('장바구니'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -84,121 +119,307 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
         data: (cart) {
           if (cart.isEmpty) {
             return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('장바구니가 비어 있습니다.'),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    style: mileagePrimaryButtonStyle(),
-                    onPressed: () => context.pop(),
-                    child: const Text('교환소로 돌아가기'),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 40,
+                        color: AppColors.textHint.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '장바구니가 비어 있습니다.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      FilledButton(
+                        style: mileagePrimaryButtonStyle(),
+                        onPressed: () => context.pop(),
+                        child: const Text('교환소로 돌아가기'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           }
 
-          return Column(
-            children: [
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: cart.items.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final item = cart.items[i];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        item.productName,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+          final insufficient = balance < cart.totalAmount;
+
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                      itemCount: cart.items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) => _CartItemRow(
+                        item: cart.items[i],
+                        onRemove: () => _removeItem(i),
                       ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${MileageCategories.labelOf(item.category)} · '
-                            '수량 ${item.quantity}',
-                          ),
-                          if (item.purchaseLink != null &&
-                              item.purchaseLink!.isNotEmpty)
-                            Text(
-                              item.purchaseLink!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            formatMileageM(item.subtotal),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: AppColors.error),
-                            onPressed: () => _removeItem(i),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: AppColors.border)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          '합계',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          formatMileageM(cart.totalAmount),
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            color: MileageColors.primary,
-                          ),
-                        ),
-                      ],
                     ),
-                    const SizedBox(height: 10),
-                    FilledButton(
-                      style: mileagePrimaryButtonStyle(minHeight: 40),
-                      onPressed: _submitting ? null : _submit,
-                      child: _submitting
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('구매 요청하기'),
-                    ),
-                  ],
-                ),
+                  ),
+                  _CartCheckoutBar(
+                    balance: balance,
+                    total: cart.totalAmount,
+                    insufficient: insufficient,
+                    submitting: _submitting,
+                    onSubmit: _submit,
+                  ),
+                ],
               ),
-            ],
+            ),
           );
         },
       ),
+    );
+  }
+}
+
+class _CartItemRow extends StatelessWidget {
+  const _CartItemRow({
+    required this.item,
+    required this.onRemove,
+  });
+
+  final MileageCartItemModel item;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final tagColor = MileageColors.categoryTagColor(item.category);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.productName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tagColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        MileageCategories.labelOf(item.category),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: tagColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '수량 ${item.quantity}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                if (item.purchaseLink != null &&
+                    item.purchaseLink!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    item.purchaseLink!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textHint,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 6, top: 2),
+                child: Text(
+                  formatMileageM(item.subtotal),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: '삭제',
+                onPressed: onRemove,
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: AppColors.error,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CartCheckoutBar extends StatelessWidget {
+  const _CartCheckoutBar({
+    required this.balance,
+    required this.total,
+    required this.insufficient,
+    required this.submitting,
+    required this.onSubmit,
+  });
+
+  final int balance;
+  final int total;
+  final bool insufficient;
+  final bool submitting;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SummaryLine(
+            label: '내 잔액',
+            value: formatMileageM(balance),
+          ),
+          const SizedBox(height: 6),
+          _SummaryLine(
+            label: '합계',
+            value: formatMileageM(total),
+            emphasize: true,
+          ),
+          if (insufficient) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '잔액이 ${formatMileageM(total - balance)} 부족합니다.',
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          FilledButton(
+            style: mileagePrimaryButtonStyle(minHeight: 42),
+            onPressed: (submitting || insufficient) ? null : onSubmit,
+            child: submitting
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(insufficient ? '잔액 부족' : '구매 요청하기'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryLine extends StatelessWidget {
+  const _SummaryLine({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: emphasize ? 14 : 13,
+            fontWeight: emphasize ? FontWeight.w700 : FontWeight.w500,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: emphasize ? 17 : 13,
+            fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
+            color: emphasize ? MileageColors.primary : AppColors.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

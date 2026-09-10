@@ -228,7 +228,7 @@ class _InstructorCurriculumScreenState
                         Text(
                           '${sheet.fileName} · ${sheet.rowCount}행'
                           '${sheet.uploadedAt != null ? ' · ${sheet.uploadedAt}' : ''}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppColors.textSecondary,
                             fontSize: 12,
                           ),
@@ -264,7 +264,7 @@ class _InstructorCurriculumScreenState
                           margin: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
-                            side: const BorderSide(color: AppColors.border),
+                            side: BorderSide(color: AppColors.border),
                           ),
                           child: Theme(
                             data: Theme.of(context).copyWith(
@@ -299,7 +299,7 @@ class _InstructorCurriculumScreenState
                                   alignment: Alignment.centerLeft,
                                   child: Text(
                                     r.detailOrTopic,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: AppColors.textSecondary,
                                     ),

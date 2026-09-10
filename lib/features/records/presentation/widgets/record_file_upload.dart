@@ -30,7 +30,7 @@ class RecordFileUpload extends StatelessWidget {
           label: Text(multiple ? '파일 추가' : '파일 선택'),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            side: const BorderSide(color: AppColors.border),
+            side: BorderSide(color: AppColors.border),
           ),
         ),
         if (files.isEmpty)
@@ -38,7 +38,7 @@ class RecordFileUpload extends StatelessWidget {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               hint,
-              style: const TextStyle(fontSize: 12, color: AppColors.textHint),
+              style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
           ),
         ...List.generate(files.length, (i) {

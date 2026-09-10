@@ -64,7 +64,7 @@ class _MissionGuidancePanelState extends ConsumerState<MissionGuidancePanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     '기록실에 제출하고 승인되면 규칙에 따라 자동 적립됩니다.',
                     style: TextStyle(
                       fontSize: 12,
@@ -126,7 +126,7 @@ class _MissionTile extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               item.progressLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
               ),

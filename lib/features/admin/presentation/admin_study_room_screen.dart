@@ -159,7 +159,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 48),
                           child: Column(
                             children: [
-                              const Text(
+                              Text(
                                 '등록된 패키지가 없습니다',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,

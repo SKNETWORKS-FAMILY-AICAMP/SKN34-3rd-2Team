@@ -57,7 +57,7 @@ class StudentNoticeRow extends StatelessWidget {
                   notice.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
@@ -67,12 +67,12 @@ class StudentNoticeRow extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 meta,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textHint,
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
                 color: AppColors.textHint,
@@ -141,7 +141,7 @@ class StudentNoticeRowList extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color: AppColors.shadow,
             blurRadius: 16,
@@ -179,7 +179,7 @@ class StudentNoticeTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Ink(
           decoration: BoxDecoration(
-            color: isFavorite ? const Color(0xFFFFFBEB) : Colors.white,
+            color: isFavorite ? const Color(0xFFFFFBEB) : AppColors.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isFavorite ? BoardUi.favoriteBorder : AppColors.border,
@@ -211,7 +211,7 @@ class StudentNoticeTile extends StatelessWidget {
                               notice.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
                                 height: 1.3,
@@ -233,7 +233,7 @@ class StudentNoticeTile extends StatelessWidget {
                         notice.content,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           height: 1.5,
                           color: AppColors.textSecondary,
@@ -251,7 +251,7 @@ class StudentNoticeTile extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             noticeTimeAgo(notice.createdAt),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               color: AppColors.textHint,
                             ),
@@ -263,7 +263,7 @@ class StudentNoticeTile extends StatelessWidget {
                 ),
                 if (showChevron) ...[
                   const SizedBox(width: 4),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 2),
                     child: Icon(
                       Icons.chevron_right_rounded,
@@ -413,7 +413,7 @@ class NoticeCard extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             _metaLine(notice),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               color: AppColors.textHint,
                             ),
@@ -452,7 +452,7 @@ class NoticeDetailSheet extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -528,7 +528,7 @@ class NoticeDetailSheet extends StatelessWidget {
               Text(
                 '${notice.authorName}'
                 '${notice.createdAt != null ? ' · ${AppDateUtils.formatDateTime(notice.createdAt!)}' : ''}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
                 ),
@@ -538,7 +538,7 @@ class NoticeDetailSheet extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 notice.content,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   height: 1.8,
                   color: AppColors.textPrimary,

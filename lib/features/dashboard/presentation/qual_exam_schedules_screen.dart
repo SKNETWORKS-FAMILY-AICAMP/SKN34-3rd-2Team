@@ -75,14 +75,14 @@ class _QualExamSchedulesScreenState
                       const SizedBox(height: 10),
                       Text(
                         '${result.year}년 · 다가오는 ${filtered.length}건',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 16),
                       if (filtered.isEmpty)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.symmetric(vertical: 48),
                           child: Center(
                             child: Text(
@@ -103,7 +103,7 @@ class _QualExamSchedulesScreenState
                                   padding: const EdgeInsets.only(bottom: 10),
                                   child: Text(
                                     month,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
                                       color: AppColors.textSecondary,
@@ -130,7 +130,7 @@ class _QualExamSchedulesScreenState
                         Text(
                           '출처: 한국산업인력공단 공공데이터 · '
                           '갱신 ${AppDateUtils.formatDateTime(result.syncedAt!)}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             color: AppColors.textHint,
                           ),

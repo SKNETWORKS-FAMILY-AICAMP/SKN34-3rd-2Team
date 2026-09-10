@@ -957,6 +957,7 @@ class DemoLmsRepository {
     required String cohortId,
     required String dateKey,
     required List<UserModel> students,
+    required DemoAttendanceSeed seed,
   }) async {
     var written = 0;
     for (final student in students) {
@@ -968,23 +969,44 @@ class DemoLmsRepository {
 
       final hash = student.uid.hashCode.abs() + dateKey.hashCode.abs();
       final missing = hash % 17 == 0;
+      final prev = i >= 0 ? _attendances[i] : null;
       final inMin = 8 * 60 + 48 + (hash % 18);
       final outMin = 17 * 60 + 50 + (hash % 20);
+      final inTime =
+          '${(inMin ~/ 60).toString().padLeft(2, '0')}:${(inMin % 60).toString().padLeft(2, '0')}';
+      final outTime =
+          '${(outMin ~/ 60).toString().padLeft(2, '0')}:${(outMin % 60).toString().padLeft(2, '0')}';
+
+      String? checkInTime = prev?.checkInTime;
+      String? checkOutTime = prev?.checkOutTime;
+      String? status = prev?.status;
+
+      if (seed == DemoAttendanceSeed.checkIn) {
+        checkInTime = missing ? null : inTime;
+        status = missing
+            ? AttendanceStatus.absent
+            : AttendanceStatus.present;
+      } else {
+        if (missing) continue;
+        checkOutTime = outTime;
+        status ??= AttendanceStatus.present;
+      }
+
       final model = AttendanceModel(
         id: '${student.uid}_$dateKey',
         userId: student.uid,
         type: 'status',
         dateKey: dateKey,
-        status: missing ? AttendanceStatus.absent : AttendanceStatus.present,
+        status: status,
         userDisplayName: student.displayName,
         timestamp: DateTime.now(),
-        checkInTime: missing
-            ? null
-            : '${(inMin ~/ 60).toString().padLeft(2, '0')}:${(inMin % 60).toString().padLeft(2, '0')}',
-        checkOutTime: missing
-            ? null
-            : '${(outMin ~/ 60).toString().padLeft(2, '0')}:${(outMin % 60).toString().padLeft(2, '0')}',
+        checkInTime: checkInTime,
+        checkOutTime: checkOutTime,
         statusSource: 'demo',
+        formAttendanceType: prev?.formAttendanceType,
+        officialLeaveUsed: prev?.officialLeaveUsed,
+        officialLeaveType: prev?.officialLeaveType,
+        officialLeaveOther: prev?.officialLeaveOther,
       );
       if (i >= 0) {
         _attendances[i] = model;

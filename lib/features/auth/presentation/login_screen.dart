@@ -165,7 +165,7 @@ class _BrandMark extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           AppConstants.appName,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.2,
@@ -222,7 +222,7 @@ class _LoginCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Log in',
               style: TextStyle(
                 fontSize: 28,
@@ -234,13 +234,13 @@ class _LoginCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Welcome to ${AppConstants.appName}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               '사용자 아이디',
               style: TextStyle(
                 fontSize: 12,
@@ -259,7 +259,7 @@ class _LoginCard extends StatelessWidget {
               validator: Validators.email,
             ),
             const SizedBox(height: 18),
-            const Text(
+            Text(
               '비밀번호',
               style: TextStyle(
                 fontSize: 12,
@@ -363,7 +363,7 @@ class _LoginCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '계정은 관리자가 발급합니다.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textHint, fontSize: 12),
@@ -416,7 +416,7 @@ class _QuickLoginRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   email,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),

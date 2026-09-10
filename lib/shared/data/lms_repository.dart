@@ -744,6 +744,7 @@ class LmsRepository {
     required String cohortId,
     required String dateKey,
     required List<UserModel> students,
+    required DemoAttendanceSeed seed,
   }) async {
     if (students.isEmpty) return 0;
     final col = cohortSub(cohortId, 'attendances');
@@ -763,26 +764,33 @@ class LmsRepository {
 
       final hash = student.uid.hashCode.abs() + dateKey.hashCode.abs();
       final missing = hash % 17 == 0;
-      final checkInTime =
-          missing ? null : _formatHm(8 * 60 + 48 + (hash % 18));
-      final checkOutTime =
-          missing ? null : _formatHm(17 * 60 + 50 + (hash % 20));
-
-      writes.add({
+      // merge 시 상대 필드를 null로 덮지 않도록, 채우는 쪽만 맵에 넣는다.
+      final data = <String, dynamic>{
         'userId': student.uid,
         'userDisplayName': student.displayName,
         'dateKey': dateKey,
         'type': 'status',
-        'status': missing
-            ? AttendanceStatus.absent
-            : AttendanceStatus.present,
         'statusSource': 'demo',
-        'checkInTime': checkInTime,
-        'checkOutTime': checkOutTime,
-        'checkInSource': 'demo',
         'timestamp': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (seed == DemoAttendanceSeed.checkIn) {
+        data['checkInTime'] =
+            missing ? null : _formatHm(8 * 60 + 48 + (hash % 18));
+        data['checkInSource'] = 'demo';
+        data['status'] = missing
+            ? AttendanceStatus.absent
+            : AttendanceStatus.present;
+      } else {
+        if (missing) continue;
+        data['checkOutTime'] = _formatHm(17 * 60 + 50 + (hash % 20));
+        if (prev?['status'] == null) {
+          data['status'] = AttendanceStatus.present;
+        }
+      }
+
+      writes.add(data);
     }
 
     var written = 0;

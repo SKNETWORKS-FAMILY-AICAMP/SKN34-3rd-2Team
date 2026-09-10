@@ -129,7 +129,7 @@ class AssessmentCard extends StatelessWidget {
                                     ),
                                     child: Text(
                                       t,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 10,
                                         color: AppColors.textSecondary,
                                       ),
@@ -143,7 +143,7 @@ class AssessmentCard extends StatelessWidget {
                         assessment.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -156,7 +156,7 @@ class AssessmentCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               '${assessment.questionCount}문제 · ${assessment.maxScore}점',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
                               ),
@@ -168,7 +168,7 @@ class AssessmentCard extends StatelessWidget {
                                 padding: const EdgeInsets.only(right: 6),
                                 child: Text(
                                   '$score점',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.textPrimary,

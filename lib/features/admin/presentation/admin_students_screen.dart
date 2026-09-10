@@ -136,7 +136,7 @@ class _StudentList extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     emptyMessage,
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: AppColors.textSecondary),
                   ),
                   if (showCreateButton) ...[
                     const SizedBox(height: 16),
@@ -200,7 +200,7 @@ class _StudentList extends StatelessWidget {
                     if (s.createdAt != null)
                       Text(
                         '등록: ${AppDateUtils.formatDisplay(s.createdAt!)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondary,
                         ),

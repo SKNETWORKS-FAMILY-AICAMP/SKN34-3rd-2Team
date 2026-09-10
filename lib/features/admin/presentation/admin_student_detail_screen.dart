@@ -213,7 +213,7 @@ class _AdminStudentDetailScreenState
                             ),
                             Text(
                               intake.cohortName,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 color: AppColors.textSecondary,
                               ),
@@ -321,7 +321,7 @@ class _AdminStudentDetailScreenState
                   if (intake.createdAt != null)
                     Text(
                       '등록일: ${AppDateUtils.formatDisplay(intake.createdAt!)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
@@ -450,7 +450,7 @@ class _CopyRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary,
                 ),

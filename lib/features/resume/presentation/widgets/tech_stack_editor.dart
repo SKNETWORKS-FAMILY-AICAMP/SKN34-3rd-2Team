@@ -74,7 +74,7 @@ class _TechStackEditorState extends State<TechStackEditor> {
 
     if (widget.readOnly) {
       if (filled.isEmpty) {
-        return const Text('미작성', style: TextStyle(color: AppColors.textHint));
+        return Text('미작성', style: TextStyle(color: AppColors.textHint));
       }
       return Wrap(
         spacing: 8,
@@ -103,7 +103,7 @@ class _TechStackEditorState extends State<TechStackEditor> {
         const _Label('선택한 기술'),
         const SizedBox(height: 6),
         if (filled.isEmpty)
-          const Text(
+          Text(
             '아래에서 태그를 고르거나 직접 입력해 추가하세요.',
             style: TextStyle(fontSize: 13, color: AppColors.textHint),
           )
@@ -189,7 +189,7 @@ class _TechStackEditorState extends State<TechStackEditor> {
                 },
               ),
             if (suggestions.isEmpty && !canAddCustom)
-              const Text(
+              Text(
                 '검색 결과가 없습니다.',
                 style: TextStyle(fontSize: 13, color: AppColors.textHint),
               ),
@@ -209,7 +209,7 @@ class _TechStackEditorState extends State<TechStackEditor> {
                 const SizedBox(width: 4),
                 Text(
                   '${page + 1} / $pageCount 페이지 · 전체 ${matches.length}개',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+                  style: TextStyle(fontSize: 11, color: AppColors.textHint),
                 ),
                 const SizedBox(width: 4),
                 TextButton.icon(
@@ -305,7 +305,7 @@ class _LevelPicker extends StatelessWidget {
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 '(선택) 같은 단계를 다시 누르면 지워집니다',
                 style: TextStyle(fontSize: 11, color: AppColors.textHint),
               ),
@@ -439,7 +439,7 @@ class _Label extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
     );
   }
 }

@@ -29,7 +29,7 @@ class StudyRoomPageHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 '학습실',
                 style: TextStyle(
                   fontSize: 22,
@@ -40,7 +40,7 @@ class StudyRoomPageHeader extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   color: AppColors.textSecondary,
                 ),
@@ -84,7 +84,7 @@ class StudyRoomPageHeader extends StatelessWidget {
                     ),
                     Text(
                       cohortName ?? user.cohortName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
                       ),
@@ -119,17 +119,17 @@ class StudyRoomSearchBar extends StatelessWidget {
       style: const TextStyle(fontSize: 13),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(fontSize: 13, color: AppColors.textHint),
+        hintStyle: TextStyle(fontSize: 13, color: AppColors.textHint),
         prefixIcon: const Icon(Icons.search, size: 20),
         filled: true,
         fillColor: AppColors.surfaceVariant,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         contentPadding: const EdgeInsets.symmetric(vertical: 0),
       ),

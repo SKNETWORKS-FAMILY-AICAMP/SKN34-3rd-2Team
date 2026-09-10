@@ -143,7 +143,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                 if (s.weekLabel != null) _row('주차', s.weekLabel!),
                 if (s.link != null && s.link!.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '링크',
                     style: TextStyle(
                       fontSize: 12,
@@ -223,7 +223,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
-                                          const Icon(
+                                          Icon(
                                             Icons.broken_image_outlined,
                                             color: AppColors.textHint,
                                           ),
@@ -264,7 +264,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                                         ),
                                       ),
                                       if (!url.startsWith('demo://'))
-                                        const Icon(
+                                        Icon(
                                           Icons.open_in_new,
                                           size: 16,
                                           color: AppColors.textHint,
@@ -282,7 +282,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                 if (s.fileUrls.isEmpty &&
                     (s.link == null || s.link!.isEmpty) &&
                     s.type != RecordTypes.blog)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 8),
                     child: Text(
                       '첨부된 증빙이 없습니다.',
@@ -348,7 +348,7 @@ class _SubmissionDetailBody extends StatelessWidget {
             width: 78,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textSecondary,

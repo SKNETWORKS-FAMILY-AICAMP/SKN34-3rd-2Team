@@ -68,7 +68,7 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Text(
                   '${a.statusLabel} · ${a.questionCount}문제 · ${a.maxScore}점 · ${a.periodLabel}',
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: AppColors.textSecondary),
                 ),
               );
             },
