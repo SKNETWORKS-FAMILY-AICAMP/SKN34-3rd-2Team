@@ -122,6 +122,36 @@ def _dl_pairs(section: Any) -> dict[str, str]:
     return pairs
 
 
+CLOSED_MARKERS = (
+    "채용정보는 마감",     # 본 채용정보는 마감 되었습니다
+    "마감되었습니다",
+    "마감 되었습니다",
+    "마감되어 작성할 수 없습니다",
+    # 페이지 자체가 사라진 경우. 예전부터 있던 것을 남긴다.
+    "삭제된 공고",
+    "존재하지 않는 공고",
+)
+
+
+def _closed_in_soup(soup: BeautifulSoup) -> bool:
+    """마감 문구는 **원본 HTML이 아니라 뽑아낸 글에서** 찾는다.
+
+    화면의 "본 채용정보는 마감되었습니다."는 실제 HTML에서 `채용정보는 <span>마감</span>
+    되었습니다` 처럼 태그로 끊겨 있다. 원본 문자열에서 찾으면 글자가 이어지지 않아
+    하나도 걸리지 않는다. 실제로 마감된 공고 4건에서 0건이 걸렸다.
+    """
+    text = soup.get_text(" ", strip=True)
+    if any(marker in text for marker in CLOSED_MARKERS):
+        return True
+    # 본문 섹션(.jv_cont)이 하나도 없으면 공고 페이지가 아니다.
+    return not soup.select(".jv_cont")
+
+
+def is_closed_page(html: str) -> bool:
+    """이미 뽑아 둔 soup이 없을 때 쓰는 통로. 링크 확인이 이걸 부른다."""
+    return _closed_in_soup(BeautifulSoup(html, "html.parser"))
+
+
 def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
     sections: dict[str, dict[str, str]] = {}
@@ -180,6 +210,8 @@ def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
         "tags": tags,
         # 본문이 이미지에만 있으면 요구역량을 텍스트로 확보하지 못한 상태다.
         "needs_human_review": bool(image_records) and not has_text_body,
+        # 이미 만든 soup으로 판정한다. 요청도 파싱도 더 하지 않는다.
+        "closed": _closed_in_soup(soup),
         "parser_version": "saramin-detail-poc-0.3.0",
     }
 
@@ -285,7 +317,7 @@ def crawl_details(
     max_minutes: float | None = None,
 ) -> dict[str, int]:
     """대상을 순서대로 받아 `output`(.jsonl)에 한 건씩 붙인다."""
-    counts = {"saved": 0, "failed": 0, "skipped": 0, "image_body": 0}
+    counts = {"saved": 0, "failed": 0, "skipped": 0, "image_body": 0, "closed": 0}
     if not targets:
         return counts
     # 사람처럼 목록 페이지를 먼저 열어 쿠키를 받은 세션으로 시작한다.
@@ -316,6 +348,16 @@ def crawl_details(
             counts["failed"] += 1
             print(f"  [{index}/{total}] 실패 {rec_idx}: {error}")
             polite_delay(min_delay, max_delay)
+            continue
+
+        # 마감된 공고는 저장하지 않는다. 본문이 비어 있어 요건을 못 뽑고,
+        # 추천 후보도 되지 못한 채 저장소만 차지한다. 이미 받아 온 페이지로
+        # 판정하므로 요청이 더 들지 않는다.
+        if detail.get("closed"):
+            counts["closed"] += 1
+            print(f"  [{index}/{total}] 마감 — {rec_idx}")
+            if index < total:
+                polite_delay(min_delay, max_delay)
             continue
 
         # 목록에서 이미 받은 값을 합쳐 하나의 레코드로 만든다.
