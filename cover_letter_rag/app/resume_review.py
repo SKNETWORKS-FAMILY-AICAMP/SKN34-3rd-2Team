@@ -15,6 +15,7 @@ from app.models import (
     FirestoreResumeReviewRequest,
     FirestoreResumeReviewResponse,
     ResumeReviewGeneration,
+    SentenceReview,
 )
 from app.prompts import RESUME_REVIEW_PROMPT
 from app.service import NUMBER_PATTERN
@@ -270,6 +271,24 @@ def _duplicate_content_tokens(text: str) -> set[str]:
     return tokens
 
 
+def _answer_reflection_anchors(text: str) -> tuple[set[str], set[str]]:
+    """Return stable facts and tolerant Korean content tokens from an answer."""
+    stable = comparison_terms(text) | set(NUMBER_PATTERN.findall(text))
+    return stable, _duplicate_content_tokens(text)
+
+
+def _answer_is_reflected(original: str, revision: str, answer: str) -> bool:
+    """Allow an answer-backed paraphrase without requiring a verbatim quote."""
+    answer_stable, answer_content = _answer_reflection_anchors(answer)
+    original_stable, original_content = _answer_reflection_anchors(original)
+    revision_stable, revision_content = _answer_reflection_anchors(revision)
+    new_stable = answer_stable - original_stable
+    new_content = answer_content - original_content
+    if new_stable & revision_stable:
+        return True
+    return len(new_content & revision_content) >= 2
+
+
 def _paragraphs(text: str) -> list[str]:
     return [part.strip() for part in re.split(r'\n\s*\n', text) if len(part.strip()) >= 40]
 
@@ -318,45 +337,27 @@ def require_answer_reflection(generation, answers):
     if not answers:
         return warnings
 
-    generic_korean = {
-        '저는', '제가', '직접', '담당', '담당한', '기능', '구현', '구현한',
-        '구현했습니다', '개발', '개발한', '개발했습니다', '설계', '설계한',
-        '진행', '진행한', '했습니다', '프로젝트', '역할', '범위', '팀원', '팀원의',
-    }
     by_path = {}
     for answer in answers:
-        by_path.setdefault(answer.field_path, []).append(answer.answer)
+        by_path.setdefault(answer.field_path, []).append(answer)
     for item in generation.sentence_reviews:
         revision = (item.suggested_revision or '').strip()
         provided = by_path.get(item.field_path, [])
         if not revision or not provided:
             continue
-        answer_text = ' '.join(provided)
-        answer_tokens = comparison_terms(answer_text) | set(NUMBER_PATTERN.findall(answer_text))
-        answer_tokens |= set(re.findall(r'[가-힣]{2,}', answer_text)) - generic_korean
-        original_tokens = (
-            comparison_terms(item.original_quote)
-            | set(NUMBER_PATTERN.findall(item.original_quote))
-            | set(re.findall(r'[가-힣]{2,}', item.original_quote))
-        )
-        new_tokens = answer_tokens - original_tokens
-        revision_tokens = comparison_terms(revision) | set(NUMBER_PATTERN.findall(revision))
-        revision_tokens |= set(re.findall(r'[가-힣]{2,}', revision)) - generic_korean
-        cites_answer = any(
-            source.startswith('answer:') for source in item.evidence_sources
+        reflects_answer = any(
+            _answer_is_reflected(item.original_quote, revision, answer.answer)
+            for answer in provided
         )
         role_boundary_question = any(
             re.search(r'(팀원|담당\s*범위|역할\s*구분)', answer.question)
-            for answer in answers
-            if answer.field_path == item.field_path
+            for answer in provided
         )
         exposes_team_detail = bool(
             role_boundary_question
             and re.search(r'(팀원은|팀원이|팀원의\s*담당|다른\s*팀원)', revision)
         )
-        if exposes_team_detail or (
-            new_tokens and (not cites_answer or not (new_tokens & revision_tokens))
-        ):
+        if exposes_team_detail or not reflects_answer:
             item.suggested_revision = None
             item.status = 'unchanged'
             item.edit_type = 'none'
@@ -364,6 +365,96 @@ def require_answer_reflection(generation, answers):
             issue = 'team_scope_exposed' if exposes_team_detail else 'answer_not_reflected'
             item.validation_issues = [*item.validation_issues, issue]
             warnings.append(f'답변 근거를 반영하지 않은 수정안을 제외했습니다: {item.field_path}')
+    return warnings
+
+
+def _merge_original_with_confirmed_answer(original: str, confirmed: str) -> str:
+    """Keep only original sentences whose facts are not already in the answer."""
+    confirmed = re.sub(r'[ \t]+', ' ', confirmed).strip()
+    answer_stable, answer_content = _answer_reflection_anchors(confirmed)
+    original_stable, original_content = _answer_reflection_anchors(original)
+    overall_overlap = (
+        len(original_content & answer_content) / len(original_content)
+        if original_content
+        else 0
+    )
+    # A detailed answer that covers most of the original paragraph is already
+    # the integrated replacement. Keeping old sentences would merely repeat it.
+    stable_overlap = original_stable & answer_stable
+    if overall_overlap >= 0.3 and (
+        not original_stable or stable_overlap or len(answer_content) >= 12
+    ):
+        return confirmed
+    preserved = []
+    for sentence in re.split(r'(?<=[.!?])\s+', original.strip()):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        sentence_stable, sentence_content = _answer_reflection_anchors(sentence)
+        stable_covered = bool(sentence_stable) and sentence_stable <= answer_stable
+        shared = sentence_content & answer_content
+        content_covered = bool(sentence_content) and (
+            len(shared) / len(sentence_content) >= 0.45
+        )
+        if not stable_covered and not content_covered:
+            preserved.append(sentence)
+    parts = [*preserved, confirmed]
+    return ' '.join(dict.fromkeys(part for part in parts if part))
+
+
+def add_substantive_answer_fallback(generation, fields, answers):
+    """Add a safe proposal if the model drops a substantive confirmed answer."""
+    warnings = []
+    negative_answer = re.compile(
+        r'(모르겠|기억(?:이\s*)?나지|없습니다|없어요|하지\s*않았|못했|해본\s*적\s*없)'
+    )
+    for answer_index, answer in enumerate(answers):
+        path = answer.field_path
+        original = fields.get(path, '').strip()
+        confirmed = answer.answer.strip()
+        already_present = bool(original) and (
+            re.sub(r'\s+', '', confirmed) in re.sub(r'\s+', '', original)
+        )
+        if already_present:
+            warnings.append(f'answer_already_present:{path}')
+            continue
+        if (
+            not original
+            or len(confirmed) < 80
+            or negative_answer.search(confirmed)
+            or any(
+                item.field_path == path and item.suggested_revision
+                for item in generation.sentence_reviews
+            )
+        ):
+            continue
+        stable, content = _answer_reflection_anchors(confirmed)
+        has_action = bool(
+            re.search(
+                r'(구현|개발|적용|측정|분석|확인|운영|설계|수정|개선|구축|처리|줄였|단축)',
+                confirmed,
+            )
+        )
+        if not has_action or (not stable and len(content) < 6):
+            continue
+        revision = _merge_original_with_confirmed_answer(original, confirmed)
+        if re.sub(r'\s+', '', revision) == re.sub(r'\s+', '', original):
+            warnings.append(f'answer_already_present:{path}')
+            continue
+        generation.sentence_reviews.append(
+            SentenceReview(
+                field_path=path,
+                original_quote=original,
+                reason='사용자가 확인한 직접 행동과 결과를 기존 내용에 보완했습니다.',
+                suggested_revision=revision,
+                evidence_quotes=[original, confirmed],
+                status='improved',
+                edit_type='content',
+                evidence_sources=[path, f'answer:{answer_index}'],
+                fact_anchors=_fact_anchors(original),
+                change_rate=_change_rate(original, revision),
+            )
+        )
     return warnings
 
 
@@ -390,14 +481,21 @@ def ground_sentences(fields, answers, generation):
             continue
         from app.review_workflow import group
         source_map = {p: v for p, v in fields.items() if group(p) == group(item.field_path)}
-        source_map.update({f'answer:{i}': a.answer for i, a in enumerate(answers) if group(a.field_path) == group(item.field_path)})
+        answer_source_map = {
+            f'answer:{i}': a.answer
+            for i, a in enumerate(answers)
+            if group(a.field_path) == group(item.field_path)
+        }
+        source_map.update(answer_source_map)
         sources = list(source_map.values())
         quotes = list(dict.fromkeys(q for q in item.evidence_quotes if q.strip() and any(q in s for s in sources)))
         # The verified original is always evidence for a minimal language edit.
         if item.original_quote not in quotes:
             quotes.insert(0, item.original_quote)
         revision = item.suggested_revision or ""
-        evidence = "\n".join(quotes)
+        # Confirmed answers are grounding even when the model paraphrases them or
+        # forgets to repeat the answer verbatim in evidence_quotes.
+        evidence = "\n".join([*quotes, *answer_source_map.values()])
         new_numbers = set(NUMBER_PATTERN.findall(revision)) - set(NUMBER_PATTERN.findall(evidence))
         new_terms = comparison_terms(revision) - comparison_terms(evidence)
         original_terms = comparison_terms(item.original_quote)
@@ -440,6 +538,13 @@ def ground_sentences(fields, answers, generation):
                 warnings.append(f"문장 근거 검증 보류: {item.field_path}")
         item.evidence_quotes = quotes
         item.evidence_sources = [p for p, value in source_map.items() if any(q in value for q in quotes)]
+        if revision.strip():
+            item.evidence_sources.extend(
+                source_path
+                for source_path, answer_text in answer_source_map.items()
+                if _answer_is_reflected(item.original_quote, revision, answer_text)
+                and source_path not in item.evidence_sources
+            )
         if item.suggested_revision is None:
             item.status = 'needs_confirmation' if item.confirmation_question else 'unchanged'
             if item.status == 'unchanged':

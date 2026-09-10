@@ -5,8 +5,9 @@ import re
 import time
 
 from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion, SentenceReview
+from app.technology import technology_mentions
 
-PROMPT_VERSION = 'resume-v7-focused-followup'
+PROMPT_VERSION = 'resume-v8-answer-fallback'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 
 
@@ -403,20 +404,47 @@ def normalize_questions(generation, fields, answers, review_id):
     generation.confirmation_questions = [q.question for q in generation.questions[:3]]
 
 
-def add_short_self_introduction_questions(generation, fields):
-    """Guarantee follow-up for unusually thin self-introduction answers.
+def carry_forward_unanswered_questions(generation, previous, answers):
+    """Reissue queued questions on the latest review snapshot.
 
-    A model can return one strong project question and miss several short
+    The chat can continue through questions returned by the first review while
+    each accepted edit rebases the resume.  Reissuing unanswered questions
+    gives them a new question_id owned by the latest review, so the next
+    answer is verifiable instead of being rejected as stale.
+    """
+    if not previous:
+        return
+    answered_ids = {answer.question_id for answer in answers}
+    known = {
+        (question.field_path, question.topic, re.sub(r'\W', '', question.question))
+        for question in generation.questions
+    }
+    for raw_question in previous.get('questions', []):
+        if raw_question.get('question_id') in answered_ids:
+            continue
+        question = ReviewQuestion.model_validate(raw_question)
+        key = (question.field_path, question.topic, re.sub(r'\W', '', question.question))
+        if key in known:
+            continue
+        generation.questions.append(question.model_copy(update={'question_id': ''}))
+        known.add(key)
+
+
+def add_thin_self_introduction_questions(generation, fields):
+    """Guarantee follow-up for self-introduction answers with too little detail.
+
+    A model can return one strong project question and miss several thin
     자기소개서 문항.  Those fields must not silently turn the whole review into
     "complete".  We add grounded, fact-seeking questions only for non-empty
-    short bodies that the model did not already target.
+    bodies that the model did not already target.  A self-introduction answer
+    needs more room than a project bullet to explain its context and evidence.
     """
     existing_paths = {question.field_path for question in generation.questions}
     followups = []
     for path, body in fields.items():
         if not re.fullmatch(r'selfIntroduction\.[^.]+\.body', path):
             continue
-        if len(re.sub(r'\s+', '', body)) >= 180 or path in existing_paths:
+        if len(re.sub(r'\s+', '', body)) >= 280 or path in existing_paths:
             continue
         section = path.split('.')[1]
         label = {
@@ -434,13 +462,55 @@ def add_short_self_introduction_questions(generation, fields):
                 f'{label} 문항에서 본인이 직접 한 행동이나 경험을 조금 더 '
                 '구체적으로 알려 주세요. 결과·배운 점이 있다면 함께 적어 주세요.'
             ),
-            reason='문항 내용이 짧아 경험의 근거와 직무 연관성을 확인하기 어렵습니다.',
+            reason='문항 내용이 충분하지 않아 경험의 근거와 직무 연관성을 확인하기 어렵습니다.',
             priority=1,
         ))
         existing_paths.add(path)
     # Preserve these coverage questions when the model already used its full
     # question budget for another section.
     generation.questions = followups + generation.questions
+
+
+def add_missing_job_technology_question(generation, fields, job_text):
+    """Turn a selected posting's missing technical evidence into one question.
+
+    Job text is never evidence that the applicant has a skill.  This only asks
+    whether an omitted, real experience exists, before any tailored revision
+    may use it.
+    """
+    job_terms = technology_mentions(job_text or '')
+    resume_terms = technology_mentions('\n'.join(fields.values()))
+    missing_terms = sorted(job_terms - resume_terms, key=str.casefold)
+    if not missing_terms:
+        return
+    if any(question.reason.startswith('공고에 언급된 기술') for question in generation.questions):
+        return
+    target_path = next(
+        (
+            path for path in fields
+            if re.fullmatch(r'projects\[\d+\]\.description', path)
+        ),
+        next(
+            (
+                path for path in fields
+                if path == 'selfIntroduction.motivation.body'
+            ),
+            next(iter(fields), None),
+        ),
+    )
+    if target_path is None:
+        return
+    named_terms = ', '.join(missing_terms[:3])
+    generation.questions.insert(0, ReviewQuestion(
+        field_path=target_path,
+        topic='scope',
+        question=(
+            f'선택 공고에 언급된 {named_terms} 관련하여, 이력서에 적지 않은 '
+            '실제 사용 경험이나 본인 담당 작업이 있나요?'
+        ),
+        reason='공고에 언급된 기술과 연결되는 이력서 직접 근거를 확인합니다.',
+        priority=1,
+    ))
 
 
 def prefer_project_evidence_over_surface_edit(generation, fields, answers):
@@ -484,7 +554,13 @@ def prefer_project_evidence_over_surface_edit(generation, fields, answers):
 
 def run_review(service, id_token, request):
     # Import here to keep pure helpers independent of model/provider construction.
-    from app.resume_review import extract_review_fields, enforce_resume_review_grounding, ground_sentences, require_answer_reflection
+    from app.resume_review import (
+        add_substantive_answer_fallback,
+        extract_review_fields,
+        enforce_resume_review_grounding,
+        ground_sentences,
+        require_answer_reflection,
+    )
     db = service._firebase
     uid = db.verify_id_token(id_token)
     if request.tailored_resume_id and request.review_mode != 'job':
@@ -617,12 +693,19 @@ def run_review(service, id_token, request):
         grounded, warnings = enforce_resume_review_grounding('\n'.join(fields.values()), generated)
         warnings.extend(ground_sentences(fields, answers, grounded))
         warnings.extend(require_answer_reflection(grounded, current_answers))
+        warnings.extend(
+            add_substantive_answer_fallback(grounded, fields, current_answers)
+        )
         if request.review_mode == 'job':
             prefer_project_evidence_over_surface_edit(grounded, fields, answers)
         apply_selected_job_identity_revisions(grounded, fields, job_source)
         changes = normalize_diagnostics(grounded, fields, bool(job_text), previous)
         if not is_focused_followup:
-            add_short_self_introduction_questions(grounded, fields)
+            add_thin_self_introduction_questions(grounded, fields)
+            if request.review_mode == 'job':
+                add_missing_job_technology_question(grounded, fields, job_text)
+        else:
+            carry_forward_unanswered_questions(grounded, previous, answers)
         normalize_questions(grounded, fields, answers, request.request_id)
         filter_verified_project_time_questions(grounded, time_context)
         telemetry.update(status='complete', elapsed_ms=round((time.monotonic() - started) * 1000))

@@ -126,7 +126,7 @@ def write_jsonl(documents: Iterable[Any], path: Path) -> int:
 def upload_documents(documents: Sequence[Any]) -> int:
     if not documents:
         return 0
-    missing = [name for name in ("OPENAI_API_KEY", "PINECONE_API_KEY") if not os.getenv(name)]
+    missing = [name for name in ("OPENAI_API_KEY", "PINECONE_API_KEY2") if not os.getenv(name)]
     if missing:
         raise RuntimeError(f"필수 환경변수가 없습니다: {', '.join(missing)}")
     try:
@@ -139,7 +139,7 @@ def upload_documents(documents: Sequence[Any]) -> int:
         model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
         dimensions=int(os.getenv("OPENAI_EMBEDDING_DIMENSION", "1536")),
     )
-    index = Pinecone(api_key=os.environ["PINECONE_API_KEY"]).Index(INDEX_NAME)
+    index = Pinecone(api_key=os.environ["PINECONE_API_KEY2"]).Index(INDEX_NAME)
     total = 0
     for start in range(0, len(documents), 100):
         batch = documents[start:start + 100]
