@@ -27,7 +27,7 @@ class StudentChatbotHost extends ConsumerStatefulWidget {
 }
 
 class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
-  static const _faqAnswers = {
+  static const Map<String, String> _faqAnswers = {
     '출결 기준': '''**출결 기준**
 
 - **출석**: 정규수업 8시간을 모두 수강한 경우
@@ -48,6 +48,10 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
     '훈련장려금': '''훈련장려금은 **단위기간 출석률 80% 이상**이 지급 기준이에요.
 
 단위기간 종료 후 공가 등 출석 증빙이 반영되면 비용 신청이 진행돼요. 실업급여 등 다른 지원금 수급이나 취업 상태에 따라 지급 대상에서 제외될 수 있어요.''',
+    '프로젝트 레퍼런스':
+        '''이전 기수의 단위·최종 프로젝트에서 **주제, 기획 설명, 활용 데이터·기술, GitHub 주소**를 찾아볼 수 있어요.
+
+원하는 기수·차수·개수를 함께 적어 주세요. 예: “25기 3차 프로젝트 주제 5개와 핵심 기술을 알려줘”''',
 
     '질문 가이드': '''**질문할 수 있는 내용**
 
@@ -66,6 +70,49 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
 검색 근거가 없는 내용이나 LMS와 관련 없는 질문에는 답변하기 어려워요.''',
   };
 
+  static const Map<String, Map<String, String>> _faqFollowUps = {
+    '출결 기준': {
+      '지각·조퇴·외출은 어떻게 처리돼?':
+          '''정규수업 8시간 중 **4시간 이상 8시간 미만**을 수강하면 지각·조퇴·외출로 처리돼요.
+
+단위기간 안에서 지각·조퇴·외출을 합쳐 **3회가 되면 결석 1일**로 환산돼요.''',
+      '출석률이 낮으면 어떻게 돼?':
+          '''단위기간 출석률이 **50% 미만**이거나 전체 훈련기간 출석률이 **80% 미만**이면 제적 대상이 될 수 있어요.
+
+실제 처리는 출결 증빙 반영 여부를 포함해 담당자에게 확인해 주세요.''',
+    },
+    '공가 사용 방법': {
+      '공가는 어떤 순서로 신청해?':
+          '''공가 당일 출결이슈 구글폼으로 일정을 공유하고, 다음 출석일 **16:50**에 라운지에서 증빙서류를 제출한 뒤 출석입력대장에 서명해 주세요.''',
+      '어떤 사유가 공가로 인정돼?': '''훈련·시험, 면접, 예비군, 병가, 휴가 등이 증빙서류 제출 시 공가로 인정될 수 있어요.
+
+사유별 인정 범위와 필요한 서류는 다를 수 있으므로 제출 전에 담당자에게 확인해 주세요.''',
+    },
+    '캠퍼스 운영 시간': {
+      '캠퍼스는 몇 시부터 이용할 수 있어?': '''캠퍼스 운영 시간은 **오전 8:30부터 오후 9:50까지**예요.
+
+공식 오픈 시간은 오전 8:30이며, 직원 출근 상황에 따라 조금 일찍 열릴 수 있어요.''',
+      '캠퍼스 흡연 공간은 어디야?':
+          '''흡연은 캠퍼스 내부가 아니라 **건물 외부 1층 또는 18층 옥상 흡연 공간**을 이용해 주세요.''',
+    },
+    '훈련장려금': {
+      '훈련장려금의 출석률 기준은 뭐야?': '''훈련장려금은 해당 단위기간의 출석률이 **80% 이상**이어야 지급 기준을 충족해요.
+
+공가 등 출석 증빙이 모두 반영된 뒤 최종 출석률을 확인해 주세요.''',
+      '출석률이 80%면 무조건 지급돼?': '''출석률 80% 이상은 기본 기준이지만 **지급 확정을 의미하지는 않아요**.
+
+실업급여·다른 지원금 수급 여부와 취업 상태 등에 따라 지급 대상에서 제외될 수 있어요.''',
+    },
+    '프로젝트 레퍼런스': {
+      '프로젝트를 정확히 검색하려면 어떻게 물어봐?': '''**기수·프로젝트 차수·원하는 개수**를 함께 적어 주세요.
+
+예: “25기 3차 프로젝트 주제 10개와 사용 기술을 알려줘”''',
+      '최종 프로젝트는 어떻게 질문해?': '''“34기 **최종 프로젝트** 주제 5개와 GitHub 주소를 알려줘”처럼 질문해 주세요.
+
+‘최종 프로젝트’ 또는 ‘final project’라고 입력하면 최종 프로젝트 기준으로 검색해요.''',
+    },
+  };
+
   late StudentChatbotApiClient _api;
   late bool _ownsApi;
   late String _threadId;
@@ -73,11 +120,14 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
   final _questionController = TextEditingController();
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
+  Map<String, String> _faqChoices = _faqAnswers;
   bool _open = false;
   bool _searching = false;
   bool _initializing = false;
   bool _ready = false;
   bool _answering = false;
+  double? _panelWidth;
+  double? _panelHeight;
   String? _error;
 
   @override
@@ -124,6 +174,7 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
       if (!mounted) return;
       setState(() {
         _ready = true;
+        _faqChoices = _faqAnswers;
         _messages
           ..clear()
           ..add(
@@ -154,10 +205,24 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
 
   void _showFaq(String label, String answer) {
     if (!_ready || _answering) return;
+    final followUps = _faqFollowUps[label];
     setState(() {
       _messages
-        ..add(_ChatMessage(text: '$label을 알려주세요.', fromUser: true))
+        ..add(
+          _ChatMessage(
+            text: label.endsWith('?') ? label : '$label을 알려주세요.',
+            fromUser: true,
+          ),
+        )
         ..add(_ChatMessage(text: answer, fromUser: false));
+      if (label == '질문 가이드') {
+        _faqChoices = _faqAnswers;
+      } else if (followUps != null) {
+        _faqChoices = {
+          '질문 가이드': _faqAnswers['질문 가이드']!,
+          ...followUps,
+        };
+      }
     });
     _scrollToBottom();
   }
@@ -167,6 +232,7 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
     if (question.isEmpty || !_ready || _answering) return;
     _questionController.clear();
     setState(() {
+      _faqChoices = _faqAnswers;
       _answering = true;
       _error = null;
       _messages
@@ -230,9 +296,18 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
-        final width = compact ? constraints.maxWidth - 24 : 390.0;
-        final height = (constraints.maxHeight - 92)
-            .clamp(420.0, 640.0)
+        final maxWidth = compact
+            ? constraints.maxWidth - 24
+            : constraints.maxWidth / 2;
+        final minWidth = math.min(320.0, maxWidth);
+        final defaultWidth = compact ? maxWidth : math.min(390.0, maxWidth);
+        final maxHeight = math.max(0.0, constraints.maxHeight - 92);
+        final minHeight = math.min(420.0, maxHeight);
+        final width = (_panelWidth ?? defaultWidth)
+            .clamp(minWidth, maxWidth)
+            .toDouble();
+        final height = (_panelHeight ?? math.min(640.0, maxHeight))
+            .clamp(minHeight, maxHeight)
             .toDouble();
         return Stack(
           clipBehavior: Clip.none,
@@ -250,7 +325,7 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
                   questionController: _questionController,
                   searchController: _searchController,
                   scrollController: _scrollController,
-                  faqAnswers: _faqAnswers,
+                  faqAnswers: _faqChoices,
                   searching: _searching,
                   initializing: _initializing,
                   answering: _answering,
@@ -266,6 +341,14 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
                   onRetry: _initialize,
                   onSend: _send,
                   onFaq: _showFaq,
+                  onResize: (size) => setState(() {
+                    _panelWidth = size.width
+                        .clamp(minWidth, maxWidth)
+                        .toDouble();
+                    _panelHeight = size.height
+                        .clamp(minHeight, maxHeight)
+                        .toDouble();
+                  }),
                 ),
               ),
             Positioned(
@@ -317,6 +400,7 @@ class _ChatPanel extends StatelessWidget {
     required this.onRetry,
     required this.onSend,
     required this.onFaq,
+    required this.onResize,
   });
 
   final double width;
@@ -339,10 +423,32 @@ class _ChatPanel extends StatelessWidget {
   final VoidCallback onRetry;
   final ValueChanged<String?> onSend;
   final void Function(String label, String answer) onFaq;
+  final ValueChanged<Size> onResize;
+
+  void _resizeToPointer(
+    BuildContext context,
+    DragUpdateDetails details, {
+    required bool horizontal,
+    required bool vertical,
+  }) {
+    final panel = context.findRenderObject();
+    if (panel is! RenderBox) return;
+
+    final bottomRight = panel.localToGlobal(
+      Offset(panel.size.width, panel.size.height),
+    );
+    onResize(
+      Size(
+        horizontal ? bottomRight.dx - details.globalPosition.dx : width,
+        vertical ? bottomRight.dy - details.globalPosition.dy : height,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Material(
+      key: const Key('student-chatbot-panel'),
       elevation: 18,
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
@@ -350,30 +456,87 @@ class _ChatPanel extends StatelessWidget {
       child: SizedBox(
         width: width,
         height: height,
-        child: Column(
+        child: Stack(
           children: [
-            _header(),
-            if (searching)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                child: TextField(
-                  controller: searchController,
-                  autofocus: true,
-                  onChanged: onSearchChanged,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search_rounded, size: 20),
-                    hintText: '현재 채팅 기록 검색',
+            Positioned.fill(
+              child: Column(
+                children: [
+                  _header(),
+                  if (searching)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      child: TextField(
+                        controller: searchController,
+                        autofocus: true,
+                        onChanged: onSearchChanged,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          prefixIcon: Icon(Icons.search_rounded, size: 20),
+                          hintText: '현재 채팅 기록 검색',
+                        ),
+                      ),
+                    ),
+                  Expanded(child: _body()),
+                  _input(),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 9),
+                    child: Text(
+                      '챗봇은 실수할 수 있습니다',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 0,
+              top: 16,
+              bottom: 0,
+              width: 6,
+              child: _resizeSurface(
+                key: const Key('chatbot-resize-left'),
+                cursor: SystemMouseCursors.resizeLeftRight,
+                onPanUpdate: (details) => _resizeToPointer(
+                  context,
+                  details,
+                  horizontal: true,
+                  vertical: false,
                 ),
               ),
-            Expanded(child: _body()),
-            _input(),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 9),
-              child: Text(
-                '챗봇은 실수할 수 있습니다',
-                style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+            ),
+            Positioned(
+              left: 16,
+              top: 0,
+              right: 0,
+              height: 6,
+              child: _resizeSurface(
+                key: const Key('chatbot-resize-top'),
+                cursor: SystemMouseCursors.resizeUpDown,
+                onPanUpdate: (details) => _resizeToPointer(
+                  context,
+                  details,
+                  horizontal: false,
+                  vertical: true,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              width: 16,
+              height: 16,
+              child: _resizeSurface(
+                key: const Key('chatbot-resize-corner'),
+                cursor: SystemMouseCursors.resizeUpLeftDownRight,
+                onPanUpdate: (details) => _resizeToPointer(
+                  context,
+                  details,
+                  horizontal: true,
+                  vertical: true,
+                ),
               ),
             ),
           ],
@@ -432,6 +595,19 @@ class _ChatPanel extends StatelessWidget {
         icon: Icon(icon, size: 20, color: Colors.white),
       );
 
+  Widget _resizeSurface({
+    required Key key,
+    required MouseCursor cursor,
+    required GestureDragUpdateCallback onPanUpdate,
+  }) => MouseRegion(
+    key: key,
+    cursor: cursor,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanUpdate: onPanUpdate,
+    ),
+  );
+
   Widget _body() {
     if (initializing) {
       return const _ChatLoading(
@@ -466,38 +642,6 @@ class _ChatPanel extends StatelessWidget {
     }
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: const Text(
-              'FAQ',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-          child: Wrap(
-            spacing: 5,
-            runSpacing: 2,
-            children: faqAnswers.entries
-                .map(
-                  (entry) => ActionChip(
-                    avatar: const Icon(Icons.help_outline_rounded, size: 16),
-                    label: Text(
-                      entry.key,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    onPressed: answering
-                        ? null
-                        : () => onFaq(entry.key, entry.value),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-        const Divider(height: 1),
         Expanded(
           child: messages.isEmpty
               ? const Center(
@@ -522,9 +666,23 @@ class _ChatPanel extends StatelessWidget {
                         nextLabel: '챗봇이 답변을 생성하는 중입니다...',
                       );
                     }
-                    return _MessageBubble(
-                      message: message,
-                      highlight: searchQuery,
+                    final showFaq =
+                        !searching &&
+                        !answering &&
+                        faqAnswers.isNotEmpty &&
+                        index == messages.length - 1 &&
+                        !message.fromUser &&
+                        !message.isError &&
+                        message.text.isNotEmpty;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _MessageBubble(
+                          message: message,
+                          highlight: searchQuery,
+                        ),
+                        if (showFaq) _faqButtons(),
+                      ],
                     );
                   },
                 ),
@@ -532,6 +690,40 @@ class _ChatPanel extends StatelessWidget {
       ],
     );
   }
+
+  Widget _faqButtons() => Padding(
+    padding: const EdgeInsets.only(left: 35, top: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '자주 묻는 질문',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Wrap(
+          spacing: 5,
+          runSpacing: 5,
+          children: faqAnswers.entries
+              .map(
+                (entry) => ActionChip(
+                  avatar: const Icon(Icons.help_outline_rounded, size: 16),
+                  label: Text(
+                    entry.key,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onPressed: () => onFaq(entry.key, entry.value),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    ),
+  );
 
   Widget _input() => Padding(
     padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
