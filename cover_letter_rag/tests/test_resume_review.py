@@ -121,7 +121,7 @@ def test_review_reads_owned_resume_and_saves_separate_review() -> None:
     assert response.input_fields['projects[0].description'] == SAMPLE_CONTENT['projects'][0]['description']
     assert 'basicInfo' in response.excluded_fields
     assert firebase.saved is not None
-    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v5-natural-korean-proofread'
+    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v7-focused-followup'
     assert "content" not in firebase.saved
 
 

@@ -63,6 +63,7 @@ def review_context(
     cohort_id: str = Query(min_length=1, max_length=200, pattern=r'^[^/]+$'),
     resume_id: str = Query(min_length=1, max_length=200, pattern=r'^[^/]+$'),
     job_id: str | None = Query(default=None, min_length=1, max_length=200),
+    tailored_resume_id: str | None = Query(default=None, min_length=1, max_length=100, pattern=r'^[A-Za-z0-9_-]+$'),
     authorization: str | None = Header(default=None),
     gateway: FirebaseGateway = Depends(get_context_gateway),
     settings: Settings = Depends(get_settings),
@@ -72,10 +73,18 @@ def review_context(
     from fastapi.responses import JSONResponse
     try:
         uid = gateway.verify_id_token(extract_bearer_token(authorization))
-        resume = gateway.get_owned_resume(cohort_id, resume_id, uid)
         job = load_selected_job(settings.matching_job_store_path, job_id) if job_id else None
+        if tailored_resume_id:
+            resume = gateway.get_owned_tailored_resume(cohort_id, resume_id, tailored_resume_id, uid)
+            if job and resume.get('jobId') != job_id:
+                raise ReviewConflict('tailored_resume_job_mismatch')
+            if job and resume.get('jobSnapshotHash') != job['source']['snapshot_hash']:
+                raise ReviewConflict('tailored_resume_job_changed')
+        else:
+            resume = gateway.get_owned_resume(cohort_id, resume_id, uid)
         content = resume.get('content') or {}
-        return JSONResponse({'content': content, 'input_hash': digest(content), 'job_source': job['source'] if job else {}},
+        return JSONResponse({'content': content, 'input_hash': digest(content), 'job_source': job['source'] if job else {},
+                             'tailored_resume_id': tailored_resume_id},
                             headers={'Cache-Control': 'no-store'})
     except FirebaseAuthenticationError as exc:
         raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc

@@ -19,6 +19,7 @@ ID = r'^[A-Za-z0-9_-]{1,100}$'
 class ApplyRequest(StrictModel):
     cohort_id: str = Field(pattern=ID)
     resume_id: str = Field(pattern=ID)
+    tailored_resume_id: str | None = Field(default=None, pattern=ID)
     request_id: str = Field(pattern=ID)
     review_id: str = Field(pattern=ID)
     expected_input_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
@@ -28,6 +29,7 @@ class ApplyRequest(StrictModel):
 class UndoRequest(StrictModel):
     cohort_id: str = Field(pattern=ID)
     resume_id: str = Field(pattern=ID)
+    tailored_resume_id: str | None = Field(default=None, pattern=ID)
     request_id: str = Field(pattern=ID)
     application_id: str = Field(pattern=ID)
     expected_input_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
@@ -104,10 +106,24 @@ def rebase_review_response(response, content):
 
 
 def mutate(gateway, uid, request, undo=False):
-    resume_ref = gateway._resume_ref(request.cohort_id, request.resume_id)
+    # 공고 맞춤 첨삭은 기본 이력서 하위의 공고별 사본만 변경한다.
+    resume_ref = (
+        gateway._tailored_ref(request.cohort_id, request.resume_id, request.tailored_resume_id)
+        if request.tailored_resume_id
+        else gateway._resume_ref(request.cohort_id, request.resume_id)
+    )
     operations = resume_ref.collection('aiApplications')
     op_ref = operations.document(request.request_id)
-    source_ref = operations.document(request.application_id) if undo else gateway._review_ref(request.cohort_id, request.resume_id, request.review_id)
+    source_ref = (
+        operations.document(request.application_id)
+        if undo
+        else gateway._review_ref(
+            request.cohort_id,
+            request.resume_id,
+            request.review_id,
+            request.tailored_resume_id,
+        )
+    )
     fingerprint = digest([uid, 'undo' if undo else 'apply', request.model_dump()])
 
     @firestore.transactional

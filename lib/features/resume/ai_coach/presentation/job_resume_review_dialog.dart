@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,10 +18,11 @@ class JobResumeReviewDialog extends StatefulWidget {
     this.jobId = '',
     this.jobCompany = '',
     this.jobTitle = '',
+    this.tailoredResumeId = '',
     this.generalReview = false,
   });
   final ResumeReviewApiClient client;
-  final String cohortId, resumeId, jobId, jobCompany, jobTitle;
+  final String cohortId, resumeId, jobId, jobCompany, jobTitle, tailoredResumeId;
   final ResumeContent draft;
   final ValueChanged<ResumeContent> onChanged;
   final bool generalReview;
@@ -47,6 +49,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   Map<String, dynamic>? _pendingQuestion;
   String? _error;
   String? _focusedFieldPath;
+  String? _tailoredResumeId;
   late ResumeContent _preview;
   String _id() =>
       '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 30)}';
@@ -59,6 +62,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   void initState() {
     super.initState();
     _preview = widget.draft;
+    _tailoredResumeId = widget.tailoredResumeId.isEmpty
+        ? null
+        : widget.tailoredResumeId;
   }
 
   @override
@@ -83,14 +89,16 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   }
 
   Future<void> _review() => _run(() async {
+    await _ensureTailoredResume();
     if (_reviewRequest == null) {
       final snapshot = await widget.client.context(
         widget.cohortId,
         widget.resumeId,
         job: widget.generalReview ? null : widget.jobId,
+        tailoredResumeId: widget.generalReview ? null : _tailoredResumeId,
       );
       final content = Map<String, dynamic>.from(snapshot['content'] as Map);
-      if (!sameResumeContent(widget.draft, content)) {
+      if (!sameResumeContent(_preview, content)) {
         throw const FormatException(
           '화면과 저장된 이력서가 다릅니다. 창을 닫고 저장 또는 새로고침한 뒤 다시 추천해 주세요.',
         );
@@ -100,6 +108,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         'request_id': _id(),
         'expected_input_hash': snapshot['input_hash'],
         'review_mode': widget.generalReview ? 'general' : 'job',
+        if (!widget.generalReview && _tailoredResumeId != null)
+          'tailored_resume_id': _tailoredResumeId,
         if (!widget.generalReview) ...{
           'selected_job_id': widget.jobId,
           'expected_job_hash': (snapshot['job_source'] as Map)['snapshot_hash'],
@@ -110,15 +120,41 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _appendReview(_result!, isFirstReview: _messages.isEmpty);
   });
 
+  Future<void> _ensureTailoredResume() async {
+    if (widget.generalReview || _tailoredResumeId != null) return;
+    final tailored = await widget.client.createTailoredResume({
+      'cohort_id': widget.cohortId,
+      'resume_id': widget.resumeId,
+      'selected_job_id': widget.jobId,
+    });
+    final tailoredId = tailored['tailored_resume_id'] as String?;
+    final rawContent = tailored['content'] as Map?;
+    if (tailoredId == null || tailoredId.isEmpty || rawContent == null) {
+      throw const FormatException('공고별 이력서를 준비하지 못했습니다. 다시 시도해 주세요.');
+    }
+    final tailoredContent = ResumeContent.fromMap(
+      Map<String, dynamic>.from(rawContent),
+    );
+    _tailoredResumeId = tailoredId;
+    if (mounted) {
+      setState(() => _preview = tailoredContent);
+    } else {
+      _preview = tailoredContent;
+    }
+  }
+
   Future<void> _reload() async {
     final snapshot = await widget.client.context(
       widget.cohortId,
       widget.resumeId,
+      job: widget.generalReview ? null : widget.jobId,
+      tailoredResumeId: widget.generalReview ? null : _tailoredResumeId,
     );
     final content = ResumeContent.fromMap(
       Map<String, dynamic>.from(snapshot['content'] as Map),
     );
-    widget.onChanged(content);
+    // 공고 맞춤본은 기본 이력서와 분리되어 서버에 자동 저장된다.
+    if (widget.generalReview) widget.onChanged(content);
     if (mounted) {
       setState(() {
         _preview = content;
@@ -267,6 +303,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         ..._identity,
         'request_id': _id(),
         'review_mode': widget.generalReview ? 'general' : 'job',
+        if (!widget.generalReview && _tailoredResumeId != null)
+          'tailored_resume_id': _tailoredResumeId,
         if (!widget.generalReview) ...{
           'selected_job_id': widget.jobId,
           'expected_job_hash': (previous['job_source'] as Map?)?['snapshot_hash'],
@@ -325,6 +363,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       'review_id': _result!['review_id'],
       'expected_input_hash': _result!['input_hash'],
       'selected_indices': _selected.toList()..sort(),
+      if (_tailoredResumeId != null)
+        'tailored_resume_id': _tailoredResumeId,
     };
     _application = await _mutate(() => widget.client.apply(_applyRequest!));
     // The server has rebased this review to the persisted content.  Keep the
@@ -352,6 +392,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       'request_id': _id(),
       'application_id': _application!['operation_id'],
       'expected_input_hash': _application!['input_hash'],
+      if (_tailoredResumeId != null)
+        'tailored_resume_id': _tailoredResumeId,
     };
     await _mutate(() => widget.client.undo(_undoRequest!));
     await _reload();
@@ -927,6 +969,113 @@ class _ReviewChatBubble extends StatelessWidget {
   final Set<int> appliedSuggestionIndices;
   final ValueChanged<List<int>> onApply;
 
+  static const _revisionTextStyle = TextStyle(
+    fontSize: 12,
+    height: 1.5,
+    color: Color(0xFF1F2937),
+  );
+
+  /// 수정안에 실제로 새로 들어간 글자만 굵게 표시한다.
+  /// 원문과 수정안을 LCS로 비교하므로 앞·뒤에 여러 수정이 있어도
+  /// 변경되지 않은 중간 문장이 함께 굵어지지 않는다.
+  static List<InlineSpan> _changedRevisionSpans(String original, String revision) {
+    if (original == revision) return [TextSpan(text: revision)];
+    final before = original.runes.toList();
+    final after = revision.runes.toList();
+    if (before.isEmpty) {
+      return [TextSpan(text: revision, style: const TextStyle(fontWeight: FontWeight.w700))];
+    }
+    if (after.isEmpty) return const [];
+
+    // 긴 문장을 여러 장 보여도 화면이 무거워지지 않도록 안전한 상한을 둔다.
+    if (before.length * after.length > 300000) {
+      return _fallbackChangedRevisionSpans(before, after);
+    }
+
+    final table = List<Uint16List>.generate(
+      before.length + 1,
+      (_) => Uint16List(after.length + 1),
+    );
+    for (var i = before.length - 1; i >= 0; i--) {
+      for (var j = after.length - 1; j >= 0; j--) {
+        table[i][j] = before[i] == after[j]
+            ? table[i + 1][j + 1] + 1
+            : max(table[i + 1][j], table[i][j + 1]);
+      }
+    }
+
+    final characters = <String>[];
+    final changed = <bool>[];
+    var i = 0;
+    var j = 0;
+    while (i < before.length && j < after.length) {
+      if (before[i] == after[j]) {
+        characters.add(String.fromCharCode(after[j]));
+        changed.add(false);
+        i++;
+        j++;
+      } else if (table[i + 1][j] >= table[i][j + 1]) {
+        // 원문에서 삭제된 글자는 수정안에 표시하지 않는다.
+        i++;
+      } else {
+        characters.add(String.fromCharCode(after[j]));
+        changed.add(true);
+        j++;
+      }
+    }
+    while (j < after.length) {
+      characters.add(String.fromCharCode(after[j++]));
+      changed.add(true);
+    }
+    return _buildDiffSpans(characters, changed);
+  }
+
+  static List<InlineSpan> _fallbackChangedRevisionSpans(
+    List<int> before,
+    List<int> after,
+  ) {
+    var prefix = 0;
+    while (prefix < before.length &&
+        prefix < after.length &&
+        before[prefix] == after[prefix]) {
+      prefix++;
+    }
+    var suffix = 0;
+    while (suffix < before.length - prefix &&
+        suffix < after.length - prefix &&
+        before[before.length - 1 - suffix] == after[after.length - 1 - suffix]) {
+      suffix++;
+    }
+    final characters = <String>[];
+    final changed = <bool>[];
+    for (var index = 0; index < after.length; index++) {
+      characters.add(String.fromCharCode(after[index]));
+      changed.add(index >= prefix && index < after.length - suffix);
+    }
+    return _buildDiffSpans(characters, changed);
+  }
+
+  static List<InlineSpan> _buildDiffSpans(
+    List<String> characters,
+    List<bool> changed,
+  ) {
+    final spans = <InlineSpan>[];
+    var start = 0;
+    while (start < characters.length) {
+      final isChanged = changed[start];
+      var end = start + 1;
+      while (end < characters.length && changed[end] == isChanged) {
+        end++;
+      }
+      spans.add(TextSpan(
+        text: characters.sublist(start, end).join(),
+        style: isChanged ? const TextStyle(fontWeight: FontWeight.w700) : null,
+      ));
+      start = end;
+    }
+    return spans;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (message.identitySuggestion != null) {
@@ -994,16 +1143,31 @@ class _ReviewChatBubble extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 7),
-              Text(
-                '원문  ${item['original_quote'] ?? ''}',
-                style: const TextStyle(fontSize: 12),
+              const Text(
+                '원문',
+                style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 3),
               Text(
-                '수정안  ${item['suggested_revision'] ?? ''}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                item['original_quote'] as String? ?? '',
+                style: _revisionTextStyle,
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 9),
+                child: Divider(height: 1, thickness: 0.6, color: Color(0x33000000)),
+              ),
+              const Text(
+                '수정안',
+                style: TextStyle(fontSize: 11, color: Color(0xFF166534)),
+              ),
+              const SizedBox(height: 3),
+              Text.rich(
+                TextSpan(
+                  style: _revisionTextStyle,
+                  children: _changedRevisionSpans(
+                    item['original_quote'] as String? ?? '',
+                    item['suggested_revision'] as String? ?? '',
+                  ),
                 ),
               ),
               if ((item['reason'] as String? ?? '').isNotEmpty) ...[

@@ -143,8 +143,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           jobCompany: job.company,
           jobTitle: job.title,
           draft: widget.draftContent,
-          onChanged: (content) {
-            widget.onResumeChanged?.call(content);
+          onChanged: (_) {
+            // 공고별 사본은 서버에서 자동 저장한다. 기본 이력서 편집 상태에는
+            // 전달하지 않아 다른 공고용 자리표시자가 바뀌지 않게 한다.
             if (mounted)
               setState(() {
                 _result = null;

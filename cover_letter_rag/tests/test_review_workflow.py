@@ -5,7 +5,8 @@ from app.models import ConfirmationAnswer, FirestoreResumeReviewRequest, ResumeR
 from app.config import Settings
 from app.resume_review import ResumeReviewService, ground_sentences
 from app.review_workflow import (ReviewConflict, ReviewInputError, redact, prepare_answers,
-                                 normalize_diagnostics, normalize_questions, item_references, digest)
+                                 normalize_diagnostics, normalize_questions, item_references, digest,
+                                 focused_followup_context, focused_time_context)
 from test_resume_review import FakeFirebase, SAMPLE_CONTENT
 
 
@@ -44,6 +45,32 @@ def test_followup_is_bound_to_question_and_version():
         service.review('valid-token', request.model_copy(update={'expected_input_hash': 'old'}))
     with pytest.raises(ReviewInputError):
         prepare_answers(request.model_copy(update={'answers': [answer.model_copy(update={'question_id': 'fake'})]}), first.model_dump(), first.input_hash, first.item_refs)
+
+
+def test_followup_prompt_is_limited_to_the_answered_resume_item():
+    fields = {
+        'projects[0].description': '첫 번째 프로젝트 설명',
+        'projects[0].techStack': 'Python',
+        'projects[1].description': '두 번째 프로젝트 설명',
+        'selfIntroduction.aspiration.body': '지원 동기',
+    }
+    current = ConfirmationAnswer(
+        question_id='q1', field_path='projects[0].description', question='무엇을 했나요?', answer='API를 구현했습니다.',
+    )
+    prior_other_item = ConfirmationAnswer(
+        question_id='q2', field_path='projects[1].description', question='무엇을 했나요?', answer='다른 답변',
+    )
+    scoped_fields, scoped_answers, focused = focused_followup_context(
+        fields, [prior_other_item, current], [current],
+    )
+    assert focused
+    assert set(scoped_fields) == {'projects[0].description', 'projects[0].techStack'}
+    assert scoped_answers == [current]
+    assert focused_time_context(
+        'projects[0] 첫 프로젝트: 2025.01 ~ 2025.02 (이력서 기록값)\n'
+        'projects[1] 둘째 프로젝트: 2025.03 ~ 2025.04 (이력서 기록값)',
+        [current],
+    ) == 'projects[0] 첫 프로젝트: 2025.01 ~ 2025.02 (이력서 기록값)'
 
 
 def test_legacy_ids_block_answers_and_reordering_changes_version():

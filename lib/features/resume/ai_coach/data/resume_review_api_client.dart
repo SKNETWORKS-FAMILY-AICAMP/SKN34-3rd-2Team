@@ -49,6 +49,7 @@ class ResumeReviewApiClient {
     String cohort,
     String resume, {
     String? job,
+    String? tailoredResumeId,
   }) => _request(
     'GET',
     '/api/v1/resumes/review-context',
@@ -56,9 +57,13 @@ class ResumeReviewApiClient {
       'cohort_id': cohort,
       'resume_id': resume,
       'job_id': ?job,
+      'tailored_resume_id': ?tailoredResumeId,
     },
   );
 
+  Future<Map<String, dynamic>> createTailoredResume(
+    Map<String, dynamic> body,
+  ) => _request('POST', '/api/v1/resumes/tailored', body: body);
   Future<Map<String, dynamic>> review(Map<String, dynamic> body) =>
       _request('POST', '/api/v1/resumes/reviews', body: body);
   Future<Map<String, dynamic>> apply(Map<String, dynamic> body) =>

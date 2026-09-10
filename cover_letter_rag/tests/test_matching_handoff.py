@@ -132,6 +132,18 @@ def test_identity_placeholder_uses_role_title_not_full_posting_title():
     )
 
 
+def test_job_subject_placeholder_uses_natural_role_particle():
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+    apply_selected_job_identity_revisions(
+        generated,
+        {'selfIntroduction.motivation.body': '[회사명]의 [직무명]은 제가 학습해 온 방향과 맞닿아 있습니다.'},
+        {'company': '(주)토마토에이아이', 'title': '(주)토마토에이아이와 함께할 AI엔지니어를 찾고 있어요'},
+    )
+    assert generated.sentence_reviews[0].suggested_revision == (
+        '(주)토마토에이아이의 AI 엔지니어 직무는 제가 학습해 온 방향과 맞닿아 있습니다.'
+    )
+
+
 def test_previously_applied_full_posting_title_is_repaired():
     generated = ResumeReviewGeneration(summary='', section_reviews=[])
     apply_selected_job_identity_revisions(
