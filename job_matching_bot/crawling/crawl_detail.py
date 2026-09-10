@@ -55,7 +55,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 
 from job_matching_bot.crawling.http_session import (
     LIST_PAGE_URL,
@@ -102,6 +102,25 @@ def _guard_allowed(url: str) -> None:
         raise ValueError(f"robots.txt가 막는 경로입니다: {url}")
 
 
+
+
+def _drop_comments(node: Any) -> Any:
+    """HTML 주석을 지우고 갈라진 글자를 다시 붙인다.
+
+    사람인은 본문에 들어온 `script` 라는 글자를 XSS 방지로 주석을 끼워 끊어 놓는다.
+
+        ja<!--x-->vasc<!--x-->ript, Typesc<!--x-->ript
+
+    주석이 텍스트 조각을 가르기 때문에 줄바꿈 구분자가 그 자리마다 줄을 나눠
+    `ja` / `vasc` / `ript,` 세 줄이 됐다. 화면에서 깨져 보이는 것보다, 기술 이름이
+    사라지는 것이 더 문제다. `JavaScript`를 뽑지 못하면 기술 겹침 점수에서 빠진다.
+
+    `smooth()`가 주석을 뺀 뒤 남은 이웃한 글자 조각을 하나로 합쳐 준다.
+    """
+    for comment in node.find_all(string=lambda t: isinstance(t, Comment)):
+        comment.extract()
+    node.smooth()
+    return node
 
 
 def _section_name(section: Any) -> str:
@@ -166,7 +185,7 @@ def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
         if pairs:
             sections[name] = pairs
         if "상세" in name:
-            body_text = section.get_text("\n", strip=True)
+            body_text = _drop_comments(section).get_text("\n", strip=True)
             body_images = [
                 img.get("src", "")
                 for img in section.find_all("img")
