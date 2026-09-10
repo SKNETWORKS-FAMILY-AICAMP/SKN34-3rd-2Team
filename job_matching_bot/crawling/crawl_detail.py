@@ -104,6 +104,48 @@ def _guard_allowed(url: str) -> None:
 
 
 
+def _unfold_header_tables(soup: BeautifulSoup, node: Any) -> Any:
+    """머리글 행이 따로 있는 표를 `머리글 → 그 칸 내용` 순서로 편다.
+
+    사람인 공고 상당수가 표로 되어 있다.
+
+        <tr><th>근무부서</th><th>담당업무</th><th>자격요건</th><th>우대사항</th></tr>
+        <tr><td>웹</td><td>ㆍ웹 개발</td><td>ㆍ기본지식</td><td>ㆍWordpress</td></tr>
+
+    글로 죽 읽으면 머리글 넷이 먼저 붙어 나오고 내용이 뒤에 몰린다. 그래서 `자격요건`
+    다음 줄이 곧바로 `우대사항`이 되어 자격요건이 빈 것으로 읽혔고, 본문 전체가
+    우대사항으로 들어갔다.
+
+    보기 나쁜 것으로 끝나지 않는다. 하드 필터가 거는 요구 전공·자격증·최소 연차는
+    **자격요건 구간에서만** 뽑는다(`ingestion/saramin.py`). 그 구간이 비면 그 공고는
+    아무 조건도 안 건 채로 지나간다. 표본 4,000건 중 57건이 이 상태였다.
+
+    머리글 칸의 글자를 해당 내용 칸 맨 앞에 옮겨 넣고 머리글 행을 지운다. 칸 수가
+    맞지 않으면(rowspan 등) 건드리지 않는다 — 잘못 붙이느니 그대로 두는 것이 낫다.
+    """
+    for head in list(node.find_all("tr")):
+        if head.parent is None:
+            continue
+        labels = head.find_all(["th", "td"], recursive=False)
+        if not labels or any(cell.name != "th" for cell in labels):
+            continue
+        body = head.find_next_sibling("tr")
+        if body is None:
+            continue
+        values = body.find_all(["th", "td"], recursive=False)
+        if len(values) != len(labels):
+            continue
+        for label, cell in zip(labels, values):
+            text = label.get_text(" ", strip=True)
+            if not text:
+                continue
+            marker = soup.new_tag("p")
+            marker.string = text
+            cell.insert(0, marker)
+        head.decompose()
+    return node
+
+
 def _drop_comments(node: Any) -> Any:
     """HTML 주석을 지우고 갈라진 글자를 다시 붙인다.
 
@@ -185,7 +227,7 @@ def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
         if pairs:
             sections[name] = pairs
         if "상세" in name:
-            body_text = _drop_comments(section).get_text("\n", strip=True)
+            body_text = _drop_comments(_unfold_header_tables(soup, section)).get_text("\n", strip=True)
             body_images = [
                 img.get("src", "")
                 for img in section.find_all("img")
