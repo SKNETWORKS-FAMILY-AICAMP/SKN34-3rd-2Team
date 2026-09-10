@@ -31,7 +31,9 @@ class RecommendRequest(StrictModel):
     career_years: float = Field(default=0, ge=0, le=60)
     majors: list[str] = Field(default_factory=list, max_length=10)
     certifications: list[str] = Field(default_factory=list, max_length=30)
-    top_k: int = Field(default=10, ge=1, le=20)
+    # 재정렬이 후보 12건까지만 판정하므로(service.RERANK_TOP_K) 그 위는 약속할 수 없다.
+    # 회사당 2건 제한과 마감 제외까지 겹치면 그보다 적게 올 수도 있다.
+    top_k: int = Field(default=10, ge=1, le=12)
     # 앱이 이력서를 저장할 때 미리 만들어 둔 구조화 결과. 있으면 서버는 다시 만들지 않는다.
     # 대기 시간이 2.7초 줄고, 무엇보다 **검색어가 고정되어 추천이 매번 흔들리지 않는다.**
     # 이력서를 고쳤으면 앱이 보내지 않으면 된다 — 그때는 서버가 새로 만든다.
