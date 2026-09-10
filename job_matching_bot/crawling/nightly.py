@@ -49,6 +49,7 @@ from bs4 import BeautifulSoup
 from job_matching_bot.config import ARTIFACTS_DIR, RAW_DIR, REPO_ROOT
 from job_matching_bot.crawling.crawl_detail import DETAIL_URL, SOURCE, crawl_details
 from job_matching_bot.crawling.crawl_list import ALL_CATEGORIES, fetch_page, pages_for
+from job_matching_bot.crawling.crawl_detail import is_closed_page
 from job_matching_bot.crawling.detail_queue import build_queue
 from job_matching_bot.crawling.http_session import (
     LIST_PAGE_URL,
@@ -107,17 +108,6 @@ NIGHTLY_DIR = ARTIFACTS_DIR / "nightly"
 # "접수마감"도 같은 성적이었지만 넣지 않았다. 위 문구가 이미 다 잡는데 상태 배지까지
 # 보면 표기가 바뀌었을 때 왜 지워졌는지 알기 어려워진다.
 # "지원하기"는 열린 페이지의 신호처럼 보이지만 마감 페이지에도 11/11 나와 쓸 수 없다.
-CLOSED_MARKERS = (
-    "채용정보는 마감",     # 본 채용정보는 마감 되었습니다
-    "마감되었습니다",
-    "마감 되었습니다",
-    "마감되어 작성할 수 없습니다",
-    # 페이지 자체가 사라진 경우. 예전부터 있던 것을 남긴다.
-    "삭제된 공고",
-    "존재하지 않는 공고",
-)
-
-
 def categories_for(today: date, full: bool = False) -> list[str]:
     if full or today.weekday() == WEEKLY_DAY:
         return [cat for cat in ALL_CATEGORIES if cat not in SKIPPED_CATEGORIES]
@@ -227,21 +217,6 @@ def site_fetcher(session: requests.Session, page_count: int = PAGE_COUNT) -> Fet
 
 
 # ── 4. 링크 확인 ───────────────────────────────────────────────
-def is_closed_page(html: str) -> bool:
-    """마감 문구는 **원본 HTML이 아니라 뽑아낸 글에서** 찾는다.
-
-    화면의 "본 채용정보는 마감되었습니다."는 실제 HTML에서 `채용정보는 <span>마감</span>
-    되었습니다` 처럼 태그로 끊겨 있다. 원본 문자열에서 찾으면 글자가 이어지지 않아
-    하나도 걸리지 않는다. 실제로 마감된 공고 4건에서 0건이 걸렸다.
-    """
-    soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text(" ", strip=True)
-    if any(marker in text for marker in CLOSED_MARKERS):
-        return True
-    # 본문 섹션(.jv_cont)이 하나도 없으면 공고 페이지가 아니다.
-    return not soup.select(".jv_cont")
-
-
 def check_alive(session: requests.Session, rec_idx: str, timeout: int = 30) -> bool | None:
     """True=아직 열려 있음, False=내려감, None=모름(일시 오류). 차단은 예외로 올린다."""
     url = f"{DETAIL_URL}?rec_idx={rec_idx}"
@@ -353,8 +328,10 @@ def main() -> int:
     parser.add_argument("--categories", default=None, help="훑을 대분류 코드. 쉼표 구분(예: 2,15)")
     parser.add_argument("--max-minutes", type=float, default=DEFAULT_MAX_MINUTES, help="전체 시간 한도")
     parser.add_argument("--link-check-limit", type=int, default=LINK_CHECK_LIMIT)
-    parser.add_argument("--min-delay", type=float, default=3.0)
-    parser.add_argument("--max-delay", type=float, default=5.0)
+    # 평균 3초. 예전에는 3~5초(평균 4초)였고 건당 4.65초가 들었다. 폭을 좁히되
+    # 고정값으로는 두지 않는다 — 간격이 자로 잰 듯 일정하면 오히려 눈에 띈다.
+    parser.add_argument("--min-delay", type=float, default=2.5)
+    parser.add_argument("--max-delay", type=float, default=3.5)
     parser.add_argument("--dry-run", action="store_true", help="목록만 훑고 상세·기록·적재는 하지 않는다")
     parser.add_argument("--no-share", action="store_true", help="공유 파일을 만들지 않는다")
     args = parser.parse_args()
@@ -400,7 +377,11 @@ def main() -> int:
     known_ids = store.source_job_ids(SOURCE)
     detail_file = DETAIL_DIR / f"{stamp}.jsonl"
     already_today = set(latest_by_id(read_records(detail_file)))
-    queue, queue_stats = build_queue(result.records, known_ids | already_today, now)
+    # 목록에서 처음 본 시각을 함께 넘긴다. 인기순 줄에 오래 기다린 공고를
+    # 끼워 넣어, 순위가 밀린 공고도 매일 조금씩 차례가 오게 한다.
+    queue, queue_stats = build_queue(
+        result.records, known_ids | already_today, now, store.waiting_since()
+    )
     queue = prioritize(queue)
     summary["new"] = {"queued": len(queue), **{k: v for k, v in queue_stats.items()}}
     print(f"[신규] 저장소에 없는 공고 {len(queue):,}건 (제외 직종 {queue_stats.get('제외 직종(배달·배송·운전)', 0):,})")

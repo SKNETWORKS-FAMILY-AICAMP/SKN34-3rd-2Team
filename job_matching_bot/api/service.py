@@ -40,6 +40,15 @@ SEARCH_TOP_K = 25
 RERANK_TOP_K = 12
 # 같은 회사가 목록을 채우지 않게 하는 상한.
 MAX_PER_COMPANY = 2
+
+# 적합도 순서. 판정을 못 받은 공고(None)는 판정된 '낮음' 뒤에 선다.
+_FIT_ORDER = {"높음": 0, "보통": 1, "낮음": 2}
+UNJUDGED_CONCERN = "AI 세부 분석을 완료하지 못했습니다. 검색 순서로만 배치했습니다."
+
+
+def fit_order(fit: str | None) -> int:
+    """정렬 키. 값이 없거나 모르는 값이면 맨 뒤."""
+    return _FIT_ORDER.get(fit or "", len(_FIT_ORDER))
 # 재정렬에 넘길 공고 본문 길이. 메타데이터 excerpt와 같게 두어 자르지 않는다.
 JOB_EXCERPT_CHARS = 1200
 # LLM 추론 강도. 대조 작업이라 낮춰도 근거 품질이 유지되고 응답이 크게 빨라진다.
@@ -411,19 +420,19 @@ class RecommendService(_LivenessMixin):
         except Exception as error:
             raise SearchUnavailable(f"조건 판정에 실패했습니다: {type(error).__name__}") from error
 
-        candidates = candidates[:RERANK_TOP_K]
-        # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없고, 걸러 낸 만큼
-        # 뒤 후보가 올라와 자리를 채운다.
+        # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없다. 자르기는 그
+        # 다음이다 — 먼저 잘라 버리면 마감된 만큼 자리가 비고 뒤 후보가 올라오지
+        # 못한다. 확인 대상이 늘지만(최대 25건) 한 번에 여는 요청이라 시간은 같다.
         alive = self.drop_dead([hit.job_id for hit, _, _ in candidates])
         if len(alive) < len(candidates):
             warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
             candidates = [c for c in candidates if c[0].job_id in alive]
+        candidates = candidates[:RERANK_TOP_K]
         say("filter", f"조건을 통과한 {len(candidates)}건이 남았어요")
 
         say("judge")
         fits, reranked = self.rerank(request.resume_text, candidates, warnings)
 
-        order = {"높음": 0, "보통": 1, "낮음": 2}
         rows: list[tuple[int, int, schemas.Recommendation]] = []
         for hit, job, filter_result in candidates:
             fit = fits.get(job.job_id)
@@ -431,16 +440,18 @@ class RecommendService(_LivenessMixin):
                 fit = self.verify(fit, request.resume_text, job, warnings)
             rows.append(
                 (
-                    order.get(fit.fit, 1) if fit else 1,
+                    fit_order(fit.fit if fit else None),
                     hit.rank,
                     schemas.Recommendation(
                         job_id=job.job_id,
                         company=job.company,
                         title=job.title,
                         source_url=job.source_url,
-                        fit=fit.fit if fit else "보통",
+                        # 판정을 못 받은 공고는 '보통'으로 올려 보내지 않는다. 판정된
+                        # '낮음'보다 위에 서는 것이 말이 안 된다. 가장 낮게 두고 사유를 남긴다.
+                        fit=fit.fit if fit else "낮음",
                         reasons=fit.reasons if fit else [],
-                        concerns=fit.concerns if fit else [],
+                        concerns=fit.concerns if fit else [UNJUDGED_CONCERN],
                         conditions=schemas.Conditions(
                             region=job.region,
                             employment_type=job.employment_type,

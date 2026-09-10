@@ -155,6 +155,21 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(["Docker"], job.preferred_skills)
         self.assertEqual(1.0, job.field_provenance["required_skills"]["confidence"])
 
+    def test_image_flag_yields_to_requirement_text(self):
+        """크롤러의 이미지 표시보다 글이 우선한다.
+
+        저장소는 읽을 때 "글에 요건이 있으면 이미지 아님"으로 뒤집는다. 쓸 때 크롤러
+        표시를 그대로 넣으면 쓴 지문과 읽은 지문이 달라져, 바뀐 것이 없는데도 다시
+        올릴 대상이 된다. 실제로 4,316건이 그렇게 잡혔다. 쓰는 쪽도 같은 규칙을 쓴다.
+        """
+        long_text = "자격요건 " + "Python으로 서비스를 만들어 본 분. " * 60
+        job = normalize_saramin({**SAMPLE, "needs_human_review": True, "description": long_text})
+        self.assertFalse(job.body_is_image, "글이 넉넉하면 이미지 공고가 아니다")
+        self.assertTrue(job.field_provenance["needs_human_review"], "크롤러 표시 자체는 기록에 남긴다")
+
+        short = normalize_saramin({**SAMPLE, "needs_human_review": True, "description": "이미지 참고"})
+        self.assertTrue(short.body_is_image, "글이 없으면 크롤러 표시대로 이미지 공고다")
+
     def test_image_only_body_is_flagged_for_review(self):
         record = {**SAMPLE, "needs_human_review": True}
         job = normalize_saramin(record)

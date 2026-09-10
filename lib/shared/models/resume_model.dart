@@ -101,6 +101,20 @@ class ResumeModel {
   final int revisionCount;
   final DateTime? updatedAt;
 
+  /// 검토자 화면에 보여줄 이름.
+  ///
+  /// 학생은 자기가 지은 제목을 본다. 강사·관리자 목록에는 여러 학생의 이력서가
+  /// 섞여 나오므로 제목보다 **누구 것인지**가 먼저 필요하다. "[목업] 임베디드 신입"
+  /// 같은 제목만 보면 누구 이력서인지 열어 봐야 안다.
+  ///
+  /// 이름은 이력서 기본정보에 적힌 값을 쓴다. 이미 함께 읽어 온 값이라 따로 찾지
+  /// 않는다. 아직 안 적었으면 학생이 지은 제목으로 물러난다.
+  String displayTitle({required bool asReviewer}) {
+    if (!asReviewer) return title;
+    final name = content.basicInfo.name.trim();
+    return name.isEmpty ? title : '$name님의 이력서';
+  }
+
   int get completedCount => sections.values.where((v) => v).length;
   int get totalCount => AppConstants.resumeSections.length;
   double get progress =>
@@ -249,6 +263,27 @@ List<ResumeFeedbackModel> unreadFeedback(
   ];
 }
 
+/// 실을 여는 글들. 답글은 여기 안 들어간다.
+///
+/// 부모가 사라진 답글은 첫 글로 올린다. 그러지 않으면 화면 어디에도 안 나와서
+/// 쓴 사람은 글이 증발한 것처럼 본다.
+List<ResumeFeedbackModel> threadRoots(List<ResumeFeedbackModel> items) {
+  final ids = {for (final item in items) item.id};
+  return [
+    for (final item in items)
+      if (!item.isThreadReply || !ids.contains(item.parentId)) item,
+  ];
+}
+
+/// [parentId] 글에 달린 답글들. 들어온 순서를 그대로 지킨다.
+List<ResumeFeedbackModel> threadRepliesTo(
+  List<ResumeFeedbackModel> items,
+  String parentId,
+) => [
+  for (final item in items)
+    if (item.parentId == parentId) item,
+];
+
 /// 내가 쓴 글인가. 강사가 **자기 이력서**를 보는 경우가 있어 역할만으로는 모자란다.
 /// 그때 자기 글이 답글로 잡혀 아무리 읽어도 숫자가 줄지 않는다.
 bool _isMine(ResumeFeedbackModel item, String? viewerId) =>
@@ -264,6 +299,7 @@ class ResumeFeedbackModel {
     required this.content,
     required this.authorName,
     this.authorId = '',
+    this.parentId = '',
     this.createdAt,
   });
 
@@ -275,7 +311,16 @@ class ResumeFeedbackModel {
   /// 누가 썼나. 이력서 주인이 쓴 것이면 답글이다.
   /// 내가 쓴 글은 나에게 안 읽음이 아니다 — 이 구분에 쓰인다.
   final String authorId;
+
+  /// 어느 피드백에 달린 답글인가. 비어 있으면 실을 여는 첫 글이다.
+  ///
+  /// 예전 기록에는 이 값이 없다. 그런 글은 전부 첫 글로 보이므로 옮길 것이 없다.
+  final String parentId;
+
   final DateTime? createdAt;
+
+  /// 다른 글에 달린 답글인가.
+  bool get isThreadReply => parentId.isNotEmpty;
 
   /// 이력서 주인이 쓴 글인가. 그러면 검토자가 읽어야 할 답글이다.
   /// 글쓴이를 모르는 옛 기록은 검토자가 남긴 것으로 본다 — 그때는 답글이 없었다.
@@ -292,6 +337,7 @@ class ResumeFeedbackModel {
       content: data['content'] as String? ?? '',
       authorName: data['authorName'] as String? ?? '관리자',
       authorId: data['authorId'] as String? ?? '',
+      parentId: data['parentId'] as String? ?? '',
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
     );
   }
@@ -305,6 +351,7 @@ class ResumeFeedbackModel {
         'content': content,
         'authorId': authorId,
         'authorName': authorName,
+        if (parentId.isNotEmpty) 'parentId': parentId,
         'createdAt': FieldValue.serverTimestamp(),
       };
 }

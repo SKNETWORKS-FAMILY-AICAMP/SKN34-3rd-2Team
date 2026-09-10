@@ -114,7 +114,11 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
 
     _qualification_checks(job, resume, passed, unknown)
 
-    if job.region == "미기재":
+    # 희망 지역을 안 골랐으면 지역은 따지지 않는다. 빈 목록을 그대로 아래로 흘리면
+    # "어느 지역에도 안 맞는다"가 되어 거의 모든 공고가 탈락한다.
+    if not resume.preferred_regions:
+        passed.append("희망 지역 제한 없음")
+    elif job.region == "미기재":
         unknown.append("근무지역 미기재")
     elif is_nationwide(job.region) or NATIONWIDE in resume.preferred_regions:
         # 공고가 전국 근무이거나 사용자가 전국을 골랐으면 지역은 따지지 않는다.
@@ -124,7 +128,9 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
     else:
         failed.append(f"희망지역 불일치: {job.region}")
 
-    if job.employment_type == "미기재":
+    if not resume.preferred_employment_types:
+        passed.append("고용형태 제한 없음")
+    elif job.employment_type == "미기재":
         unknown.append("고용형태 미기재")
     elif job.employment_type in resume.preferred_employment_types:
         passed.append("희망 고용형태 일치")

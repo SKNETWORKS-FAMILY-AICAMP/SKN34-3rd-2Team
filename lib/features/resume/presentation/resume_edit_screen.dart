@@ -428,7 +428,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('피드백 요청'),
         content: const Text(
-          '강사·관리자에게 피드백을 요청합니다. 요청해야 이력서가 전달되고, 승인 전까지는 계속 수정할 수 있습니다.',
+          '강사·관리자에게 피드백을 요청합니다. 요청해야 이력서가 전달되고, 요청한 뒤에도 계속 수정할 수 있습니다.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
@@ -533,7 +533,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
           },
           child: Scaffold(
             appBar: AppBar(
-              title: const SizedBox.shrink(),
+              // 검토자는 남의 이력서를 연다. 지금 누구 것을 보고 있는지 머리말에
+              // 적어 둔다. 학생 자신은 굳이 알 필요가 없어 비워 둔다.
+              title: isReviewer
+                  ? Text(
+                      resume.displayTitle(asReviewer: true),
+                      style: const TextStyle(fontSize: 15),
+                    )
+                  : const SizedBox.shrink(),
               leading: TextButton.icon(
                 onPressed: _goBack,
                 icon: const Icon(Icons.arrow_back, size: 18),
@@ -664,7 +671,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     color: AppColors.primaryLight,
                     child: const Text(
-                      '피드백 요청됨 — 승인 전까지 수정 가능합니다.',
+                      '피드백 요청됨 — 계속 수정할 수 있습니다.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ),

@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from job_matching_bot.config import AS_OF
+from job_matching_bot.ingestion.detail_quality import is_image_only_detail
 from job_matching_bot.ingestion.saramin_tech_vocab import split_tags
 from job_matching_bot.schemas.job_posting import Job
 
@@ -269,7 +270,10 @@ def normalize_saramin(
         preferred_skills=preferred,
         tech_stack=tech_stack,
         keywords=keywords,
-        body_is_image=bool(record.get("needs_human_review")),
+        # 크롤러가 이미지라고 표시했어도 글에 요건이 있으면 이미지 공고가 아니다.
+        # 저장소가 읽을 때 같은 규칙으로 뒤집는데, 쓸 때 다른 값을 넣으면 쓴 지문과
+        # 읽은 지문이 어긋난다. 실제로 4,316건이 그렇게 어긋나 다시 올려야 했다.
+        body_is_image=is_image_only_detail(description, record.get("needs_human_review")),
         required_majors=qualifications.majors,
         required_major_terms=qualifications.major_terms,
         required_certifications=qualifications.certifications,
