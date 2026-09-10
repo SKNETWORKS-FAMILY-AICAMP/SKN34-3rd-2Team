@@ -144,8 +144,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           jobCompany: job.company,
           jobTitle: job.title,
           draft: widget.draftContent,
-          onChanged: (content) {
-            widget.onResumeChanged?.call(content);
+          onChanged: (_) {
+            // 공고별 사본은 서버에서 자동 저장한다. 기본 이력서 편집 상태에는
+            // 전달하지 않아 다른 공고용 자리표시자가 바뀌지 않게 한다.
             if (mounted)
               setState(() {
                 _result = null;
@@ -1721,29 +1722,6 @@ class _Section extends StatelessWidget {
         ],
         const SizedBox(height: 9),
         child,
-      ],
-    );
-  }
-}
-
-class _BulletText extends StatelessWidget {
-  const _BulletText(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 5),
-          child: Icon(Icons.circle, size: 5, color: AppColors.info),
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text(text, style: const TextStyle(fontSize: 11, height: 1.4)),
-        ),
       ],
     );
   }

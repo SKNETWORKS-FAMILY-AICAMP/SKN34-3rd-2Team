@@ -6,7 +6,7 @@ import time
 
 from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion, SentenceReview
 
-PROMPT_VERSION = 'resume-v5-natural-korean-proofread'
+PROMPT_VERSION = 'resume-v7-focused-followup'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 
 
@@ -48,6 +48,33 @@ _RECRUITING_TITLE_PREFIX = re.compile(
     r'^(?:(?:에서|와|과)\s*)?(?:함께할|함께\s*일할|모실)\s*',
     re.IGNORECASE,
 )
+
+
+def _has_final_consonant(text):
+    """Return whether the final Hangul syllable has a 받침.
+
+    English/acronym-ending role names have no reliable Korean particle rule, so
+    use the vowel-ending form as the least intrusive fallback.
+    """
+    match = re.search(r'[가-힣]$', str(text or '').strip())
+    return bool(match and (ord(match.group()) - ord('가')) % 28)
+
+
+def _job_role_with_particle(role, particle):
+    """Attach a natural Korean particle to a selected-job role title."""
+    has_batchim = _has_final_consonant(role)
+    if particle in ('은', '는', '이', '가'):
+        # 직무 자체를 주어로 쓸 때는 'AI 엔지니어은'이 아니라
+        # 'AI 엔지니어 직무는'이 가장 자연스럽다.
+        return f'{role} 직무는'
+    if particle in ('을', '를'):
+        return f"{role}{'을' if has_batchim else '를'}"
+    if particle in ('으로', '로'):
+        # 받침 ㄹ 뒤에는 '로', 그 밖의 받침 뒤에는 '으로'를 쓴다.
+        last = str(role or '').strip()[-1:]
+        is_rieul = bool(last and '가' <= last <= '힣' and (ord(last) - ord('가')) % 28 == 8)
+        return f"{role}{'로' if not has_batchim or is_rieul else '으로'}"
+    return f'{role}{particle}'
 
 
 def job_role_title(company, posting_title):
@@ -151,6 +178,19 @@ def apply_selected_job_identity_revisions(generation, fields, job_source):
     for field_path, original in fields.items():
         revised = original
         changed = []
+        # 자리표시자 뒤의 조사를 직무명 마지막 글자에 맞게 바꾼다.
+        # 예: 'AI 엔지니어은' → 'AI 엔지니어 직무는',
+        #     'AI 엔지니어으로' → 'AI 엔지니어로'.
+        if company and title:
+            placeholder_with_particle = re.compile(
+                r'\[회사명\]\s*의\s*\[직무명\]\s*(?P<particle>으로|은|는|이|가|을|를|로)'
+            )
+            if placeholder_with_particle.search(revised):
+                revised = placeholder_with_particle.sub(
+                    lambda match: f"{company}의 {_job_role_with_particle(title, match.group('particle'))}",
+                    revised,
+                )
+                changed.extend(['회사명', '직무명'])
         if company and '[회사명]' in revised:
             revised = revised.replace('[회사명]', company)
             changed.append('회사명')
@@ -162,6 +202,19 @@ def apply_selected_job_identity_revisions(generation, fields, job_source):
             revised = revised.replace(posting_title, title)
             if '직무명' not in changed:
                 changed.append('직무명')
+        # 이미 잘못 치환된 이력서도 같은 표현으로 복구한다.
+        if company and title:
+            role_candidates = [title]
+            if posting_title and posting_title != title:
+                role_candidates.append(posting_title)
+            role_pattern = '|'.join(re.escape(candidate) for candidate in role_candidates)
+            job_subject = re.compile(
+                rf'{re.escape(company)}\s*의\s*(?:{role_pattern})\s*(?:은|는|이|가)'
+            )
+            if job_subject.search(revised):
+                revised = job_subject.sub(f'{company}의 {title} 직무는', revised)
+                if '직무명' not in changed:
+                    changed.append('직무명')
         if changed:
             replacements[field_path] = (original, revised, '·'.join(changed))
     if not replacements:
@@ -200,6 +253,61 @@ def apply_selected_job_identity_revisions(generation, fields, job_source):
 
 def group(path):
     return path.rsplit('.', 1)[0]
+
+
+def focused_followup_context(fields, answers, current_answers):
+    """Limit a follow-up model call to the answered resume item.
+
+    Grounding and persistence still receive the complete ``fields`` mapping.
+    This only keeps unrelated resume entries out of the next model prompt after
+    a user answers a confirmation question.
+    """
+    target_groups = {group(answer.field_path) for answer in current_answers if answer.field_path in fields}
+    if not target_groups:
+        return fields, answers, False
+    scoped_fields = {
+        path: value for path, value in fields.items()
+        if group(path) in target_groups
+    }
+    scoped_answers = [
+        answer for answer in answers
+        if group(answer.field_path) in target_groups
+    ]
+    return scoped_fields, scoped_answers, True
+
+
+def focused_time_context(time_context, current_answers):
+    """Keep project-period context aligned with the follow-up resume item."""
+    target_groups = {group(answer.field_path) for answer in current_answers}
+    if not target_groups:
+        return time_context
+    lines = [
+        line for line in time_context.splitlines()
+        if any(line.startswith(target_group + ' ') for target_group in target_groups)
+    ]
+    return '\n'.join(lines) or '현재 첨삭 항목에 기록된 프로젝트 기간이 없습니다.'
+
+
+def followup_job_prompt_text(job_text, job_source):
+    """Keep selected-job identity in a follow-up without resending its full text."""
+    if not job_text:
+        return '제공되지 않음'
+    if not job_source:
+        # Older clients can submit a posting directly without a selected-job id.
+        # Preserve a small amount of context, but do not resend a long posting.
+        return '[후속 첨삭용 공고 요약]\n' + job_text[:1500]
+    company = str(job_source.get('company') or '').strip() or '확인 불가'
+    title = str(job_source.get('title') or '').strip() or '확인 불가'
+    role_title = str(job_source.get('role_title') or '').strip() or job_role_title(company, title)
+    return (
+        '[선택 공고 식별 정보 — 사용자가 선택한 확정값]\n'
+        f'회사명: {company}\n'
+        f'직무명: {role_title}\n'
+        f'공고 제목: {title}\n\n'
+        '[후속 첨삭 범위]\n'
+        '공고 원문은 첫 검토에서 비교했습니다. 이번 턴에서는 위 공고 식별 정보와 '
+        '사용자가 답한 이력서 항목만 사용해 수정안을 만드세요.'
+    )
 
 
 def item_references(content, fields):
@@ -300,7 +408,17 @@ def run_review(service, id_token, request):
     from app.resume_review import extract_review_fields, enforce_resume_review_grounding, ground_sentences, require_answer_reflection
     db = service._firebase
     uid = db.verify_id_token(id_token)
-    resume = db.get_owned_resume(request.cohort_id, request.resume_id, uid)
+    if request.tailored_resume_id and request.review_mode != 'job':
+        raise ReviewInputError('tailored_resume_requires_job_review')
+    if request.tailored_resume_id:
+        resume = db.get_owned_tailored_resume(
+            request.cohort_id,
+            request.resume_id,
+            request.tailored_resume_id,
+            uid,
+        )
+    else:
+        resume = db.get_owned_resume(request.cohort_id, request.resume_id, uid)
     raw_content = resume.get('content') or {}
     fields, excluded = extract_review_fields(raw_content)
     refs = item_references(raw_content, fields)
@@ -314,7 +432,18 @@ def run_review(service, id_token, request):
         raise ReviewInputError('resume exceeds 50000 characters')
     previous = None
     if request.previous_review_id:
-        previous = db.get_ai_review(request.cohort_id, request.resume_id, uid, request.previous_review_id)
+        if request.tailored_resume_id:
+            previous = db.get_ai_review(
+                request.cohort_id,
+                request.resume_id,
+                uid,
+                request.previous_review_id,
+                request.tailored_resume_id,
+            )
+        else:
+            previous = db.get_ai_review(
+                request.cohort_id, request.resume_id, uid, request.previous_review_id
+            )
     if request.expected_input_hash and request.expected_input_hash != snapshot_hash:
         raise ReviewConflict('resume_version_changed')
     job_source = {}
@@ -329,13 +458,45 @@ def run_review(service, id_token, request):
         job_source, job_text = job['source'], job['text']
         if request.expected_job_hash and request.expected_job_hash != job_source['snapshot_hash']:
             raise ReviewConflict('selected_job_changed')
+        if request.tailored_resume_id and resume.get('jobId') != request.selected_job_id:
+            raise ReviewConflict('tailored_resume_job_mismatch')
+        if request.tailored_resume_id and resume.get('jobSnapshotHash') != job_source['snapshot_hash']:
+            raise ReviewConflict('tailored_resume_job_changed')
+    elif request.tailored_resume_id:
+        raise ReviewInputError('tailored_resume_requires_selected_job')
     answers = prepare_answers(request, previous, snapshot_hash, refs)
     if len(answers) > 30:
         raise ReviewInputError('too many accumulated answers')
     current_answer_ids = {answer.question_id for answer in request.answers}
     current_answers = [answer for answer in answers if answer.question_id in current_answer_ids]
+    prompt_fields, prompt_answers, is_focused_followup = focused_followup_context(
+        fields, answers, current_answers,
+    )
+    prompt_resume_text = json.dumps(prompt_fields, ensure_ascii=False)
+    prompt_job_text = (
+        followup_job_prompt_text(job_text, job_source)
+        if is_focused_followup
+        else review_job_prompt_text(job_text, job_source)
+    )
+    prompt_time_context = (
+        focused_time_context(time_context, current_answers)
+        if is_focused_followup
+        else time_context
+    )
     fingerprint = digest([uid, request.model_dump(), snapshot_hash, job_source, PROMPT_VERSION])
-    state = db.claim_review(request.cohort_id, request.resume_id, uid, request.request_id, fingerprint)
+    if request.tailored_resume_id:
+        state = db.claim_review(
+            request.cohort_id,
+            request.resume_id,
+            uid,
+            request.request_id,
+            fingerprint,
+            request.tailored_resume_id,
+        )
+    else:
+        state = db.claim_review(
+            request.cohort_id, request.resume_id, uid, request.request_id, fingerprint
+        )
     if state.get('response'):
         return FirestoreResumeReviewResponse.model_validate(state['response'])
     telemetry = {'model': service._settings.openai_model, 'prompt_version': PROMPT_VERSION,
@@ -343,14 +504,22 @@ def run_review(service, id_token, request):
     started = time.monotonic()
     try:
         generated = service._generator({
-            'resume_text': text,
-            'confirmed_answers': json.dumps([a.model_dump(exclude={'question_id'}) for a in answers], ensure_ascii=False),
+            'resume_text': prompt_resume_text,
+            'confirmed_answers': json.dumps(
+                [a.model_dump(exclude={'question_id'}) for a in prompt_answers], ensure_ascii=False,
+            ),
             'current_turn_answers': json.dumps(
                 [a.model_dump(exclude={'question_id'}) for a in current_answers],
                 ensure_ascii=False,
             ),
-            'job_posting_text': redact(review_job_prompt_text(job_text, job_source)),
-            'resume_time_context': time_context,
+            'job_posting_text': redact(prompt_job_text),
+            'resume_time_context': prompt_time_context,
+            'review_scope': (
+                '첫 검토입니다. 이력서 전체와 선택 공고를 비교해 검토하세요.'
+                if not is_focused_followup
+                else '후속 첨삭입니다. 이번 답변의 field_path와 같은 이력서 항목만 수정하세요. '
+                '다른 항목의 새 진단·수정·질문은 만들지 마세요.'
+            ),
             'review_mode': (
                 '일반 이력서 첨삭 — 공고 없이 문장·경험·역할·성과 근거를 검토'
                 if request.review_mode == 'general'
@@ -378,15 +547,40 @@ def run_review(service, id_token, request):
             **grounded.model_dump(), review_id=request.request_id, cohort_id=request.cohort_id,
             resume_id=request.resume_id, grounding_warnings=warnings, input_fields=fields,
             input_hash=snapshot_hash, item_refs=refs, excluded_fields=excluded,
-            confirmed_answers=answers, changes=changes, telemetry=telemetry, job_source=job_source)
+            confirmed_answers=answers, changes=changes, telemetry=telemetry, job_source=job_source,
+            tailored_resume_id=request.tailored_resume_id)
         # Persist the response on the claimed document; repeat requests recover it.
-        db.complete_review(request.cohort_id, request.resume_id, uid, request.request_id, response.model_dump())
+        if request.tailored_resume_id:
+            db.complete_review(
+                request.cohort_id,
+                request.resume_id,
+                uid,
+                request.request_id,
+                response.model_dump(),
+                request.tailored_resume_id,
+            )
+        else:
+            db.complete_review(
+                request.cohort_id, request.resume_id, uid, request.request_id, response.model_dump()
+            )
         return response
     except Exception as exc:
         telemetry.update(status='failed', elapsed_ms=round((time.monotonic() - started) * 1000), error_type=type(exc).__name__)
         # Do not release the claim: uncertain model/save outcomes must not silently rebill.
         try:
-            db.fail_review(request.cohort_id, request.resume_id, uid, request.request_id, telemetry)
+            if request.tailored_resume_id:
+                db.fail_review(
+                    request.cohort_id,
+                    request.resume_id,
+                    uid,
+                    request.request_id,
+                    telemetry,
+                    request.tailored_resume_id,
+                )
+            else:
+                db.fail_review(
+                    request.cohort_id, request.resume_id, uid, request.request_id, telemetry
+                )
         except Exception:
             pass
         raise

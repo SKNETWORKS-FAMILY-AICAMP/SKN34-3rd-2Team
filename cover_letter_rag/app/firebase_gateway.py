@@ -64,8 +64,13 @@ class FirebaseGateway:
             raise ResumeNotFoundError("resume not found")
         return data
 
-    def _review_ref(self, cohort_id, resume_id, review_id):
-        return self._resume_ref(cohort_id, resume_id).collection(self._settings.firestore_ai_reviews_collection).document(review_id)
+    def _review_ref(self, cohort_id, resume_id, review_id, tailored_resume_id: str | None = None):
+        parent = (
+            self._tailored_ref(cohort_id, resume_id, tailored_resume_id)
+            if tailored_resume_id
+            else self._resume_ref(cohort_id, resume_id)
+        )
+        return parent.collection(self._settings.firestore_ai_reviews_collection).document(review_id)
 
     def create_tailored_resume(self, cohort_id: str, resume_id: str, uid: str, job_source: dict[str, Any]) -> dict[str, Any]:
         """Clone an owned base resume once per immutable job snapshot.
@@ -114,15 +119,35 @@ class FirebaseGateway:
                 result.append({'tailored_resume_id': snapshot.id, **data})
         return result
 
-    def get_ai_review(self, cohort_id, resume_id, uid, review_id):
+    def get_owned_tailored_resume(
+        self,
+        cohort_id: str,
+        resume_id: str,
+        tailored_resume_id: str,
+        uid: str,
+    ) -> dict[str, Any]:
+        """Read a company-specific draft only after validating its base resume."""
         self.get_owned_resume(cohort_id, resume_id, uid)
-        data = self._review_ref(cohort_id, resume_id, review_id).get().to_dict() or {}
+        snapshot = self._tailored_ref(cohort_id, resume_id, tailored_resume_id).get()
+        if not snapshot.exists:
+            raise ResumeNotFoundError('tailored resume not found')
+        data = snapshot.to_dict() or {}
+        if data.get('userId') != uid or data.get('baseResumeId') != resume_id:
+            raise ResumeNotFoundError('tailored resume not found')
+        return data
+
+    def get_ai_review(self, cohort_id, resume_id, uid, review_id, tailored_resume_id: str | None = None):
+        if tailored_resume_id:
+            self.get_owned_tailored_resume(cohort_id, resume_id, tailored_resume_id, uid)
+        else:
+            self.get_owned_resume(cohort_id, resume_id, uid)
+        data = self._review_ref(cohort_id, resume_id, review_id, tailored_resume_id).get().to_dict() or {}
         if data.get('userId') != uid or not data.get('response'):
             raise ResumeNotFoundError('review not found')
         return data['response']
 
-    def claim_review(self, cohort_id, resume_id, uid, request_id, fingerprint):
-        ref = self._review_ref(cohort_id, resume_id, request_id)
+    def claim_review(self, cohort_id, resume_id, uid, request_id, fingerprint, tailored_resume_id: str | None = None):
+        ref = self._review_ref(cohort_id, resume_id, request_id, tailored_resume_id)
         try:
             ref.create({'userId': uid, 'fingerprint': fingerprint, 'status': 'processing', 'createdAt': firestore.SERVER_TIMESTAMP})
             return {}
@@ -134,13 +159,16 @@ class FirebaseGateway:
                 return state
             raise ReviewConflict('request_processing_or_failed: inspect before issuing a new request_id')
 
-    def complete_review(self, cohort_id, resume_id, uid, request_id, response):
-        self.get_owned_resume(cohort_id, resume_id, uid)
-        self._review_ref(cohort_id, resume_id, request_id).update({'response': response, 'status': 'complete', 'telemetry': response['telemetry']})
+    def complete_review(self, cohort_id, resume_id, uid, request_id, response, tailored_resume_id: str | None = None):
+        if tailored_resume_id:
+            self.get_owned_tailored_resume(cohort_id, resume_id, tailored_resume_id, uid)
+        else:
+            self.get_owned_resume(cohort_id, resume_id, uid)
+        self._review_ref(cohort_id, resume_id, request_id, tailored_resume_id).update({'response': response, 'status': 'complete', 'telemetry': response['telemetry']})
 
-    def fail_review(self, cohort_id, resume_id, uid, request_id, telemetry):
+    def fail_review(self, cohort_id, resume_id, uid, request_id, telemetry, tailored_resume_id: str | None = None):
         # Keep any response committed by an ambiguous successful update recoverable.
-        self._review_ref(cohort_id, resume_id, request_id).update({'status': 'failed', 'telemetry': telemetry})
+        self._review_ref(cohort_id, resume_id, request_id, tailored_resume_id).update({'status': 'failed', 'telemetry': telemetry})
 
     def save_ai_review(
         self,

@@ -261,6 +261,8 @@ class FirestoreResumeReviewRequest(StrictModel):
     expected_input_hash: str | None = None
     cohort_id: str = Field(min_length=1, max_length=200)
     resume_id: str = Field(min_length=1, max_length=200)
+    # 공고 맞춤 첨삭은 기본 이력서가 아닌 공고별 사본을 대상으로 한다.
+    tailored_resume_id: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{1,100}$')
     job_posting_text: str | None = Field(default=None, max_length=50_000)
     review_focus: str | None = Field(default=None, max_length=2_000)
     answers: list[ConfirmationAnswer] = Field(default_factory=list, max_length=10)
@@ -271,6 +273,16 @@ class FirestoreResumeReviewRequest(StrictModel):
         if not value.strip() or '/' in value or value.strip() in {'.', '..'}:
             raise ValueError("identifier must not be blank")
         return value.strip()
+
+    @field_validator("tailored_resume_id")
+    @classmethod
+    def normalize_tailored_resume_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value or '/' in value or value in {'.', '..'}:
+            raise ValueError("tailored resume identifier must not be blank")
+        return value
 
     @field_validator("job_posting_text", "review_focus")
     @classmethod
@@ -354,6 +366,7 @@ class FirestoreResumeReviewResponse(ResumeReviewGeneration):
     review_id: str
     cohort_id: str
     resume_id: str
+    tailored_resume_id: str | None = None
     grounding_warnings: list[str] = Field(default_factory=list)
     input_fields: dict[str, str] = Field(default_factory=dict)
     input_hash: str = ""
