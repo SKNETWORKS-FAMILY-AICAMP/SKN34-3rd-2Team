@@ -247,8 +247,11 @@ class JobChatRequest(StrictModel):
     top_k: int = Field(default=5, ge=1, le=20)
     job_id: str | None = Field(
         default=None,
-        description="이 공고를 놓고 묻는 경우의 job_id. 있으면 그 공고 원문만 근거로 답한다",
+        description="이 공고를 놓고 묻는 경우의 job_id. 있으면 그 공고를 근거로 답한다",
     )
+    # 공고를 놓고 물을 때 "나한테 맞아?"는 이력서를 봐야 답할 수 있다. 없으면 서버는
+    # 공고만 읽고 답하므로, 앱은 이력서 화면에서 물을 때 평문을 함께 보낸다.
+    resume_text: str | None = Field(default=None, max_length=50_000)
 
 
 class JobChatJob(StrictModel):

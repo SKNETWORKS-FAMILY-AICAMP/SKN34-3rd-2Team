@@ -113,9 +113,10 @@ class ChatTestCase(unittest.TestCase):
         )
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
-            job_id=None, answered=None):
+            job_id=None, answered=None, resume_text=None):
         request = schemas.JobChatRequest(
-            message=message, filters=filters, top_k=top_k, job_id=job_id
+            message=message, filters=filters, top_k=top_k, job_id=job_id,
+            resume_text=resume_text,
         )
         return self.service(out, answered=answered).chat(request)
 
@@ -522,6 +523,23 @@ class JobQuestionTest(ChatTestCase):
         )
         self.assertEqual("공고", response.mode)
         self.assertEqual(0, self.calls, "조건 추출 LLM은 부르지 않는다")
+
+    def test_the_resume_goes_with_the_question(self):
+        """이력서 화면에서 물었으면 이력서를 함께 넘긴다.
+
+        안 넘기던 때에는 "이 공고 나한테 맞아?"에 "현재 이력서 내용을 볼 수 없어
+        판단하기는 어렵다"고 답했다. 이력서는 바로 옆 화면에 열려 있었다.
+        """
+        self.ask(
+            turn(), message="나한테 맞는 공고야?", job_id="J1",
+            resume_text="Python으로 FastAPI 추천 API를 만들었습니다.",
+        )
+        self.assertIn("FastAPI", self.asked["resume"])
+
+    def test_without_a_resume_the_model_is_told_so(self):
+        """안 받았으면 없다고 분명히 알린다. 빈 칸을 주면 지어내 채운다."""
+        self.ask(turn(), message="뭘 요구해?", job_id="J1")
+        self.assertEqual("(없음)", self.asked["resume"])
 
     def test_the_posting_text_is_handed_to_the_model(self):
         self.ask(turn(), message="뭘 요구해?", job_id="J1")

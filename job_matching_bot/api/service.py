@@ -740,8 +740,15 @@ class ChatService(_LivenessMixin):
                 total=0,
             )
 
+        # 이력서를 함께 받았으면 넘긴다. 이력서 화면에서 "나한테 맞아?"라고 물었는데
+        # 공고만 읽고 "이력서를 볼 수 없어요"라고 답하던 것을 고친다.
+        resume = (request.resume_text or "").strip()
         answer = self.job_asker(
-            {"job": _job_text(record.job), "question": request.message}
+            {
+                "job": _job_text(record.job),
+                "resume": resume or "(없음)",
+                "question": request.message,
+            }
         )
         return schemas.JobChatResponse(
             mode="공고",

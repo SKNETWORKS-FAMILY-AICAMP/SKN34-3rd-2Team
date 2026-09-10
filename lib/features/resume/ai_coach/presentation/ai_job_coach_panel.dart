@@ -16,6 +16,7 @@ import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
 import '../data/resume_analysis_repository.dart';
 import '../data/resume_analyzer.dart';
+import '../data/resume_text_builder.dart';
 import '../models/ai_job_coach_result.dart';
 import '../models/resume_readiness.dart';
 
@@ -465,6 +466,11 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         message: text,
         filters: _chatFilters,
         jobId: _askingAbout?.jobId,
+        // 공고를 놓고 물을 때만 보낸다. 공고를 안 고른 검색·질문은 이력서가
+        // 필요 없고, 보내 봐야 쓰이지 않는다.
+        resumeText: _askingAbout == null
+            ? null
+            : buildResumeText(widget.draftContent),
       );
       if (!mounted) return;
       setState(() {
