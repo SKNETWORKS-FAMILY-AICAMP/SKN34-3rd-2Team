@@ -412,7 +412,7 @@ class _ResumeCard extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              resume.title,
+                              resume.displayTitle(asReviewer: canReview),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 15,

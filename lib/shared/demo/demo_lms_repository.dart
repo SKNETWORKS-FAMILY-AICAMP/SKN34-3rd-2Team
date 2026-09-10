@@ -808,6 +808,19 @@ class DemoLmsRepository {
     );
   }
 
+  Future<void> deleteResumeFeedback({
+    required String cohortId,
+    required String resumeId,
+    required String feedbackId,
+  }) async {
+    final i = _resumes.indexWhere((r) => r.id == resumeId);
+    if (i < 0) return;
+    final current = _resumes[i];
+    _resumes[i] = current.copyWith(
+      feedbackCount: current.feedbackCount > 0 ? current.feedbackCount - 1 : 0,
+    );
+  }
+
   Future<void> markResumeFeedbackRead({
     required String cohortId,
     required String resumeId,

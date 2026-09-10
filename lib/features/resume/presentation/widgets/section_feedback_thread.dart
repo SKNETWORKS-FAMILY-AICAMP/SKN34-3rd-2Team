@@ -43,10 +43,67 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
   /// 다시 그리므로 글자 하나에 쓰기 한 번이 나간다.
   final Set<String> _marked = {};
 
+  /// 지금 답글을 달려는 피드백. 비어 있으면 실을 새로 여는 글이다.
+  ResumeFeedbackModel? _replyTo;
+  final FocusNode _inputFocus = FocusNode();
+
   @override
   void dispose() {
     _input.dispose();
+    _inputFocus.dispose();
     super.dispose();
+  }
+
+  void _startReply(ResumeFeedbackModel target) {
+    setState(() => _replyTo = target);
+    _inputFocus.requestFocus();
+  }
+
+  /// 내가 쓴 글인가. 지우기는 자기 글에만 준다.
+  bool _isMine(ResumeFeedbackModel item) {
+    final uid = ref.read(currentUserSyncProvider)?.uid;
+    return uid != null && uid.isNotEmpty && item.authorId == uid;
+  }
+
+  Future<void> _delete(ResumeFeedbackModel item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('글 삭제'),
+        content: const Text('지운 글은 되돌릴 수 없습니다. 삭제할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('삭제', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (cohortId == null) return;
+    try {
+      await ref.read(lmsRepositoryProvider).deleteResumeFeedback(
+            cohortId: cohortId,
+            resumeId: widget.resume.id,
+            feedbackId: item.id,
+          );
+      // 답글을 달던 글이 사라졌으면 대상도 함께 놓는다.
+      if (mounted && _replyTo?.id == item.id) {
+        setState(() => _replyTo = null);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제 실패: $error')),
+        );
+      }
+    }
   }
 
   Future<void> _markRead(List<ResumeFeedbackModel> unread) async {
@@ -85,9 +142,11 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
               content: text,
               authorName: user.displayName,
               authorId: user.uid,
+              parentId: _replyTo?.id ?? '',
             ),
           );
       _input.clear();
+      if (mounted) setState(() => _replyTo = null);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -163,11 +222,30 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
               style: TextStyle(fontSize: 12.5, color: AppColors.textHint),
             )
           else
-            for (final item in items)
-              _Comment(
-                item: item,
-                isNew: unreadIds.contains(item.id),
-                mine: item.isReplyOn(widget.resume) != asReviewer,
+            // 첫 글과 그 답글을 묶어 그린다. 부모를 찾지 못한 답글(부모가 지워진
+            // 경우)은 첫 글로 올라와 화면에서 사라지지 않게 한다.
+            for (final item in threadRoots(items))
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Comment(
+                    item: item,
+                    isNew: unreadIds.contains(item.id),
+                    mine: item.isReplyOn(widget.resume) != asReviewer,
+                    onReply: () => _startReply(item),
+                    onDelete: _isMine(item) ? () => _delete(item) : null,
+                  ),
+                  for (final reply in threadRepliesTo(items, item.id))
+                    Padding(
+                      padding: const EdgeInsets.only(left: 22),
+                      child: _Comment(
+                        item: reply,
+                        isNew: unreadIds.contains(reply.id),
+                        mine: reply.isReplyOn(widget.resume) != asReviewer,
+                        onDelete: _isMine(reply) ? () => _delete(reply) : null,
+                      ),
+                    ),
+                ],
               ),
           const SizedBox(height: 10),
           _composer(asReviewer),
@@ -177,11 +255,50 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
   }
 
   Widget _composer(bool asReviewer) {
+    final target = _replyTo;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 누구에게 답하는지 입력칸 위에 밝힌다. 실이 길어지면 쓰는 사람도 헷갈린다.
+        if (target != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    '${target.authorName}님의 글에 답글',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => setState(() => _replyTo = null),
+                  child: const Text(
+                    '취소',
+                    style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        _composerRow(asReviewer, target),
+      ],
+    );
+  }
+
+  Widget _composerRow(bool asReviewer, ResumeFeedbackModel? target) {
     return Row(
       children: [
         Expanded(
           child: TextField(
             controller: _input,
+            focusNode: _inputFocus,
             minLines: 1,
             maxLines: 4,
             enabled: !_sending,
@@ -191,7 +308,11 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
               isDense: true,
               filled: true,
               fillColor: Colors.white,
-              hintText: asReviewer ? '이 항목에 대한 피드백을 적어 주세요' : '답글을 적어 주세요',
+              hintText: target != null
+                  ? '${target.authorName}님에게 답글을 적어 주세요'
+                  : (asReviewer
+                        ? '이 항목에 대한 피드백을 적어 주세요'
+                        : '이 항목에 대해 남길 말을 적어 주세요'),
               hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.textHint),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
@@ -300,7 +421,19 @@ class _ThreadChip extends StatelessWidget {
 }
 
 class _Comment extends StatelessWidget {
-  const _Comment({required this.item, required this.isNew, required this.mine});
+  const _Comment({
+    required this.item,
+    required this.isNew,
+    required this.mine,
+    this.onReply,
+    this.onDelete,
+  });
+
+  /// 이 글에 답글 달기. 답글에는 주지 않는다 — 답글의 답글은 만들지 않는다.
+  final VoidCallback? onReply;
+
+  /// 이 글 지우기. 자기가 쓴 글에만 준다.
+  final VoidCallback? onDelete;
 
   final ResumeFeedbackModel item;
   final bool isNew;
@@ -393,6 +526,40 @@ class _Comment extends StatelessWidget {
                     color: Color(0xFF374151),
                   ),
                 ),
+                if (onReply != null || onDelete != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        if (onReply != null)
+                          InkWell(
+                            onTap: onReply,
+                            child: const Text(
+                              '답글',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        if (onReply != null && onDelete != null)
+                          const SizedBox(width: 12),
+                        if (onDelete != null)
+                          InkWell(
+                            onTap: onDelete,
+                            child: const Text(
+                              '삭제',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textHint,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
