@@ -12,16 +12,18 @@ class JobResumeReviewDialog extends StatefulWidget {
     required this.client,
     required this.cohortId,
     required this.resumeId,
-    required this.jobId,
-    required this.jobCompany,
-    required this.jobTitle,
     required this.draft,
     required this.onChanged,
+    this.jobId = '',
+    this.jobCompany = '',
+    this.jobTitle = '',
+    this.generalReview = false,
   });
   final ResumeReviewApiClient client;
   final String cohortId, resumeId, jobId, jobCompany, jobTitle;
   final ResumeContent draft;
   final ValueChanged<ResumeContent> onChanged;
+  final bool generalReview;
 
   @override
   State<JobResumeReviewDialog> createState() => _JobResumeReviewDialogState();
@@ -42,6 +44,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final Map<String, GlobalKey> _previewSectionKeys = {};
   bool _busy = false, _changed = false, _undone = false;
   bool _mutationPending = false;
+  Map<String, dynamic>? _pendingQuestion;
   String? _error;
   String? _focusedFieldPath;
   late ResumeContent _preview;
@@ -84,7 +87,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       final snapshot = await widget.client.context(
         widget.cohortId,
         widget.resumeId,
-        job: widget.jobId,
+        job: widget.generalReview ? null : widget.jobId,
       );
       final content = Map<String, dynamic>.from(snapshot['content'] as Map);
       if (!sameResumeContent(widget.draft, content)) {
@@ -95,9 +98,12 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       _reviewRequest = {
         ..._identity,
         'request_id': _id(),
-        'selected_job_id': widget.jobId,
         'expected_input_hash': snapshot['input_hash'],
-        'expected_job_hash': (snapshot['job_source'] as Map)['snapshot_hash'],
+        'review_mode': widget.generalReview ? 'general' : 'job',
+        if (!widget.generalReview) ...{
+          'selected_job_id': widget.jobId,
+          'expected_job_hash': (snapshot['job_source'] as Map)['snapshot_hash'],
+        },
       };
     }
     _result = await widget.client.review(_reviewRequest!);
@@ -118,11 +124,6 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _preview = content;
         _changed = true;
         _mutationPending = false;
-        _messages.add(
-          const _ReviewChatMessage.assistant(
-            '수정안이 왼쪽 이력서에 반영되었습니다. 다음 질문에 답하면 수정된 내용 기준으로 첨삭을 계속합니다.',
-          ),
-        );
       });
     }
   }
@@ -132,10 +133,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     required bool isFirstReview,
     String? answeredFieldPath,
   }) {
+    _pendingQuestion = null;
     if (isFirstReview) {
       _messages.add(
         _ReviewChatMessage.assistant(
-          review['summary'] as String? ?? '이력서와 선택 공고를 비교했습니다.',
+          review['summary'] as String? ??
+              (widget.generalReview
+                  ? '이력서 문장을 검토했습니다.'
+                  : '이력서와 선택 공고를 비교했습니다.'),
         ),
       );
     }
@@ -155,7 +160,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       if (sentence['suggested_revision'] is String &&
           (sentence['suggested_revision'] as String).trim().isNotEmpty) {
         sentence['_index'] = index;
-        if (_isIdentityPlaceholderSuggestion(sentence)) {
+        if (!widget.generalReview && _isIdentityPlaceholderSuggestion(sentence)) {
           sentence['_company'] = job['company'] ?? widget.jobCompany;
           sentence['_title'] =
               job['role_title'] ?? job['title'] ?? widget.jobTitle;
@@ -191,8 +196,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     final questions = (review['questions'] as List? ?? []).cast<Map>();
     if (questions.isNotEmpty) {
       final question = Map<String, dynamic>.from(questions.first);
-      _messages.add(_ReviewChatMessage.question(question));
-      _focusPreviewField(question['field_path'] as String?);
+      if (displayedSuggestions > 0) {
+        // The user should decide whether to apply the current revision before
+        // moving on. Show this question after the revised resume is reloaded.
+        _pendingQuestion = question;
+      } else {
+        _messages.add(_ReviewChatMessage.question(question));
+        _focusPreviewField(question['field_path'] as String?);
+      }
     } else if (!isFirstReview && displayedSuggestions > 0) {
       _messages.add(
         const _ReviewChatMessage.assistant(
@@ -255,8 +266,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       final nextRequest = <String, dynamic>{
         ..._identity,
         'request_id': _id(),
-        'selected_job_id': widget.jobId,
-        'expected_job_hash': (previous['job_source'] as Map?)?['snapshot_hash'],
+        'review_mode': widget.generalReview ? 'general' : 'job',
+        if (!widget.generalReview) ...{
+          'selected_job_id': widget.jobId,
+          'expected_job_hash': (previous['job_source'] as Map?)?['snapshot_hash'],
+        },
         'previous_review_id': previous['review_id'],
         'expected_input_hash': previous['input_hash'],
         'answers': [
@@ -320,6 +334,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       setState(() => _appliedSuggestionIndices.addAll(_selected));
     }
     await _reload();
+    if (mounted && _pendingQuestion != null) {
+      final question = _pendingQuestion!;
+      setState(() {
+        _pendingQuestion = null;
+        _messages.add(_ReviewChatMessage.question(question));
+      });
+      _focusPreviewField(question['field_path'] as String?);
+    }
   });
 
   Future<void> _undo() => _run(() async {
@@ -342,6 +364,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _applyRequest = null;
         _application = null;
         _undone = true;
+        _pendingQuestion = null;
         _messages.add(
           const _ReviewChatMessage.assistant(
             '수정안을 되돌렸습니다. 현재 이력서 기준으로 첨삭을 다시 시작할 수 있습니다.',
@@ -387,11 +410,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
             children: [
               _ReviewDialogHeader(
                 job:
-                    _result?['job_source'] as Map? ??
+                    widget.generalReview
+                        ? null
+                        : _result?['job_source'] as Map? ??
                     {
                       'company': widget.jobCompany,
                       'title': widget.jobTitle,
                     },
+                generalReview: widget.generalReview,
                 canUndo: _application != null && !_undone,
                 busy: _busy,
                 onUndo: _undo,
@@ -414,6 +440,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       busy: _busy,
                       error: _error,
                       resultAvailable: _result != null,
+                      generalReview: widget.generalReview,
                       answerController: _answerController,
                       scrollController: _chatScrollController,
                       activeQuestion: activeQuestion,
@@ -454,6 +481,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
 class _ReviewDialogHeader extends StatelessWidget {
   const _ReviewDialogHeader({
     required this.job,
+    required this.generalReview,
     required this.canUndo,
     required this.busy,
     required this.onUndo,
@@ -461,6 +489,7 @@ class _ReviewDialogHeader extends StatelessWidget {
   });
 
   final Map? job;
+  final bool generalReview;
   final bool canUndo;
   final bool busy;
   final Future<void> Function() onUndo;
@@ -479,11 +508,16 @@ class _ReviewDialogHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '공고 맞춤 이력서 첨삭',
+                Text(
+                  generalReview ? '이력서 첨삭' : '공고 맞춤 이력서 첨삭',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                 ),
-                if (jobLabel.isNotEmpty)
+                if (generalReview)
+                  const Text(
+                    '문장 표현과 이력서 근거를 검토해 수정안을 제시합니다.',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                  )
+                else if (jobLabel.isNotEmpty)
                   Text(
                     jobLabel,
                     maxLines: 1,
@@ -699,6 +733,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.busy,
     required this.error,
     required this.resultAvailable,
+    required this.generalReview,
     required this.answerController,
     required this.scrollController,
     required this.activeQuestion,
@@ -712,6 +747,7 @@ class _ReviewChatPane extends StatelessWidget {
   final bool busy;
   final String? error;
   final bool resultAvailable;
+  final bool generalReview;
   final TextEditingController answerController;
   final ScrollController scrollController;
   final Map<String, dynamic>? activeQuestion;
@@ -731,19 +767,27 @@ class _ReviewChatPane extends StatelessWidget {
             color: Colors.white,
             border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.smart_toy_outlined,
                 size: 18,
                 color: Color(0xFF16A34A),
               ),
-              SizedBox(width: 7),
-              Text('AI 첨삭 대화', style: TextStyle(fontWeight: FontWeight.w700)),
-              SizedBox(width: 8),
+              const SizedBox(width: 7),
+              const Text(
+                'AI 첨삭 대화',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 8),
               Text(
-                '근거가 부족한 내용은 질문으로 확인합니다.',
-                style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                generalReview
+                    ? '문장 표현과 경험 근거를 함께 검토합니다.'
+                    : '근거가 부족한 내용은 질문으로 확인합니다.',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF6B7280),
+                ),
               ),
             ],
           ),
@@ -755,7 +799,7 @@ class _ReviewChatPane extends StatelessWidget {
               padding: const EdgeInsets.all(18),
               children: [
                 if (!resultAvailable && !busy && error == null)
-                  _ChatIntro(onStart: onStart),
+                  _ChatIntro(onStart: onStart, generalReview: generalReview),
                 for (final message in messages)
                   _ReviewChatBubble(
                     message: message,
@@ -829,9 +873,10 @@ class _ReviewChatPane extends StatelessWidget {
 }
 
 class _ChatIntro extends StatelessWidget {
-  const _ChatIntro({required this.onStart});
+  const _ChatIntro({required this.onStart, required this.generalReview});
 
   final Future<void> Function() onStart;
+  final bool generalReview;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -841,13 +886,17 @@ class _ChatIntro extends StatelessWidget {
         children: [
           const Icon(Icons.auto_awesome, size: 34, color: Color(0xFF16A34A)),
           const SizedBox(height: 12),
-          const Text(
-            '선택 공고 기준으로 이력서를 확인합니다.',
+          Text(
+            generalReview
+                ? '이력서 문장과 경험 근거를 확인합니다.'
+                : '선택 공고 기준으로 이력서를 확인합니다.',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
-          const Text(
-            '부족한 사실은 AI가 질문하고, 답변을 근거로 수정안을 제시합니다.',
+          Text(
+            generalReview
+                ? '필요한 사실은 질문으로 확인하고, 맞춤법·문법·표현도 함께 다듬습니다.'
+                : '부족한 사실은 AI가 질문하고, 답변을 근거로 수정안을 제시합니다.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
           ),

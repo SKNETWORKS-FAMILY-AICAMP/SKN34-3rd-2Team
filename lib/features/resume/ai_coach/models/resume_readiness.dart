@@ -5,7 +5,7 @@ import '../../../../shared/models/resume_content.dart';
 ///
 /// - 맞춤 공고 추천: 조건 판정에 쓰는 항목이 있고, 직무 근거가 **하나라도** 있으면
 ///   실행한다. 근거 없는 순위를 내지 않으려는 것이지, 칸을 다 채우게 하려는 것이 아니다.
-/// - 이력서 분석: 분석할 내용이 하나라도 있으면 실행한다.
+/// - 이력서 첨삭: 첨삭할 내용이 하나라도 있으면 실행한다.
 /// - 채용공고 찾기: 이력서와 무관하게 언제나 실행한다.
 enum AiCoachFeature { resumeAnalysis, jobRecommendation, jobSearch }
 
@@ -38,7 +38,7 @@ const evidenceSectionsForRecommendation = <String>[
   'experience', // 경력사항
 ];
 
-/// 이력서 분석에 최소한 필요한 섹션. 이 중 하나라도 있으면 분석할 수 있다.
+/// 이력서 첨삭에 최소한 필요한 섹션. 이 중 하나라도 있으면 첨삭할 수 있다.
 const analyzableSections = <String>[
   'coreCompetencies',
   'experience',
@@ -129,7 +129,7 @@ class ResumeReadiness {
             '핵심역량, 기술스택, 프로젝트, 자기소개서, 경력 중 '
             '하나 이상을 작성해주세요.';
       case AiCoachFeature.resumeAnalysis:
-        return '분석할 내용이 아직 없습니다. 핵심역량, 경력, 기술스택, '
+        return '첨삭할 내용이 아직 없습니다. 핵심역량, 경력, 기술스택, '
             '프로젝트 중 하나 이상을 작성해주세요.';
       case AiCoachFeature.jobSearch:
         return null;

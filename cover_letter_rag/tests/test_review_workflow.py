@@ -84,6 +84,54 @@ def test_fixed_diagnostics_and_priority_questions():
     assert len(result.questions) == 1
 
 
+def test_general_review_sends_no_job_and_keeps_content_questions():
+    seen = []
+
+    def generate(data):
+        seen.append(data)
+        return ResumeReviewGeneration(
+            summary='문장을 검토했습니다.',
+            section_reviews=[],
+            sentence_reviews=[
+                SentenceReview(
+                    field_path='coreCompetencies.text',
+                    original_quote='Python REST API 개발',
+                    suggested_revision='Python REST API를 개발했습니다.',
+                    reason='명사형 표현을 서술형으로 정리했습니다.',
+                    edit_type='content',
+                ),
+            ],
+            questions=[
+                ReviewQuestion(
+                    field_path='coreCompetencies.text',
+                    topic='other',
+                    question='구현한 API의 범위나 검증 방식이 있나요?',
+                    reason='일반 첨삭에서도 사실 확인 질문을 반환합니다.',
+                ),
+            ],
+        )
+
+    response = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generate,
+    ).review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1',
+            resume_id='resume-1',
+            review_mode='general',
+        ),
+    )
+
+    assert seen[0]['review_mode'].startswith('일반 이력서 첨삭')
+    assert response.sentence_reviews[0].suggested_revision == 'Python REST API를 개발했습니다.'
+    assert response.questions[0].question == '구현한 API의 범위나 검증 방식이 있나요?'
+    assert all(
+        diagnostic.criterion not in {'relevance', 'company_fit'} or
+        diagnostic.status == 'not_evaluated'
+        for diagnostic in response.diagnostics
+    )
+
+
 def test_failed_call_is_not_automatically_rebilled():
     db = FakeFirebase()
     calls = []

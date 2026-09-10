@@ -251,6 +251,9 @@ class SentenceReview(StrictModel):
 
 
 class FirestoreResumeReviewRequest(StrictModel):
+    # 일반 첨삭은 공고와 분리해 이력서 원문 자체를 검토한다. 기존 공고 첨삭 호출은
+    # 호환성을 위해 job 모드를 기본값으로 유지한다.
+    review_mode: Literal['general', 'job'] = 'job'
     selected_job_id: str | None = Field(default=None, min_length=1, max_length=200)
     expected_job_hash: str | None = None
     request_id: str = Field(default_factory=lambda: __import__('uuid').uuid4().hex, pattern=r'^[A-Za-z0-9_-]{1,100}$')
