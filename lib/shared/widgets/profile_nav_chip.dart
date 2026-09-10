@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/shell_chrome.dart';
 import '../models/user_model.dart';
 import '../providers/profile_photo_providers.dart';
+import '../providers/side_rail_theme_provider.dart';
 import 'profile_avatar.dart';
 import 'profile_avatar_editor.dart';
 
@@ -27,12 +29,14 @@ class ProfileNavChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preview = ref.watch(profilePhotoPreviewProvider);
+    final railDark = ref.watch(sideRailDarkModeProvider);
 
     return switch (style) {
       ProfileNavChipStyle.appBar => _AppBarProfileChip(
           user: user,
           preview: preview,
           onTap: onTap,
+          isDark: railDark,
         ),
       ProfileNavChipStyle.drawer => _DrawerProfileHeader(
           user: user,
@@ -49,11 +53,13 @@ class _AppBarProfileChip extends StatelessWidget {
     required this.user,
     required this.preview,
     required this.onTap,
+    required this.isDark,
   });
 
   final UserModel user;
   final Uint8List? preview;
   final VoidCallback onTap;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
@@ -70,9 +76,9 @@ class _AppBarProfileChip extends StatelessWidget {
           constraints: BoxConstraints(maxWidth: showCohort ? 220 : 160),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            color: AppColors.surfaceVariant.withValues(alpha: 0.55),
+            color: ShellChrome.chipFill(isDark),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: ShellChrome.chipBorder(isDark)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -97,10 +103,11 @@ class _AppBarProfileChip extends StatelessWidget {
                       user.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         height: 1.15,
+                        color: ShellChrome.appBarForeground(isDark),
                       ),
                     ),
                     if (showCohort) ...[
@@ -111,7 +118,7 @@ class _AppBarProfileChip extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 10,
-                          color: AppColors.textSecondary,
+                          color: ShellChrome.appBarMuted(isDark),
                           height: 1.15,
                         ),
                       ),

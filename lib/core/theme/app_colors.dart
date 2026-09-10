@@ -23,9 +23,17 @@ abstract final class AppColors {
   static const error = Color(0xFFDC2626);
   static const info = Color(0xFF0055FF);
 
-  /// 사이드바 / 네비 액센트
+  /// 사이드바 / 네비 액센트 (레거시·마일리지 카드 등)
   static const sidebar = Color(0xFF0B2A6F);
   static const sidebarIconInactive = Color(0xFF94A3B8);
+
+  /// 로그인·셸 다크 크롬 (시네마틱)
+  static const cinematicBg = Color(0xFF05070F);
+  static const cinematicSurface = Color(0xFF0B1224);
+  static const cinematicBorder = Color(0xFF1E2538);
+  static const cinematicAccent = Color(0xFF00C2D4);
+  static const cinematicAccentAlt = Color(0xFF7B5CFF);
+  static const cinematicMuted = Color(0xFF94A3B8);
 
   /// 상태 뱃지
   static const badgeOpen = Color(0xFF0055FF);

@@ -4,29 +4,62 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/providers/side_rail_theme_provider.dart';
 import '../../../shared/widgets/app_side_rail.dart';
 import '../../../shared/widgets/profile_nav_chip.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/instructor/instructor_onboarding_keys.dart';
+import '../../onboarding/presentation/instructor_onboarding_host.dart';
+import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../shell/widgets/app_shell_header.dart';
+import '../../../core/theme/shell_chrome.dart';
 
 class _NavItem {
-  const _NavItem(this.icon, this.label, this.path);
+  const _NavItem(this.icon, this.label, this.path, this.targetId);
   final IconData icon;
   final String label;
   final String path;
+  final String targetId;
 }
 
 const _kInstructorNavItems = [
-  _NavItem(Icons.fact_check_outlined, '자리 확인', RoutePaths.instructor),
-  _NavItem(Icons.description_rounded, '이력서관리', RoutePaths.instructorResumes),
-  _NavItem(Icons.forum_rounded, '게시물관리', RoutePaths.instructorBoard),
-  _NavItem(Icons.quiz_outlined, '성취도평가', RoutePaths.instructorAssessments),
+  _NavItem(
+    Icons.fact_check_outlined,
+    '자리 확인',
+    RoutePaths.instructor,
+    InstructorOnboardingTargets.navAttendance,
+  ),
+  _NavItem(
+    Icons.description_rounded,
+    '이력서관리',
+    RoutePaths.instructorResumes,
+    InstructorOnboardingTargets.navResumes,
+  ),
+  _NavItem(
+    Icons.forum_rounded,
+    '게시물관리',
+    RoutePaths.instructorBoard,
+    InstructorOnboardingTargets.navBoard,
+  ),
+  _NavItem(
+    Icons.quiz_outlined,
+    '성취도평가',
+    RoutePaths.instructorAssessments,
+    InstructorOnboardingTargets.navAssessments,
+  ),
   _NavItem(
     Icons.table_chart_outlined,
     '커리큘럼',
     RoutePaths.instructorCurriculum,
+    InstructorOnboardingTargets.navCurriculum,
   ),
-  _NavItem(Icons.person_rounded, '마이페이지', RoutePaths.instructorMyPage),
+  _NavItem(
+    Icons.person_rounded,
+    '마이페이지',
+    RoutePaths.instructorMyPage,
+    InstructorOnboardingTargets.navMyPage,
+  ),
 ];
 
 bool _isNavSelected(String location, String path) {
@@ -50,78 +83,118 @@ class InstructorShellScreen extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider);
     final user = currentUser.value;
     final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
+    final tourActive = ref.watch(onboardingTourProvider)?.active == true;
+    final railDark = ref.watch(sideRailDarkModeProvider);
 
     final railItems = [
       for (final item in _kInstructorNavItems)
-        AppSideRailItem(icon: item.icon, label: item.label, path: item.path),
+        AppSideRailItem(
+          icon: item.icon,
+          label: item.label,
+          path: item.path,
+          itemKey: wide
+              ? OnboardingTargetRegistry.keyOf(item.targetId)
+              : null,
+        ),
     ];
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const AppShellHeader(homePath: RoutePaths.instructor),
-        actions: [
-          if (user != null)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ProfileNavChip(
-                  user: user,
-                  style: ProfileNavChipStyle.appBar,
-                  onTap: () => context.go(RoutePaths.instructorMyPage),
+    void navigate(String path) {
+      if (tourActive) return;
+      context.go(path);
+    }
+
+    return InstructorOnboardingHost(
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: ShellChrome.appBarBackground(railDark),
+          foregroundColor: ShellChrome.appBarForeground(railDark),
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          iconTheme: IconThemeData(
+            color: ShellChrome.appBarForeground(railDark),
+          ),
+          title: const AppShellHeader(homePath: RoutePaths.instructor),
+          actions: [
+            if (user != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ProfileNavChip(
+                    user: user,
+                    style: ProfileNavChipStyle.appBar,
+                    onTap: tourActive
+                        ? () {}
+                        : () => context.go(RoutePaths.instructorMyPage),
+                  ),
                 ),
               ),
-            ),
-          if (!wide)
-            IconButton(
-              tooltip: '로그아웃',
-              onPressed: () => ref.read(authRepositoryProvider).signOut(),
-              icon: const Icon(Icons.logout, size: 20),
-            ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Row(
-        children: [
-          if (wide)
-            AppSideRail(
-              items: railItems,
-              location: location,
-              isSelected: _isNavSelected,
-              onNavigate: (path) => context.go(path),
-              onLogout: () => ref.read(authRepositoryProvider).signOut(),
-              profile: user == null
-                  ? null
-                  : SideRailProfileTile(
-                      label: user.displayName.isNotEmpty
-                          ? user.displayName
-                          : '마이페이지',
-                      initial: user.displayName.isNotEmpty
-                          ? user.displayName[0]
-                          : 'I',
-                      onTap: () => context.go(RoutePaths.instructorMyPage),
+            if (!wide)
+              IconButton(
+                tooltip: '로그아웃',
+                onPressed: tourActive
+                    ? null
+                    : () => ref.read(authRepositoryProvider).signOut(),
+                icon: const Icon(Icons.logout, size: 20),
+              ),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: Row(
+          children: [
+            if (wide)
+              AppSideRail(
+                items: railItems,
+                location: location,
+                isSelected: _isNavSelected,
+                onNavigate: navigate,
+                onLogout: tourActive
+                    ? null
+                    : () => ref.read(authRepositoryProvider).signOut(),
+                profile: user == null
+                    ? null
+                    : SideRailProfileTile(
+                        label: user.displayName.isNotEmpty
+                            ? user.displayName
+                            : '마이페이지',
+                        initial: user.displayName.isNotEmpty
+                            ? user.displayName[0]
+                            : 'I',
+                        onTap: tourActive
+                            ? () {}
+                            : () => context.go(RoutePaths.instructorMyPage),
+                      ),
+              ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!wide)
+                    _InstructorTopNav(
+                      currentLocation: location,
+                      tourActive: tourActive,
                     ),
+                  Expanded(child: child),
+                ],
+              ),
             ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (!wide) _InstructorTopNav(currentLocation: location),
-                Expanded(child: child),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 class _InstructorTopNav extends StatelessWidget {
-  const _InstructorTopNav({required this.currentLocation});
+  const _InstructorTopNav({
+    required this.currentLocation,
+    required this.tourActive,
+  });
 
   final String currentLocation;
+  final bool tourActive;
 
   @override
   Widget build(BuildContext context) {
@@ -145,12 +218,17 @@ class _InstructorTopNav extends StatelessWidget {
                   for (final item in _kInstructorNavItems) ...[
                     if (item != _kInstructorNavItems.first)
                       SizedBox(width: compact ? 4 : 6),
-                    _NavChip(
-                      icon: item.icon,
-                      label: item.label,
-                      selected: _isNavSelected(currentLocation, item.path),
-                      compact: compact,
-                      onTap: () => context.go(item.path),
+                    KeyedSubtree(
+                      key: OnboardingTargetRegistry.keyOf(item.targetId),
+                      child: _NavChip(
+                        icon: item.icon,
+                        label: item.label,
+                        selected: _isNavSelected(currentLocation, item.path),
+                        compact: compact,
+                        onTap: tourActive
+                            ? () {}
+                            : () => context.go(item.path),
+                      ),
                     ),
                   ],
                 ],

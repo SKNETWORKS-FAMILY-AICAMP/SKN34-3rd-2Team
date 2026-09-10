@@ -27,6 +27,7 @@ abstract final class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Paperlogy',
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
       dividerColor: AppColors.divider,

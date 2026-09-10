@@ -5,10 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/models/notice_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../hub/presentation/widgets/board_ui.dart';
 import '../../hub/presentation/widgets/notice_list_widgets.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/instructor/instructor_onboarding_keys.dart';
 
 /// 강사 — 게시물 작성 (공지 등록·본인 글 수정)
 class InstructorBoardScreen extends ConsumerWidget {
@@ -29,12 +32,17 @@ class InstructorBoardScreen extends ConsumerWidget {
             title: '게시판 관리',
             subtitle:
                 '${cohortName ?? '담당 기수'} · 본인이 등록한 글만 수정할 수 있습니다.',
-            action: FilledButton.icon(
-              onPressed: () =>
-                  context.push(RoutePaths.instructorBoardCreate),
-              style: BoardUi.primaryButtonStyle(),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('공지 작성'),
+            action: KeyedSubtree(
+              key: OnboardingTargetRegistry.keyOf(
+                InstructorOnboardingTargets.boardCreate,
+              ),
+              child: FilledButton.icon(
+                onPressed: () =>
+                    context.push(RoutePaths.instructorBoardCreate),
+                style: BoardUi.primaryButtonStyle(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('공지 작성'),
+              ),
             ),
           ),
           Expanded(
@@ -67,37 +75,69 @@ class InstructorBoardScreen extends ConsumerWidget {
                         );
                       }
 
-                      return ListView.builder(
+                      final favorites =
+                          list.where((n) => n.isFavorite).toList();
+                      final regular =
+                          list.where((n) => !n.isFavorite).toList();
+
+                      Widget? editTrailing(NoticeModel notice) {
+                        if (uid == null || notice.authorId != uid) {
+                          return null;
+                        }
+                        return IconButton(
+                          tooltip: '수정',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 16,
+                            color: AppColors.textHint,
+                          ),
+                          onPressed: () => context.push(
+                            RoutePaths.instructorBoardNoticeEditPath(
+                              notice.id,
+                            ),
+                          ),
+                        );
+                      }
+
+                      return ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                        itemCount: list.length,
-                        itemBuilder: (_, i) {
-                          final notice = list[i];
-                          final canEdit =
-                              uid != null && notice.authorId == uid;
-                          return NoticeCard(
-                            notice: notice,
-                            compact: true,
-                            onTap: () =>
-                                NoticeDetailSheet.show(context, notice),
-                            trailing: canEdit
-                                ? IconButton(
-                                    tooltip: '수정',
-                                    visualDensity: VisualDensity.compact,
-                                    icon: Icon(
-                                      Icons.edit_outlined,
-                                      size: 18,
-                                      color: AppColors.textHint,
-                                    ),
-                                    onPressed: () => context.push(
-                                      RoutePaths.instructorBoardNoticeEditPath(
-                                        notice.id,
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                          );
-                        },
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                        children: [
+                          if (favorites.isNotEmpty) ...[
+                            const _SectionHeader(
+                              icon: Icons.star_rounded,
+                              iconColor: BoardUi.favorite,
+                              title: '중요 공지',
+                            ),
+                            const SizedBox(height: 8),
+                            StudentNoticeRowList(
+                              notices: favorites,
+                              onTap: (notice) =>
+                                  NoticeDetailSheet.show(context, notice),
+                              trailingBuilder: editTrailing,
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                          if (regular.isNotEmpty) ...[
+                            const _SectionHeader(
+                              icon: Icons.campaign_outlined,
+                              title: '전체 공지',
+                            ),
+                            const SizedBox(height: 8),
+                            StudentNoticeRowList(
+                              notices: regular,
+                              onTap: (notice) =>
+                                  NoticeDetailSheet.show(context, notice),
+                              trailingBuilder: editTrailing,
+                            ),
+                          ],
+                        ],
                       );
                     },
                   ),
@@ -107,6 +147,36 @@ class InstructorBoardScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String title;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: iconColor ?? AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

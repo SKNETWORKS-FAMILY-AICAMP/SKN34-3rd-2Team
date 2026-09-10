@@ -14,6 +14,8 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../hub/presentation/widgets/board_ui.dart';
 import '../../hub/presentation/widgets/notice_list_widgets.dart';
+import '../../onboarding/admin/admin_onboarding_keys.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
 
 /// 관리자 — 게시판 관리 (공지 + 예약 공지)
 class AdminBoardScreen extends ConsumerStatefulWidget {
@@ -67,11 +69,16 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
           BoardPageHeader(
             title: '게시판 관리',
             subtitle: '공지 · 예약 게시 · 로그인 알림 팝업을 관리합니다.',
-            action: FilledButton.icon(
-              onPressed: _onCreate,
-              style: BoardUi.primaryButtonStyle(),
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(_createLabel),
+            action: KeyedSubtree(
+              key: OnboardingTargetRegistry.keyOf(
+                AdminOnboardingTargets.boardCreate,
+              ),
+              child: FilledButton.icon(
+                onPressed: _onCreate,
+                style: BoardUi.primaryButtonStyle(),
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(_createLabel),
+              ),
             ),
           ),
           BoardTabBar(

@@ -11,6 +11,8 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/resume_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/instructor/instructor_onboarding_keys.dart';
 
 const _kResumeContentMaxWidth = 1100.0;
 
@@ -76,28 +78,33 @@ class _ResumeBody extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      _StatCard(label: '전체', value: '${resumes.length}'),
-                      const SizedBox(width: 8),
-                      _StatCard(
-                        label: '작성 중',
-                        value: '$writing',
-                        color: AppColors.warning,
-                      ),
-                      const SizedBox(width: 8),
-                      _StatCard(
-                        label: '제출 요청',
-                        value: '$submitted',
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      _StatCard(
-                        label: '승인',
-                        value: '$approved',
-                        color: AppColors.success,
-                      ),
-                    ],
+                  KeyedSubtree(
+                    key: OnboardingTargetRegistry.keyOf(
+                      InstructorOnboardingTargets.resumesStats,
+                    ),
+                    child: Row(
+                      children: [
+                        _StatCard(label: '전체', value: '${resumes.length}'),
+                        const SizedBox(width: 8),
+                        _StatCard(
+                          label: '작성 중',
+                          value: '$writing',
+                          color: AppColors.warning,
+                        ),
+                        const SizedBox(width: 8),
+                        _StatCard(
+                          label: '제출 요청',
+                          value: '$submitted',
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        _StatCard(
+                          label: '승인',
+                          value: '$approved',
+                          color: AppColors.success,
+                        ),
+                      ],
+                    ),
                   ),
                   if (!canReview) ...[
                     const SizedBox(height: 12),

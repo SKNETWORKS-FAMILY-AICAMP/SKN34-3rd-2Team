@@ -13,6 +13,8 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/services/storage_service.dart';
 import '../../../shared/utils/curriculum_csv_parser.dart';
+import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../onboarding/instructor/instructor_onboarding_keys.dart';
 
 /// 강사 — 커리큘럼 CSV 업로드 + 표 조회
 class InstructorCurriculumScreen extends ConsumerStatefulWidget {
@@ -165,20 +167,27 @@ class _InstructorCurriculumScreenState
     final sheetAsync = ref.watch(latestCurriculumSheetProvider);
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _uploading
-            ? null
-            : () => _uploadCsv(
-                  replaceSheetId: sheetAsync.asData?.value?.id,
-                ),
-        icon: _uploading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.upload_file),
-        label: Text(sheetAsync.asData?.value == null ? 'CSV 등록' : 'CSV 교체'),
+      floatingActionButton: KeyedSubtree(
+        key: OnboardingTargetRegistry.keyOf(
+          InstructorOnboardingTargets.curriculumUpload,
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: _uploading
+              ? null
+              : () => _uploadCsv(
+                    replaceSheetId: sheetAsync.asData?.value?.id,
+                  ),
+          icon: _uploading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.upload_file),
+          label: Text(
+            sheetAsync.asData?.value == null ? 'CSV 등록' : 'CSV 교체',
+          ),
+        ),
       ),
       body: sheetAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
