@@ -55,7 +55,7 @@ class AdminFormTasksScreen extends ConsumerWidget {
                             color: AppColors.textHint.withValues(alpha: 0.6),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
+                          Text(
                             '등록된 설문이 없습니다',
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
@@ -429,7 +429,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                             const SizedBox(height: 8),
                             Text(
                               task.description,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textSecondary,
                               ),
                             ),
@@ -468,7 +468,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'Google Apps Script에 아래 값을 넣고, '
                             '폼 제출 트리거를 설정하면 LMS에 자동 반영됩니다.',
                             style: TextStyle(
@@ -674,7 +674,7 @@ class _MetaRow extends StatelessWidget {
             width: 64,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
               ),
@@ -765,7 +765,7 @@ class _SubTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4, top: 4),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 13,
           color: AppColors.textSecondary,

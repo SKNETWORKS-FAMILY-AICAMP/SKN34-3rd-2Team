@@ -348,7 +348,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
               children: [
                 Text(
                   widget.isEditing ? '기수 정보 수정' : '새 기수 등록',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
@@ -459,7 +459,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     CohortStatus.archived =>
                       '종료: 조회 전용, 드롭다운에서 숨김',
                   },
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),
@@ -475,7 +475,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                   ),
                 ] else ...[
                   const SizedBox(height: 28),
-                  const Text(
+                  Text(
                     '커리큘럼 PDF는 기수 생성 후 수정 화면에서 등록할 수 있습니다.',
                     style: TextStyle(
                       fontSize: 12,
@@ -525,7 +525,7 @@ class _CurriculumPdfSection extends ConsumerWidget {
     return AdminFormSection(
       title: '커리큘럼 PDF',
       children: [
-        const Text(
+        Text(
           '이 기수 학생 대시보드의 「PDF 보기」 버튼으로 열립니다.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
@@ -561,7 +561,7 @@ class _CurriculumPdfSection extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                 ] else
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(bottom: 12),
                     child: Text(
                       '아직 등록된 PDF가 없습니다.',
@@ -620,7 +620,7 @@ class _DateTile extends StatelessWidget {
       color: AppColors.surfaceVariant,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -632,7 +632,7 @@ class _DateTile extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary,
                 ),

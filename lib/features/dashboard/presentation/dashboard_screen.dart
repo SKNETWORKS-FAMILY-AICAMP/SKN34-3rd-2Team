@@ -6,10 +6,10 @@ import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/widgets/status_badge.dart';
 import '../../hub/presentation/widgets/notice_list_widgets.dart';
 import '../../../shared/models/notice_model.dart';
 import '../../../shared/models/submission_model.dart';
-import '../../../shared/models/todo_model.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/mission_providers.dart';
@@ -25,28 +25,14 @@ import 'widgets/dashboard_profile_header.dart';
 import 'widgets/mission_progress_dashboard_card.dart';
 import 'widgets/my_seating_dashboard_card.dart';
 import 'widgets/qual_exam_schedule_section.dart';
-import 'widgets/resume_dashboard_section.dart';
 import 'widgets/weekly_learning_recommend_section.dart';
 
-/// 대시보드 — 프로필, 출석, 이력서, 게시판, 주간학습, TODO, 승인
-class DashboardScreen extends ConsumerStatefulWidget {
+/// 대시보드 — 프로필, 출석, 게시판, 주간학습, 승인
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
-}
-
-class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  final _todoController = TextEditingController();
-
-  @override
-  void dispose() {
-    _todoController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final currentUser = ref.watch(currentUserProvider);
 
     return currentUser.when(
@@ -54,36 +40,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       error: (e, _) => ErrorView(message: e.toString()),
       data: (user) {
         if (user == null) return const SizedBox.shrink();
-        return _DashboardBody(
-          user: user,
-          todoController: _todoController,
-        );
+        return _DashboardBody(user: user);
       },
     );
   }
 }
 
 class _DashboardBody extends ConsumerWidget {
-  const _DashboardBody({
-    required this.user,
-    required this.todoController,
-  });
+  const _DashboardBody({required this.user});
 
   final UserModel user;
-  final TextEditingController todoController;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notices = ref.watch(noticesStreamProvider);
-    final todos = ref.watch(todosStreamProvider);
     final submissions = ref.watch(mySubmissionsProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(noticesStreamProvider);
-        ref.invalidate(todosStreamProvider);
-        ref.invalidate(myResumesProvider);
-        ref.invalidate(adminCohortsWithResumesProvider);
         ref.invalidate(myAttendancesProvider);
         ref.invalidate(mySubmissionsProvider);
         ref.invalidate(formTasksWithStatusProvider);
@@ -104,8 +79,6 @@ class _DashboardBody extends ConsumerWidget {
           );
           final sidebar = _DashboardSidebar(
             user: user,
-            todos: todos,
-            todoController: todoController,
             submissions: submissions,
             compactCalendar: wide,
             onRetrySubmissions: () => ref.invalidate(mySubmissionsProvider),
@@ -174,11 +147,7 @@ class _DashboardMainColumn extends StatelessWidget {
         const SizedBox(height: 20),
         const WeeklyLearningRecommendSection(),
         const SizedBox(height: 20),
-        const ResumeDashboardSection(),
-        const SizedBox(height: 20),
         const FormTasksDashboardSection(),
-        const SizedBox(height: 20),
-        const QualExamScheduleSection(),
       ],
     );
   }
@@ -187,16 +156,12 @@ class _DashboardMainColumn extends StatelessWidget {
 class _DashboardSidebar extends StatelessWidget {
   const _DashboardSidebar({
     required this.user,
-    required this.todos,
-    required this.todoController,
     required this.submissions,
     this.compactCalendar = true,
     this.onRetrySubmissions,
   });
 
   final UserModel user;
-  final AsyncValue<List<TodoModel>> todos;
-  final TextEditingController todoController;
   final AsyncValue<List<SubmissionModel>> submissions;
   final bool compactCalendar;
   final VoidCallback? onRetrySubmissions;
@@ -211,14 +176,9 @@ class _DashboardSidebar extends StatelessWidget {
         const MissionProgressDashboardCard(compact: true),
         const SizedBox(height: 20),
         const MySeatingDashboardSection(),
-        const _SectionTitle('TODO', compact: true),
-        _TodoSection(
-          todos: todos,
-          controller: todoController,
-          uid: user.uid,
-        ),
-        const SizedBox(height: 20),
         const CurriculumDashboardSection(),
+        const SizedBox(height: 20),
+        const QualExamScheduleSection(),
         const SizedBox(height: 20),
         const _SectionTitle('승인 현황', compact: true),
         submissions.when(
@@ -245,7 +205,7 @@ class _NoticeSectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          const Text(
+          Text(
             '시스템 공지',
             style: TextStyle(
               fontWeight: FontWeight.w700,
@@ -295,7 +255,7 @@ class _NoticesPreview extends StatelessWidget {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.border),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
               color: AppColors.shadow,
               blurRadius: 16,
@@ -303,7 +263,7 @@ class _NoticesPreview extends StatelessWidget {
             ),
           ],
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             '공지사항이 없습니다',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
@@ -333,163 +293,6 @@ class _NoticesPreview extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _TodoSection extends ConsumerWidget {
-  const _TodoSection({
-    required this.todos,
-    required this.controller,
-    required this.uid,
-  });
-
-  final AsyncValue<List<TodoModel>> todos;
-  final TextEditingController controller;
-  final String uid;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 6, 8),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: '새 할 일 추가...',
-                      hintStyle: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textHint,
-                      ),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppColors.border),
-                      ),
-                    ),
-                    onSubmitted: (value) async {
-                      if (value.trim().isEmpty) return;
-                      await ref
-                          .read(lmsRepositoryProvider)
-                          .addTodo(uid, value.trim());
-                      controller.clear();
-                    },
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle, size: 22),
-                  color: AppColors.primary,
-                  padding: const EdgeInsets.only(left: 4),
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                  onPressed: () async {
-                    final value = controller.text.trim();
-                    if (value.isEmpty) return;
-                    await ref.read(lmsRepositoryProvider).addTodo(uid, value);
-                    controller.clear();
-                  },
-                ),
-              ],
-            ),
-            todos.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(12),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-              error: (e, _) => Text(
-                '오류: $e',
-                style: const TextStyle(fontSize: 12),
-              ),
-              data: (list) {
-                if (list.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text(
-                      '예정된 일정이 없습니다',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  );
-                }
-                return Column(
-                  children: list.map((todo) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 16),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 28,
-                              minHeight: 28,
-                            ),
-                            color: AppColors.textSecondary,
-                            onPressed: () => ref
-                                .read(lmsRepositoryProvider)
-                                .deleteTodo(uid, todo.id),
-                          ),
-                          Expanded(
-                            child: Text(
-                              todo.title,
-                              style: TextStyle(
-                                fontSize: 13,
-                                decoration: todo.isCompleted
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                color: todo.isCompleted
-                                    ? AppColors.textHint
-                                    : AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: Checkbox(
-                              value: todo.isCompleted,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                              side: const BorderSide(
-                                color: AppColors.border,
-                                width: 1.5,
-                              ),
-                              onChanged: (_) => ref
-                                  .read(lmsRepositoryProvider)
-                                  .toggleTodo(uid, todo),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -562,7 +365,7 @@ class _SubmissionsListState extends State<_SubmissionsList> {
                 : const NeverScrollableScrollPhysics(),
             padding: EdgeInsets.zero,
             itemCount: submissions.length,
-            separatorBuilder: (_, _) => const Divider(
+            separatorBuilder: (_, _) => Divider(
               height: 1,
               thickness: 1,
               color: AppColors.border,
@@ -615,7 +418,7 @@ class _SubmissionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              _StatusBadge(
+              StatusBadge(
                 label: s.statusLabel,
                 color: s.isApproved
                     ? AppColors.success
@@ -639,7 +442,7 @@ class _SubmissionTile extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               AppDateUtils.formatDisplay(s.submittedAt!),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
               ),
@@ -667,32 +470,6 @@ class _SectionTitle extends StatelessWidget {
           fontWeight: FontWeight.w700,
           fontSize: compact ? 14 : 16,
           color: AppColors.textPrimary,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: color,
         ),
       ),
     );

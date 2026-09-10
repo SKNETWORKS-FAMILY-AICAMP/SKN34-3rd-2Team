@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,6 +90,8 @@ class _CurriculumAiGenerateDialogState
   var _mix = _MixPreset.mcHeavy;
   var _showAdvanced = false;
   String? _progressHint;
+  int _genMc = 0;
+  int _genSa = 0;
 
   static const _targetPresets = [10, 15, 20, 25];
 
@@ -207,7 +212,10 @@ class _CurriculumAiGenerateDialogState
     setState(() {
       _generating = true;
       _error = null;
-      _progressHint = '초안 준비 중… (목표 $_targetCount문항 · 여유분 포함 ${plan.mc + plan.sa}개)';
+      _genMc = plan.mc;
+      _genSa = plan.sa;
+      _progressHint =
+          '목표 $_targetCount문항 · AI 초안 객관식 ${plan.mc} · 단답 ${plan.sa}';
     });
 
     try {
@@ -266,6 +274,25 @@ class _CurriculumAiGenerateDialogState
     final canGenerate =
         sheet != null && !_generating && _resolvedRange != null;
 
+    final overrideMc = _showAdvanced
+        ? int.tryParse(_mcOverrideCtrl.text.trim())
+        : null;
+    final overrideSa = _showAdvanced
+        ? int.tryParse(_saOverrideCtrl.text.trim())
+        : null;
+    final plan = _planGeneration(
+      targetCount: _targetCount,
+      mix: _mix,
+      overrideMc: overrideMc,
+      overrideSa: overrideSa,
+    );
+    final planUsesOverride = overrideMc != null || overrideSa != null;
+    final mixLabel = switch (_mix) {
+      _MixPreset.mcHeavy => '객관식 위주',
+      _MixPreset.balanced => '균형',
+      _MixPreset.moreSa => '단답 위주',
+    };
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -289,7 +316,7 @@ class _CurriculumAiGenerateDialogState
                       _ErrorBanner(message: _error!),
                     ],
                     if (sheet == null)
-                      const Expanded(
+                      Expanded(
                         child: Center(
                           child: Text(
                             '등록된 커리큘럼이 없습니다.\n커리큘럼 메뉴에서 CSV를 업로드하세요.',
@@ -299,6 +326,15 @@ class _CurriculumAiGenerateDialogState
                               height: 1.5,
                             ),
                           ),
+                        ),
+                      )
+                    else if (_generating)
+                      Expanded(
+                        child: _AiGeneratingPanel(
+                          targetCount: _targetCount,
+                          mcCount: _genMc,
+                          saCount: _genSa,
+                          summaryHint: _progressHint,
                         ),
                       )
                     else ...[
@@ -314,203 +350,13 @@ class _CurriculumAiGenerateDialogState
                                     sheet.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: AppColors.textSecondary,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _RangeSlot(
-                                          label: '시작',
-                                          day: _rangeStart,
-                                          topic: startRow?.topic,
-                                          active: _pickingStart,
-                                          onTap: _generating
-                                              ? null
-                                              : () => setState(
-                                                    () => _pickingStart = true,
-                                                  ),
-                                        ),
-                                      ),
-                                      const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        child: Icon(
-                                          Icons.arrow_forward_rounded,
-                                          size: 18,
-                                          color: AppColors.textHint,
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: _RangeSlot(
-                                          label: '종료',
-                                          day: _rangeEnd,
-                                          topic: endRow?.topic,
-                                          active: !_pickingStart,
-                                          onTap: _generating
-                                              ? null
-                                              : () => setState(
-                                                    () =>
-                                                        _pickingStart = false,
-                                                  ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      TextButton(
-                                        onPressed:
-                                            _generating ? null : _clearRange,
-                                        child: const Text('초기화'),
-                                      ),
-                                    ],
-                                  ),
-                                  if (range != null) ...[
-                                    const SizedBox(height: 10),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primaryLight,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        '선택 구간 일수 ${range.$1}~${range.$2} · ${inRangeCount}차시',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.primaryDark,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 14),
-                                  const Text(
-                                    '이번 평가 문항 수',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      for (final n in _targetPresets)
-                                        ChoiceChip(
-                                          label: Text('$n문항'),
-                                          selected: _targetCount == n,
-                                          onSelected: _generating
-                                              ? null
-                                              : (_) => setState(
-                                                    () => _targetCount = n,
-                                                  ),
-                                          selectedColor: AppColors.primaryLight,
-                                          labelStyle: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            color: _targetCount == n
-                                                ? AppColors.primaryDark
-                                                : AppColors.textPrimary,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
                                   const SizedBox(height: 12),
-                                  const Text(
-                                    '유형 비중',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  SegmentedButton<_MixPreset>(
-                                    segments: const [
-                                      ButtonSegment(
-                                        value: _MixPreset.mcHeavy,
-                                        label: Text('객관식 위주'),
-                                      ),
-                                      ButtonSegment(
-                                        value: _MixPreset.balanced,
-                                        label: Text('균형'),
-                                      ),
-                                      ButtonSegment(
-                                        value: _MixPreset.moreSa,
-                                        label: Text('단답 더'),
-                                      ),
-                                    ],
-                                    selected: {_mix},
-                                    onSelectionChanged: _generating
-                                        ? null
-                                        : (s) =>
-                                            setState(() => _mix = s.first),
-                                  ),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: TextButton.icon(
-                                      onPressed: _generating
-                                          ? null
-                                          : () => setState(
-                                                () => _showAdvanced =
-                                                    !_showAdvanced,
-                                              ),
-                                      icon: Icon(
-                                        _showAdvanced
-                                            ? Icons.expand_less
-                                            : Icons.tune_rounded,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        _showAdvanced
-                                            ? '고급 옵션 숨기기'
-                                            : '고급 옵션',
-                                      ),
-                                    ),
-                                  ),
-                                  if (_showAdvanced) ...[
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _mcOverrideCtrl,
-                                            keyboardType:
-                                                TextInputType.number,
-                                            enabled: !_generating,
-                                            decoration: const InputDecoration(
-                                              labelText: '생성 객관식(직접)',
-                                              filled: true,
-                                              fillColor:
-                                                  AppColors.surfaceVariant,
-                                              border: OutlineInputBorder(),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _saOverrideCtrl,
-                                            keyboardType:
-                                                TextInputType.number,
-                                            enabled: !_generating,
-                                            decoration: const InputDecoration(
-                                              labelText: '생성 단답(직접)',
-                                              filled: true,
-                                              fillColor:
-                                                  AppColors.surfaceVariant,
-                                              border: OutlineInputBorder(),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                  ],
                                   TextField(
                                     controller: _searchCtrl,
                                     enabled: !_generating,
@@ -558,6 +404,286 @@ class _CurriculumAiGenerateDialogState
                                     ),
                                   ],
                                   const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _RangeSlot(
+                                          label: '시작',
+                                          day: _rangeStart,
+                                          topic: startRow?.topic,
+                                          active: _pickingStart,
+                                          onTap: _generating
+                                              ? null
+                                              : () => setState(
+                                                    () => _pickingStart = true,
+                                                  ),
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        child: Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 18,
+                                          color: AppColors.textHint,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: _RangeSlot(
+                                          label: '종료',
+                                          day: _rangeEnd,
+                                          topic: endRow?.topic,
+                                          active: !_pickingStart,
+                                          onTap: _generating
+                                              ? null
+                                              : () => setState(
+                                                    () =>
+                                                        _pickingStart = false,
+                                                  ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      TextButton(
+                                        onPressed:
+                                            _generating ? null : _clearRange,
+                                        child: const Text('초기화'),
+                                      ),
+                                    ],
+                                  ),
+                                  if (range != null) ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryLight,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        '선택 구간 D${range.$1}~D${range.$2} · ${inRangeCount}차시',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primaryDark,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 18),
+                                  const Text(
+                                    '이번 평가 문항 수',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      for (final n in _targetPresets)
+                                        ChoiceChip(
+                                          label: Text('$n문항'),
+                                          selected: _targetCount == n,
+                                          onSelected: _generating
+                                              ? null
+                                              : (_) => setState(
+                                                    () => _targetCount = n,
+                                                  ),
+                                          selectedColor: AppColors.primaryLight,
+                                          checkmarkColor: AppColors.primaryDark,
+                                          labelStyle: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: _targetCount == n
+                                                ? AppColors.primaryDark
+                                                : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    '유형 비중',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SegmentedButton<_MixPreset>(
+                                    style: ButtonStyle(
+                                      visualDensity: VisualDensity.compact,
+                                      backgroundColor:
+                                          WidgetStateProperty.resolveWith(
+                                        (states) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return AppColors.primaryLight;
+                                          }
+                                          return Colors.white;
+                                        },
+                                      ),
+                                      foregroundColor:
+                                          WidgetStateProperty.resolveWith(
+                                        (states) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return AppColors.primaryDark;
+                                          }
+                                          return AppColors.textPrimary;
+                                        },
+                                      ),
+                                      side: WidgetStatePropertyAll(
+                                        BorderSide(
+                                          color: AppColors.border
+                                              .withValues(alpha: 0.9),
+                                        ),
+                                      ),
+                                    ),
+                                    segments: const [
+                                      ButtonSegment(
+                                        value: _MixPreset.mcHeavy,
+                                        label: Text('객관식 위주'),
+                                      ),
+                                      ButtonSegment(
+                                        value: _MixPreset.balanced,
+                                        label: Text('균형'),
+                                      ),
+                                      ButtonSegment(
+                                        value: _MixPreset.moreSa,
+                                        label: Text('단답 위주'),
+                                      ),
+                                    ],
+                                    selected: {_mix},
+                                    onSelectionChanged: _generating
+                                        ? null
+                                        : (s) =>
+                                            setState(() => _mix = s.first),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      14,
+                                      12,
+                                      14,
+                                      12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: AppColors.border,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '시험 $_targetCount문항 · $mixLabel',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          planUsesOverride
+                                              ? 'AI 초안 객관식 ${plan.mc} · 단답 ${plan.sa}'
+                                                  ' (직접 지정 · 총 ${plan.mc + plan.sa}개)'
+                                              : 'AI 초안 객관식 ${plan.mc} · 단답 ${plan.sa}'
+                                                  ' (여유분 포함 총 ${plan.mc + plan.sa}개)',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            height: 1.4,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton.icon(
+                                      onPressed: _generating
+                                          ? null
+                                          : () => setState(
+                                                () => _showAdvanced =
+                                                    !_showAdvanced,
+                                              ),
+                                      icon: Icon(
+                                        _showAdvanced
+                                            ? Icons.expand_less
+                                            : Icons.tune_rounded,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        _showAdvanced
+                                            ? '고급 옵션 숨기기'
+                                            : '고급 옵션',
+                                      ),
+                                    ),
+                                  ),
+                                  if (_showAdvanced) ...[
+                                    Text(
+                                      '비우면 위 비중으로 자동 계산합니다.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller: _mcOverrideCtrl,
+                                            keyboardType:
+                                                TextInputType.number,
+                                            enabled: !_generating,
+                                            onChanged: (_) => setState(() {}),
+                                            decoration: InputDecoration(
+                                              labelText: '객관식 생성 수',
+                                              hintText: '예: 24',
+                                              helperText: 'AI가 만들 객관식 개수',
+                                              filled: true,
+                                              fillColor:
+                                                  AppColors.surfaceVariant,
+                                              border: OutlineInputBorder(),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: _saOverrideCtrl,
+                                            keyboardType:
+                                                TextInputType.number,
+                                            enabled: !_generating,
+                                            onChanged: (_) => setState(() {}),
+                                            decoration: InputDecoration(
+                                              labelText: '단답 생성 수',
+                                              hintText: '예: 8',
+                                              helperText: 'AI가 만들 단답 개수',
+                                              filled: true,
+                                              fillColor:
+                                                  AppColors.surfaceVariant,
+                                              border: OutlineInputBorder(),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+                                  const SizedBox(height: 8),
                                   Text(
                                     '커리큘럼 ${_pickingStart ? "시작일" : "종료일"} 선택 · ${filtered.length}행',
                                     style: const TextStyle(
@@ -570,7 +696,7 @@ class _CurriculumAiGenerateDialogState
                               ),
                             ),
                             if (filtered.isEmpty)
-                              const SliverToBoxAdapter(
+                              SliverToBoxAdapter(
                                 child: Padding(
                                   padding: EdgeInsets.symmetric(vertical: 24),
                                   child: Text(
@@ -665,7 +791,7 @@ class _CurriculumAiGenerateDialogState
                                                     maxLines: 1,
                                                     overflow: TextOverflow
                                                         .ellipsis,
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       fontSize: 12,
                                                       color: AppColors
                                                           .textSecondary,
@@ -716,16 +842,6 @@ class _CurriculumAiGenerateDialogState
                           ],
                         ),
                       ),
-                      if (_progressHint != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          _progressHint!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
                     ],
                     const SizedBox(height: 10),
                     SafeArea(
@@ -750,21 +866,12 @@ class _CurriculumAiGenerateDialogState
                                 vertical: 14,
                               ),
                             ),
-                            child: _generating
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text(
-                                    '초안 만들기',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                            child: Text(
+                              _generating ? '생성 중…' : '초안 만들기',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -1119,10 +1226,10 @@ class _AssessmentAiReviewDialogState
                                             text: q.sourceTopic!,
                                           ),
                                         if (busy)
-                                          const _TinyBadge(
+                                          _TinyBadge(
                                             text: '다시 만드는 중…',
-                                            color: Color(0xFFFFF7ED),
-                                            textColor: Color(0xFF9A3412),
+                                            color: const Color(0xFFFFF7ED),
+                                            textColor: const Color(0xFF9A3412),
                                           ),
                                       ],
                                     ),
@@ -1131,7 +1238,7 @@ class _AssessmentAiReviewDialogState
                                       q.prompt,
                                       maxLines: 4,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         height: 1.45,
                                         color: AppColors.textPrimary,
@@ -1151,7 +1258,7 @@ class _AssessmentAiReviewDialogState
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.white,
                 border: Border(
                   top: BorderSide(color: AppColors.border),
@@ -1235,6 +1342,214 @@ class _AssessmentAiReviewDialogState
 
 enum _ChipTone { normal, warn }
 
+/// 문제 생성 대기 — 단계 문구 · 경과 시간 · soft progress
+class _AiGeneratingPanel extends StatefulWidget {
+  const _AiGeneratingPanel({
+    required this.targetCount,
+    required this.mcCount,
+    required this.saCount,
+    this.summaryHint,
+  });
+
+  final int targetCount;
+  final int mcCount;
+  final int saCount;
+  final String? summaryHint;
+
+  @override
+  State<_AiGeneratingPanel> createState() => _AiGeneratingPanelState();
+}
+
+class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
+    with SingleTickerProviderStateMixin {
+  static const _phases = <String>[
+    '선택한 커리큘럼 구간을 읽고 있어요',
+    '객관식 초안을 만들고 있어요',
+    '단답형 초안을 다듬고 있어요',
+    '문항 난이도와 표현을 점검하는 중이에요',
+    '거의 다 됐어요. 조금만 기다려 주세요',
+  ];
+
+  late final AnimationController _pulse;
+  Timer? _tick;
+  Timer? _phaseTimer;
+  var _elapsedSec = 0;
+  var _phaseIndex = 0;
+  var _progress = 0.08;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _elapsedSec += 1;
+        // 실제 진행률은 없음 → 느리게 90%까지 접근
+        final t = _elapsedSec / 55.0;
+        _progress = (0.08 + (1 - math.exp(-t)) * 0.82).clamp(0.08, 0.92);
+      });
+    });
+
+    _phaseTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted) return;
+      setState(() {
+        _phaseIndex = (_phaseIndex + 1) % _phases.length;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    _phaseTimer?.cancel();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  String get _elapsedLabel {
+    final m = _elapsedSec ~/ 60;
+    final s = _elapsedSec % 60;
+    if (m <= 0) return '${s}초 경과';
+    return '$m분 ${s.toString().padLeft(2, '0')}초 경과';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedBuilder(
+                animation: _pulse,
+                builder: (context, child) {
+                  final t = Curves.easeInOut.transform(_pulse.value);
+                  final scale = 0.94 + t * 0.08;
+                  final glow = 0.18 + t * 0.28;
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF2563EB), Color(0xFF0B2A6F)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: glow),
+                            blurRadius: 22,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: child,
+                    ),
+                  );
+                },
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                'AI가 문제를 만들고 있어요',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 420),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: Text(
+                  _phases[_phaseIndex],
+                  key: ValueKey(_phaseIndex),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.45,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: _progress,
+                  minHeight: 8,
+                  backgroundColor: AppColors.surfaceVariant,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${(_progress * 100).round()}% · $_elapsedLabel',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textHint,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.summaryHint ??
+                          '시험 ${widget.targetCount}문항 · 초안 객관식 ${widget.mcCount} · 단답 ${widget.saCount}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '보통 20~60초 정도 걸려요. 창을 닫지 말고 기다려 주세요.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StepHeader extends StatelessWidget {
   const _StepHeader({
     required this.title,
@@ -1269,7 +1584,7 @@ class _StepHeader extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.3,
@@ -1279,7 +1594,7 @@ class _StepHeader extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           subtitle,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             height: 1.45,
             color: AppColors.textSecondary,
@@ -1376,7 +1691,7 @@ class _RangeSlot extends StatelessWidget {
                   topic!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
@@ -1445,11 +1760,12 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _TinyBadge extends StatelessWidget {
-  const _TinyBadge({
+  _TinyBadge({
     required this.text,
-    this.color = const Color(0xFFF3F4F6),
-    this.textColor = AppColors.textSecondary,
-  });
+    Color? color,
+    Color? textColor,
+  })  : color = color ?? const Color(0xFFF3F4F6),
+        textColor = textColor ?? AppColors.textSecondary;
 
   final String text;
   final Color color;

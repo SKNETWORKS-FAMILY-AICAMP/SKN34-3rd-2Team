@@ -177,7 +177,7 @@ class _AlertPopupOverlay extends StatelessWidget {
                       const SizedBox(height: 10),
                       Text(
                         '표시 시간 ${popup.timeWindowLabel}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
                         ),

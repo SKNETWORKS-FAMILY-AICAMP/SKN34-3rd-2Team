@@ -40,7 +40,7 @@ class UnassignedStudentList extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   '학생을 좌석으로 드래그하세요',
                   style: TextStyle(
                     fontSize: 11,
@@ -60,7 +60,7 @@ class UnassignedStudentList extends StatelessWidget {
                 ],
                 const SizedBox(height: 12),
                 if (students.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Center(
                       child: Text(
@@ -154,7 +154,7 @@ class _StudentChip extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ),
-          const Icon(Icons.drag_indicator, size: 16, color: AppColors.textHint),
+          Icon(Icons.drag_indicator, size: 16, color: AppColors.textHint),
         ],
       ),
     );

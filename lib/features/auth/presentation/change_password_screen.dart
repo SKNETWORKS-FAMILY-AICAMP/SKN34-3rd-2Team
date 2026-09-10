@@ -36,7 +36,7 @@ class ChangePasswordScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: const [
+                  boxShadow: [
                     BoxShadow(
                       color: AppColors.shadow,
                       blurRadius: 32,
@@ -53,7 +53,7 @@ class ChangePasswordScreen extends ConsumerWidget {
                         color: AppColors.primary,
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         '보안을 위해 비밀번호를 변경해 주세요.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -62,7 +62,7 @@ class ChangePasswordScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         '마이페이지에서도 언제든 변경할 수 있습니다.',
                         textAlign: TextAlign.center,
                         style: TextStyle(

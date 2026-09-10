@@ -22,7 +22,7 @@ class AdminMileageHubScreen extends StatelessWidget {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '상품 등록, 구매 요청 처리, 마일리지 지급 및 기수 설정을 관리합니다.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),

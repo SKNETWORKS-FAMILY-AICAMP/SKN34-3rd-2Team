@@ -126,7 +126,7 @@ class _RecordBlogFormScreenState extends ConsumerState<RecordBlogFormScreen> {
                 onSelected: (n) => setState(() => _selectedWeek = n),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '승인된 주차는 다시 작성할 수 없습니다.',
                 style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),

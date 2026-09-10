@@ -109,7 +109,7 @@ class _AppBarProfileChip extends StatelessWidget {
                         user.cohortName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
                           color: AppColors.textSecondary,
                           height: 1.15,
@@ -186,7 +186,7 @@ class _DrawerProfileHeader extends StatelessWidget {
                       user.cohortName,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                         height: 1.25,
@@ -214,7 +214,7 @@ class _DrawerProfileHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 size: 20,
                 color: AppColors.textHint,
@@ -279,7 +279,7 @@ class ProfileSummaryRow extends StatelessWidget {
                 user.cohortName,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
                   height: 1.25,

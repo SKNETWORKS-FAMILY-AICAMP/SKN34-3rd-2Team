@@ -110,7 +110,7 @@ class _RecommendBodyState extends State<_RecommendBody> {
           data.weekLabel != null
               ? '${data.weekLabel} · 지금 배울 주제 영상'
               : '커리큘럼 기준으로 골라둔 추천 영상입니다.',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             color: AppColors.textSecondary,
             height: 1.4,
@@ -126,12 +126,12 @@ class _RecommendBodyState extends State<_RecommendBody> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
+                  color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   t,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary,
@@ -144,7 +144,7 @@ class _RecommendBodyState extends State<_RecommendBody> {
         const SizedBox(height: 8),
         Row(
           children: [
-            const Text(
+            Text(
               '좌우로 밀어 더 보기',
               style: TextStyle(fontSize: 11, color: AppColors.textHint),
             ),
@@ -214,7 +214,7 @@ class _MiniVideoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF8FAFC),
+      color: AppColors.surfaceVariant,
       borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -255,7 +255,7 @@ class _MiniVideoCard extends StatelessWidget {
                       video.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         height: 1.25,
@@ -291,7 +291,7 @@ class _RecommendEmpty extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,
               height: 1.4,

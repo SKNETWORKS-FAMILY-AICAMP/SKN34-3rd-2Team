@@ -434,6 +434,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: RoutePaths.adminSeatPresence,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: InstructorAttendanceScreen(title: '자리 확인'),
+            ),
+          ),
+          GoRoute(
             path: RoutePaths.adminInstructors,
             pageBuilder: (_, _) => const NoTransitionPage(
               child: AdminInstructorsScreen(),

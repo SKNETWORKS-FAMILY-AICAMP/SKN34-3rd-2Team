@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_layout.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_section_card.dart';
 
 abstract final class AdminPageLayout {
-  static const maxWidth = 860.0;
+  static const maxWidth = AppLayout.list;
   static const padding = 24.0;
 }
 
@@ -43,7 +44,7 @@ class AdminFormSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -77,7 +78,7 @@ class AdminDetailRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w600,
@@ -86,7 +87,7 @@ class AdminDetailRow extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               color: AppColors.textPrimary,
             ),

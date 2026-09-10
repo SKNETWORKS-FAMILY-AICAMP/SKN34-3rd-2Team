@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 
 /// 관리자 — 평가별 학생 점수 목록 (조회만)
@@ -21,7 +21,6 @@ class AdminAssessmentDetailScreen extends ConsumerWidget {
     final submissions = ref.watch(assessmentSubmissionsProvider(assessmentId));
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: assessment.when(
           data: (a) => Text(a?.title ?? '평가 결과'),
@@ -31,10 +30,17 @@ class AdminAssessmentDetailScreen extends ConsumerWidget {
       ),
       body: submissions.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => ErrorView(
+          message: e.toString(),
+          onRetry: () =>
+              ref.invalidate(assessmentSubmissionsProvider(assessmentId)),
+        ),
         data: (list) {
           if (list.isEmpty) {
-            return const Center(child: Text('아직 제출이 없습니다.'));
+            return const EmptyView(
+              message: '아직 제출이 없습니다.',
+              icon: Icons.assignment_outlined,
+            );
           }
           final sorted = [...list]
             ..sort((a, b) => a.userDisplayName.compareTo(b.userDisplayName));

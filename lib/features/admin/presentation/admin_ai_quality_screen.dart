@@ -20,7 +20,6 @@ class AdminAiQualityScreen extends ConsumerWidget {
         ref.watch(aiQuestionFeedbackProvider).asData?.value ?? const [];
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(aiGenerationLogsProvider);
@@ -37,7 +36,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               '문제 생성 로그 · 채택률 · 프롬프트 버전별 성과\n'
               '다음 확장: 오답→추천도 같은 type/outcome 파이프라인으로 연결',
               style: TextStyle(
@@ -80,7 +79,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             if (stats.byPromptVersion.isEmpty)
-              const Text(
+              Text(
                 '아직 버전별 데이터가 없습니다.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               )
@@ -116,7 +115,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
               error: (e, _) => ErrorView(message: '$e'),
               data: (logs) {
                 if (logs.isEmpty) {
-                  return const Padding(
+                  return Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Text(
                       '아직 AI 생성 로그가 없습니다.\n강사 성취도평가에서 문제 생성 AI를 실행해 보세요.',
@@ -171,7 +170,7 @@ class _StatChip extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
             ),
@@ -252,7 +251,7 @@ class _LogCard extends StatelessWidget {
                 ),
                 Text(
                   '${log.latencyMs}ms',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),
@@ -267,7 +266,7 @@ class _LogCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '피드백 채택 $adopted · 수정 $edited · 폐기 $discarded',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
               ),

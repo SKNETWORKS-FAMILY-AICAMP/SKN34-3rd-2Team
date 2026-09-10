@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_layout.dart';
 import '../../../../shared/models/user_model.dart';
 
 /// 기록실 페이지 최대 너비
 abstract final class RecordLayout {
-  static const maxContentWidth = 860.0;
+  static const maxContentWidth = AppLayout.list;
   static const horizontalPadding = 24.0;
   static const verticalPadding = 20.0;
 }
@@ -102,7 +103,7 @@ class RecordPageHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 '기록실',
                 style: TextStyle(
                   fontSize: 22,
@@ -159,7 +160,7 @@ class RecordPageHeader extends StatelessWidget {
                   if (cohortName != null)
                     Text(
                       cohortName!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
                       ),
@@ -196,7 +197,7 @@ class RecordFormPanel extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color: AppColors.shadow,
             blurRadius: 16,
@@ -209,7 +210,7 @@ class RecordFormPanel extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -289,7 +290,7 @@ class RecordFormActions extends StatelessWidget {
           onPressed: submitting ? null : onBack,
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(88, 40),
-            side: const BorderSide(color: AppColors.border),
+            side: BorderSide(color: AppColors.border),
           ),
           child: const Text('이전'),
         ),
@@ -347,10 +348,10 @@ InputDecoration recordInputDecoration({String? hint}) => InputDecoration(
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: AppColors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: AppColors.border),
       ),
     );

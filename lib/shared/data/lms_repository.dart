@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/constants/attendance_status.dart';
 import '../../core/constants/firestore_paths.dart';
 import '../../core/errors/app_exception.dart';
+import '../../core/utils/class_period_utils.dart';
 import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
@@ -691,6 +692,7 @@ class LmsRepository {
     required String cohortId,
     required String dateKey,
     required List<UserModel> students,
+    required DemoAttendanceSeed seed,
   }) async {
     if (students.isEmpty) return 0;
     final col = cohortSub(cohortId, 'attendances');
@@ -710,26 +712,33 @@ class LmsRepository {
 
       final hash = student.uid.hashCode.abs() + dateKey.hashCode.abs();
       final missing = hash % 17 == 0;
-      final checkInTime =
-          missing ? null : _formatHm(8 * 60 + 48 + (hash % 18));
-      final checkOutTime =
-          missing ? null : _formatHm(17 * 60 + 50 + (hash % 20));
-
-      writes.add({
+      // merge 시 상대 필드를 null로 덮지 않도록, 채우는 쪽만 맵에 넣는다.
+      final data = <String, dynamic>{
         'userId': student.uid,
         'userDisplayName': student.displayName,
         'dateKey': dateKey,
         'type': 'status',
-        'status': missing
-            ? AttendanceStatus.absent
-            : AttendanceStatus.present,
         'statusSource': 'demo',
-        'checkInTime': checkInTime,
-        'checkOutTime': checkOutTime,
-        'checkInSource': 'demo',
         'timestamp': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (seed == DemoAttendanceSeed.checkIn) {
+        data['checkInTime'] =
+            missing ? null : _formatHm(8 * 60 + 48 + (hash % 18));
+        data['checkInSource'] = 'demo';
+        data['status'] = missing
+            ? AttendanceStatus.absent
+            : AttendanceStatus.present;
+      } else {
+        if (missing) continue;
+        data['checkOutTime'] = _formatHm(17 * 60 + 50 + (hash % 20));
+        if (prev?['status'] == null) {
+          data['status'] = AttendanceStatus.present;
+        }
+      }
+
+      writes.add(data);
     }
 
     var written = 0;
@@ -828,32 +837,88 @@ class LmsRepository {
     await cohortSub(cohortId, 'attendances').doc(docId).delete();
   }
 
-  Stream<Set<String>> watchRollCallConfirmed(String cohortId, String dateKey) {
-    return cohortSub(cohortId, 'rollCalls').doc(dateKey).snapshots().map((doc) {
+  Stream<Set<String>> watchRollCallConfirmed(
+    String cohortId,
+    String dateKey,
+    String periodId,
+  ) {
+    final docId = '${dateKey}_p$periodId';
+    return cohortSub(cohortId, 'rollCalls').doc(docId).snapshots().map((doc) {
       final raw = doc.data()?['confirmedUserIds'];
       if (raw is! List) return <String>{};
       return raw.map((e) => e.toString()).toSet();
     });
   }
 
-  Stream<Set<String>> watchRollCallHeld(String cohortId, String dateKey) {
-    return cohortSub(cohortId, 'rollCalls').doc(dateKey).snapshots().map((doc) {
+  Stream<Set<String>> watchRollCallHeld(
+    String cohortId,
+    String dateKey,
+    String periodId,
+  ) {
+    final docId = '${dateKey}_p$periodId';
+    return cohortSub(cohortId, 'rollCalls').doc(docId).snapshots().map((doc) {
       final raw = doc.data()?['heldUserIds'];
       if (raw is! List) return <String>{};
       return raw.map((e) => e.toString()).toSet();
     });
   }
 
+  /// 현재 교시 문서가 없으면 직전 교시(확인만)를 복사해 이어받음. 보류는 이어받지 않음.
+  Future<void> ensureRollCallCarriedForward({
+    required String cohortId,
+    required String dateKey,
+    required String periodId,
+    required String updatedBy,
+  }) async {
+    final docRef =
+        cohortSub(cohortId, 'rollCalls').doc('${dateKey}_p$periodId');
+    final snap = await docRef.get();
+    if (snap.exists) return;
+
+    var prev = ClassPeriodUtils.previousPeriod(periodId);
+    while (prev != null) {
+      final prevSnap = await cohortSub(cohortId, 'rollCalls')
+          .doc('${dateKey}_p${prev.id}')
+          .get();
+      if (prevSnap.exists) {
+        final raw = prevSnap.data()?['confirmedUserIds'];
+        final confirmed = raw is List
+            ? raw.map((e) => e.toString()).toList()
+            : <String>[];
+        await docRef.set({
+          'dateKey': dateKey,
+          'periodId': periodId,
+          'confirmedUserIds': confirmed,
+          'heldUserIds': <String>[],
+          'carriedFromPeriodId': prev.id,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'updatedBy': updatedBy,
+        });
+        return;
+      }
+      prev = ClassPeriodUtils.previousPeriod(prev.id);
+    }
+  }
+
   Future<void> setRollCallConfirmed({
     required String cohortId,
     required String dateKey,
+    required String periodId,
     required String userId,
     required bool confirmed,
     required String updatedBy,
   }) async {
-    await cohortSub(cohortId, 'rollCalls').doc(dateKey).set(
+    await ensureRollCallCarriedForward(
+      cohortId: cohortId,
+      dateKey: dateKey,
+      periodId: periodId,
+      updatedBy: updatedBy,
+    );
+    final docId = '${dateKey}_p$periodId';
+    await cohortSub(cohortId, 'rollCalls').doc(docId).set(
       {
         'dateKey': dateKey,
+        'periodId': periodId,
         'confirmedUserIds': confirmed
             ? FieldValue.arrayUnion([userId])
             : FieldValue.arrayRemove([userId]),
@@ -868,13 +933,22 @@ class LmsRepository {
   Future<void> setRollCallHeld({
     required String cohortId,
     required String dateKey,
+    required String periodId,
     required String userId,
     required bool held,
     required String updatedBy,
   }) async {
-    await cohortSub(cohortId, 'rollCalls').doc(dateKey).set(
+    await ensureRollCallCarriedForward(
+      cohortId: cohortId,
+      dateKey: dateKey,
+      periodId: periodId,
+      updatedBy: updatedBy,
+    );
+    final docId = '${dateKey}_p$periodId';
+    await cohortSub(cohortId, 'rollCalls').doc(docId).set(
       {
         'dateKey': dateKey,
+        'periodId': periodId,
         'heldUserIds': held
             ? FieldValue.arrayUnion([userId])
             : FieldValue.arrayRemove([userId]),

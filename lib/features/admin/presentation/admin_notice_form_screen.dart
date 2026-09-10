@@ -127,7 +127,7 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
           _isEdit ? '공지 수정' : '공지 작성',
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
-        bottom: const PreferredSize(
+        bottom: PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.border),
         ),
@@ -162,7 +162,7 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
             child: Column(
@@ -178,28 +178,28 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
                       color: AppColors.textHint.withValues(alpha: 0.7),
                     ),
                   ),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Divider(height: 1, color: AppColors.border),
+                Divider(height: 1, color: AppColors.border),
                 const SizedBox(height: 20),
                 Expanded(
                   child: TextField(
                     controller: _contentController,
                     decoration: _borderless.copyWith(
                       hintText: '학생에게 전달할 공지 내용을 작성하세요.',
-                      hintStyle: const TextStyle(
+                      hintStyle: TextStyle(
                         fontSize: 15,
                         color: AppColors.textHint,
                         height: 1.7,
                       ),
                       alignLabelWithHint: true,
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       height: 1.7,
                       color: AppColors.textPrimary,

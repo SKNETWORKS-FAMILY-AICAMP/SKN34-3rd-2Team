@@ -6,6 +6,7 @@ import '../../../core/constants/cohort_status.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../shared/models/cohort_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
@@ -46,7 +47,7 @@ class AppShellHeader extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Text(
                   AppConstants.appName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary,
                   ),
@@ -64,11 +65,28 @@ class AppShellHeader extends ConsumerWidget {
   }
 }
 
-class _CohortSelector extends ConsumerWidget {
+class _CohortSelector extends ConsumerStatefulWidget {
   const _CohortSelector();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CohortSelector> createState() => _CohortSelectorState();
+}
+
+class _CohortSelectorState extends ConsumerState<_CohortSelector> {
+  final _anchorKey = GlobalKey();
+  double _width = 0;
+
+  void _measure() {
+    final box = _anchorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final next = box.size.width;
+    if ((next - _width).abs() > 0.5) {
+      setState(() => _width = next);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cohortsAsync = ref.watch(cohortsStreamProvider);
     final effectiveId = ref.watch(effectiveCohortIdProvider);
 
@@ -92,41 +110,73 @@ class _CohortSelector extends ConsumerWidget {
         return Align(
           alignment: Alignment.centerLeft,
           child: MenuAnchor(
-            style: MenuStyle(
-              backgroundColor: const WidgetStatePropertyAll(AppColors.surface),
-              elevation: const WidgetStatePropertyAll(6),
-              shadowColor: WidgetStatePropertyAll(
-                Colors.black.withValues(alpha: 0.08),
-              ),
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: AppColors.border),
-                ),
-              ),
-              padding: const WidgetStatePropertyAll(
-                EdgeInsets.symmetric(vertical: 6),
-              ),
-            ),
+            crossAxisUnconstrained: false,
+            style: _width > 0
+                ? AppMenuStyles.matchedPanel(_width)
+                : AppMenuStyles.panel,
+            alignmentOffset: const Offset(0, 2),
             builder: (context, controller, _) {
-              return _CohortTrigger(
-                label: _cohortLabel(selected),
-                isOpen: controller.isOpen,
-                onPressed: () {
-                  if (controller.isOpen) {
-                    controller.close();
-                  } else {
-                    controller.open();
-                  }
-                },
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _measure();
+              });
+              return KeyedSubtree(
+                key: _anchorKey,
+                child: _CohortTrigger(
+                  label: _cohortLabel(selected),
+                  isOpen: controller.isOpen,
+                  onPressed: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                ),
               );
             },
             menuChildren: [
               for (final cohort in cohorts)
-                _CohortMenuItem(
-                  label: _cohortLabel(cohort),
-                  selected: cohort.cohortId == selected.cohortId,
+                MenuItemButton(
                   onPressed: () => selectCohort(ref, cohort.cohortId),
+                  style: ButtonStyle(
+                    minimumSize: _width > 0
+                        ? WidgetStatePropertyAll(Size(_width, 40))
+                        : null,
+                    maximumSize: _width > 0
+                        ? WidgetStatePropertyAll(Size(_width, 64))
+                        : null,
+                    backgroundColor: WidgetStateProperty.resolveWith((states) {
+                      final selectedItem =
+                          cohort.cohortId == selected.cohortId;
+                      if (selectedItem) return AppColors.primaryLight;
+                      if (states.contains(WidgetState.hovered) ||
+                          states.contains(WidgetState.focused)) {
+                        return AppColors.surfaceVariant;
+                      }
+                      return Colors.transparent;
+                    }),
+                    padding: const WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                  leadingIcon: SizedBox(
+                    width: 18,
+                    child: cohort.cohortId == selected.cohortId
+                        ? const Icon(Icons.check,
+                            size: 16, color: AppColors.primary)
+                        : null,
+                  ),
+                  child: Text(
+                    _cohortLabel(cohort),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: cohort.cohortId == selected.cohortId
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -173,7 +223,7 @@ class _CohortTrigger extends StatelessWidget {
                 child: Text(
                   label,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
@@ -188,56 +238,6 @@ class _CohortTrigger extends StatelessWidget {
                 color: AppColors.textSecondary,
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CohortMenuItem extends StatelessWidget {
-  const _CohortMenuItem({
-    required this.label,
-    required this.selected,
-    required this.onPressed,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return MenuItemButton(
-      onPressed: onPressed,
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (selected) return AppColors.primaryLight;
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.focused)) {
-            return AppColors.surfaceVariant;
-          }
-          return Colors.transparent;
-        }),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        ),
-      ),
-      leadingIcon: SizedBox(
-        width: 18,
-        child: selected
-            ? const Icon(Icons.check, size: 16, color: AppColors.primary)
-            : null,
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 320),
-        child: Text(
-          label,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: AppColors.textPrimary,
           ),
         ),
       ),

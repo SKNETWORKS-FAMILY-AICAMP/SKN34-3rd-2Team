@@ -4,13 +4,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/filter_pill.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/student_intake_model.dart';
 import '../providers/student_admin_providers.dart';
 import 'widgets/admin_page_layout.dart';
 
-/// 관리자 — 등록 학생 목록 (재원 / 퇴소 탭)
+/// 관리자 — 등록 학생 목록 (재원 / 퇴소 필터)
 class AdminStudentsScreen extends ConsumerStatefulWidget {
   const AdminStudentsScreen({super.key});
 
@@ -19,86 +21,82 @@ class AdminStudentsScreen extends ConsumerStatefulWidget {
       _AdminStudentsScreenState();
 }
 
-class _AdminStudentsScreenState extends ConsumerState<AdminStudentsScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+class _AdminStudentsScreenState extends ConsumerState<AdminStudentsScreen> {
+  /// 0: 재원, 1: 퇴소
+  int _filter = 0;
 
   @override
   Widget build(BuildContext context) {
     final intakes = ref.watch(cohortStudentIntakesProvider);
+    final activeCount = intakes.maybeWhen(
+      data: (list) => list.where((s) => s.isActive).length,
+      orElse: () => null,
+    );
+    final inactiveCount = intakes.maybeWhen(
+      data: (list) => list.where((s) => !s.isActive).length,
+      orElse: () => null,
+    );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('학생 관리'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: intakes.maybeWhen(
-            data: (list) {
-              final active = list.where((s) => s.isActive).length;
-              final inactive = list.length - active;
-              return [
-                Tab(text: '재원 ($active)'),
-                Tab(text: '퇴소 ($inactive)'),
-              ];
-            },
-            orElse: () => const [
-              Tab(text: '재원'),
-              Tab(text: '퇴소'),
+      body: Column(
+        children: [
+          FilterPillHeader(
+            pills: [
+              FilterPill(
+                label: '재원',
+                count: activeCount,
+                selected: _filter == 0,
+                onTap: () => setState(() => _filter = 0),
+              ),
+              FilterPill(
+                label: '퇴소',
+                count: inactiveCount,
+                selected: _filter == 1,
+                onTap: () => setState(() => _filter = 1),
+              ),
             ],
-          ),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilledButton.icon(
+            trailing: FilledButton.icon(
               onPressed: () => context.push(RoutePaths.adminStudentsCreate),
               icon: const Icon(Icons.person_add, size: 18),
               label: const Text('상담 등록'),
             ),
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(cohortStudentIntakesProvider),
-        child: intakes.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ErrorView(message: e.toString()),
-          data: (list) {
-            final activeList =
-                list.where((s) => s.isActive).toList(growable: false);
-            final inactiveList =
-                list.where((s) => !s.isActive).toList(growable: false);
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async =>
+                  ref.invalidate(cohortStudentIntakesProvider),
+              child: intakes.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (e, _) => ErrorView(
+                  message: e.toString(),
+                  onRetry: () =>
+                      ref.invalidate(cohortStudentIntakesProvider),
+                ),
+                data: (list) {
+                  final activeList =
+                      list.where((s) => s.isActive).toList(growable: false);
+                  final inactiveList =
+                      list.where((s) => !s.isActive).toList(growable: false);
 
-            return TabBarView(
-              controller: _tabController,
-              children: [
-                _StudentList(
-                  students: activeList,
-                  emptyMessage: '등록된 학생이 없습니다',
-                  showCreateButton: true,
-                ),
-                _StudentList(
-                  students: inactiveList,
-                  emptyMessage: '퇴소 처리된 학생이 없습니다',
-                  showCreateButton: false,
-                  isInactive: true,
-                ),
-              ],
-            );
-          },
-        ),
+                  if (_filter == 0) {
+                    return _StudentList(
+                      students: activeList,
+                      emptyMessage: '등록된 학생이 없습니다',
+                      showCreateButton: true,
+                    );
+                  }
+                  return _StudentList(
+                    students: inactiveList,
+                    emptyMessage: '퇴소 처리된 학생이 없습니다',
+                    showCreateButton: false,
+                    isInactive: true,
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -138,7 +136,7 @@ class _StudentList extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     emptyMessage,
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: AppColors.textSecondary),
                   ),
                   if (showCreateButton) ...[
                     const SizedBox(height: 16),
@@ -160,7 +158,7 @@ class _StudentList extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 860),
+        constraints: AppLayout.listConstraints(),
         child: ListView.builder(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
@@ -202,7 +200,7 @@ class _StudentList extends StatelessWidget {
                     if (s.createdAt != null)
                       Text(
                         '등록: ${AppDateUtils.formatDisplay(s.createdAt!)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondary,
                         ),

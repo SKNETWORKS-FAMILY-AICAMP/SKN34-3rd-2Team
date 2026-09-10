@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/inflearn_package_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -322,17 +323,13 @@ class _AdminInflearnPackageFormScreenState
                       v == null || v.trim().isEmpty ? '교과목을 입력하세요' : null,
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<InflearnPackageType>(
-                  initialValue: _type,
+                AppDropdownField<InflearnPackageType>(
+                  value: _type,
                   decoration: const InputDecoration(labelText: '유형'),
-                  items: InflearnPackageType.values
-                      .map(
-                        (t) => DropdownMenuItem(
-                          value: t,
-                          child: Text(t.label),
-                        ),
-                      )
-                      .toList(),
+                  items: [
+                    for (final t in InflearnPackageType.values)
+                      AppDropdownItem(value: t, label: t.label),
+                  ],
                   onChanged: (v) {
                     if (v != null) setState(() => _type = v);
                   },
@@ -423,7 +420,7 @@ class _AdminInflearnPackageFormScreenState
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: AppColors.border),
+              side: BorderSide(color: AppColors.border),
             ),
             child: Padding(
               padding: const EdgeInsets.all(12),

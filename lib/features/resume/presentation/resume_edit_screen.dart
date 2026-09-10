@@ -418,7 +418,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     color: AppColors.primaryLight,
-                    child: const Text(
+                    child: Text(
                       '제출 요청됨 — 승인 전까지 수정 가능합니다.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
@@ -693,7 +693,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                           SizedBox(
                             width: 340,
                             child: DecoratedBox(
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 border: Border(
                                   left: BorderSide(color: AppColors.border),
                                 ),
@@ -791,7 +791,7 @@ class _FlatSection extends StatelessWidget {
       children: [
         Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        const Divider(height: 1, color: AppColors.border),
+        Divider(height: 1, color: AppColors.border),
         const SizedBox(height: 16),
         child,
       ],
@@ -859,7 +859,7 @@ class _FieldState extends State<_Field> {
             if (widget.label.isNotEmpty)
               Text(
                 widget.label,
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             if (widget.label.isNotEmpty) const SizedBox(height: 2),
             Text(
@@ -1067,7 +1067,7 @@ class _TitleSectionState extends State<_TitleSection> {
         if (!widget.readOnly)
           Text(
             '${widget.title.length}/100',
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
       ],
     );
@@ -1214,7 +1214,7 @@ class _NameFieldState extends State<_NameField> {
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         hintText: '이름을 입력하세요',
         hintStyle: TextStyle(
           fontSize: 20,
@@ -1308,7 +1308,7 @@ class _IconFieldState extends State<_IconField> {
                     children: [
                       Text(
                         widget.label,
-                        style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+                        style: TextStyle(fontSize: 11, color: AppColors.textHint),
                       ),
                       Text(
                         widget.value.isEmpty ? '미작성' : widget.value,
@@ -1349,15 +1349,15 @@ class _CoreCompetenciesSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '채용 담당자들이 가장 먼저 읽게 되는 글입니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const Text(
+          Text(
             '경력을 기반으로 나의 역량과 강점을 소개해 주세요.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const Text(
+          Text(
             '5줄 이내로 간결하게 작성하는 것을 권장합니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textHint),
           ),

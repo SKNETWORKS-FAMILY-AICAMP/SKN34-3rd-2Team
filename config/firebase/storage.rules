@@ -76,7 +76,8 @@ service firebase.storage {
 
     // cohorts/{cohortId}/assessments/{assessmentId}/thumbnails/{fileName}
     match /cohorts/{cohortId}/assessments/{assessmentId}/thumbnails/{fileName} {
-      allow read: if belongsToCohort(cohortId) || isAdmin();
+      allow read: if canAccessCohort(cohortId)
+        || isInstructorOfCohort(cohortId);
       allow write: if (isAdmin() || isInstructorOfCohort(cohortId))
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');

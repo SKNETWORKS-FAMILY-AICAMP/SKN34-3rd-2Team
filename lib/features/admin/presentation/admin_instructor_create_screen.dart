@@ -100,7 +100,7 @@ class _AdminInstructorCreateScreenState
                 children: [
                   Text(
                     '담당 기수: ${cohortName.isEmpty ? '-' : cohortName}',
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(

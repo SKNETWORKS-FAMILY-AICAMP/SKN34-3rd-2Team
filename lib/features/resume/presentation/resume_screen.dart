@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/resume_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
@@ -69,7 +70,7 @@ class _ResumeBody extends ConsumerWidget {
                     canReview
                         ? '${ref.watch(effectiveCohortNameProvider) ?? '담당 기수'} · 제출·피드백을 확인합니다.'
                         : '이력서 작성 현황과 피드백을 관리합니다.',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
                     ),
@@ -114,7 +115,7 @@ class _ResumeBody extends ConsumerWidget {
             ),
             Expanded(
               child: resumes.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         '이력서가 없습니다',
                         style: TextStyle(color: AppColors.textSecondary),
@@ -184,7 +185,7 @@ class _StatCard extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary,
                 ),
@@ -246,7 +247,7 @@ class _ResumeCard extends ConsumerWidget {
                             const SizedBox(height: 2),
                             Text(
                               '${resume.completedCount}/${resume.totalCount} · ${resume.statusLabel}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textSecondary,
                                 fontSize: 12,
                               ),
@@ -345,7 +346,7 @@ class _ResumeCard extends ConsumerWidget {
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
                         AppDateUtils.formatDisplay(resume.updatedAt!),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textHint,
                           fontSize: 11,
                         ),
@@ -395,7 +396,7 @@ class _SectionChip extends StatelessWidget {
               ],
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
                   color: AppColors.textPrimary,
@@ -452,7 +453,7 @@ class _FeedbackSection extends ConsumerWidget {
           error: (e, _) => Text('오류: $e'),
           data: (list) {
             if (list.isEmpty) {
-              return const Padding(
+              return Padding(
                 padding: EdgeInsets.only(bottom: 2),
                 child: Text(
                   '피드백이 없습니다',
@@ -502,18 +503,19 @@ class _FeedbackSection extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: sectionKey,
+              AppDropdownField<String>(
+                value: sectionKey,
                 decoration: const InputDecoration(labelText: '섹션'),
-                items: AppConstants.resumeSections
-                    .map(
-                      (k) => DropdownMenuItem(
-                        value: k,
-                        child: Text(AppConstants.resumeSectionLabels[k] ?? k),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => sectionKey = v!),
+                items: [
+                  for (final k in AppConstants.resumeSections)
+                    AppDropdownItem(
+                      value: k,
+                      label: AppConstants.resumeSectionLabels[k] ?? k,
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => sectionKey = v);
+                },
               ),
               TextField(
                 controller: contentCtrl,

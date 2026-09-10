@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_layout.dart';
 
 /// 게시판 UI 공통 색상·스타일
 abstract final class BoardUi {
@@ -13,6 +14,7 @@ abstract final class BoardUi {
   static const activeBadgeBg = Color(0xFFDCFCE7);
   static const activeBadgeText = AppColors.success;
   static const listBackground = AppColors.background;
+  static const contentMaxWidth = AppLayout.list;
 
   static BoxDecoration cardDecoration({
     bool isFavorite = false,
@@ -28,11 +30,11 @@ abstract final class BoardUi {
                 ? AppColors.primary.withValues(alpha: 0.35)
                 : AppColors.border,
       ),
-      boxShadow: const [
+      boxShadow: [
         BoxShadow(
           color: AppColors.shadow,
           blurRadius: 12,
-          offset: Offset(0, 4),
+          offset: const Offset(0, 4),
         ),
       ],
     );
@@ -45,6 +47,66 @@ abstract final class BoardUi {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 0,
+    );
+  }
+}
+
+/// 관리자/강사 게시판 공통 페이지 헤더
+class BoardPageHeader extends StatelessWidget {
+  const BoardPageHeader({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.action,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (action != null) ...[
+                const SizedBox(width: 12),
+                action!,
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -66,7 +128,7 @@ class BoardTabBar extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             border: Border(bottom: BorderSide(color: AppColors.border)),
           ),

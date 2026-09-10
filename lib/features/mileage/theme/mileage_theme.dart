@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 
 /// 마일리지 화면 전용 accent (AppColors 기반)
 abstract final class MileageColors {
@@ -38,7 +39,7 @@ abstract final class MileageColors {
 abstract final class MileageLayout {
   static const pagePaddingH = 20.0;
   static const sectionGap = 12.0;
-  static const maxContentWidth = 720.0;
+  static const maxContentWidth = AppLayout.reading;
   static const cardHeight = 140.0;
   static const buttonHeight = 36.0;
 }

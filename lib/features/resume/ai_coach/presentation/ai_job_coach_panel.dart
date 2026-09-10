@@ -366,7 +366,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                   const SizedBox(height: 20),
                   const LinearProgressIndicator(minHeight: 3),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     '이력서 근거와 채용 조건을 비교하고 있습니다…',
                     style: TextStyle(
                       fontSize: 12,
@@ -407,7 +407,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 430),
       child: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.border)),
         ),
         child: panel,
@@ -431,7 +431,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
@@ -451,7 +451,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 9),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -534,7 +534,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       children: [
         Icon(Icons.hub_outlined, size: 42, color: AppColors.textHint),
         SizedBox(height: 12),
@@ -578,7 +578,7 @@ class _RecommendationSection extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           if (result.fromServer && result.recommendations.isEmpty)
-            const Text(
+            Text(
               '조건에 맞는 공고를 찾지 못했습니다. 희망 지역·고용형태를 넓히거나 이력서에 기술과 프로젝트를 더 적어 보세요.',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.4),
             ),
@@ -701,7 +701,7 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                         item.source.isEmpty
                             ? item.company
                             : '${item.company} · ${item.source}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
                           color: AppColors.textSecondary,
                         ),
@@ -754,7 +754,7 @@ class _RecommendationCardState extends State<_RecommendationCard> {
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.open_in_new,
                         size: 13,
                         color: AppColors.textHint,
@@ -858,7 +858,7 @@ class _RecommendationRationale extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _AnalysisLabel('공고 조건', AppColors.textSecondary),
+          _AnalysisLabel('공고 조건', AppColors.textSecondary),
           _ConditionRow(
             label: '근무지역',
             value: item.region.isEmpty ? '미기재' : item.region,
@@ -922,14 +922,14 @@ class _RecommendationRationale extends StatelessWidget {
                   style: const TextStyle(fontSize: 10.5, height: 1.4),
                 ),
               ),
-            const Text(
+            Text(
               '경험이 없다는 판단이 아닙니다. 경험이 있다면 이력서에 적어 주세요.',
               style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
             ),
             const SizedBox(height: 8),
           ],
           if (hasBuckets) ...[
-            const _AnalysisLabel('기술 근거', AppColors.textSecondary),
+            _AnalysisLabel('기술 근거', AppColors.textSecondary),
             _SkillBucketRow(
               label: '필수 기술',
               matched: item.matchedRequired,
@@ -951,7 +951,7 @@ class _RecommendationRationale extends StatelessWidget {
           ],
           if (item.unmatchedSkills.isNotEmpty) ...[
             const SizedBox(height: 3),
-            const Text(
+            Text(
               '회색 기술은 이력서에 적혀 있지 않다는 뜻이며, 경험이 없다고 판단한 것은 아닙니다. '
               '경험이 있다면 기술스택이나 프로젝트에 적어 주세요.',
               style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
@@ -959,7 +959,7 @@ class _RecommendationRationale extends StatelessWidget {
           ],
           if (item.bodyIsImage) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '이 공고는 상세 내용이 이미지로만 올라와 있어 필수·우대 요건을 텍스트로 확인하지 못했습니다. '
               '기업이 등록 때 고른 기술 태그와 조건만으로 비교했으니 공고 원문을 직접 확인해 주세요.',
               style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
@@ -969,7 +969,7 @@ class _RecommendationRationale extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '자기소개서·프로젝트 문장과 공고 내용의 임베딩 유사도 $rank위로 순위에 반영됨',
-              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
             ),
           ],
         ],
@@ -1013,7 +1013,7 @@ class _ConditionRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 50,
-            child: Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary)),
+            child: Text(label, style: TextStyle(fontSize: 10.5, color: AppColors.textSecondary)),
           ),
           Expanded(
             child: Text(value, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
@@ -1141,7 +1141,7 @@ class _Section extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             subtitle,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               height: 1.35,
               color: AppColors.textSecondary,
@@ -1282,7 +1282,7 @@ class _ReadinessCard extends StatelessWidget {
                   preferences.isEmpty
                       ? '희망 조건 미입력 — 지역·고용형태 필터 없이 추천합니다.'
                       : '희망 조건: ${preferences.summary}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     height: 1.5,
                     color: AppColors.textSecondary,
@@ -1310,7 +1310,7 @@ class _ReadinessCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '남은 항목: ${readiness.missingRequiredSectionLabels.join(', ')}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 height: 1.5,
                 color: AppColors.textSecondary,
@@ -1400,7 +1400,7 @@ class _AnalysisBullet extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2, bottom: 4),
                   child: Text(
                     '“$quote”',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
                       height: 1.35,
                       fontStyle: FontStyle.italic,
@@ -1474,7 +1474,7 @@ class _ChatView extends StatelessWidget {
           ),
         ),
         if (busy)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1494,7 +1494,7 @@ class _ChatView extends StatelessWidget {
           ),
         Container(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(top: BorderSide(color: AppColors.border)),
           ),
           child: Row(
@@ -1624,7 +1624,7 @@ class _ChatJobCard extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               '${job.company} · ${job.region} · ${job.career}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
                 color: AppColors.textSecondary,
               ),
@@ -1632,7 +1632,7 @@ class _ChatJobCard extends StatelessWidget {
             if (job.deadline case final deadline?)
               Text(
                 '마감 $deadline',
-                style: const TextStyle(fontSize: 10, color: AppColors.textHint),
+                style: TextStyle(fontSize: 10, color: AppColors.textHint),
               ),
             if (skills.isNotEmpty) ...[
               const SizedBox(height: 5),
@@ -1682,7 +1682,7 @@ class _ServerQueryNote extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '이력서에서 뽑은 검색 기준',
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
           ),
@@ -1692,7 +1692,7 @@ class _ServerQueryNote extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               profileSummary,
-              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
+              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.4),
             ),
           ],
         ],
@@ -1749,7 +1749,7 @@ class _QuoteLine extends StatelessWidget {
           Expanded(
             child: Text(
               '“$text”',
-              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.35),
+              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.35),
             ),
           ),
         ],

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/mileage_constants.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../shared/models/mileage_models.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
@@ -165,28 +166,40 @@ class _AdminMileageProductFormScreenState
             AdminFormSection(
               title: '가격 · 카테고리',
               children: [
-                DropdownButtonFormField<String>(
-                  initialValue: _category,
-                  decoration: const InputDecoration(labelText: '카테고리', border: OutlineInputBorder()),
-                  items: MileageCategories.all
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c,
-                          child: Text(MileageCategories.labelOf(c)),
-                        ),
-                      )
-                      .toList(),
+                AppDropdownField<String>(
+                  value: _category,
+                  decoration: const InputDecoration(
+                    labelText: '카테고리',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final c in MileageCategories.all)
+                      AppDropdownItem(
+                        value: c,
+                        label: MileageCategories.labelOf(c),
+                      ),
+                  ],
                   onChanged: (v) => setState(() => _category = v ?? _category),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _pricingType,
-                  decoration: const InputDecoration(labelText: '가격 유형', border: OutlineInputBorder()),
+                AppDropdownField<String>(
+                  value: _pricingType,
+                  decoration: const InputDecoration(
+                    labelText: '가격 유형',
+                    border: OutlineInputBorder(),
+                  ),
                   items: const [
-                    DropdownMenuItem(value: MileagePricingTypes.fixed, child: Text('고정가')),
-                    DropdownMenuItem(value: MileagePricingTypes.custom, child: Text('가격 직접 입력')),
+                    AppDropdownItem(
+                      value: MileagePricingTypes.fixed,
+                      label: '고정가',
+                    ),
+                    AppDropdownItem(
+                      value: MileagePricingTypes.custom,
+                      label: '가격 직접 입력',
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _pricingType = v ?? _pricingType),
+                  onChanged: (v) =>
+                      setState(() => _pricingType = v ?? _pricingType),
                 ),
                 if (_pricingType == MileagePricingTypes.fixed) ...[
                   const SizedBox(height: 12),

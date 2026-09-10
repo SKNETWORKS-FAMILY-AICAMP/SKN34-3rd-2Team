@@ -120,7 +120,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
                 ],
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 '사용할 수 있는 스킬을 선택해 주세요.',
@@ -150,7 +150,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
                 children: [
                   Text(
                     '총 ${_filtered.length}개',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
                     ),
@@ -177,7 +177,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
             ),
             Expanded(
               child: pageItems.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         '검색 결과가 없습니다.',
                         style: TextStyle(color: AppColors.textHint),
@@ -226,12 +226,12 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
             if (_selected.isNotEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: AppColors.border)),
                 ),
                 child: Text(
                   '${_selected.length}개 선택됨',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),

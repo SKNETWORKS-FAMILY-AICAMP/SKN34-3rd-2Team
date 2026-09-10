@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../core/constants/attendance_status.dart';
 import '../../core/constants/cohort_status.dart';
+import '../../core/utils/class_period_utils.dart';
 import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
@@ -807,31 +808,71 @@ class DemoLmsRepository {
 
   final Map<String, Set<String>> _rollCallConfirmed = {};
   final Map<String, Set<String>> _rollCallHeld = {};
+  final Set<String> _rollCallDocs = {};
 
-  String _rollCallKey(String cohortId, String dateKey) => '$cohortId|$dateKey';
+  String _rollCallKey(String cohortId, String dateKey, String periodId) =>
+      '$cohortId|$dateKey|$periodId';
 
   Stream<Set<String>> watchRollCallConfirmed(
     String cohortId,
     String dateKey,
+    String periodId,
   ) async* {
-    yield Set.of(_rollCallConfirmed[_rollCallKey(cohortId, dateKey)] ?? const {});
+    yield Set.of(
+      _rollCallConfirmed[_rollCallKey(cohortId, dateKey, periodId)] ??
+          const {},
+    );
   }
 
   Stream<Set<String>> watchRollCallHeld(
     String cohortId,
     String dateKey,
+    String periodId,
   ) async* {
-    yield Set.of(_rollCallHeld[_rollCallKey(cohortId, dateKey)] ?? const {});
+    yield Set.of(
+      _rollCallHeld[_rollCallKey(cohortId, dateKey, periodId)] ?? const {},
+    );
+  }
+
+  Future<void> ensureRollCallCarriedForward({
+    required String cohortId,
+    required String dateKey,
+    required String periodId,
+    required String updatedBy,
+  }) async {
+    final key = _rollCallKey(cohortId, dateKey, periodId);
+    if (_rollCallDocs.contains(key)) return;
+
+    var prev = ClassPeriodUtils.previousPeriod(periodId);
+    while (prev != null) {
+      final prevKey = _rollCallKey(cohortId, dateKey, prev.id);
+      if (_rollCallDocs.contains(prevKey)) {
+        _rollCallConfirmed[key] =
+            Set<String>.of(_rollCallConfirmed[prevKey] ?? const {});
+        _rollCallHeld[key] = <String>{};
+        _rollCallDocs.add(key);
+        return;
+      }
+      prev = ClassPeriodUtils.previousPeriod(prev.id);
+    }
   }
 
   Future<void> setRollCallConfirmed({
     required String cohortId,
     required String dateKey,
+    required String periodId,
     required String userId,
     required bool confirmed,
     required String updatedBy,
   }) async {
-    final key = _rollCallKey(cohortId, dateKey);
+    await ensureRollCallCarriedForward(
+      cohortId: cohortId,
+      dateKey: dateKey,
+      periodId: periodId,
+      updatedBy: updatedBy,
+    );
+    final key = _rollCallKey(cohortId, dateKey, periodId);
+    _rollCallDocs.add(key);
     final set = _rollCallConfirmed.putIfAbsent(key, () => <String>{});
     final held = _rollCallHeld.putIfAbsent(key, () => <String>{});
     if (confirmed) {
@@ -845,11 +886,19 @@ class DemoLmsRepository {
   Future<void> setRollCallHeld({
     required String cohortId,
     required String dateKey,
+    required String periodId,
     required String userId,
     required bool held,
     required String updatedBy,
   }) async {
-    final key = _rollCallKey(cohortId, dateKey);
+    await ensureRollCallCarriedForward(
+      cohortId: cohortId,
+      dateKey: dateKey,
+      periodId: periodId,
+      updatedBy: updatedBy,
+    );
+    final key = _rollCallKey(cohortId, dateKey, periodId);
+    _rollCallDocs.add(key);
     final heldSet = _rollCallHeld.putIfAbsent(key, () => <String>{});
     final confirmed = _rollCallConfirmed.putIfAbsent(key, () => <String>{});
     if (held) {
@@ -864,6 +913,7 @@ class DemoLmsRepository {
     required String cohortId,
     required String dateKey,
     required List<UserModel> students,
+    required DemoAttendanceSeed seed,
   }) async {
     var written = 0;
     for (final student in students) {
@@ -875,23 +925,44 @@ class DemoLmsRepository {
 
       final hash = student.uid.hashCode.abs() + dateKey.hashCode.abs();
       final missing = hash % 17 == 0;
+      final prev = i >= 0 ? _attendances[i] : null;
       final inMin = 8 * 60 + 48 + (hash % 18);
       final outMin = 17 * 60 + 50 + (hash % 20);
+      final inTime =
+          '${(inMin ~/ 60).toString().padLeft(2, '0')}:${(inMin % 60).toString().padLeft(2, '0')}';
+      final outTime =
+          '${(outMin ~/ 60).toString().padLeft(2, '0')}:${(outMin % 60).toString().padLeft(2, '0')}';
+
+      String? checkInTime = prev?.checkInTime;
+      String? checkOutTime = prev?.checkOutTime;
+      String? status = prev?.status;
+
+      if (seed == DemoAttendanceSeed.checkIn) {
+        checkInTime = missing ? null : inTime;
+        status = missing
+            ? AttendanceStatus.absent
+            : AttendanceStatus.present;
+      } else {
+        if (missing) continue;
+        checkOutTime = outTime;
+        status ??= AttendanceStatus.present;
+      }
+
       final model = AttendanceModel(
         id: '${student.uid}_$dateKey',
         userId: student.uid,
         type: 'status',
         dateKey: dateKey,
-        status: missing ? AttendanceStatus.absent : AttendanceStatus.present,
+        status: status,
         userDisplayName: student.displayName,
         timestamp: DateTime.now(),
-        checkInTime: missing
-            ? null
-            : '${(inMin ~/ 60).toString().padLeft(2, '0')}:${(inMin % 60).toString().padLeft(2, '0')}',
-        checkOutTime: missing
-            ? null
-            : '${(outMin ~/ 60).toString().padLeft(2, '0')}:${(outMin % 60).toString().padLeft(2, '0')}',
+        checkInTime: checkInTime,
+        checkOutTime: checkOutTime,
         statusSource: 'demo',
+        formAttendanceType: prev?.formAttendanceType,
+        officialLeaveUsed: prev?.officialLeaveUsed,
+        officialLeaveType: prev?.officialLeaveType,
+        officialLeaveOther: prev?.officialLeaveOther,
       );
       if (i >= 0) {
         _attendances[i] = model;

@@ -21,6 +21,8 @@ class _BoardScreenState extends ConsumerState<BoardScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _postController = TextEditingController();
+  final _searchController = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
@@ -32,6 +34,7 @@ class _BoardScreenState extends ConsumerState<BoardScreen>
   void dispose() {
     _tabController.dispose();
     _postController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -45,11 +48,28 @@ class _BoardScreenState extends ConsumerState<BoardScreen>
             controller: _tabController,
             tabs: const ['공지사항', '소통 피드'],
           ),
+          AnimatedBuilder(
+            animation: _tabController,
+            builder: (context, _) {
+              if (_tabController.index != 0) {
+                return const SizedBox.shrink();
+              }
+              return _BoardSearchBar(
+                controller: _searchController,
+                query: _query,
+                onChanged: (value) => setState(() => _query = value.trim()),
+                onClear: () {
+                  _searchController.clear();
+                  setState(() => _query = '');
+                },
+              );
+            },
+          ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
-                const _NoticesTab(),
+                _NoticesTab(query: _query),
                 _FeedTab(controller: _postController),
               ],
             ),
@@ -60,8 +80,63 @@ class _BoardScreenState extends ConsumerState<BoardScreen>
   }
 }
 
+class _BoardSearchBar extends StatelessWidget {
+  const _BoardSearchBar({
+    required this.controller,
+    required this.query,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final String query;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          hintText: '공지 제목·내용·작성자 검색',
+          hintStyle: TextStyle(fontSize: 13, color: AppColors.textHint),
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: query.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: onClear,
+                ),
+          filled: true,
+          fillColor: BoardUi.listBackground,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+        ),
+      ),
+    );
+  }
+}
+
 class _NoticesTab extends ConsumerWidget {
-  const _NoticesTab();
+  const _NoticesTab({required this.query});
+
+  final String query;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,38 +148,41 @@ class _NoticesTab extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorView(message: e.toString()),
         data: (list) {
-          if (list.isEmpty) {
+          final q = query.toLowerCase();
+          final filtered = q.isEmpty
+              ? list
+              : list
+                  .where(
+                    (n) =>
+                        n.title.toLowerCase().contains(q) ||
+                        n.content.toLowerCase().contains(q) ||
+                        n.authorName.toLowerCase().contains(q),
+                  )
+                  .toList();
+
+          if (filtered.isEmpty) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                SizedBox(height: 120),
-                Center(
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.campaign_outlined,
-                        size: 40,
-                        color: AppColors.textHint,
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        '공지사항이 없습니다',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
+              children: [
+                SizedBox(height: 48),
+                EmptyView(
+                  message: q.isEmpty ? '등록된 공지가 없습니다.' : '검색 결과가 없습니다.',
+                  icon: q.isEmpty
+                      ? Icons.campaign_outlined
+                      : Icons.search_off_rounded,
                 ),
               ],
             );
           }
 
-          final favorites = list.where((n) => n.isFavorite).toList();
-          final regular = list.where((n) => !n.isFavorite).toList();
+          final favorites = filtered.where((n) => n.isFavorite).toList();
+          final regular = filtered.where((n) => !n.isFavorite).toList();
 
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
+              constraints:
+                  const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
@@ -164,7 +242,7 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
             color: AppColors.textPrimary,
@@ -196,7 +274,7 @@ class _FeedTab extends ConsumerWidget {
                   controller: controller,
                   decoration: InputDecoration(
                     hintText: '무엇이든 물어보세요...',
-                    hintStyle: const TextStyle(color: AppColors.textHint),
+                    hintStyle: TextStyle(color: AppColors.textHint),
                     filled: true,
                     fillColor: BoardUi.listBackground,
                     isDense: true,
@@ -237,11 +315,9 @@ class _FeedTab extends ConsumerWidget {
             error: (e, _) => ErrorView(message: e.toString()),
             data: (list) {
               if (list.isEmpty) {
-                return const Center(
-                  child: Text(
-                    '게시글이 없습니다',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
+                return const EmptyView(
+                  message: '게시글이 없습니다.',
+                  icon: Icons.forum_outlined,
                 );
               }
               return ListView.builder(

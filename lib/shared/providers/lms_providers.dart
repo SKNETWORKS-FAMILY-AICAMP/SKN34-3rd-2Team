@@ -191,7 +191,11 @@ final attendancesByDateProvider = StreamProvider.autoDispose
 });
 
 final rollCallConfirmedProvider =
-    StreamProvider.autoDispose.family<Set<String>, String>((ref, dateKey) {
+    StreamProvider.autoDispose.family<Set<String>, String>((ref, scopeKey) {
+  final parts = scopeKey.split('|');
+  if (parts.length != 2) return Stream.value(const <String>{});
+  final dateKey = parts[0];
+  final periodId = parts[1];
   final cohortId = ref.watch(effectiveCohortIdProvider);
   final isAdmin = ref.watch(isAdminProvider);
   final isInstructor = ref.watch(isInstructorProvider);
@@ -201,11 +205,16 @@ final rollCallConfirmedProvider =
   return ref.watch(lmsRepositoryProvider).watchRollCallConfirmed(
         cohortId,
         dateKey,
+        periodId,
       ) as Stream<Set<String>>;
 });
 
 final rollCallHeldProvider =
-    StreamProvider.autoDispose.family<Set<String>, String>((ref, dateKey) {
+    StreamProvider.autoDispose.family<Set<String>, String>((ref, scopeKey) {
+  final parts = scopeKey.split('|');
+  if (parts.length != 2) return Stream.value(const <String>{});
+  final dateKey = parts[0];
+  final periodId = parts[1];
   final cohortId = ref.watch(effectiveCohortIdProvider);
   final isAdmin = ref.watch(isAdminProvider);
   final isInstructor = ref.watch(isInstructorProvider);
@@ -215,6 +224,7 @@ final rollCallHeldProvider =
   return ref.watch(lmsRepositoryProvider).watchRollCallHeld(
         cohortId,
         dateKey,
+        periodId,
       ) as Stream<Set<String>>;
 });
 

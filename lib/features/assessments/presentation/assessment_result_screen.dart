@@ -1,9 +1,11 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/demo/demo_lms_repository.dart';
 import '../../../shared/models/assessment_model.dart';
@@ -125,7 +127,17 @@ class _AssessmentResultScreenState
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = '$e';
+        if (e is FirebaseFunctionsException) {
+          final msg = e.message?.trim();
+          _error = (msg != null &&
+                  msg.isNotEmpty &&
+                  msg.toUpperCase() != 'INTERNAL' &&
+                  !msg.toUpperCase().startsWith('INTERNAL '))
+              ? msg
+              : '결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        } else {
+          _error = '결과를 불러오지 못했습니다.';
+        }
       });
     }
   }
@@ -161,7 +173,7 @@ class _AssessmentResultScreenState
                             heightFactor: 1,
                             child: ConstrainedBox(
                               constraints:
-                                  const BoxConstraints(maxWidth: 720),
+                                  const BoxConstraints(maxWidth: AppLayout.reading),
                               child: Column(
                                 crossAxisAlignment:
                                     CrossAxisAlignment.stretch,
@@ -172,7 +184,7 @@ class _AssessmentResultScreenState
                                     shape: RoundedRectangleBorder(
                                       borderRadius:
                                           BorderRadius.circular(12),
-                                      side: const BorderSide(
+                                      side: BorderSide(
                                         color: AppColors.border,
                                       ),
                                     ),
@@ -193,7 +205,7 @@ class _AssessmentResultScreenState
                                           const SizedBox(height: 8),
                                           Text(
                                             user?.displayName ?? '',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color:
                                                   AppColors.textSecondary,
                                             ),
@@ -210,7 +222,7 @@ class _AssessmentResultScreenState
                                           Text(
                                             '자동채점 $_autoTotal점'
                                             '${_totalScore != _autoTotal ? ' · 조정 반영' : ''}',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color:
                                                   AppColors.textSecondary,
                                               fontSize: 13,
@@ -279,7 +291,7 @@ class _AssessmentResultScreenState
                             heightFactor: 1,
                             child: ConstrainedBox(
                               constraints:
-                                  const BoxConstraints(maxWidth: 720),
+                                  const BoxConstraints(maxWidth: AppLayout.reading),
                               child: SizedBox(
                                 width: double.infinity,
                                 height: 48,

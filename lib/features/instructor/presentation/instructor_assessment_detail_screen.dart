@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'instructor_assessments_screen.dart';
 
@@ -22,7 +23,6 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
     final submissions = ref.watch(assessmentSubmissionsProvider(assessmentId));
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: assessment.when(
           data: (a) => Text(a?.title ?? '평가'),
@@ -68,7 +68,7 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Text(
                   '${a.statusLabel} · ${a.questionCount}문제 · ${a.maxScore}점 · ${a.periodLabel}',
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: AppColors.textSecondary),
                 ),
               );
             },
@@ -83,10 +83,17 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
           Expanded(
             child: submissions.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('$e')),
+              error: (e, _) => ErrorView(
+                message: e.toString(),
+                onRetry: () =>
+                    ref.invalidate(assessmentSubmissionsProvider(assessmentId)),
+              ),
               data: (list) {
                 if (list.isEmpty) {
-                  return const Center(child: Text('아직 제출이 없습니다.'));
+                  return const EmptyView(
+                    message: '아직 제출이 없습니다.',
+                    icon: Icons.assignment_outlined,
+                  );
                 }
                 final sorted = [...list]
                   ..sort(

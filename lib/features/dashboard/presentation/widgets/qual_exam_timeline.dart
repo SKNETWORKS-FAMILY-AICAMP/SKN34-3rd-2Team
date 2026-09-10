@@ -98,7 +98,7 @@ class _TimelineEntry extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${item.nextExamLabel} · $dateLabel',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
                     ),
@@ -108,7 +108,7 @@ class _TimelineEntry extends StatelessWidget {
                     Text(
                       '필기 접수 ${AppDateUtils.formatYmd(item.docRegStartDt)}'
                       '${item.docRegEndDt != null ? ' ~ ${AppDateUtils.formatYmd(item.docRegEndDt)}' : ''}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textHint,
                       ),
@@ -121,7 +121,7 @@ class _TimelineEntry extends StatelessWidget {
                     Text(
                       '실기 접수 ${AppDateUtils.formatYmd(item.pracRegStartDt)}'
                       '${item.pracRegEndDt != null ? ' ~ ${AppDateUtils.formatYmd(item.pracRegEndDt)}' : ''}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textHint,
                       ),

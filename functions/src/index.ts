@@ -603,36 +603,62 @@ export const adjustMileage = onCall(
       cohortId: string;
     };
 
-    if (!userId || !amount || !reason || !cohortId) {
+    if (!userId || !reason || !cohortId) {
       throw new HttpsError("invalid-argument", "필수 파라미터가 누락되었습니다.");
     }
-
-    const batch = db.batch();
+    if (!Number.isFinite(amount) || amount === 0) {
+      throw new HttpsError("invalid-argument", "amount는 0이 아닌 숫자여야 합니다.");
+    }
 
     const userRef = db.collection("users").doc(userId);
-    batch.update(userRef, {
-      mileageBalance: fieldValue.increment(amount),
-      updatedAt: fieldValue.serverTimestamp(),
-    });
-
     const txRef = db
       .collection("cohorts")
       .doc(cohortId)
       .collection("mileageTransactions")
       .doc();
 
-    batch.set(txRef, {
-      userId,
-      amount,
-      reason,
-      type: "admin_adjust",
-      adjustedBy: request.auth.uid,
-      createdAt: fieldValue.serverTimestamp(),
+    await db.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "학생을 찾을 수 없습니다.");
+      }
+
+      const userData = userDoc.data()!;
+      if (userData.cohortId && userData.cohortId !== cohortId) {
+        throw new HttpsError(
+          "failed-precondition",
+          "선택한 기수와 학생 소속이 일치하지 않습니다.",
+        );
+      }
+
+      const balance = Number(userData.mileageBalance ?? 0);
+      if (amount < 0 && balance + amount < 0) {
+        throw new HttpsError(
+          "failed-precondition",
+          `잔액이 부족합니다. (잔액: ${balance.toLocaleString()}M)`,
+        );
+      }
+
+      transaction.update(userRef, {
+        mileageBalance: fieldValue.increment(amount),
+        updatedAt: fieldValue.serverTimestamp(),
+      });
+
+      transaction.set(txRef, {
+        userId,
+        userDisplayName: (userData.displayName as string | undefined) ?? "",
+        amount,
+        reason,
+        type: "admin_adjust",
+        adjustedBy: request.auth!.uid,
+        createdAt: fieldValue.serverTimestamp(),
+      });
     });
 
-    await batch.commit();
-
-    return {message: `마일리지 ${amount > 0 ? "지급" : "차감"} 완료`, txId: txRef.id};
+    return {
+      message: `마일리지 ${amount > 0 ? "지급" : "차감"} 완료`,
+      txId: txRef.id,
+    };
   },
 );
 
