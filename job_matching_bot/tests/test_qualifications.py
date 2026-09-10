@@ -114,3 +114,62 @@ class HardFilterQualificationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LanguageTestTest(unittest.TestCase):
+    """어학 성적은 자격증과 성격이 다르다. 섞으면 조건을 잘못 건다.
+
+    자격요건에서 자격증이 잡힌 모집 중 공고 669건 중 361건(54%)이 어학 성적뿐이었다.
+    OPIc 301건, TOEIC 203건이다. 앱 이력서의 자격사항 칸에 토익 점수를 적는 사람은
+    드물어서, 이걸 자격증으로 취급하면 이력서에 안 적었다는 이유로 걸린다.
+    """
+
+    def test_a_language_score_is_not_a_certification(self):
+        q = extract_qualifications(["• TOEIC 700점 이상 또는 그에 준하는 영어능력 보유자"])
+        self.assertEqual([], q.certifications)
+        self.assertEqual(["TOEIC"], q.language_tests)
+
+    def test_opic_and_hsk_too(self):
+        q = extract_qualifications(["ㆍ중국어 활용능력 우수자 (필수)_HSK6급 이상", "· OPIc IM2 이상"])
+        self.assertEqual([], q.certifications)
+        self.assertIn("HSK", q.language_tests)
+        self.assertIn("OPIc", q.language_tests)
+
+    def test_a_real_certification_still_lands_in_certifications(self):
+        q = extract_qualifications(["• 정보처리기사 소지자"])
+        self.assertEqual(["정보처리기사"], q.certifications)
+        self.assertEqual([], q.language_tests)
+
+    def test_a_line_with_both_splits_them(self):
+        q = extract_qualifications(["• 자격 : 정보처리기사, TOEIC 800점 이상"])
+        self.assertEqual(["정보처리기사"], q.certifications)
+        self.assertEqual(["TOEIC"], q.language_tests)
+
+
+class CertificationGroupTest(unittest.TestCase):
+    """한 줄에 나열된 자격증은 '이 중 하나'다.
+
+    쉼표로 나열한 99개 줄을 전부 읽어 보니 "정보처리기사, 네트워크관리사, 리눅스마스터 등",
+    "CCNA/CCNP/CCIE 등"처럼 다 대안이었다. 둘 다 가지라는 공고는 하나도 없었다.
+    """
+
+    def test_either_or_becomes_one_group(self):
+        q = extract_qualifications(["-대기환경기사 또는 산업위생관리기사"])
+        self.assertEqual([["대기환경기사", "산업위생관리기사"]], q.certification_groups)
+
+    def test_a_comma_list_is_also_one_group(self):
+        q = extract_qualifications(["• 자격증: 실내건축기사, 실내건축산업기사"])
+        self.assertEqual(1, len(q.certification_groups))
+        self.assertEqual(2, len(q.certification_groups[0]))
+
+    def test_asking_for_all_of_them_splits_the_group(self):
+        q = extract_qualifications(["ㆍ정보처리기사 및 정보보안기사 모두 보유"])
+        self.assertEqual([["정보처리기사"], ["정보보안기사"]], q.certification_groups)
+
+    def test_one_certification_is_a_group_of_one(self):
+        self.assertEqual([["정보처리기사"]], extract_qualifications(["• 정보처리기사"]).certification_groups)
+
+    def test_the_flat_list_still_holds_every_name(self):
+        """화면에는 평평한 목록을 쓴다. 묶음은 판정용이다."""
+        q = extract_qualifications(["-대기환경기사 또는 산업위생관리기사"])
+        self.assertEqual(["대기환경기사", "산업위생관리기사"], q.certifications)

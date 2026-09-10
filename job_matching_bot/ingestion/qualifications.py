@@ -56,9 +56,26 @@ CERTIFICATIONS: tuple[str, ...] = (
     "AWS Certified", "AWS SAA", "CCNA", "CCNP", "PMP", "CISA", "CISSP",
     "컴퓨터활용능력", "워드프로세서", "전기기사", "산업안전기사", "일반기계기사",
     "OPIc", "OPIC", "TOEIC", "토익", "토스", "TOEIC Speaking", "TEPS", "JLPT", "HSK",
+    "TOEFL", "토익스피킹", "토플",
+)
+
+# 어학 성적. 자격증과 성격이 다르므로 따로 담는다.
+#
+# 자격요건에서 자격증이 잡힌 모집 중 공고 669건 중 **361건(54%)이 어학 성적뿐이었다.**
+# OPIc 301건, TOEIC 203건이 가장 많다. 그런데 앱 이력서의 자격사항 칸에 토익 점수를
+# 적는 사람은 드물다. 이걸 자격증으로 취급해 조건을 걸면, 이력서에 안 적었다는 이유로
+# 멀쩡한 지원자가 걸린다.
+#
+# 점수 기준도 다르다. 자격증은 있고 없고지만 어학은 "TOEIC 700점 이상"처럼 문턱이 있다.
+# 지금 구조로는 그 숫자를 비교할 수 없다. 그래서 조건으로 쓰지 않고 보여 주기만 한다.
+LANGUAGE_TESTS: frozenset[str] = frozenset(
+    {"OPIc", "OPIC", "TOEIC", "토익", "토스", "TOEIC Speaking", "토익스피킹",
+     "TEPS", "TEP", "JLPT", "HSK", "TOEFL", "토플"}
 )
 _CERT_CONTEXT = re.compile(r"자격|기사|certified|opic|toeic|토익|토스|teps|jlpt|hsk|sqld|adsp", re.IGNORECASE)
 _GENERIC_GISA = re.compile(r"([가-힣A-Za-z]{2,12}(?:산업)?기사)")
+# 한 줄에 여러 자격증이 나올 때 "이 중 하나"를 뜻하는 표시.
+_CERT_ALL = re.compile(r"및\s|모두\s*(?:보유|소지)|전부\s*(?:보유|소지)|둘\s*다")
 # 경력 연차. "경력 5년 이상", "3년 이상 10년 이하", "5~10년", "경력 : 3년".
 # 숫자 앞에 숫자가 없어야 하므로 "2026년"은 잡히지 않고, "2년제"·"3년차"는 뒤 글자로 거른다.
 # "경력 3년 이하"는 상한이지 요구가 아니다.
@@ -78,6 +95,11 @@ class Qualifications:
     majors: list[str] = field(default_factory=list)
     major_terms: list[str] = field(default_factory=list)
     certifications: list[str] = field(default_factory=list)
+    # "이 중 하나면 된다"로 묶은 자격증. 각 묶음에서 하나만 맞으면 충족이다.
+    # `certifications`는 화면에 보여 줄 평평한 목록이고, 판정은 이쪽을 본다.
+    certification_groups: list[list[str]] = field(default_factory=list)
+    # 어학 성적. 조건으로 걸지 않고 보여 주기만 한다. LANGUAGE_TESTS 설명 참고.
+    language_tests: list[str] = field(default_factory=list)
     military_required: bool = False
     # 자격요건이 요구하는 최소 연차. 여러 직무면 가장 낮은 값 — 문턱이 낮은 자리 기준이어야
     # 억울한 탈락이 없다. 연차 없이 "경력자"라고만 쓰면 career_required 만 켜진다.
@@ -86,7 +108,9 @@ class Qualifications:
     # 요건 줄에서 신입을 언급했는가. 정규화 단계가 제목과 합쳐 판단한다.
     mentions_entry: bool = False
     evidence: dict[str, list[str]] = field(
-        default_factory=lambda: {"majors": [], "certifications": [], "military": [], "career": []}
+        default_factory=lambda: {
+            "majors": [], "certifications": [], "language_tests": [], "military": [], "career": []
+        }
     )
 
 
@@ -139,11 +163,38 @@ def extract_qualifications(lines: list[str], *, preferred: bool = False) -> Qual
             for match in _GENERIC_GISA.findall(line):
                 if not any(normalize_term(match) in normalize_term(c) or normalize_term(c) in normalize_term(match) for c in found):
                     found.append(match)
-            for cert in found:
+
+            # 어학 성적은 따로 담는다. 조건으로 걸 수 없는 것이라 섞으면 안 된다.
+            langs = [c for c in found if c in LANGUAGE_TESTS]
+            certs = [c for c in found if c not in LANGUAGE_TESTS]
+
+            for name in langs:
+                if not any(normalize_term(name) == normalize_term(c) for c in result.language_tests):
+                    result.language_tests.append(name)
+            if langs:
+                result.evidence["language_tests"].append(line)
+
+            fresh: list[str] = []
+            for cert in certs:
                 if not any(normalize_term(cert) == normalize_term(c) for c in result.certifications):
                     result.certifications.append(cert)
-            if found:
+                fresh.append(cert)
+            if certs:
                 result.evidence["certifications"].append(line)
+                # 한 줄에서 나온 자격증은 **이 중 하나**면 된다. 묶어 두지 않으면
+                # 매처가 하나씩 따로 검사해, 자격을 갖춘 사람이 나머지를 안 가졌다는
+                # 이유로 걸린다.
+                #
+                # "또는"이 있는 줄이 51%다. 나머지도 마찬가지였다. 쉼표로 나열한 99개
+                # 줄을 전부 읽어 보니 "정보처리기사, 네트워크관리사, 리눅스마스터 등",
+                # "CCNA/CCNP/CCIE 등", "실내건축기사, 실내건축산업기사"처럼 다 대안이었다.
+                # **둘 다 가지라는 공고는 하나도 없었다.** 그래서 기본이 "이 중 하나"다.
+                # `및`·`모두`처럼 함께 요구하는 표시가 있을 때만 각각으로 나눈다.
+                if fresh:
+                    if len(fresh) > 1 and _CERT_ALL.search(line):
+                        result.certification_groups.extend([c] for c in fresh)
+                    else:
+                        result.certification_groups.append(list(fresh))
 
         if preferred:
             continue

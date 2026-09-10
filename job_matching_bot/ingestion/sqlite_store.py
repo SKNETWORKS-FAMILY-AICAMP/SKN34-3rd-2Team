@@ -51,6 +51,7 @@ _JSON_FIELDS = frozenset(
         "required_skills", "preferred_skills", "tech_stack", "keywords",
         "required_majors", "required_major_terms", "required_certifications",
         "preferred_majors", "preferred_major_terms", "preferred_certifications",
+        "required_certification_groups", "required_language_tests", "preferred_language_tests",
         "field_provenance",
     }
 )

@@ -6,6 +6,7 @@
 
 import json
 import unittest
+from dataclasses import replace
 
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records
 from job_matching_bot.config import DEFAULT_SARAMIN_INPUT, REPO_ROOT
@@ -116,6 +117,45 @@ class CareerBranchTest(unittest.TestCase):
         resume = mock_resumes()["backend_experienced_3y"]
         result = hard_filter(_saramin_job("5", career="경력무관"), resume)
         self.assertNotEqual("FAIL", result["status"])
+
+
+class CertificationGroupBranchTest(unittest.TestCase):
+    """`대기환경기사 또는 산업위생관리기사` 는 하나만 있으면 된다.
+
+    묶지 않고 하나씩 따로 검사하면, 대기환경기사를 가진 사람이 나머지를 안 가졌다는
+    이유로 "확인 필요"가 붙는다. 이걸 탈락으로 바꾸면 자격 있는 사람이 떨어진다.
+    """
+
+    def _job(self, groups, flat=None):
+        return replace(
+            _saramin_job("9"),
+            required_certifications=flat if flat is not None else [c for g in groups for c in g],
+            required_certification_groups=groups,
+        )
+
+    def test_holding_one_of_the_group_is_enough(self):
+        resume = replace(mock_resumes()["backend_entry"], certifications=["대기환경기사"])
+        result = hard_filter(self._job([["대기환경기사", "산업위생관리기사"]]), resume)
+        self.assertIn("자격증 요건 충족: 대기환경기사, 산업위생관리기사", result["passed"])
+        self.assertEqual([], [u for u in result["unknown"] if "자격증" in u])
+
+    def test_holding_none_of_the_group_needs_checking(self):
+        resume = replace(mock_resumes()["backend_entry"], certifications=["SQLD"])
+        result = hard_filter(self._job([["대기환경기사", "산업위생관리기사"]]), resume)
+        self.assertIn("자격증 확인 필요: 대기환경기사, 산업위생관리기사", result["unknown"])
+
+    def test_separate_groups_are_checked_separately(self):
+        resume = replace(mock_resumes()["backend_entry"], certifications=["정보처리기사"])
+        result = hard_filter(self._job([["정보처리기사"], ["정보보안기사"]]), resume)
+        self.assertIn("자격증 요건 충족: 정보처리기사", result["passed"])
+        self.assertIn("자격증 확인 필요: 정보보안기사", result["unknown"])
+
+    def test_an_old_row_without_groups_behaves_as_before(self):
+        """묶음 열이 비어 있는 옛 저장소 행. 재파싱 전까지 예전 규칙 그대로다."""
+        resume = replace(mock_resumes()["backend_entry"], certifications=["정보처리기사"])
+        result = hard_filter(self._job([], flat=["정보처리기사", "정보보안기사"]), resume)
+        self.assertIn("자격증 요건 충족: 정보처리기사", result["passed"])
+        self.assertIn("자격증 확인 필요: 정보보안기사", result["unknown"])
 
 
 class EducationBranchTest(unittest.TestCase):

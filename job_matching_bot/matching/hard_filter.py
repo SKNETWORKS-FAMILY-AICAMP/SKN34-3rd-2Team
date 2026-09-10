@@ -63,12 +63,23 @@ def _qualification_checks(job: Job, resume: ResumeProfile, passed: list[str], un
                     f"전공 요건 미확인: 공고 {', '.join(job.required_majors)} / 이력서 {', '.join(resume_majors)}"
                 )
     resume_certs = [normalize_term(c) for c in resume.certifications if c.strip()]
-    for cert in job.required_certifications:
+
+    def _holds(cert: str) -> bool:
         key = normalize_term(cert)
-        if any(key and (key in c or c in key) for c in resume_certs):
-            passed.append(f"자격증 요건 충족: {cert}")
+        return bool(key) and any(key in c or c in key for c in resume_certs)
+
+    # 한 묶음은 "이 중 하나"다. `대기환경기사 또는 산업위생관리기사`처럼 대안을 나열한
+    # 공고가 자격증이 잡힌 669건 중 과반이다. 하나씩 따로 검사하면 자격을 갖춘 사람이
+    # 나머지를 안 가졌다는 이유로 걸린다.
+    #
+    # 묶음이 없는 옛 저장소 행은 평평한 목록을 각각 한 묶음으로 본다. 예전과 같다.
+    groups = job.required_certification_groups or [[c] for c in job.required_certifications]
+    for group in groups:
+        names = ", ".join(group)
+        if any(_holds(cert) for cert in group):
+            passed.append(f"자격증 요건 충족: {names}")
         else:
-            unknown.append(f"자격증 확인 필요: {cert}")
+            unknown.append(f"자격증 확인 필요: {names}")
     if job.military_required:
         unknown.append("병역 조건 확인 필요 (병역필 또는 면제)")
 
