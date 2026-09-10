@@ -25,6 +25,7 @@ from typing import Any, Callable
 
 from job_matching_bot.api import prompts, schemas
 from job_matching_bot.matching.hard_filter import hard_filter
+from job_matching_bot.matching.pre_ranker import pre_rank, skill_match
 from job_matching_bot.retrieval import search as retrieval
 from job_matching_bot.retrieval import market_stats, store_search
 from job_matching_bot.schemas.job_posting import Job
@@ -427,21 +428,30 @@ class RecommendService(_LivenessMixin):
         if len(alive) < len(candidates):
             warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
             candidates = [c for c in candidates if c[0].job_id in alive]
+        # 벡터 순위와 기술 겹침을 섞어 다시 세운다. 벡터 유사도는 후보 안에서 거의
+        # 평평해서(실측 폭 0.042~0.140) 그 순서만으로는 누구를 LLM에 보낼지 가리기
+        # 어렵다. 기술 정보가 없는 공고는 제자리에 남는다 — `pre_ranker` 참고.
+        matches = [skill_match(job, profile.skills) for _, job, _ in candidates]
+        candidates = pre_rank(
+            candidates, [hit.score for hit, _, _ in candidates], matches
+        )
         candidates = candidates[:RERANK_TOP_K]
         say("filter", f"조건을 통과한 {len(candidates)}건이 남았어요")
 
         say("judge")
         fits, reranked = self.rerank(request.resume_text, candidates, warnings)
 
+        # 같은 적합도 안에서는 다시 세운 순서를 쓴다. 예전에는 벡터 순위였는데,
+        # 판정을 예측하는 힘이 더 약한 신호였다(+0.26 대 +0.42).
         rows: list[tuple[int, int, schemas.Recommendation]] = []
-        for hit, job, filter_result in candidates:
+        for position, (hit, job, filter_result) in enumerate(candidates):
             fit = fits.get(job.job_id)
             if fit is not None:
                 fit = self.verify(fit, request.resume_text, job, warnings)
             rows.append(
                 (
                     fit_order(fit.fit if fit else None),
-                    hit.rank,
+                    position,
                     schemas.Recommendation(
                         job_id=job.job_id,
                         company=job.company,
