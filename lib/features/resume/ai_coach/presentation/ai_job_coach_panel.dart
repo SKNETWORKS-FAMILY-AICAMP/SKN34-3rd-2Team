@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,10 +7,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/constants/ai_ops_types.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
+import '../../../../shared/services/ai_ops_service.dart';
 import '../data/resume_review_api_client.dart';
 import 'job_resume_review_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
@@ -132,6 +136,20 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
     final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    final ops = ref.read(aiOpsServiceProvider);
+    final recommendLogId = _recommendLogId;
+    if (recommendLogId != null) {
+      unawaited(
+        ops.recordOutcome(
+          cohortId: cohort,
+          logId: recommendLogId,
+          outcome: AiOpsOutcomes.selectedForReview,
+          draftId: job.jobId,
+          promptVersion: _recommendPromptVersion,
+          type: AiOpsTypes.jobRecommend,
+        ),
+      );
+    }
     try {
       await showDialog<void>(
         context: context,
@@ -144,6 +162,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           jobCompany: job.company,
           jobTitle: job.title,
           draft: widget.draftContent,
+          aiOps: ops,
           onChanged: (_) {
             // 공고별 사본은 서버에서 자동 저장한다. 기본 이력서 편집 상태에는
             // 전달하지 않아 다른 공고용 자리표시자가 바뀌지 않게 한다.
@@ -210,6 +229,12 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// 끝난 단계가 남긴 결과 한 줄. {단계 이름: "열린 공고에서 40건을 추렸어요"}
   final Map<String, String> _stageResults = {};
 
+  /// LLMOps: 직전 생성 로그 id (outcome 연결용)
+  String? _chatLogId;
+  String? _chatPromptVersion;
+  String? _recommendLogId;
+  String? _recommendPromptVersion;
+
   ResumeReadiness get _readiness => ResumeReadiness.of(widget.draftContent);
 
   /// 취업 희망 조건은 이력서가 아니라 프로필(`users/{uid}.jobPreferences`)에 있다.
@@ -246,6 +271,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
     final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    final ops = ref.read(aiOpsServiceProvider);
     try {
       await showDialog<void>(
         context: context,
@@ -256,6 +282,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           resumeId: widget.resumeId,
           draft: widget.draftContent,
           generalReview: true,
+          aiOps: ops,
           onChanged: (content) {
             widget.onResumeChanged?.call(content);
             if (mounted) setState(() => _result = null);
@@ -308,6 +335,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         _ => '이력서를 읽고 공고를 고르는 중…',
       };
     });
+    final cohort = ref.read(effectiveCohortIdProvider);
+    final ops = ref.read(aiOpsServiceProvider);
+    final watch = Stopwatch()..start();
     try {
       final result = await ref
           .read(aiJobCoachRepositoryProvider)
@@ -317,6 +347,26 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             // 읽을 글만 좁힌다. 검증과 조건은 이력서 원본 그대로다.
             focus: scope == '전체' ? null : _scopedResume(scope),
           );
+      if (cohort != null) {
+        final logId = await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: true,
+          promptVersion: result.promptVersion,
+          model: result.model,
+          generatedCount: result.recommendations.length,
+          meta: {
+            'jobCount': result.recommendations.length,
+            'reranked': result.reranked,
+            'mode': 'chat_$scope',
+          },
+        );
+        _recommendLogId = logId;
+        _recommendPromptVersion = result.promptVersion.isEmpty
+            ? AiOpsPromptVersions.jobRecommend
+            : result.promptVersion;
+      }
       if (!mounted) return;
       setState(() {
         _result = result;
@@ -331,9 +381,29 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         );
       });
     } on JobRecommendApiException catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error.message,
+          meta: {'mode': 'chat_$scope'},
+        );
+      }
       if (mounted)
         setState(() => _messages.add(_ChatMessage.bot(error.message)));
     } catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error,
+          meta: {'mode': 'chat_$scope'},
+        );
+      }
       if (mounted) {
         setState(
           () => _messages.add(_ChatMessage.bot('공고를 고르지 못했습니다: $error')),
@@ -438,6 +508,18 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
 
   /// 공고 하나를 놓고 묻기 시작한다. 그만둘 때까지 모든 말이 이 공고로 간다.
   void _askAbout(JobChatJob job) {
+    final cohort = ref.read(effectiveCohortIdProvider);
+    final logId = _chatLogId;
+    if (cohort != null && logId != null) {
+      ref.read(aiOpsServiceProvider).recordOutcome(
+            cohortId: cohort,
+            logId: logId,
+            outcome: AiOpsOutcomes.clickedJob,
+            draftId: job.jobId,
+            promptVersion: _chatPromptVersion,
+            type: AiOpsTypes.jobChat,
+          );
+    }
     setState(() {
       _askingAbout = job;
       _messages.add(
@@ -462,6 +544,22 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (text.isEmpty || _chatBusy) return;
 
     final client = ref.read(jobRecommendApiClientProvider);
+    final cohort = ref.read(effectiveCohortIdProvider);
+    final ops = ref.read(aiOpsServiceProvider);
+    final fromSuggestion = preset != null;
+    if (fromSuggestion && cohort != null && _chatLogId != null) {
+      unawaited(
+        ops.recordOutcome(
+          cohortId: cohort,
+          logId: _chatLogId!,
+          outcome: AiOpsOutcomes.followedUp,
+          draftId: 'followup',
+          promptVersion: _chatPromptVersion,
+          type: AiOpsTypes.jobChat,
+        ),
+      );
+    }
+
     setState(() {
       _messages.add(_ChatMessage.user(text));
       _chatController.clear();
@@ -478,6 +576,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
 
+    final watch = Stopwatch()..start();
     try {
       final result = await client.chat(
         message: text,
@@ -490,6 +589,30 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             : buildResumeText(widget.draftContent),
       );
       if (!mounted) return;
+      if (cohort != null) {
+        final logId = await ops.recordCoachLog(
+          type: AiOpsTypes.jobChat,
+          cohortId: cohort,
+          watch: watch,
+          success: true,
+          promptVersion: result.promptVersion,
+          model: result.model,
+          generatedCount: result.jobs.isEmpty ? 1 : result.jobs.length,
+          meta: {
+            'mode': result.mode,
+            'jobCount': result.jobs.length,
+            'topK': result.total,
+            'messageLength': text.length,
+            'resumeLength': _askingAbout == null
+                ? 0
+                : buildResumeText(widget.draftContent).length,
+          },
+        );
+        _chatLogId = logId;
+        _chatPromptVersion = result.promptVersion.isEmpty
+            ? AiOpsPromptVersions.jobChat
+            : result.promptVersion;
+      }
       setState(() {
         _chatFilters = result.filters;
         _messages.add(
@@ -506,9 +629,29 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         await _recommendInChat(result.resumeScope);
       }
     } on JobRecommendApiException catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobChat,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error.message,
+          meta: {'messageLength': text.length},
+        );
+      }
       if (!mounted) return;
       setState(() => _messages.add(_ChatMessage.bot(error.message)));
     } catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobChat,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error,
+          meta: {'messageLength': text.length},
+        );
+      }
       if (!mounted) return;
       setState(() => _messages.add(_ChatMessage.bot('공고를 찾지 못했습니다: $error')));
     } finally {
@@ -519,12 +662,15 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   Future<void> _run() async {
     if (!_guard(AiCoachFeature.jobRecommendation)) return;
     final requestedContent = widget.draftContent;
+    final cohort = ref.read(effectiveCohortIdProvider);
+    final ops = ref.read(aiOpsServiceProvider);
     setState(() {
       _loading = true;
       _error = null;
       _stage = null;
       _stageResults.clear();
     });
+    final watch = Stopwatch()..start();
     try {
       final result = await ref
           .read(aiJobCoachRepositoryProvider)
@@ -542,6 +688,27 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
               });
             },
           );
+      if (cohort != null) {
+        final logId = await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: true,
+          promptVersion: result.promptVersion,
+          model: result.model,
+          generatedCount: result.recommendations.length,
+          meta: {
+            'jobCount': result.recommendations.length,
+            'topK': result.recommendations.length,
+            'reranked': result.reranked,
+            'resumeLength': buildResumeText(requestedContent).length,
+          },
+        );
+        _recommendLogId = logId;
+        _recommendPromptVersion = result.promptVersion.isEmpty
+            ? AiOpsPromptVersions.jobRecommend
+            : result.promptVersion;
+      }
       if (mounted) {
         setState(() {
           if (sameResumeContent(
@@ -556,9 +723,27 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         });
       }
     } on JobRecommendApiException catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error.message,
+        );
+      }
       // 서버가 없거나 실패하면 추천하지 않는다. 이유를 그대로 보여 준다.
       if (mounted) setState(() => _error = error.message);
     } catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error,
+        );
+      }
       if (mounted) setState(() => _error = '분석 실패: $error');
     } finally {
       if (mounted) setState(() => _loading = false);

@@ -2,8 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/utils/date_utils.dart';
 
-/// 루트 `aiGenerationLogs` — type discriminator로 확장
-/// (assessment_questions → wrong_answer_recommend 등)
+/// 루트 `aiGenerationLogs` — type discriminator
+/// assessment_questions | assessment_questions_regen |
+/// job_chat | job_recommend | resume_review
 class AiGenerationLogModel {
   const AiGenerationLogModel({
     required this.id,
@@ -25,6 +26,16 @@ class AiGenerationLogModel {
     this.createdByName,
     this.createdAt,
     this.drafts = const [],
+    this.reasoningEffort,
+    this.tokenIn,
+    this.tokenOut,
+    this.mode,
+    this.intent,
+    this.topK,
+    this.jobCount,
+    this.appliedCount,
+    this.requestIdHash,
+    this.reviewMode,
   });
 
   final String id;
@@ -46,6 +57,19 @@ class AiGenerationLogModel {
   final String? createdByName;
   final DateTime? createdAt;
   final List<AiGenerationDraftPreview> drafts;
+  final String? reasoningEffort;
+  final int? tokenIn;
+  final int? tokenOut;
+  final String? mode;
+  final String? intent;
+  final int? topK;
+  final int? jobCount;
+  final int? appliedCount;
+  final String? requestIdHash;
+  final String? reviewMode;
+
+  bool get isAssessment =>
+      type == 'assessment_questions' || type == 'assessment_questions_regen';
 
   factory AiGenerationLogModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -55,6 +79,13 @@ class AiGenerationLogModel {
       if (v is int) return v;
       if (v is num) return v.toInt();
       return int.tryParse('$v') ?? 0;
+    }
+
+    int? toIntOrNull(dynamic v) {
+      if (v == null) return null;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse('$v');
     }
 
     final rawDrafts = data['drafts'] as List? ?? const [];
@@ -85,6 +116,16 @@ class AiGenerationLogModel {
             ),
           )
           .toList(),
+      reasoningEffort: data['reasoningEffort']?.toString(),
+      tokenIn: toIntOrNull(data['tokenIn']),
+      tokenOut: toIntOrNull(data['tokenOut']),
+      mode: data['mode']?.toString(),
+      intent: data['intent']?.toString(),
+      topK: toIntOrNull(data['topK']),
+      jobCount: toIntOrNull(data['jobCount']),
+      appliedCount: toIntOrNull(data['appliedCount']),
+      requestIdHash: data['requestIdHash']?.toString(),
+      reviewMode: data['reviewMode']?.toString(),
     );
   }
 }
@@ -123,7 +164,10 @@ class AiGenerationDraftPreview {
 }
 
 /// 루트 `aiQuestionFeedback`
-/// outcome 확장 예정: clicked | ignored (오답→추천)
+/// outcome: adopted|edited|discarded|
+/// clicked_job|followed_up|ignored|
+/// opened|selected_for_review|dismissed|
+/// applied|partial_apply|undone|abandoned
 class AiQuestionFeedbackModel {
   const AiQuestionFeedbackModel({
     required this.id,
@@ -139,6 +183,7 @@ class AiQuestionFeedbackModel {
     this.actorUid,
     this.createdAt,
     this.updatedAt,
+    this.type,
   });
 
   final String id;
@@ -154,6 +199,7 @@ class AiQuestionFeedbackModel {
   final String? actorUid;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? type;
 
   factory AiQuestionFeedbackModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -180,6 +226,7 @@ class AiQuestionFeedbackModel {
       actorUid: data['actorUid']?.toString(),
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
       updatedAt: AppDateUtils.timestampToDateTime(data['updatedAt']),
+      type: data['type']?.toString(),
     );
   }
 }

@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../shared/constants/ai_ops_types.dart';
 import '../../../../shared/models/resume_content.dart';
+import '../../../../shared/services/ai_ops_service.dart';
 import '../data/resume_review_api_client.dart';
 
 class JobResumeReviewDialog extends StatefulWidget {
@@ -20,12 +22,14 @@ class JobResumeReviewDialog extends StatefulWidget {
     this.jobTitle = '',
     this.tailoredResumeId = '',
     this.generalReview = false,
+    this.aiOps,
   });
   final ResumeReviewApiClient client;
   final String cohortId, resumeId, jobId, jobCompany, jobTitle, tailoredResumeId;
   final ResumeContent draft;
   final ValueChanged<ResumeContent> onChanged;
   final bool generalReview;
+  final AiOpsService? aiOps;
 
   @override
   State<JobResumeReviewDialog> createState() => _JobResumeReviewDialogState();
@@ -52,6 +56,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   String? _focusedFieldPath;
   String? _tailoredResumeId;
   late ResumeContent _preview;
+  String? _reviewLogId;
+  String? _reviewPromptVersion;
+  bool _hadApply = false;
   String _id() =>
       '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 30)}';
   Map<String, dynamic> get _identity => {
@@ -70,6 +77,18 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
 
   @override
   void dispose() {
+    final ops = widget.aiOps;
+    final logId = _reviewLogId;
+    if (ops != null && logId != null && !_hadApply && !_undone) {
+      ops.recordOutcome(
+        cohortId: widget.cohortId,
+        logId: logId,
+        outcome: AiOpsOutcomes.abandoned,
+        draftId: 'session',
+        promptVersion: _reviewPromptVersion,
+        type: AiOpsTypes.resumeReview,
+      );
+    }
     _answerController.dispose();
     _chatScrollController.dispose();
     super.dispose();
@@ -90,35 +109,74 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   }
 
   Future<void> _review() => _run(() async {
-    await _ensureTailoredResume();
-    if (_reviewRequest == null) {
-      final snapshot = await widget.client.context(
-        widget.cohortId,
-        widget.resumeId,
-        job: widget.generalReview ? null : widget.jobId,
-        tailoredResumeId: widget.generalReview ? null : _tailoredResumeId,
-      );
-      final content = Map<String, dynamic>.from(snapshot['content'] as Map);
-      if (!sameResumeContent(_preview, content)) {
-        throw const FormatException(
-          '화면과 저장된 이력서가 다릅니다. 창을 닫고 저장 또는 새로고침한 뒤 다시 추천해 주세요.',
+    final watch = Stopwatch()..start();
+    try {
+      await _ensureTailoredResume();
+      if (_reviewRequest == null) {
+        final snapshot = await widget.client.context(
+          widget.cohortId,
+          widget.resumeId,
+          job: widget.generalReview ? null : widget.jobId,
+          tailoredResumeId: widget.generalReview ? null : _tailoredResumeId,
+        );
+        final content = Map<String, dynamic>.from(snapshot['content'] as Map);
+        if (!sameResumeContent(_preview, content)) {
+          throw const FormatException(
+            '화면과 저장된 이력서가 다릅니다. 창을 닫고 저장 또는 새로고침한 뒤 다시 추천해 주세요.',
+          );
+        }
+        _reviewRequest = {
+          ..._identity,
+          'request_id': _id(),
+          'expected_input_hash': snapshot['input_hash'],
+          'review_mode': widget.generalReview ? 'general' : 'job',
+          if (!widget.generalReview && _tailoredResumeId != null)
+            'tailored_resume_id': _tailoredResumeId,
+          if (!widget.generalReview) ...{
+            'selected_job_id': widget.jobId,
+            'expected_job_hash': (snapshot['job_source'] as Map)['snapshot_hash'],
+          },
+        };
+      }
+      _result = await widget.client.review(_reviewRequest!);
+      _appendReview(_result!, isFirstReview: _messages.isEmpty);
+      final ops = widget.aiOps;
+      if (ops != null) {
+        final suggestions = (_result!['suggestions'] as List?)?.length ?? 0;
+        final logId = await ops.recordCoachLog(
+          type: AiOpsTypes.resumeReview,
+          cohortId: widget.cohortId,
+          watch: watch,
+          success: true,
+          promptVersion: AiOpsPromptVersions.resumeReview,
+          generatedCount: suggestions == 0 ? 1 : suggestions,
+          meta: {
+            'reviewMode': widget.generalReview ? 'general' : 'job',
+            'jobCount': widget.generalReview ? 0 : 1,
+            'requestIdHash': (_reviewRequest?['request_id'] as String? ?? '')
+                .hashCode
+                .toRadixString(16),
+          },
+        );
+        _reviewLogId = logId;
+        _reviewPromptVersion = AiOpsPromptVersions.resumeReview;
+      }
+    } catch (error) {
+      final ops = widget.aiOps;
+      if (ops != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.resumeReview,
+          cohortId: widget.cohortId,
+          watch: watch,
+          success: false,
+          error: error,
+          meta: {
+            'reviewMode': widget.generalReview ? 'general' : 'job',
+          },
         );
       }
-      _reviewRequest = {
-        ..._identity,
-        'request_id': _id(),
-        'expected_input_hash': snapshot['input_hash'],
-        'review_mode': widget.generalReview ? 'general' : 'job',
-        if (!widget.generalReview && _tailoredResumeId != null)
-          'tailored_resume_id': _tailoredResumeId,
-        if (!widget.generalReview) ...{
-          'selected_job_id': widget.jobId,
-          'expected_job_hash': (snapshot['job_source'] as Map)['snapshot_hash'],
-        },
-      };
+      rethrow;
     }
-    _result = await widget.client.review(_reviewRequest!);
-    _appendReview(_result!, isFirstReview: _messages.isEmpty);
   });
 
   Future<void> _ensureTailoredResume() async {
@@ -424,6 +482,23 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     // The server has rebased this review to the persisted content.  Keep the
     // next answer on the current snapshot rather than the pre-apply hash.
     _result!['input_hash'] = _application!['input_hash'];
+    _hadApply = true;
+    final ops = widget.aiOps;
+    final logId = _reviewLogId;
+    if (ops != null && logId != null) {
+      final selected = _selected.length;
+      final total = (_result!['suggestions'] as List?)?.length ?? selected;
+      await ops.recordOutcome(
+        cohortId: widget.cohortId,
+        logId: logId,
+        outcome: selected < total
+            ? AiOpsOutcomes.partialApply
+            : AiOpsOutcomes.applied,
+        draftId: 'apply',
+        promptVersion: _reviewPromptVersion,
+        type: AiOpsTypes.resumeReview,
+      );
+    }
     if (mounted) {
       setState(() => _appliedSuggestionIndices.addAll(_selected));
     }
@@ -450,6 +525,18 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         'tailored_resume_id': _tailoredResumeId,
     };
     await _mutate(() => widget.client.undo(_undoRequest!));
+    final ops = widget.aiOps;
+    final logId = _reviewLogId;
+    if (ops != null && logId != null) {
+      await ops.recordOutcome(
+        cohortId: widget.cohortId,
+        logId: logId,
+        outcome: AiOpsOutcomes.undone,
+        draftId: 'undo',
+        promptVersion: _reviewPromptVersion,
+        type: AiOpsTypes.resumeReview,
+      );
+    }
     await _reload();
     if (mounted) {
       setState(() {
