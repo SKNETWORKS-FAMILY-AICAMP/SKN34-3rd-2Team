@@ -13,6 +13,7 @@ import '../../shared/widgets/app_side_rail.dart';
 import '../../shared/widgets/profile_avatar.dart';
 import '../../shared/widgets/profile_nav_chip.dart';
 import '../auth/providers/auth_providers.dart';
+import '../chatbot/presentation/student_chatbot_host.dart';
 import '../onboarding/domain/onboarding_target_registry.dart';
 import '../onboarding/presentation/onboarding_controller.dart';
 import '../onboarding/student/student_onboarding_host.dart';
@@ -224,7 +225,14 @@ class MainShellScreen extends ConsumerWidget {
                         ),
                       ),
               ),
-            Expanded(child: AlertPopupHost(child: child)),
+            Expanded(
+              child: user?.isStudent == true
+                  ? StudentChatbotHost(
+                      user: user!,
+                      child: AlertPopupHost(child: child),
+                    )
+                  : AlertPopupHost(child: child),
+            ),
           ],
         ),
       ),

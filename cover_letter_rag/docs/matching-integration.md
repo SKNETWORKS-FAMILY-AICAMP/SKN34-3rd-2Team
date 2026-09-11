@@ -22,10 +22,11 @@
 - 첨삭 문맥: `GET /resume-review/api/v1/resumes/review-context`
 - 첨삭: `POST /resume-review/api/v1/resumes/reviews`
 - 적용/복원: 위 첨삭 경로 뒤에 `/apply`, `/undo`
+- 학생 챗봇: `POST /api/v1/student-chatbot/init`, `POST /api/v1/student-chatbot/stream` (`chatbot/api.py` 라우터를 그대로 포함)
 
 두 모듈의 기존 `/api/v1/jobs/recommend`는 서로 다른 스키마이므로 그대로 한 라우터에 합치지 않는다. 통합 진입점만 별도로 두어 기존 단독 실행 방식도 유지한다.
 
-Flutter 기본 추천 주소는 `http://127.0.0.1:8000`, 첨삭 기본 주소는 추천 주소 뒤에 `/resume-review`를 붙인다. 별도 서버라면 `--dart-define=RESUME_REVIEW_API_URL=http://127.0.0.1:8001`로 지정한다. URL만 설정하고 키는 Flutter에 넣지 않는다.
+Flutter 기본 추천 주소는 `http://127.0.0.1:8000`, 첨삭 기본 주소는 추천 주소 뒤에 `/resume-review`를 붙인다. 별도 서버라면 `--dart-define=RESUME_REVIEW_API_URL=http://127.0.0.1:8001`로 지정한다. 학생 챗봇 기본 주소도 추천 주소와 같으며, 챗봇만 따로 띄웠다면 `--dart-define=STUDENT_CHATBOT_API_URL=...`로 바꾼다. URL만 설정하고 키는 Flutter에 넣지 않는다.
 
 ## 필요한 로컬 설정/데이터
 
