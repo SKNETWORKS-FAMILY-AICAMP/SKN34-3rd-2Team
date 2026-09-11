@@ -14,6 +14,8 @@ import 'job_resume_review_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
+import '../data/chat_job_refs.dart';
+import '../data/chat_text.dart';
 import '../data/resume_text_builder.dart';
 import '../models/ai_job_coach_result.dart';
 import '../models/resume_readiness.dart';
@@ -500,11 +502,11 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       if (!mounted) return;
       setState(() {
         _chatFilters = result.filters;
-        // 목록을 보여 준 답만 기억한다. 공고 하나에 답한 턴이 목록을 지우면
-        // 그다음 "3번"이 안 걸린다.
-        if (result.jobs.isNotEmpty) {
-          _lastShownJobIds = [for (final job in result.jobs) job.jobId];
-        }
+        _lastShownJobIds = nextShownJobIds(
+          mode: result.mode,
+          jobsInAnswer: [for (final job in result.jobs) job.jobId],
+          previous: _lastShownJobIds,
+        );
         _messages.add(
           _ChatMessage.bot(
             result.reply,
@@ -1930,7 +1932,7 @@ class _AnalysisLabel extends StatelessWidget {
 }
 
 /// 챗봇으로 채용공고를 찾는 화면.
-class _ChatView extends StatelessWidget {
+class _ChatView extends StatefulWidget {
   const _ChatView({
     required this.messages,
     required this.controller,
@@ -1964,11 +1966,57 @@ class _ChatView extends StatelessWidget {
   final String? busyLabel;
 
   @override
+  State<_ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<_ChatView> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 답이 왔는데 화면은 그대로면 사용자가 직접 내려야 한다. 말이 길수록 어디까지
+    // 왔는지도 모른다. 새 말이 붙을 때마다 아래로 따라간다.
+    if (widget.messages.length != oldWidget.messages.length) {
+      _scrollToBottom();
+    }
+  }
+
+  /// 프레임이 그려진 뒤에 내린다. 지금 재면 새 말풍선의 높이가 아직 없다.
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final messages = widget.messages;
+    final busy = widget.busy;
+    final onAskAbout = widget.onAskAbout;
+    final onOpenDetail = widget.onOpenDetail;
+    final onSuggestion = widget.onSuggestion;
+    final busyLabel = widget.busyLabel;
+    final askingAbout = widget.askingAbout;
+    final onStopAsking = widget.onStopAsking;
+    final controller = widget.controller;
+    final onSend = widget.onSend;
     return Column(
       children: [
         Expanded(
           child: ListView.builder(
+            controller: _scroll,
             padding: const EdgeInsets.all(14),
             itemCount: messages.length,
             itemBuilder: (context, index) => _ChatBubble(
@@ -2109,10 +2157,7 @@ class _ChatBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.text,
-              style: const TextStyle(fontSize: 12, height: 1.5),
-            ),
+            _ChatText(message.text),
             // 이력서를 읽고 고른 공고. 적합도와 근거가 붙는다.
             for (final job in message.recommendations) ...[
               const SizedBox(height: 8),
@@ -2154,21 +2199,31 @@ class _ChatBubble extends StatelessWidget {
             ],
             if (message.suggestions.isNotEmpty && onSuggestion != null) ...[
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final suggestion in message.suggestions)
-                    ActionChip(
-                      label: Text(
-                        suggestion,
-                        style: const TextStyle(fontSize: 11),
+              // 제안이 길면 칩이 말풍선 밖으로 나가 글자가 잘렸다. 칩은 글자만큼
+              // 넓어지려 하므로 줄바꿈할 자리를 직접 알려 줘야 한다. 말풍선 너비에서
+              // 칩 안쪽 여백을 뺀 만큼이 글자가 쓸 수 있는 자리다.
+              LayoutBuilder(
+                builder: (context, constraints) => Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final suggestion in message.suggestions)
+                      ActionChip(
+                        label: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth - 28,
+                          ),
+                          child: Text(
+                            suggestion,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                        onPressed: () => onSuggestion!(suggestion),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      onPressed: () => onSuggestion!(suggestion),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                ],
+                  ],
+                ),
               ),
             ],
           ],
@@ -2176,6 +2231,55 @@ class _ChatBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 답을 서식대로 그린다. 굵게와 항목 줄만 읽는다(`chat_text.dart`).
+class _ChatText extends StatelessWidget {
+  const _ChatText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = parseChatText(text);
+    if (blocks.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < blocks.length; i++) ...[
+          if (i > 0) const SizedBox(height: 6),
+          if (blocks[i].bullet)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(right: 6),
+                  child: Text('•', style: TextStyle(fontSize: 12, height: 1.5)),
+                ),
+                Expanded(child: _line(blocks[i])),
+              ],
+            )
+          else
+            _line(blocks[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _line(ChatBlock block) => Text.rich(
+    TextSpan(
+      children: [
+        for (final span in block.spans)
+          TextSpan(
+            text: span.text,
+            style: span.bold
+                ? const TextStyle(fontWeight: FontWeight.w700)
+                : null,
+          ),
+      ],
+    ),
+    style: const TextStyle(fontSize: 12, height: 1.5),
+  );
 }
 
 /// 이력서를 읽고 고른 공고 한 건. 조건 검색 카드와 달리 **왜 맞는지**를 함께 보여준다.
