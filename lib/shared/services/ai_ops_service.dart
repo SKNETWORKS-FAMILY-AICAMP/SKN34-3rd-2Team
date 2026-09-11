@@ -6,11 +6,16 @@ import '../constants/ai_ops_types.dart';
 /// Firestore LLMOps 로그/피드백 Callable 래퍼.
 /// 원문(이력서·채팅·공고)은 보내지 않고 메타만 전달한다.
 class AiOpsService {
-  AiOpsService({FirebaseFunctions? functions})
-    : _functions =
-          functions ?? FirebaseFunctions.instanceFor(region: 'asia-northeast3');
+  AiOpsService({FirebaseFunctions? functions}) : _given = functions;
 
-  final FirebaseFunctions _functions;
+  // **만들 때가 아니라 쓸 때 잡는다.** 생성자에서 잡으면 Firebase가 아직 안 뜬
+  // 곳에서 이 객체를 만들기만 해도 터진다. 위젯 시험이 실제로 그렇게 터졌다 —
+  // 화면이 `ref.read(aiOpsServiceProvider)`를 읽는 순간 Firebase 없음 오류가 났다.
+  // 로그는 곁다리라 여기서 화면을 막으면 본말이 뒤집힌다.
+  final FirebaseFunctions? _given;
+
+  FirebaseFunctions get _functions =>
+      _given ?? FirebaseFunctions.instanceFor(region: 'asia-northeast3');
 
   /// 성공 시 logId. 실패해도 코치 UX를 막지 않도록 null을 반환한다.
   Future<String?> recordGenerationLog({

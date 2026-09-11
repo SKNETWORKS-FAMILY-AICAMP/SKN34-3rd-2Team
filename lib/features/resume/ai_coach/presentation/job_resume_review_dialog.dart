@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../shared/constants/ai_ops_types.dart';
 import '../../../../shared/models/resume_content.dart';
+import '../../../../shared/services/ai_ops_service.dart';
 import '../data/resume_review_api_client.dart';
 
 enum _ReviewBusyKind { review, answer, apply, undo }
@@ -22,7 +24,10 @@ class JobResumeReviewDialog extends StatefulWidget {
     this.jobTitle = '',
     this.tailoredResumeId = '',
     this.generalReview = false,
+    this.aiOps,
   });
+  // 없으면 로그를 남기지 않는다. 첨삭이 로그 때문에 막히면 안 된다.
+  final AiOpsService? aiOps;
   final ResumeReviewApiClient client;
   final String cohortId,
       resumeId,
@@ -50,6 +55,10 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final List<_ReviewChatMessage> _suggestionQueue = [];
   final Map<String, GlobalKey> _previewSectionKeys = {};
   bool _busy = false, _changed = false;
+  // 이 첨삭을 남긴 로그. 사용자가 무엇을 했는지를 나중에 이 id에 붙인다.
+  String? _reviewLogId, _reviewPromptVersion;
+  // 적용도 되돌림도 없이 닫았는지 가리는 표시. 창을 닫을 때 한 번 본다.
+  bool _hadApply = false, _hadUndo = false;
   _ReviewBusyKind? _busyKind;
   int _busyStage = 0;
   bool _mutationPending = false;
@@ -79,6 +88,20 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
 
   @override
   void dispose() {
+    // 첨삭을 받아 놓고 아무것도 적용하지 않은 채 창을 닫았다. 이것도 결과다 —
+    // 수정안이 쓸모없었다는 뜻이므로 빠지면 품질이 실제보다 좋아 보인다.
+    final ops = widget.aiOps;
+    final logId = _reviewLogId;
+    if (ops != null && logId != null && !_hadApply && !_hadUndo) {
+      ops.recordOutcome(
+        cohortId: widget.cohortId,
+        logId: logId,
+        outcome: AiOpsOutcomes.abandoned,
+        draftId: 'session',
+        promptVersion: _reviewPromptVersion,
+        type: AiOpsTypes.resumeReview,
+      );
+    }
     _answerController.dispose();
     _chatScrollController.dispose();
     super.dispose();
@@ -114,6 +137,46 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   }
 
   Future<void> _review() => _run(() async {
+    final watch = Stopwatch()..start();
+    try {
+      await _reviewOnce();
+    } catch (error) {
+      final ops = widget.aiOps;
+      if (ops != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.resumeReview,
+          cohortId: widget.cohortId,
+          watch: watch,
+          success: false,
+          error: error,
+          meta: {'reviewMode': widget.generalReview ? 'general' : 'job'},
+        );
+      }
+      rethrow;
+    }
+    final ops = widget.aiOps;
+    if (ops != null) {
+      final suggestions = (_result!['suggestions'] as List?)?.length ?? 0;
+      _reviewLogId = await ops.recordCoachLog(
+        type: AiOpsTypes.resumeReview,
+        cohortId: widget.cohortId,
+        watch: watch,
+        success: true,
+        promptVersion: AiOpsPromptVersions.resumeReview,
+        generatedCount: suggestions == 0 ? 1 : suggestions,
+        meta: {
+          'reviewMode': widget.generalReview ? 'general' : 'job',
+          'jobCount': widget.generalReview ? 0 : 1,
+          'requestIdHash': (_reviewRequest?['request_id'] as String? ?? '')
+              .hashCode
+              .toRadixString(16),
+        },
+      );
+      _reviewPromptVersion = AiOpsPromptVersions.resumeReview;
+    }
+  }, kind: _ReviewBusyKind.review);
+
+  Future<void> _reviewOnce() async {
     _setBusyStage(0);
     await _ensureTailoredResume();
     _setBusyStage(1);
@@ -147,7 +210,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _result = await widget.client.review(_reviewRequest!);
     _setBusyStage(4);
     _appendReview(_result!, isFirstReview: _messages.isEmpty);
-  }, kind: _ReviewBusyKind.review);
+  }
 
   Future<void> _ensureTailoredResume() async {
     if (widget.generalReview || _tailoredResumeId != null) return;
@@ -650,6 +713,24 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     // The server has rebased this review to the persisted content.  Keep the
     // next answer on the current snapshot rather than the pre-apply hash.
     _result!['input_hash'] = application['input_hash'];
+    // 수정안을 받아들였다. 고른 것이 전부보다 적으면 부분 적용이다.
+    _hadApply = true;
+    final applyOps = widget.aiOps;
+    final applyLogId = _reviewLogId;
+    if (applyOps != null && applyLogId != null) {
+      final selected = _selected.length;
+      final total = (_result!['suggestions'] as List?)?.length ?? selected;
+      await applyOps.recordOutcome(
+        cohortId: widget.cohortId,
+        logId: applyLogId,
+        outcome: selected < total
+            ? AiOpsOutcomes.partialApply
+            : AiOpsOutcomes.applied,
+        draftId: 'apply',
+        promptVersion: _reviewPromptVersion,
+        type: AiOpsTypes.resumeReview,
+      );
+    }
     if (mounted) {
       setState(() {
         _appliedSuggestionIndices.addAll(_selected);
@@ -701,6 +782,24 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       final undone = await _mutate(() => widget.client.undo(undoRequest));
       _result!['input_hash'] = undone['input_hash'];
       _applyRequest = null;
+      // 받아들였다가 물렸다. **수정안 하나마다 남긴다.**
+      //
+      // develop은 마지막 적용을 통째로 되돌리는 화면이라 되돌림이 한 번뿐이었다.
+      // 여기서는 하나씩 물릴 수 있으므로, 전체를 물렸을 때만 세면 셋 중 둘을
+      // 물려도 0으로 잡힌다. 물린 수가 곧 쓸모없었던 수정안의 수다.
+      _hadUndo = true;
+      final undoOps = widget.aiOps;
+      final undoLogId = _reviewLogId;
+      if (undoOps != null && undoLogId != null) {
+        await undoOps.recordOutcome(
+          cohortId: widget.cohortId,
+          logId: undoLogId,
+          outcome: AiOpsOutcomes.undone,
+          draftId: 'undo',
+          promptVersion: _reviewPromptVersion,
+          type: AiOpsTypes.resumeReview,
+        );
+      }
       await _reload();
       if (mounted) {
         setState(() {

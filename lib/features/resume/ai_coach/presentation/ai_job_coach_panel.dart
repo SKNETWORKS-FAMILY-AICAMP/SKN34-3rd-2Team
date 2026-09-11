@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +9,8 @@ import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
+import '../../../../shared/services/ai_ops_service.dart';
+import '../../../../shared/constants/ai_ops_types.dart';
 import '../data/resume_review_api_client.dart';
 import 'job_resume_review_dialog.dart';
 import 'job_recommendation_loading.dart';
@@ -133,6 +137,23 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
     final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    // 이 추천을 받아 첨삭까지 갔다는 표시. 추천이 실제로 쓰였는지를 이걸로 센다.
+    // 기다리지 않는다 — 로그 때문에 대화창이 늦게 뜨면 안 된다.
+    final recommendLogId = _recommendLogId;
+    if (recommendLogId != null) {
+      unawaited(
+        ref
+            .read(aiOpsServiceProvider)
+            .recordOutcome(
+              cohortId: cohort,
+              logId: recommendLogId,
+              outcome: AiOpsOutcomes.selectedForReview,
+              draftId: job.jobId,
+              promptVersion: _recommendPromptVersion,
+              type: AiOpsTypes.jobRecommend,
+            ),
+      );
+    }
     try {
       await showDialog<void>(
         context: context,
@@ -140,6 +161,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         builder: (_) => JobResumeReviewDialog(
           client: client,
           cohortId: cohort,
+          aiOps: ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           jobId: job.jobId,
           jobCompany: job.company,
@@ -214,6 +236,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   bool _chatMode = false;
   bool _loading = false;
   bool _recommendationCompleted = false;
+  // 직전 추천을 남긴 로그의 id. 그 추천으로 무엇을 했는지(첨삭으로 넘어갔는지)를
+  // 나중에 이 id에 붙인다. 추천을 다시 돌리면 새 id로 덮인다.
+  String? _recommendLogId;
+  String? _recommendPromptVersion;
   String? _recommendationError;
   String? _error;
 
@@ -267,6 +293,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         builder: (_) => JobResumeReviewDialog(
           client: client,
           cohortId: cohort,
+          aiOps: ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           draft: widget.draftContent,
           generalReview: true,
@@ -556,6 +583,12 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       widget.draftContent,
       requestedContent.toMap(),
     );
+    // 무엇이 나왔고 얼마나 걸렸는지 남긴다. 원문은 안 보내고 메타만 보낸다.
+    // 기수를 모르면(로그인 전) 남길 곳이 없으므로 건너뛴다. 로그가 실패해도
+    // 추천은 막지 않는다 — `recordCoachLog`가 실패 시 null을 돌려준다.
+    final cohort = ref.read(effectiveCohortIdProvider);
+    final ops = ref.read(aiOpsServiceProvider);
+    final watch = Stopwatch()..start();
     setState(() {
       _loading = true;
       _recommendationCompleted = false;
@@ -582,6 +615,26 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
               });
             },
           );
+      if (cohort != null) {
+        _recommendLogId = await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: true,
+          promptVersion: result.promptVersion,
+          model: result.model,
+          generatedCount: result.recommendations.length,
+          meta: {
+            'jobCount': result.recommendations.length,
+            'topK': result.recommendations.length,
+            'reranked': result.reranked,
+            'resumeLength': buildResumeText(requestedContent).length,
+          },
+        );
+        _recommendPromptVersion = result.promptVersion.isEmpty
+            ? AiOpsPromptVersions.jobRecommend
+            : result.promptVersion;
+      }
       if (!mounted) return;
       if (resumeUnchanged()) {
         setState(() => _recommendationCompleted = true);
@@ -601,8 +654,26 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         }
       });
     } on JobRecommendApiException catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error.message,
+        );
+      }
       if (mounted) setState(() => _recommendationError = error.message);
     } catch (error) {
+      if (cohort != null) {
+        await ops.recordCoachLog(
+          type: AiOpsTypes.jobRecommend,
+          cohortId: cohort,
+          watch: watch,
+          success: false,
+          error: error,
+        );
+      }
       if (mounted) setState(() => _recommendationError = '분석 실패: $error');
     } finally {
       if (mounted) {
