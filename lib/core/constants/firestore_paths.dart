@@ -74,6 +74,14 @@ abstract final class FirestorePaths {
       '${assessmentSubmissions(cohortId)}/${assessmentId}_$userId';
   static String inflearnPackages(String cohortId) =>
       '${cohort(cohortId)}/inflearnPackages';
+  static String studySources(String cohortId) =>
+      '${cohort(cohortId)}/studySources';
+  static String studySource(String cohortId, String sourceId) =>
+      '${studySources(cohortId)}/$sourceId';
+  static String studyNotes(String cohortId) =>
+      '${cohort(cohortId)}/studyNotes';
+  static String studyNote(String cohortId, String noteId) =>
+      '${studyNotes(cohortId)}/$noteId';
   static String youtubeRecommendations(String cohortId) =>
       '${cohort(cohortId)}/youtubeRecommendations';
   static String projectTeams(String cohortId) =>

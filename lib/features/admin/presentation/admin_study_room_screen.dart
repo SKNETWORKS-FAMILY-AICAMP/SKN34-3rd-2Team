@@ -10,6 +10,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../study_room/presentation/widgets/inflearn_package_card.dart';
 import '../../study_room/presentation/widgets/study_room_layout.dart';
+import 'widgets/admin_study_source_panel.dart';
 import 'widgets/admin_youtube_recommendation_panel.dart';
 
 /// 관리자 학습실 — 인프런 강의 패키지 관리
@@ -90,6 +91,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
           onRefresh: () async {
             ref.invalidate(inflearnPackagesProvider);
             ref.invalidate(youtubeRecommendationsProvider);
+            ref.invalidate(studySourcesProvider);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -119,6 +121,8 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                   ),
                   const SizedBox(height: 24),
                   const AdminYoutubeRecommendationPanel(),
+                  const SizedBox(height: 28),
+                  const AdminStudySourcePanel(),
                   const SizedBox(height: 28),
                   const Text(
                     '인프런 패키지',

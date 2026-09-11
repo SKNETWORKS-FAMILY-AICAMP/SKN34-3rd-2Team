@@ -43,6 +43,11 @@ export {
 } from "./assessments";
 export {recordAiGenerationLog, recordAiOutcomeFeedback} from "./aiOps";
 export {getCurriculumYoutubeRecommendations} from "./youtubeRecommendations";
+export {
+  listStudySourceTree,
+  generateStudyNote,
+  getStudyNote,
+} from "./studyNotes";
 import {settleMissionsOnApproval} from "./missions";
 
 const EMAIL_DOMAIN = "playdata.co.kr";

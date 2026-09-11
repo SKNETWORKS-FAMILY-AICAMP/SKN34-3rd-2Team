@@ -412,6 +412,20 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
+      // ── 공부방 소스 (기수별 수업 저장소) ──
+      match /studySources/{sourceId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId) && resource.data.isActive == true);
+        allow write: if isAdmin();
+      }
+
+      // ── 공부방 노트 (생성·수정은 Functions만) ──
+      match /studyNotes/{noteId} {
+        allow read: if isAdmin()
+          || (belongsToCohort(cohortId) && resource.data.status == 'ready');
+        allow write: if false;
+      }
+
       // ── YouTube 추천 영상 (학습실 관심사 추천) ──
       match /youtubeRecommendations/{videoId} {
         allow read: if canAccessCohort(cohortId);

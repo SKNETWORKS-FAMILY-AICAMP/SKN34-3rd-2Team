@@ -7,6 +7,7 @@ import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/study_source_model.dart';
 import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
@@ -1227,6 +1228,31 @@ class DemoLmsRepository {
     _inflearnPackages.removeWhere((p) => p.id == packageId);
     _emit();
   }
+
+  Stream<List<StudySourceModel>> watchStudySources(String cohortId) async* {
+    yield [];
+  }
+
+  Stream<List<StudySourceModel>> watchActiveStudySources(String cohortId) async* {
+    yield [];
+  }
+
+  Stream<List<StudyNoteModel>> watchReadyStudyNotes(String cohortId) async* {
+    yield [];
+  }
+
+  Future<String> createStudySource({
+    required String cohortId,
+    required StudySourceModel source,
+  }) async {
+    return 'demo-source';
+  }
+
+  Future<void> updateStudySource({
+    required String cohortId,
+    required String sourceId,
+    required Map<String, dynamic> updates,
+  }) async {}
 
   Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
     String cohortId,

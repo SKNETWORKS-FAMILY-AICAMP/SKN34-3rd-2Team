@@ -64,6 +64,8 @@ import '../../features/resume/presentation/resume_screen.dart';
 import '../../features/seating/presentation/admin_seating_screen.dart';
 import '../../features/seating/presentation/seating_screen.dart';
 import '../../features/shell/main_shell_screen.dart';
+import '../../features/study_room/presentation/study_room_note_source_screen.dart';
+import '../../features/study_room/presentation/study_room_notes_screen.dart';
 import '../../features/study_room/presentation/study_room_screen.dart';
 import 'fade_page.dart';
 import 'route_paths.dart';
@@ -84,6 +86,10 @@ bool _isAdminRoute(String location) => location.startsWith('/admin');
 bool _isInstructorRoute(String location) => location.startsWith('/instructor');
 
 String? _adminRedirectForStudentRoute(String location) {
+  if (location == RoutePaths.studyRoom ||
+      location.startsWith('${RoutePaths.studyRoom}/')) {
+    return RoutePaths.adminStudyRoom;
+  }
   return switch (location) {
     RoutePaths.dashboard => RoutePaths.admin,
     RoutePaths.records || RoutePaths.recordsCreate ||
@@ -249,6 +255,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (_, _) => const NoTransitionPage(
               child: StudyRoomScreen(),
             ),
+          ),
+          GoRoute(
+            path: RoutePaths.studyRoomNotes,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: StudyRoomNotesScreen(),
+            ),
+            routes: [
+              GoRoute(
+                path: ':sourceId',
+                pageBuilder: (_, state) => NoTransitionPage(
+                  child: StudyRoomNoteSourceScreen(
+                    sourceId: state.pathParameters['sourceId']!,
+                  ),
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: RoutePaths.board,

@@ -4,7 +4,7 @@ import * as logger from "firebase-functions/logger";
 import {db, ensureInitialized, fieldValue} from "./firebase";
 import {
   ASSESSMENT_MODEL,
-  ASSESSMENT_PROMPT_VERSION,
+  assessmentPromptVersion,
   ASSESSMENT_SYSTEM_PROMPT,
   buildAssessmentRegenPrompt,
   buildAssessmentUserPrompt,
@@ -702,7 +702,7 @@ async function runGenerateAssessmentQuestions(
 
     const baseLog: Record<string, unknown> = {
       type: isRegen ? "assessment_questions_regen" : "assessment_questions",
-      promptVersion: ASSESSMENT_PROMPT_VERSION,
+      promptVersion: assessmentPromptVersion(),
       model: ASSESSMENT_MODEL,
       cohortId,
       sheetId,
@@ -958,7 +958,7 @@ async function runGenerateAssessmentQuestions(
             [],
           origin: "ai",
           aiLogId: logId,
-          promptVersion: ASSESSMENT_PROMPT_VERSION,
+          promptVersion: assessmentPromptVersion(),
           aiDraftId: draftId,
         };
         if (type === "mc") {
@@ -1007,7 +1007,7 @@ async function runGenerateAssessmentQuestions(
         questions,
         rowCount: filtered.length,
         logId,
-        promptVersion: ASSESSMENT_PROMPT_VERSION,
+        promptVersion: assessmentPromptVersion(),
         model: ASSESSMENT_MODEL,
         ...(parentLogId ? {parentLogId} : {}),
         isRegen,
@@ -1087,7 +1087,7 @@ export const recordAiQuestionFeedback = onCall(
         draftId: item.draftId,
         cohortId,
         outcome: item.outcome,
-        promptVersion: promptVersion ?? ASSESSMENT_PROMPT_VERSION,
+        promptVersion: promptVersion ?? assessmentPromptVersion(),
         actorUid: caller.uid,
         updatedAt: fieldValue.serverTimestamp(),
       };

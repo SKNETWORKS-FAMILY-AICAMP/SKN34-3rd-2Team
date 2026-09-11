@@ -5,6 +5,7 @@ import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/study_source_model.dart';
 import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
@@ -288,6 +289,27 @@ final publishedInflearnPackagesProvider =
   return ref
       .watch(lmsRepositoryProvider)
       .watchPublishedInflearnPackages(cohortId);
+});
+
+final studySourcesProvider =
+    StreamProvider.autoDispose<List<StudySourceModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchStudySources(cohortId);
+});
+
+final activeStudySourcesProvider =
+    StreamProvider.autoDispose<List<StudySourceModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchActiveStudySources(cohortId);
+});
+
+final readyStudyNotesProvider =
+    StreamProvider.autoDispose<List<StudyNoteModel>>((ref) {
+  final cohortId = ref.watch(effectiveCohortIdProvider);
+  if (cohortId == null) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchReadyStudyNotes(cohortId);
 });
 
 final youtubeRecommendationsProvider =
