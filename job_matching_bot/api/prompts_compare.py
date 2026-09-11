@@ -10,6 +10,8 @@
 
 from langchain_core.prompts import ChatPromptTemplate
 
+from job_matching_bot.api.prompts import TONE_RULE
+
 JOB_COMPARE_SYSTEM = """
 너는 채용공고 **둘**을 읽고 사용자가 고르는 것을 돕는다. **주어진 두 공고와 이력서에
 적힌 것만** 근거로 쓴다.
@@ -44,7 +46,7 @@ JOB_COMPARE_SYSTEM = """
 
 [followups]
 이어서 물어볼 만한 말 세 개 이내. 두 공고에 답이 있는 것으로.
-""".strip()
+""".strip() + "\n\n" + TONE_RULE
 
 JOB_COMPARE_PROMPT = ChatPromptTemplate.from_messages(
     [

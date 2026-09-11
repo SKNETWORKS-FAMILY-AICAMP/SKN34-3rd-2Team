@@ -195,6 +195,37 @@ class SearchTest(ChatTestCase):
         self.assertEqual("정규직", job.employment_type)
 
 
+class SmallTalkTest(ChatTestCase):
+    """채용과 상관없는 말. **그래도 사람이 말을 건 것이다.**
+
+    "안녕"에 사용법 안내가 돌아오면 대화가 아니라 자판기다. 잡담에는 답을 쓰는 다음
+    단계가 없으므로, 갈래를 가르며 이미 받아 둔 `understood`를 그대로 내보낸다.
+    답을 부르려고 모델을 한 번 더 쓰지 않는다.
+    """
+
+    def test_a_greeting_gets_a_greeting(self):
+        response = self.ask(turn(intent="잡담", understood="안녕하세요!"), message="안녕")
+        self.assertEqual("안내", response.mode)
+        self.assertEqual("안녕하세요!", response.reply)
+
+    def test_the_reply_costs_no_extra_call(self):
+        """인사 한 번에 모델을 두 번 부를 이유가 없다."""
+        self.ask(turn(intent="잡담", understood="안녕하세요!"), message="안녕")
+        self.assertEqual(1, self.calls, "갈래를 가른 한 번이 전부다")
+        self.assertEqual({}, self.advised)
+
+    def test_an_empty_line_falls_back_to_the_guide(self):
+        """모델이 빈손으로 오면 빈 말풍선이 뜬다. 그럴 바에는 사용법이라도 보여 준다."""
+        response = self.ask(turn(intent="잡담", understood="   "), message="안녕")
+        self.assertIn("공고를 찾으시려면", response.reply)
+
+    def test_it_still_does_not_look_for_jobs(self):
+        response = self.ask(turn(intent="잡담", understood="안녕하세요!"), message="안녕")
+        self.assertEqual([], response.jobs)
+        self.assertEqual(0, response.total)
+        self.assertEqual({}, self.found)
+
+
 class ConfusableTermTest(unittest.TestCase):
     """Java 로 찾을 때 JavaScript 가 걸리면 안 된다. 그렇다고 Spring 이 SpringBoot 를
     놓쳐서도 안 된다.

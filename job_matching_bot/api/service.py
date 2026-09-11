@@ -62,6 +62,15 @@ PROFILE_CACHE_SIZE = 64
 RECOMMEND_STAGES = ("resume", "search", "filter", "judge")
 
 
+# 잡담에 돌려줄 말은 모델이 쓴다. 이것은 모델이 아무 말도 안 돌려줬을 때의 자리다.
+# 빈 말풍선을 띄우느니 무엇을 물으면 되는지라도 보여 준다.
+SMALL_TALK_FALLBACK = (
+    "채용에 대한 것을 도와드릴 수 있어요.\n"
+    "공고를 찾으시려면 “서울 백엔드 신입”처럼, "
+    "궁금한 게 있으시면 “백엔드 신입은 뭘 준비해야 해?”처럼 물어보세요."
+)
+
+
 def _progress_reporter(
     progress: Callable[[str, str | None], None] | None,
 ) -> Callable[..., None]:
@@ -683,13 +692,12 @@ class ChatService(_LivenessMixin):
             return self._unavailable(turn.unavailable, previous)
 
         if turn.intent == "잡담":
+            # "안녕"에 사용법 안내가 돌아오면 사람과 말하는 것 같지 않다. 인사에는
+            # 인사로 답한다. 잡담에는 다음 단계가 없으므로 답을 새로 부르지 않고,
+            # 갈래를 가르며 이미 받아 둔 `understood`를 그대로 쓴다. 호출은 안 는다.
             return schemas.JobChatResponse(
                 mode="안내",
-                reply=(
-                    "채용에 대한 것을 도와드릴 수 있어요.\n"
-                    "공고를 찾으시려면 \u201c서울 백엔드 신입\u201d처럼, "
-                    "궁금한 게 있으시면 \u201c백엔드 신입은 뭘 준비해야 해?\u201d처럼 물어보세요."
-                ),
+                reply=turn.understood.strip() or SMALL_TALK_FALLBACK,
                 filters=previous,
                 total=0,
                 suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
