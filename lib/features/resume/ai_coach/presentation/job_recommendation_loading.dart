@@ -135,7 +135,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                       clipBehavior: Clip.none,
                       children: [
                         Container(
-                          width: double.infinity,
+                          // 글에 맞춰 줄어든다. 가장 긴 줄이 카드 너비를 정한다.
                           constraints: const BoxConstraints(minHeight: 244),
                           padding: const EdgeInsets.fromLTRB(15, 25, 15, 17),
                           decoration: BoxDecoration(
@@ -153,7 +153,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                             ],
                           ),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 widget.errorMessage != null
@@ -175,9 +175,12 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                                 )
                               else ...[
                                 if (index < 0 && !widget.completed) ...[
-                                  const LinearProgressIndicator(
-                                    minHeight: 2,
-                                    color: AppColors.primary,
+                                  const SizedBox(
+                                    width: 196,
+                                    child: LinearProgressIndicator(
+                                      minHeight: 2,
+                                      color: AppColors.primary,
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                 ],
@@ -346,7 +349,8 @@ class _ChecklistStep extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.only(bottom: last ? 0 : 13),
     child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      // 카드가 글에 맞춰 줄어들어야 하므로 줄도 제 너비만 차지한다.
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
@@ -379,11 +383,10 @@ class _ChecklistStep extends StatelessWidget {
         Flexible(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Wrap(
                 spacing: 8,
-                alignment: WrapAlignment.center,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
@@ -414,7 +417,6 @@ class _ChecklistStep extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   detail!,
-                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
