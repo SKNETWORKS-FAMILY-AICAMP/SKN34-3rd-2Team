@@ -83,3 +83,51 @@ class DetailQueueOrderTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def in_category(job_id: str, cat: str, rank: int = 1) -> dict:
+    return {**record(job_id, rank), "cat_mcls": cat}
+
+
+class DetailCategoryTest(unittest.TestCase):
+    """목록은 전부 훑되 상세는 고른 대분류만 받는다.
+
+    일요일 전체 훑기가 14개 대분류를 훑는다. IT 밖 대분류의 상세까지 다 받으려면
+    13만 건에 38일이 걸려, 하룻밤 4,500건으로는 다음 일요일 전에 못 끝낸다. 그러면
+    큐 숫자가 "밀린 양"이라는 뜻을 잃는다.
+
+    목록만 훑어도 **사라짐 판정은 그대로 된다.** 그게 일요일 훑기의 다른 역할이고
+    거기에는 상세가 필요 없다.
+    """
+
+    def test_only_the_chosen_categories_enter_the_queue(self):
+        records = [
+            in_category("a", "2"),    # IT개발·데이터
+            in_category("b", "9"),    # 연구·R&D
+            in_category("c", "1"),    # 매일 훑지 않는 대분류
+            in_category("d", "4"),
+        ]
+        queue, stats = build_queue(records, set(), NOW, detail_categories=("2", "9"))
+        self.assertEqual(["a", "b"], [r["source_job_id"] for r in queue])
+        self.assertEqual(2, stats["상세 대상 아닌 대분류"])
+
+    def test_giving_no_list_keeps_everything(self):
+        """예전과 같은 동작. 인자를 안 주면 전부 담는다."""
+        records = [in_category("a", "2"), in_category("c", "1")]
+        queue, _ = build_queue(records, set(), NOW)
+        self.assertEqual(["a", "c"], [r["source_job_id"] for r in queue])
+
+    def test_widening_is_one_more_category(self):
+        """넓히는 방법이 대분류 하나를 더하는 것이어야 한다."""
+        records = [in_category(str(i), "15") for i in range(3)]
+        self.assertEqual(0, len(build_queue(records, set(), NOW, detail_categories=("2",))[0]))
+        self.assertEqual(3, len(build_queue(records, set(), NOW, detail_categories=("2", "15"))[0]))
+
+    def test_the_order_rules_still_apply_inside_the_kept_categories(self):
+        records = [
+            {**record("popular", 1, top=True), "cat_mcls": "2"},
+            {**record("plain", 50), "cat_mcls": "2"},
+            {**record("other", 1, top=True), "cat_mcls": "1"},
+        ]
+        queue, _ = build_queue(records, set(), NOW, detail_categories=("2",))
+        self.assertEqual(["popular", "plain"], [r["source_job_id"] for r in queue])

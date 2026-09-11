@@ -32,7 +32,7 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from job_matching_bot.ingestion.excluded_roles import is_excluded
 
@@ -113,13 +113,31 @@ def build_queue(
     detailed_ids: set[str],
     now: datetime,
     waiting_since: dict[str, str] | None = None,
+    detail_categories: Sequence[str] | None = None,
 ) -> tuple[list[dict[str, Any]], Counter]:
+    """목록에서 본 공고 중 상세를 받을 것을 골라 순서대로 세운다.
+
+    `detail_categories`를 주면 **그 대분류만** 큐에 담는다. 목록은 전부 훑되 상세는
+    일부만 받기 위한 것이다.
+
+    일요일 전체 훑기가 14개 대분류를 훑는데, IT 밖 대분류의 상세를 다 받으려면
+    13만 건에 38일이 걸린다. 하룻밤에 4,500건씩 받으니 다음 일요일 전에 못 끝내고,
+    그러면 큐 숫자가 "밀린 양"이라는 뜻을 잃는다.
+
+    목록만 훑어도 **사라짐 판정은 그대로 된다.** 그게 일요일 훑기의 다른 역할이고,
+    거기에는 상세가 필요 없다. 상세를 넓히고 싶으면 대분류를 매일 훑는 목록에
+    하나씩 추가한다. 그러면 며칠 걸리는지 미리 알고 시작할 수 있다.
+    """
+    allowed = set(detail_categories) if detail_categories is not None else None
     best: dict[str, dict[str, Any]] = {}
     stats: Counter = Counter()
     for record in list_records:
         job_id = str(record.get("source_job_id") or "")
         if not job_id:
             stats["id 없음"] += 1
+            continue
+        if allowed is not None and str(record.get("cat_mcls") or "") not in allowed:
+            stats["상세 대상 아닌 대분류"] += 1
             continue
         if job_id in detailed_ids:
             stats["이미 상세 있음"] += 1

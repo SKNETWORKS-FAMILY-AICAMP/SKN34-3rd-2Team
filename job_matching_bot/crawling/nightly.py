@@ -72,6 +72,10 @@ SKIPPED_CATEGORIES: tuple[str, ...] = ("7",)  # 운전·운송·배송
 WEEKLY_DAY = 6  # 일요일
 # 신규 상세를 받는 순서에서 앞에 두는 대분류. 첫 채우기는 IT부터 하기로 했다.
 PRIORITY_CATEGORIES: tuple[str, ...] = ("2",)
+# **상세를 받는 대분류.** 목록은 일요일에 전부 훑지만 상세는 여기 있는 것만 받는다.
+# 넓히려면 여기에 하나씩 더한다. 대분류 하나가 사이트 기준 8,000~14,000건이고
+# 하룻밤 4,500건을 받으므로 이틀에서 사흘이면 채워진다.
+DETAIL_CATEGORIES: tuple[str, ...] = DAILY_CATEGORIES
 
 # 주 1회 훑는 대분류의 공고를 살아 있다고 볼 기간. 일요일 sweep을 한 번 놓쳐도 지우지 않는다.
 OBSERVED_WINDOW_DAYS = 15
@@ -379,8 +383,13 @@ def main() -> int:
     already_today = set(latest_by_id(read_records(detail_file)))
     # 목록에서 처음 본 시각을 함께 넘긴다. 인기순 줄에 오래 기다린 공고를
     # 끼워 넣어, 순위가 밀린 공고도 매일 조금씩 차례가 오게 한다.
+    # 상세는 **매일 훑는 대분류만** 받는다. 일요일 전체 훑기가 14개를 훑는데 IT 밖
+    # 대분류의 상세까지 다 받으려면 13만 건에 38일이 걸려, 다음 일요일 전에 못 끝낸다.
+    # 목록은 전부 훑으므로 사라짐 판정은 그대로다. 상세를 넓히려면 DAILY_CATEGORIES에
+    # 대분류를 하나 추가한다 — 연구·R&D 8,707건이면 이틀치다.
     queue, queue_stats = build_queue(
-        result.records, known_ids | already_today, now, store.waiting_since()
+        result.records, known_ids | already_today, now, store.waiting_since(),
+        detail_categories=DETAIL_CATEGORIES,
     )
     queue = prioritize(queue)
     summary["new"] = {"queued": len(queue), **{k: v for k, v in queue_stats.items()}}
