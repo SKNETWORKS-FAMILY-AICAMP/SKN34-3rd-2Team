@@ -591,13 +591,24 @@ class SqliteJobStore:
             )
 
     def record_list_jobs(
-        self, records: Iterable[dict[str, Any]], at: datetime, *, keep_days: int = 60
+        self,
+        records: Iterable[dict[str, Any]],
+        at: datetime,
+        *,
+        skip_categories: Iterable[str] = (),
+        keep_days: int = 60,
     ) -> int:
         """목록 레코드를 `list_jobs`에 담는다. 챗봇 검색만 읽는 표다.
 
-        같은 공고가 여러 대분류에 나오므로 `source_job_id` 하나로 모은다. 조건은
-        `listing_conditions`가 가른다 — 상세와 **같은 파서**를 쓰므로 두 표가 섞여도
-        검색 결과가 어긋나지 않는다.
+        `skip_categories`에는 **상세를 받는 대분류**를 준다. 그쪽 공고는 며칠 안에
+        상세가 들어와 `jobs`에 자리를 잡으므로, 목록에 담아 봐야 곧 검색에서 제외될
+        중복이 된다. 목록만으로 남는 것은 상세를 안 받기로 한 대분류뿐이다.
+
+        같은 공고가 여러 대분류에 나온다. 그중 **하나라도** 상세를 받는 대분류면
+        건너뛴다. 그 경로로 상세가 들어오기 때문이다.
+
+        조건은 `listing_conditions`가 가른다 — 상세와 **같은 파서**를 쓰므로 두 표가
+        섞여도 검색 결과가 어긋나지 않는다.
 
         `first_seen_at`은 처음 값을 지킨다. 목록에서 오래 기다린 공고를 재는 근거다.
         """
@@ -607,11 +618,20 @@ class SqliteJobStore:
         )
 
         stamp = at.isoformat()
+        records = list(records)
+        skip = set(skip_categories)
+        # 상세를 받는 대분류에 한 번이라도 나온 공고는 통째로 뺀다.
+        detailed = {
+            str(r.get("source_job_id") or "")
+            for r in records
+            if str(r.get("cat_mcls") or "") in skip
+        } if skip else set()
+
         rows = []
         seen: set[str] = set()
         for record in records:
             job_id = str(record.get("source_job_id") or "")
-            if not job_id or job_id in seen:
+            if not job_id or job_id in seen or job_id in detailed:
                 continue
             seen.add(job_id)
             text = str(record.get("condition_text") or "")

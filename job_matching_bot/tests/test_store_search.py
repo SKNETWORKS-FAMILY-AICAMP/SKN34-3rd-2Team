@@ -291,3 +291,46 @@ class ListingOnlySearchTest(unittest.TestCase):
         self.assertFalse(hit.has_detail)
         self.assertEqual("https://x/3", hit.source_url)
         self.assertEqual("경력 3년 이상", hit.career_label)
+
+
+class ListingSkipCategoryTest(unittest.TestCase):
+    """상세를 받는 대분류는 목록 표에 담지 않는다.
+
+    그쪽 공고는 며칠 안에 상세가 들어와 `jobs`에 자리를 잡는다. 목록에 담아 봐야
+    곧 검색에서 제외될 중복이고, 그동안 본문 없는 카드가 섞인다. 목록만으로 남겨야
+    하는 것은 **상세를 안 받기로 한 대분류**뿐이다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "store.sqlite"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    @staticmethod
+    def rec(job_id, cat, title="공고"):
+        return {"source_job_id": job_id, "cat_mcls": cat, "company": "회사",
+                "title": title, "job_sectors": ["영업관리"], "source_url": f"https://x/{job_id}",
+                "condition_text": "서울 마포구 신입 · 정규직 고졸↑", "support_text": "~12.31"}
+
+    def stored(self, records, skip=()):
+        with SqliteJobStore(self.path) as store:
+            store.record_list_jobs(records, NOW, skip_categories=skip)
+            rows = store.conn.execute(
+                "SELECT source_job_id FROM list_jobs ORDER BY source_job_id").fetchall()
+        return [r["source_job_id"] for r in rows]
+
+    def test_detail_categories_are_left_out(self):
+        kept = self.stored([self.rec("1", "2"), self.rec("2", "9"), self.rec("3", "4")],
+                           skip=("2", "9"))
+        self.assertEqual(["3"], kept)
+
+    def test_a_posting_in_both_is_left_out(self):
+        """같은 공고가 여러 대분류에 나온다. 하나라도 상세를 받는 쪽이면 건너뛴다."""
+        kept = self.stored([self.rec("7", "4"), self.rec("7", "2")], skip=("2",))
+        self.assertEqual([], kept)
+
+    def test_giving_no_skip_list_keeps_everything(self):
+        kept = self.stored([self.rec("1", "2"), self.rec("2", "4")])
+        self.assertEqual(["1", "2"], kept)
