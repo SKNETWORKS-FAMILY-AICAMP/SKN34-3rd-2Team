@@ -708,6 +708,22 @@ class ChatService(_LivenessMixin):
             }
         )
 
+        # 여기가 문이다. **채용이라고 짚은 말만** 아래로 내려간다.
+        #
+        # 막을 것을 고르는 대신 답해도 되는 것을 짚게 했다. 애매한 말은 통과하지 않고
+        # 막힌다. 아래 어느 단계도 모델이 쓴 문장을 쓰지 않으므로, 답하지 말아야 할
+        # 것에 답할 길이 없다.
+        if turn.topic == "그 밖":
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply=OFF_TOPIC_REPLY,
+                filters=previous,
+                total=0,
+                suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
+            )
+        if turn.topic == "인사":
+            return self._small_talk(turn, previous)
+
         # "2번 자세히 봐줘" — 직전 목록에서 자리를 가리킨 말. 그 공고 하나에 대한 물음이
         # 되므로 조건 검색으로 내려보내지 않는다. 사용자가 카드를 다시 누르지 않아도 된다.
         # 자리를 **둘 이상** 가리켰으면 비교다. 따로 의도를 두지 않는다 — 개수가 곧
@@ -728,31 +744,11 @@ class ChatService(_LivenessMixin):
                 suggestions=["서울 백엔드 신입", "마감 임박한 공고"],
             )
 
-        # 채용 밖의 일을 시킨 말. 갈래를 가르기 전에 여기서 끊는다. 모델이 쓴 문장을
-        # 쓰지 않고 정해진 말을 내보내므로, 답하지 말아야 할 것에 답할 길이 없다.
-        if turn.off_topic:
-            return schemas.JobChatResponse(
-                mode="안내",
-                reply=OFF_TOPIC_REPLY,
-                filters=previous,
-                total=0,
-                suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
-            )
-
         if turn.unavailable:
             return self._unavailable(turn.unavailable, previous)
 
         if turn.intent == "잡담":
-            # "안녕"에 사용법 안내가 돌아오면 사람과 말하는 것 같지 않다. 인사에는
-            # 인사로 답한다. 잡담에는 다음 단계가 없으므로 답을 새로 부르지 않고,
-            # 갈래를 가르며 이미 받아 둔 `understood`를 그대로 쓴다. 호출은 안 는다.
-            return schemas.JobChatResponse(
-                mode="안내",
-                reply=turn.understood.strip() or SMALL_TALK_FALLBACK,
-                filters=previous,
-                total=0,
-                suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
-            )
+            return self._small_talk(turn, previous)
 
         if turn.intent == "추천":
             # 챗봇은 이력서를 받지 않는다. 앱이 이 mode를 보고 추천으로 넘긴다.
@@ -824,6 +820,22 @@ class ChatService(_LivenessMixin):
             jobs=[_to_chat_job(hit) for hit in shown],
             total=result.total,
             suggestions=_suggestions(filters, result),
+        )
+
+    @staticmethod
+    def _small_talk(turn, previous) -> schemas.JobChatResponse:
+        """인사에는 인사로. **모델을 한 번 더 부르지 않는다.**
+
+        "안녕"에 사용법 안내가 돌아오면 사람과 말하는 것 같지 않다. 그렇다고 답을 쓰는
+        호출을 붙이면 인사 한 마디에 두 번을 부르게 된다. 갈래를 가르며 이미 받아 둔
+        `understood`를 그대로 쓴다.
+        """
+        return schemas.JobChatResponse(
+            mode="안내",
+            reply=turn.understood.strip() or SMALL_TALK_FALLBACK,
+            filters=previous,
+            total=0,
+            suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
         )
 
     @staticmethod
