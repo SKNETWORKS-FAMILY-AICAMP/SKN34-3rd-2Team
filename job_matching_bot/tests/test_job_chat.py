@@ -197,6 +197,38 @@ class SearchTest(ChatTestCase):
         self.assertEqual("정규직", job.employment_type)
 
 
+class BlockedBeforeTheModelTest(ChatTestCase):
+    """목록에 적어 둔 말은 모델을 부르기 전에 막는다.
+
+    `off_topic`은 모델이 판단한다. 판단은 그날그날 흔들릴 수 있고 호출 비용도 든다.
+    적어 둔 말만큼은 그 앞에서 끊는다. 무엇을 적었는지는 `test_abuse.py`가 본다.
+    """
+
+    def test_no_call_goes_out_at_all(self):
+        response = self.ask(turn(roles=["백엔드"]), message="바보")
+        self.assertEqual(0, self.calls, "가르기 호출도 나가지 않는다")
+        self.assertEqual("안내", response.mode)
+        self.assertIn("채용과 취업 준비", response.reply)
+
+    def test_it_blocks_even_when_a_job_is_picked(self):
+        """공고를 골라 놓고 욕을 보내도 그 공고 프롬프트로 가지 않는다."""
+        self.ask(turn(), message="멍청이", job_id="J1")
+        self.assertEqual({}, self.asked)
+        self.assertEqual(0, self.calls)
+
+    def test_previous_conditions_survive(self):
+        previous = schemas.ChatFilters(roles=["백엔드"], regions=["서울"])
+        response = self.ask(turn(), message="바보", filters=previous)
+        self.assertEqual(["백엔드"], response.filters.roles)
+        self.assertEqual(["서울"], response.filters.regions)
+
+    def test_a_sentence_flows_as_usual(self):
+        """말 속에 들어 있을 뿐이면 평소 경로다. 여기서 막으면 하소연이 걸린다."""
+        response = self.ask(turn(roles=["백엔드"]), message="미친 듯이 준비했는데 안 되네요")
+        self.assertEqual(1, self.calls, "평소대로 한 번 부른다")
+        self.assertEqual("검색", response.mode)
+
+
 class OffTopicTest(ChatTestCase):
     """채용 밖의 일을 시킨 말. **답을 쓰는 단계로 보내지 않는다.**
 

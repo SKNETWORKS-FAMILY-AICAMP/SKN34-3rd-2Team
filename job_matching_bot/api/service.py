@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable
 
-from job_matching_bot.api import prompts, schemas
+from job_matching_bot.api import abuse, prompts, schemas
 from job_matching_bot.matching.hard_filter import hard_filter
 from job_matching_bot.matching.pre_ranker import pre_rank, preferred_match, skill_match
 from job_matching_bot.retrieval import search as retrieval
@@ -685,6 +685,17 @@ class ChatService(_LivenessMixin):
             raise StoreUnavailable("공고 저장소가 없습니다. 공유 파일을 먼저 받아 주세요.")
 
         previous = request.filters or schemas.ChatFilters()
+
+        # 모델을 부르기 전에 막는 한 겹. 여기 걸리면 호출이 0이다.
+        # 적어 둔 말만 잡는다. 나머지는 아래에서 모델이 가른다(`off_topic`).
+        if abuse.is_abuse(request.message):
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply=OFF_TOPIC_REPLY,
+                filters=previous,
+                total=0,
+                suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
+            )
 
         # 공고를 골라 물은 경우. 무슨 말이든 그 공고에 대한 물음이므로 의도를 가르지 않는다.
         if request.job_id:
