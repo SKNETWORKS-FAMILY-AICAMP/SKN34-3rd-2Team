@@ -144,6 +144,59 @@ def test_job_subject_placeholder_uses_natural_role_particle():
     )
 
 
+def test_tailored_resume_adds_safe_job_identity_without_placeholders():
+    generated = ResumeReviewGeneration(
+        summary='',
+        section_reviews=[],
+        sentence_reviews=[SentenceReview(
+            field_path='selfIntroduction.motivation.body',
+            original_quote='데이터로 사용자의 문제를 해결하고 싶습니다.',
+            reason='표현 정리',
+            suggested_revision='데이터를 활용해 사용자의 문제를 해결하고 싶습니다.',
+            evidence_quotes=['데이터로 사용자의 문제를 해결하고 싶습니다.'],
+        )],
+    )
+    original = '데이터로 사용자의 문제를 해결하고 싶습니다.'
+
+    apply_selected_job_identity_revisions(
+        generated,
+        {'selfIntroduction.motivation.body': original},
+        {
+            'company': '(주)토마토에이아이',
+            'title': '(주)토마토에이아이와 함께할 AI엔지니어를 찾고 있어요',
+        },
+        insert_missing_identity=True,
+    )
+
+    assert len(generated.sentence_reviews) == 1
+    assert generated.sentence_reviews[0].suggested_revision == (
+        '(주)토마토에이아이의 AI 엔지니어 직무에 지원한 이유는 다음과 같습니다.\n'
+        '데이터로 사용자의 문제를 해결하고 싶습니다.'
+    )
+
+
+def test_identity_is_not_inserted_without_explicit_tailored_resume_rule():
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+    apply_selected_job_identity_revisions(
+        generated,
+        {'selfIntroduction.motivation.body': '데이터로 문제를 해결하고 싶습니다.'},
+        {'company': '테스트 회사', 'title': '백엔드 개발자'},
+    )
+    assert generated.sentence_reviews == []
+
+
+def test_identity_is_inserted_only_once_when_already_written():
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+    original = '테스트 회사의 백엔드 개발자 직무에 지원합니다.'
+    apply_selected_job_identity_revisions(
+        generated,
+        {'selfIntroduction.motivation.body': original},
+        {'company': '테스트 회사', 'title': '백엔드 개발자'},
+        insert_missing_identity=True,
+    )
+    assert generated.sentence_reviews == []
+
+
 def test_previously_applied_full_posting_title_is_repaired():
     generated = ResumeReviewGeneration(summary='', section_reviews=[])
     apply_selected_job_identity_revisions(

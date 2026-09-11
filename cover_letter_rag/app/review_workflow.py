@@ -7,7 +7,7 @@ import time
 from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion, SentenceReview
 from app.technology import technology_mentions
 
-PROMPT_VERSION = 'resume-v8-answer-fallback'
+PROMPT_VERSION = 'resume-v9-gap-audit'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 
 
@@ -162,12 +162,18 @@ def filter_verified_project_time_questions(generation, context):
     ]
 
 
-def apply_selected_job_identity_revisions(generation, fields, job_source):
+def apply_selected_job_identity_revisions(
+    generation,
+    fields,
+    job_source,
+    *,
+    insert_missing_identity=False,
+):
     """Replace resume placeholders from the selected job without asking the user.
 
-    Company and role are selected-job facts, not resume facts. They are safe to use
-    only for the literal placeholders, and must not depend on an LLM following a
-    prompt instruction.
+    Company and role are selected-job facts, not resume facts. Placeholder
+    replacement and the optional tailored-resume introduction are deterministic;
+    neither depends on an LLM following a prompt instruction.
     """
     company = str(job_source.get('company') or '').strip()
     posting_title = str(job_source.get('title') or '').strip()
@@ -176,6 +182,7 @@ def apply_selected_job_identity_revisions(generation, fields, job_source):
         posting_title,
     )
     replacements = {}
+    auto_identity_paths = set()
     for field_path, original in fields.items():
         revised = original
         changed = []
@@ -218,6 +225,47 @@ def apply_selected_job_identity_revisions(generation, fields, job_source):
                     changed.append('직무명')
         if changed:
             replacements[field_path] = (original, revised, '·'.join(changed))
+
+    # 기본 이력서에 자리표시자를 쓰도록 강요하지 않는다. 공고별 사본의 첫 검토에서만
+    # 지원동기(없으면 입사 후 포부) 한 곳에 안전한 독립 문장을 제안한다. 원문과 문장을
+    # 억지로 이어 붙이지 않아 어떤 내용이 뒤따라도 조사나 의미가 깨지지 않는다.
+    has_identity_replacement = bool(replacements)
+    # 'AI 엔지니어' 같은 범용 희망 직무는 기본 이력서에도 흔히 존재한다.
+    # 선택 회사명이 실제로 들어간 경우에만 이미 공고 맞춤 반영된 것으로 본다.
+    identity_already_written = bool(company) and any(
+        company in value for value in fields.values()
+    )
+    if (
+        insert_missing_identity
+        and company
+        and title
+        and not has_identity_replacement
+        and not identity_already_written
+    ):
+        candidate_paths = (
+            'selfIntroduction.motivation.body',
+            'selfIntroduction.aspiration.body',
+        )
+        field_path = next(
+            (path for path in candidate_paths if str(fields.get(path) or '').strip()),
+            None,
+        )
+        if field_path:
+            original = fields[field_path]
+            if field_path.endswith('.motivation.body'):
+                role_label = title if title.endswith('직무') else f'{title} 직무'
+                identity_sentence = f'{company}의 {role_label}에 지원한 이유는 다음과 같습니다.'
+            else:
+                identity_sentence = (
+                    f'{company}에서 {_job_role_with_particle(title, "으로")} '
+                    '성장하고 싶습니다.'
+                )
+            replacements[field_path] = (
+                original,
+                f'{identity_sentence}\n{original}',
+                '회사명·직무명',
+            )
+            auto_identity_paths.add(field_path)
     if not replacements:
         return
 
@@ -228,11 +276,17 @@ def apply_selected_job_identity_revisions(generation, fields, job_source):
         if review.field_path not in replacements
     ]
     for field_path, (original, revised, changed) in replacements.items():
+        reason = (
+            '선택한 공고의 회사명·직무명을 공고별 이력서에만 '
+            '안전한 문장 패턴으로 추가했습니다.'
+            if field_path in auto_identity_paths
+            else f'선택한 공고의 {changed} 확정값을 자리표시자에 반영했습니다.'
+        )
         generation.sentence_reviews.append(SentenceReview(
             field_path=field_path,
             original_quote=original,
             suggested_revision=revised,
-            reason=f'선택한 공고의 {changed} 확정값을 자리표시자에 반영했습니다.',
+            reason=reason,
             evidence_quotes=[original],
             status='improved',
             edit_type='content',
@@ -400,7 +454,7 @@ def normalize_questions(generation, fields, answers, review_id):
         seen.add(key)
         q.question_id = digest([review_id, q.field_path, q.topic, text_key])[:24]
         questions.append(q)
-    generation.questions = questions[:10]
+    generation.questions = questions[:30]
     generation.confirmation_questions = [q.question for q in generation.questions[:3]]
 
 
@@ -599,6 +653,9 @@ def run_review(service, id_token, request):
             previous = db.get_ai_review(
                 request.cohort_id, request.resume_id, uid, request.previous_review_id
             )
+    is_gap_audit = request.review_phase == 'gap_audit'
+    if is_gap_audit and (previous is None or request.answers):
+        raise ReviewInputError('gap_audit_requires_previous_review_without_answers')
     if request.expected_input_hash and request.expected_input_hash != snapshot_hash:
         raise ReviewConflict('resume_version_changed')
     job_source = {}
@@ -670,10 +727,15 @@ def run_review(service, id_token, request):
             'job_posting_text': redact(prompt_job_text),
             'resume_time_context': prompt_time_context,
             'review_scope': (
-                '첫 검토입니다. 이력서 전체와 선택 공고를 비교해 검토하세요.'
-                if not is_focused_followup
-                else '후속 첨삭입니다. 이번 답변의 field_path와 같은 이력서 항목만 수정하세요. '
-                '다른 항목의 새 진단·수정·질문은 만들지 마세요.'
+                '누락 점검 단계입니다. 기존 첨삭을 다시 쓰거나 수정안을 만들지 마세요. '
+                '확인된 답변을 존중하고, 아직 확인되지 않은 중요한 사실만 새로운 질문으로 만드세요.'
+                if is_gap_audit
+                else (
+                    '첫 검토입니다. 이력서 전체와 선택 공고를 비교해 검토하세요.'
+                    if not is_focused_followup
+                    else '후속 첨삭입니다. 이번 답변의 field_path와 같은 이력서 항목만 수정하세요. '
+                    '다른 항목의 새 진단·수정·질문은 만들지 마세요.'
+                )
             ),
             'review_mode': (
                 '일반 이력서 첨삭 — 공고 없이 문장·경험·역할·성과 근거를 검토'
@@ -690,21 +752,38 @@ def run_review(service, id_token, request):
             if generated.get('parsing_error') or generated.get('parsed') is None:
                 raise RuntimeError('invalid structured model response')
             generated = generated['parsed']
+        if is_gap_audit:
+            # A final audit may discover questions only. It must never replace
+            # an already accepted edit with a different model rewrite.
+            generated.sentence_reviews = []
+            for section in generated.section_reviews:
+                section.suggested_revision = None
         grounded, warnings = enforce_resume_review_grounding('\n'.join(fields.values()), generated)
         warnings.extend(ground_sentences(fields, answers, grounded))
         warnings.extend(require_answer_reflection(grounded, current_answers))
-        warnings.extend(
-            add_substantive_answer_fallback(grounded, fields, current_answers)
-        )
+        if not is_gap_audit:
+            warnings.extend(
+                add_substantive_answer_fallback(grounded, fields, current_answers)
+            )
         if request.review_mode == 'job':
             prefer_project_evidence_over_surface_edit(grounded, fields, answers)
-        apply_selected_job_identity_revisions(grounded, fields, job_source)
+        if not is_gap_audit:
+            apply_selected_job_identity_revisions(
+                grounded,
+                fields,
+                job_source,
+                insert_missing_identity=(
+                    request.review_mode == 'job'
+                    and request.tailored_resume_id is not None
+                    and not is_focused_followup
+                ),
+            )
         changes = normalize_diagnostics(grounded, fields, bool(job_text), previous)
-        if not is_focused_followup:
+        if not is_focused_followup and not is_gap_audit:
             add_thin_self_introduction_questions(grounded, fields)
             if request.review_mode == 'job':
                 add_missing_job_technology_question(grounded, fields, job_text)
-        else:
+        elif not is_gap_audit:
             carry_forward_unanswered_questions(grounded, previous, answers)
         normalize_questions(grounded, fields, answers, request.request_id)
         filter_verified_project_time_questions(grounded, time_context)

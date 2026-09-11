@@ -121,7 +121,7 @@ def test_review_reads_owned_resume_and_saves_separate_review() -> None:
     assert response.input_fields['projects[0].description'] == SAMPLE_CONTENT['projects'][0]['description']
     assert 'basicInfo' in response.excluded_fields
     assert firebase.saved is not None
-    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v8-answer-fallback'
+    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v9-gap-audit'
     assert "content" not in firebase.saved
 
 
@@ -348,7 +348,7 @@ def test_korean_section_label_is_normalized_and_questions_are_limited() -> None:
                 confirmation_questions=[f"질문 {index}" for index in range(5)],
             )
         ],
-        confirmation_questions=[f"전체 질문 {index}" for index in range(12)],
+        confirmation_questions=[f"전체 질문 {index}" for index in range(35)],
     )
 
     grounded, warnings = enforce_resume_review_grounding(resume_text, generated)
@@ -356,7 +356,7 @@ def test_korean_section_label_is_normalized_and_questions_are_limited() -> None:
     assert warnings == []
     assert grounded.section_reviews[0].section_key == "projects"
     assert len(grounded.section_reviews[0].confirmation_questions) == 3
-    assert len(grounded.confirmation_questions) == 10
+    assert len(grounded.confirmation_questions) == 30
 
 
 class EndpointService:

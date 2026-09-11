@@ -37,11 +37,7 @@ class JobResumeReviewDialog extends StatefulWidget {
 }
 
 class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
-  Map<String, dynamic>? _result,
-      _reviewRequest,
-      _applyRequest,
-      _undoRequest,
-      _application;
+  Map<String, dynamic>? _result, _reviewRequest, _applyRequest;
   final Set<int> _selected = {};
   final Set<int> _appliedSuggestionIndices = {};
   final TextEditingController _answerController = TextEditingController();
@@ -51,8 +47,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final List<Map<String, dynamic>> _questionQueue = [];
   final List<_ReviewChatMessage> _suggestionQueue = [];
   final Map<String, GlobalKey> _previewSectionKeys = {};
-  bool _busy = false, _changed = false, _undone = false;
+  bool _busy = false, _changed = false;
   bool _mutationPending = false;
+  bool _gapAuditScheduled = false;
+  bool _gapAuditStarted = false;
+  bool _gapAuditFinished = false;
   Map<String, dynamic>? _pendingQuestion;
   String? _error;
   String? _focusedFieldPath;
@@ -175,6 +174,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     Map<String, dynamic> review, {
     required bool isFirstReview,
     String? answeredFieldPath,
+    bool isGapAudit = false,
   }) {
     _pendingQuestion = null;
     if (isFirstReview) {
@@ -235,7 +235,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           queuedSuggestion.identitySuggestion?['field_path'] as String?;
       _focusPreviewField(fieldPath);
     }
-    if (!isFirstReview && displayedSuggestions == 0) {
+    if (!isFirstReview && !isGapAudit && displayedSuggestions == 0) {
       final warnings = (review['grounding_warnings'] as List? ?? const [])
           .whereType<String>();
       final answerAlreadyPresent = warnings.any(
@@ -268,6 +268,17 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           '방금 답한 항목을 기준으로 수정안을 만들었습니다. 적용 전 내용을 확인해 주세요.',
         ),
       );
+    }
+    if (isGapAudit && nextQuestion == null) {
+      _messages.add(
+        const _ReviewChatMessage.assistant(
+          '누락 점검까지 완료했습니다. 추가로 확인할 중요한 항목이 없습니다.',
+        ),
+      );
+    } else if (!isFirstReview &&
+        displayedSuggestions == 0 &&
+        nextQuestion == null) {
+      _scheduleGapAudit();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_chatScrollController.hasClients) {
@@ -353,11 +364,80 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     return _suggestionQueue.removeAt(0);
   }
 
-  void _markAppliedSuggestionMessages(Set<int> appliedIndices) {
+  bool get _hasUnansweredDisplayedQuestion {
+    for (final message in _messages) {
+      final questionId = message.question?['question_id'] as String?;
+      if (message.question != null &&
+          (questionId == null || !_answeredQuestionIds.contains(questionId))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _scheduleGapAudit() {
+    if (_gapAuditScheduled || _gapAuditStarted || _result == null) return;
+    _gapAuditScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _gapAuditScheduled = false;
+      if (_gapAuditStarted ||
+          _busy ||
+          _result == null ||
+          _suggestionQueue.isNotEmpty ||
+          _pendingQuestion != null ||
+          _questionQueue.isNotEmpty ||
+          _hasUnansweredDisplayedQuestion) {
+        return;
+      }
+      final previous = _result!;
+      setState(() {
+        _gapAuditStarted = true;
+        _messages.add(
+          const _ReviewChatMessage.assistant(
+            '기존 질문이 끝났습니다. 놓친 중요한 보완 항목이 있는지 한 번만 점검합니다.',
+          ),
+        );
+      });
+      _run(() async {
+        final request = <String, dynamic>{
+          ..._identity,
+          'request_id': _id(),
+          'review_mode': widget.generalReview ? 'general' : 'job',
+          'review_phase': 'gap_audit',
+          'previous_review_id': previous['review_id'],
+          'expected_input_hash': previous['input_hash'],
+          if (!widget.generalReview && _tailoredResumeId != null)
+            'tailored_resume_id': _tailoredResumeId,
+          if (!widget.generalReview) ...{
+            'selected_job_id': widget.jobId,
+            'expected_job_hash':
+                (previous['job_source'] as Map?)?['snapshot_hash'],
+          },
+        };
+        _result = await widget.client.review(request);
+        _gapAuditFinished = true;
+        _appendReview(_result!, isFirstReview: false, isGapAudit: true);
+      });
+    });
+  }
+
+  void _markAppliedSuggestionMessages(
+    Set<int> appliedIndices,
+    Map<String, dynamic> application,
+  ) {
+    for (final message in _messages) {
+      message.suggestion?['_undo_available'] = false;
+      message.identitySuggestion?['_undo_available'] = false;
+    }
     for (final message in _messages) {
       final suggestion = message.suggestion;
       if (suggestion != null && appliedIndices.contains(suggestion['_index'])) {
         suggestion['_applied'] = true;
+        suggestion['_undone'] = false;
+        suggestion['_operation_id'] = application['operation_id'];
+        suggestion['_application_input_hash'] = application['input_hash'];
+        suggestion['_undo_available'] = true;
       }
       final identitySuggestion = message.identitySuggestion;
       if (identitySuggestion != null) {
@@ -366,6 +446,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
             .toList();
         if (indices.isNotEmpty && indices.every(appliedIndices.contains)) {
           identitySuggestion['_applied'] = true;
+          identitySuggestion['_undone'] = false;
+          identitySuggestion['_operation_id'] = application['operation_id'];
+          identitySuggestion['_application_input_hash'] =
+              application['input_hash'];
+          identitySuggestion['_undo_available'] = true;
         }
       }
     }
@@ -415,7 +500,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _messages.add(_ReviewChatMessage.question(question));
       });
       _focusPreviewField(question['field_path'] as String?);
+      return;
     }
+    _scheduleGapAudit();
   }
 
   bool _isIdentityPlaceholderSuggestion(Map<String, dynamic> sentence) {
@@ -494,11 +581,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       // selected revision in the same chat flow.
       if (mounted) {
         setState(() {
-          _application = null;
           _appliedSuggestionIndices.clear();
           _applyRequest = null;
-          _undoRequest = null;
-          _undone = false;
         });
       }
       _appendReview(
@@ -535,14 +619,16 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       'selected_indices': _selected.toList()..sort(),
       if (_tailoredResumeId != null) 'tailored_resume_id': _tailoredResumeId,
     };
-    _application = await _mutate(() => widget.client.apply(_applyRequest!));
+    final application = await _mutate(
+      () => widget.client.apply(_applyRequest!),
+    );
     // The server has rebased this review to the persisted content.  Keep the
     // next answer on the current snapshot rather than the pre-apply hash.
-    _result!['input_hash'] = _application!['input_hash'];
+    _result!['input_hash'] = application['input_hash'];
     if (mounted) {
       setState(() {
         _appliedSuggestionIndices.addAll(_selected);
-        _markAppliedSuggestionMessages(_selected);
+        _markAppliedSuggestionMessages(_selected, application);
       });
     }
     await _reload();
@@ -563,41 +649,43 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _messages.add(_ReviewChatMessage.question(question));
       });
       _focusPreviewField(question['field_path'] as String?);
+      return;
     }
+    _scheduleGapAudit();
   });
 
-  Future<void> _undo() => _run(() async {
-    _mutationPending = true;
-    _changed = false;
-    _undoRequest ??= {
-      ..._identity,
-      'request_id': _id(),
-      'application_id': _application!['operation_id'],
-      'expected_input_hash': _application!['input_hash'],
-      if (_tailoredResumeId != null) 'tailored_resume_id': _tailoredResumeId,
-    };
-    await _mutate(() => widget.client.undo(_undoRequest!));
-    await _reload();
-    if (mounted) {
-      setState(() {
-        // The restored resume no longer matches the rebased review. Start a
-        // fresh review instead of sending an answer with the applied hash.
-        _result = null;
-        _reviewRequest = null;
-        _applyRequest = null;
-        _application = null;
-        _undone = true;
-        _pendingQuestion = null;
-        _questionQueue.clear();
-        _suggestionQueue.clear();
-        _messages.add(
-          const _ReviewChatMessage.assistant(
-            '수정안을 되돌렸습니다. 현재 이력서 기준으로 첨삭을 다시 시작할 수 있습니다.',
-          ),
-        );
-      });
-    }
-  });
+  Future<void> _undoSuggestion(Map<String, dynamic> item) async {
+    if (_busy || item['_undo_available'] != true) return;
+    await _run(() async {
+      final operationId = item['_operation_id'] as String?;
+      final applicationInputHash = item['_application_input_hash'] as String?;
+      if (operationId == null || applicationInputHash == null) return;
+      final indices = (item['_indices'] as List? ?? [item['_index']])
+          .whereType<int>()
+          .toSet();
+      _mutationPending = true;
+      _changed = false;
+      final undoRequest = {
+        ..._identity,
+        'request_id': _id(),
+        'application_id': operationId,
+        'expected_input_hash': applicationInputHash,
+        if (_tailoredResumeId != null) 'tailored_resume_id': _tailoredResumeId,
+      };
+      final undone = await _mutate(() => widget.client.undo(undoRequest));
+      _result!['input_hash'] = undone['input_hash'];
+      _applyRequest = null;
+      await _reload();
+      if (mounted) {
+        setState(() {
+          _appliedSuggestionIndices.removeAll(indices);
+          item['_applied'] = false;
+          item['_undone'] = true;
+          item['_undo_available'] = false;
+        });
+      }
+    });
+  }
 
   Future<Map<String, dynamic>> _mutate(
     Future<Map<String, dynamic>> Function() action,
@@ -623,13 +711,38 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         break;
       }
     }
+    String? activeSuggestionFieldPath;
+    for (final message in _messages.reversed) {
+      final suggestion = message.suggestion;
+      if (suggestion != null &&
+          suggestion['_applied'] != true &&
+          suggestion['_skipped'] != true) {
+        activeSuggestionFieldPath = suggestion['field_path'] as String?;
+        break;
+      }
+      final identitySuggestion = message.identitySuggestion;
+      if (identitySuggestion != null &&
+          identitySuggestion['_applied'] != true &&
+          identitySuggestion['_skipped'] != true) {
+        activeSuggestionFieldPath = identitySuggestion['field_path'] as String?;
+        break;
+      }
+    }
+    final highlightedFieldPath =
+        activeQuestion?['field_path'] as String? ?? activeSuggestionFieldPath;
+    final remainingQuestionCount =
+        _questionQueue.length +
+        (_pendingQuestion == null ? 0 : 1) +
+        (activeQuestion == null ? 0 : 1);
     final reviewCompleted =
         _result != null &&
         !_busy &&
         _error == null &&
         activeQuestion == null &&
         _pendingQuestion == null &&
-        _questionQueue.isEmpty;
+        _questionQueue.isEmpty &&
+        !_gapAuditScheduled &&
+        (!_gapAuditStarted || _gapAuditFinished);
     return PopScope(
       canPop: !_busy && !_mutationPending,
       child: Dialog(
@@ -649,9 +762,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                             'title': widget.jobTitle,
                           },
                 generalReview: widget.generalReview,
-                canUndo: _application != null && !_undone,
                 busy: _busy,
-                onUndo: _undo,
                 onClose: () => Navigator.pop(context),
               ),
               const Divider(height: 1),
@@ -662,8 +773,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                     final preview = _ResumeDraftPreview(
                       content: _preview,
                       changed: _changed,
-                      highlightedFieldPath:
-                          activeQuestion?['field_path'] as String?,
+                      highlightedFieldPath: highlightedFieldPath,
                       sectionKeys: _previewSectionKeys,
                     );
                     final chat = _ReviewChatPane(
@@ -672,6 +782,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       error: _error,
                       resultAvailable: _result != null,
                       reviewCompleted: reviewCompleted,
+                      remainingQuestionCount: remainingQuestionCount,
                       awaitingSuggestionApply: _pendingQuestion != null,
                       generalReview: widget.generalReview,
                       answerController: _answerController,
@@ -684,6 +795,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                           : () => _submitAnswer(activeQuestion!),
                       onApply: _applySuggestion,
                       onSkip: _skipSuggestion,
+                      onUndo: _undoSuggestion,
                       onClose: () => Navigator.pop(context),
                     );
                     if (!horizontal) {
@@ -717,17 +829,13 @@ class _ReviewDialogHeader extends StatelessWidget {
   const _ReviewDialogHeader({
     required this.job,
     required this.generalReview,
-    required this.canUndo,
     required this.busy,
-    required this.onUndo,
     required this.onClose,
   });
 
   final Map? job;
   final bool generalReview;
-  final bool canUndo;
   final bool busy;
-  final Future<void> Function() onUndo;
   final VoidCallback onClose;
 
   @override
@@ -765,12 +873,6 @@ class _ReviewDialogHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (canUndo)
-            TextButton.icon(
-              onPressed: busy ? null : () => onUndo(),
-              icon: const Icon(Icons.undo, size: 16),
-              label: const Text('되돌리기'),
-            ),
           IconButton(
             tooltip: '닫기',
             onPressed: busy ? null : onClose,
@@ -1036,6 +1138,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.error,
     required this.resultAvailable,
     required this.reviewCompleted,
+    required this.remainingQuestionCount,
     required this.awaitingSuggestionApply,
     required this.generalReview,
     required this.answerController,
@@ -1046,6 +1149,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.onAnswer,
     required this.onApply,
     required this.onSkip,
+    required this.onUndo,
     required this.onClose,
   });
 
@@ -1054,6 +1158,7 @@ class _ReviewChatPane extends StatelessWidget {
   final String? error;
   final bool resultAvailable;
   final bool reviewCompleted;
+  final int remainingQuestionCount;
   final bool awaitingSuggestionApply;
   final bool generalReview;
   final TextEditingController answerController;
@@ -1064,6 +1169,7 @@ class _ReviewChatPane extends StatelessWidget {
   final VoidCallback? onAnswer;
   final ValueChanged<List<int>> onApply;
   final ValueChanged<List<int>> onSkip;
+  final ValueChanged<Map<String, dynamic>> onUndo;
   final VoidCallback onClose;
 
   @override
@@ -1099,6 +1205,26 @@ class _ReviewChatPane extends StatelessWidget {
                   color: Color(0xFF6B7280),
                 ),
               ),
+              const Spacer(),
+              if (resultAvailable && remainingQuestionCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    '남은 질문 약 $remainingQuestionCount개',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2563EB),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1116,6 +1242,7 @@ class _ReviewChatPane extends StatelessWidget {
                     appliedSuggestionIndices: appliedSuggestionIndices,
                     onApply: onApply,
                     onSkip: onSkip,
+                    onUndo: onUndo,
                   ),
                 if (busy)
                   const Padding(
@@ -1304,12 +1431,14 @@ class _ReviewChatBubble extends StatelessWidget {
     required this.appliedSuggestionIndices,
     required this.onApply,
     required this.onSkip,
+    required this.onUndo,
   });
 
   final _ReviewChatMessage message;
   final Set<int> appliedSuggestionIndices;
   final ValueChanged<List<int>> onApply;
   final ValueChanged<List<int>> onSkip;
+  final ValueChanged<Map<String, dynamic>> onUndo;
 
   static const _revisionTextStyle = TextStyle(
     fontSize: 12,
@@ -1444,8 +1573,14 @@ class _ReviewChatBubble extends StatelessWidget {
           indices.isNotEmpty &&
           (item['_applied'] == true ||
               indices.every(appliedSuggestionIndices.contains));
+      if (item['_undone'] == true) {
+        return const _AppliedSuggestionNotice(text: '회사명·직무명 수정안 반영을 취소했습니다.');
+      }
       if (applied) {
-        return const _AppliedSuggestionNotice(text: '회사명·직무명 수정안을 반영했습니다.');
+        return _AppliedSuggestionNotice(
+          text: '회사명·직무명 수정안을 반영했습니다.',
+          onUndo: item['_undo_available'] == true ? () => onUndo(item) : null,
+        );
       }
       if (item['_skipped'] == true) {
         return const _AppliedSuggestionNotice(text: '회사명·직무명 수정안을 건너뛰었습니다.');
@@ -1500,8 +1635,14 @@ class _ReviewChatBubble extends StatelessWidget {
       final index = item['_index'] as int;
       final applied =
           item['_applied'] == true || appliedSuggestionIndices.contains(index);
+      if (item['_undone'] == true) {
+        return const _AppliedSuggestionNotice(text: '수정안 반영을 취소했습니다.');
+      }
       if (applied) {
-        return const _AppliedSuggestionNotice(text: '수정안을 이력서에 반영했습니다.');
+        return _AppliedSuggestionNotice(
+          text: '수정안을 이력서에 반영했습니다.',
+          onUndo: item['_undo_available'] == true ? () => onUndo(item) : null,
+        );
       }
       if (item['_skipped'] == true) {
         return const _AppliedSuggestionNotice(text: '수정안을 건너뛰었습니다.');
@@ -1616,9 +1757,10 @@ class _ReviewChatBubble extends StatelessWidget {
 }
 
 class _AppliedSuggestionNotice extends StatelessWidget {
-  const _AppliedSuggestionNotice({required this.text});
+  const _AppliedSuggestionNotice({required this.text, this.onUndo});
 
   final String text;
+  final VoidCallback? onUndo;
 
   @override
   Widget build(BuildContext context) => Align(
@@ -1630,13 +1772,33 @@ class _AppliedSuggestionNotice extends StatelessWidget {
         color: const Color(0xFFF0FDF4),
         borderRadius: BorderRadius.circular(9),
       ),
-      child: Text(
-        '✓ $text',
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF166534),
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              '✓ $text',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF166534),
+              ),
+            ),
+          ),
+          if (onUndo != null) ...[
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: onUndo,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                foregroundColor: const Color(0xFF166534),
+              ),
+              icon: const Icon(Icons.undo, size: 14),
+              label: const Text('되돌리기'),
+            ),
+          ],
+        ],
       ),
     ),
   );
