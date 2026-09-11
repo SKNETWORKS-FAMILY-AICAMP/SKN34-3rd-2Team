@@ -182,6 +182,15 @@ class ChatFilters(StrictModel):
     skills: list[str] = Field(default_factory=list, description="기술. Python, React")
     regions: list[str] = Field(default_factory=list, description="지역. 서울, 경기")
     career: Literal["신입", "경력", "무관"] = "무관"
+    # 몇 년차인지. **`career`만으로는 부족하다.**
+    #
+    # "3년차인데 갈 만한 데 있어?"에 경력 5년 이상 공고가 나갔다. 경력이냐 신입이냐만
+    # 보고 숫자를 버렸기 때문이다. 저장소에 최소 연차가 있는데 안 읽었다. 추천 쪽
+    # 하드 필터는 이미 본다(`hard_filter`) — 챗봇 검색에만 없었다.
+    career_years: int | None = Field(
+        default=None, ge=0, le=50,
+        description="말한 연차. '3년차', '5년 경력' → 3, 5. 안 밝혔으면 null",
+    )
     employment_types: list[str] = Field(default_factory=list, description="정규직, 인턴")
     deadline_within_days: int | None = Field(
         default=None, description="마감 임박만 볼 때의 날짜 수. 아니면 null"

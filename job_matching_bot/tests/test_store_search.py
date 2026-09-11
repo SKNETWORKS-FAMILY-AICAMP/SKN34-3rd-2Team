@@ -334,3 +334,69 @@ class ListingSkipCategoryTest(unittest.TestCase):
     def test_giving_no_skip_list_keeps_everything(self):
         kept = self.stored([self.rec("1", "2"), self.rec("2", "4")])
         self.assertEqual(["1", "2"], kept)
+
+
+class CareerYearsTest(unittest.TestCase):
+    """몇 년차인지 말했으면 모자란 공고를 뺀다.
+
+    "3년차인데 갈 만한 데 있어?"에 경력 5년 이상 공고가 나갔다. 경력이냐 신입이냐만
+    보고 숫자를 버렸기 때문이다. 사람이 채점하다 잡았다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "store.sqlite"
+        base = mock_jobs()[0]
+        made = [
+            ("any", "ANY", None),
+            ("y2", "EXPERIENCED", 2),
+            ("y5", "EXPERIENCED", 5),
+            ("blank", "EXPERIENCED", None),
+            ("entry", "ENTRY", None),
+        ]
+        jobs = [
+            replace(base, job_id=name, source_job_id=name, title="백엔드 개발자",
+                    description="서버를 만듭니다", tech_stack=[], keywords=["IT개발·데이터"],
+                    region="서울 강남구", career_type=kind, min_career_years=years,
+                    employment_type="정규직", deadline=None, status="OPEN")
+            for name, kind, years in made
+        ]
+        with SqliteJobStore(self.path) as store:
+            store.upsert(jobs, source="MOCK")
+
+    def found(self, **kwargs) -> set[str]:
+        result = search(self.path, JobFilters(roles=["백엔드"], **kwargs), limit=20, as_of=NOW)
+        return {hit.job_id for hit in result.jobs}
+
+    def test_a_posting_asking_more_years_is_dropped(self):
+        self.assertNotIn("y5", self.found(career_years=3))
+
+    def test_a_posting_within_reach_stays(self):
+        self.assertIn("y2", self.found(career_years=3))
+
+    def test_an_unstated_minimum_stays(self):
+        # 미기재인 것은 연차이지 "안 맞는다"는 사실이 아니다. 검색에서 빠지면
+        # 사용자가 아예 못 본다. 판단할 거리를 남긴다.
+        self.assertIn("blank", self.found(career_years=3))
+
+    def test_entry_only_postings_drop_for_the_experienced(self):
+        self.assertNotIn("entry", self.found(career_years=3))
+
+    def test_entry_only_postings_stay_for_a_first_year(self):
+        self.assertIn("entry", self.found(career_years=1))
+
+    def test_saying_nothing_about_years_changes_nothing(self):
+        self.assertEqual(self.found(), {"any", "y2", "y5", "blank", "entry"})
+
+
+class CareerYearsSummaryTest(unittest.TestCase):
+    def test_the_summary_says_the_year(self):
+        self.assertIn("3년차", JobFilters(career_years=3).summary())
+
+    def test_the_year_replaces_the_coarse_label(self):
+        # "경력 · 3년차"는 같은 말을 두 번 하는 것이다.
+        self.assertEqual(JobFilters(career="경력", career_years=3).summary(), "3년차")
+
+    def test_a_year_alone_is_not_an_empty_filter(self):
+        self.assertFalse(JobFilters(career_years=3).is_empty)

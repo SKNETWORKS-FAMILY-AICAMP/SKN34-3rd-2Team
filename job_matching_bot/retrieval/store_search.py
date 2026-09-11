@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 
+from job_matching_bot.matching.hard_filter import ENTRY_ONLY_MAX_YEARS
 from job_matching_bot.matching.skill_normalize import canonical_skill
 
 KST = timezone(timedelta(hours=9))
@@ -139,6 +140,7 @@ class JobFilters:
     skills: list[str] = field(default_factory=list)         # 기술 (Python, React)
     regions: list[str] = field(default_factory=list)        # 시·도 (서울, 경기)
     career: str = "무관"                                     # 신입 / 경력 / 무관
+    career_years: int | None = None                         # 몇 년차인지 말했으면
     employment_types: list[str] = field(default_factory=list)
     deadline_within_days: int | None = None                 # 마감 임박만 보기
     keywords: list[str] = field(default_factory=list)       # 그 밖의 말
@@ -147,7 +149,8 @@ class JobFilters:
     def is_empty(self) -> bool:
         return not any(
             [self.roles, self.skills, self.regions, self.employment_types,
-             self.keywords, self.deadline_within_days, self.career != "무관"]
+             self.keywords, self.deadline_within_days, self.career != "무관",
+             self.career_years is not None]
         )
 
     def summary(self) -> str:
@@ -157,7 +160,10 @@ class JobFilters:
             *(f"{region}" for region in self.regions),
             *self.employment_types,
         ]
-        if self.career != "무관":
+        if self.career_years is not None:
+            # 무엇으로 걸렀는지 그대로 보인다. 해석이 틀렸으면 사용자가 알아채야 한다.
+            parts.append(f"{self.career_years}년차")
+        elif self.career != "무관":
             parts.append(self.career)
         if self.deadline_within_days:
             parts.append(f"{self.deadline_within_days}일 내 마감")
@@ -256,6 +262,19 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
     if types:
         where.append("career_type IN (" + ", ".join("?" for _ in types) + ")")
         params.extend(types)
+
+    # 몇 년차인지 말했으면 **모자란 공고를 뺀다.** "3년차인데 갈 만한 데"에 경력 5년
+    # 이상 공고가 나갔었다. 추천 쪽 하드 필터와 같은 규칙으로 본다.
+    #
+    # 연차 미기재(`min_career_years IS NULL`)는 빼지 않는다. 미기재인 것은 연차이지
+    # "이 사람에게 안 맞는다"는 사실이 아니다. 여기는 검색이라 빠지면 사용자가 아예
+    # 못 본다 — 판단할 거리를 남기는 쪽이 낫다.
+    if filters.career_years is not None:
+        where.append("(min_career_years IS NULL OR min_career_years <= ?)")
+        params.append(filters.career_years)
+        # 신입만 뽑는다고 적은 공고는 경력자에게 맞지 않는다. 경계는 하드 필터와 같다.
+        if filters.career_years >= ENTRY_ONLY_MAX_YEARS:
+            where.append("career_type != 'ENTRY'")
 
     if filters.employment_types:
         where.append("(" + " OR ".join("employment_type LIKE ?" for _ in filters.employment_types) + ")")

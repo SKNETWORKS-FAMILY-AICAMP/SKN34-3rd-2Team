@@ -1243,6 +1243,7 @@ def _to_job_filters(filters: schemas.ChatFilters):
         skills=filters.skills,
         regions=filters.regions,
         career=filters.career,
+        career_years=filters.career_years,
         employment_types=filters.employment_types,
         deadline_within_days=filters.deadline_within_days,
         keywords=filters.keywords,
