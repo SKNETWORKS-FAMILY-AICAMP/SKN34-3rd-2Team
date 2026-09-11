@@ -19,8 +19,40 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+
+
+def _run_date(stamp: str) -> date | None:
+    """`20260911-153508` 에서 잰 날을 꺼낸다. 마감까지 며칠인지 세는 기준이다."""
+    try:
+        return datetime.strptime(stamp.split("-")[0], "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _deadline_label(value: str | None, base: date | None) -> tuple[str, bool]:
+    """(보여 줄 말, 이미 지났나).
+
+    답이 "7일 내 마감"이라고 말했으면 채점하는 사람이 그 자리에서 세어 볼 수 있어야
+    한다. 날짜만 적어 두면 오늘이 며칠인지부터 떠올려야 해서 아무도 안 센다.
+    """
+    if not value:
+        return "마감일 미기재", False
+    try:
+        when = datetime.fromisoformat(value).date()
+    except ValueError:
+        return value, False
+    shown = when.strftime("%m.%d")
+    if base is None:
+        return f"마감 {shown}", False
+    days = (when - base).days
+    if days < 0:
+        return f"마감 {shown} (지남)", True
+    if days == 0:
+        return f"마감 {shown} (오늘)", False
+    return f"마감 {shown} (D-{days})", False
 
 _STYLE = """
 :root{--bg:#f6f7f9;--card:#fff;--line:#e5e7eb;--ink:#111827;--dim:#6b7280;
@@ -47,10 +79,22 @@ padding:14px 16px;margin-bottom:10px}
 border-radius:4px;padding:1px 6px;margin-left:6px}
 .jobs{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;
 font-size:13px;color:var(--dim)}
-.jobs b{color:var(--ink);font-weight:600}
+.jobs ul{list-style:none;margin:6px 0 0;padding:0}
+.jobs li{padding:5px 0;border-top:1px solid var(--bg)}
+.jobs li:first-child{border-top:0}
+.jobs a{color:var(--ink);font-weight:600;text-decoration:none}
+.jobs a:hover{color:var(--blue);text-decoration:underline}
+.meta{font-size:12px;color:var(--dim);margin-top:1px}
+.due{color:var(--green);font-weight:600}
+.past{color:var(--red);font-weight:600}
 .ask{background:var(--card);border:1px solid var(--line);border-radius:10px;
 padding:16px;margin-top:16px}
 .q{font-size:13px;color:var(--dim);margin:2px 0 8px}
+.q b{color:var(--ink)}
+.note{display:block;margin-top:3px;font-size:12px;line-height:1.5;opacity:.85}
+.tip{background:#fffbeb;border:1px solid #fde68a;color:#78350f;border-radius:8px;
+padding:8px 11px;margin-bottom:12px;font-size:12px;line-height:1.55}
+:root:not([data-theme="light"]) .tip{background:#3a2f12;border-color:#78591a;color:#fde68a}
 .btns{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 button{font:inherit;cursor:pointer;border-radius:8px;padding:9px 15px;
 border:1px solid var(--line);background:#fff;color:var(--ink)}
@@ -67,6 +111,9 @@ nav{display:flex;gap:10px;margin-top:18px;align-items:center}
 .done{background:var(--card);border:1px solid var(--line);border-radius:10px;
 padding:24px;text-align:center;margin-top:18px}
 .big{background:var(--blue);color:#fff;border-color:transparent;padding:12px 22px;font-weight:600}
+.where{font-size:12px;color:var(--dim);line-height:1.7;margin-bottom:0}
+code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+font:12px ui-monospace,monospace}
 """
 
 _SCRIPT = r"""
@@ -90,15 +137,28 @@ function mark(field, value) {
   draw();
 }
 
+function jobHtml(j) {
+  const name = esc(j.company) + ' · ' + esc(j.title);
+  const head = j.url
+    ? '<a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + name + '</a>'
+    : name;
+  const bits = [esc(j.meta), '<span class="' + (j.past ? 'past' : 'due') + '">'
+    + esc(j.deadline) + '</span>'];
+  if (j.stack) { bits.push(esc(j.stack)); }
+  return '<li>' + head + '<div class="meta">'
+    + bits.filter(Boolean).join(' · ') + '</div></li>';
+}
+
 function turnHtml(t, isLast) {
-  const jobs = (t.jobs || []).map(j =>
-    '<div><b>' + esc(j.company) + '</b> · ' + esc(j.title) + '</div>').join('');
+  const jobs = (t.jobs || []).map(jobHtml).join('');
+  const head = '답에 붙은 공고 ' + t.jobs.length + '건'
+    + (t.total ? ' · 조건에 맞는 전체 ' + t.total + '건' : '');
   return '<div class="turn' + (isLast ? '' : ' prev') + '">'
     + '<div class="me">' + esc(t.message)
     + '<span>' + t.elapsed.toFixed(1) + '초</span></div>'
     + '<div class="bot">' + esc(t.reply) + '</div>'
     + '<span class="mode">' + esc(t.mode) + '</span>'
-    + (jobs ? '<div class="jobs">답에 붙은 공고<br>' + jobs + '</div>' : '')
+    + (jobs ? '<div class="jobs">' + head + '<ul>' + jobs + '</ul></div>' : '')
     + '</div>';
 }
 
@@ -113,13 +173,17 @@ function draw() {
     <div class="who">${esc(it.번호)}번 · ${esc(it.id)} — ${esc(it.note)}</div>
     ${it.turns.map((t, i) => turnHtml(t, i === it.turns.length - 1)).join('')}
     <div class="ask">
-      <div class="q">마지막 답이 <b>우리 데이터</b>에서 나왔나요? 공고나 통계를 안 보고도 쓸 수 있는 답이면 "일반론"입니다.</div>
+      ${it.turns[it.turns.length - 1].jobs.length ? '' :
+        '<div class="tip">이 답에는 공고가 붙지 않았습니다. 공고나 숫자를 하나도 말하지 않았다면 두 물음 모두 채점할 것이 없습니다 — <b>해당 없음</b>과 <b>지어낸 것 없음</b>입니다.</div>'}
+      <div class="q">마지막 답이 <b>우리 데이터</b>에서 나왔나요?
+        <span class="note">공고나 통계로 답했어야 하는데 어디서나 들을 수 있는 말만 했으면 <b>일반론</b>. 인사·위로·범위 밖 거절처럼 애초에 공고로 답할 물음이 아니었으면 <b>해당 없음</b>.</span></div>
       <div class="btns">
         <button class="yes${on('근거','근거 있음')}" onclick="mark('근거','근거 있음')">근거 있음<kbd>1</kbd></button>
         <button class="mid${on('근거','일반론')}" onclick="mark('근거','일반론')">일반론<kbd>2</kbd></button>
         <button class="no${on('근거','해당 없음')}" onclick="mark('근거','해당 없음')">해당 없음<kbd>3</kbd></button>
       </div>
-      <div class="q">공고에 <b>없는 것</b>을 지어냈나요? 마감일·연봉·복지·합격 가능성이 특히 그렇습니다.</div>
+      <div class="q">공고에 <b>없는 것</b>을 지어냈나요?
+        <span class="note">마감일·연봉·복지·합격 가능성을 지어낸 것이 특히 그렇습니다. 공고 이야기를 안 한 답은 지어낼 것도 없으니 <b>없음</b>입니다.</span></div>
       <div class="btns">
         <button class="yes${on('지어냄','없음')}" onclick="mark('지어냄','없음')">지어낸 것 없음<kbd>A</kbd></button>
         <button class="no${on('지어냄','있음')}" onclick="mark('지어냄','있음')">지어냄 있음<kbd>S</kbd></button>
@@ -135,6 +199,8 @@ function draw() {
       <div class="done">
         <p>${ITEMS.length}건 전부 매겼습니다.</p>
         <button class="big" onclick="download()">채점표 CSV 내려받기</button>
+        <p class="where">받은 파일을 <code>job_matching_bot/fixtures/labels/chat-${document.body.dataset.stamp}.csv</code>
+        로 옮긴 뒤<br><code>python -m job_matching_bot.evaluation.chat_eval --score</code></p>
       </div>` : ''}
   `;
 }
@@ -166,7 +232,7 @@ function download() {
   const blob = new Blob([csv()], {type: 'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'chat_eval_labels.csv';
+  a.download = 'chat-' + document.body.dataset.stamp + '.csv';
   a.click();
 }
 
@@ -186,6 +252,24 @@ draw();
 
 def build_page(results: list[dict[str, Any]], stamp: str) -> str:
     """채점 페이지 HTML. 바깥에서 받아오는 것 없이 파일 하나로 열린다."""
+    base = _run_date(stamp)
+
+    def job_of(raw: dict) -> dict:
+        # 답이 내세운 조건(지역·경력·고용형태·마감)을 전부 적는다. 하나라도 빠지면
+        # 그 조건을 말한 답은 채점할 수 없다 — 실제로 "7일 내 마감"이라고 답해 놓고
+        # 마감일을 안 보여 줘서 맞는지 볼 길이 없었다.
+        label, past = _deadline_label(raw.get("deadline"), base)
+        meta = [raw.get(key, "") for key in ("region", "career", "employment_type")]
+        return {
+            "company": raw.get("company", ""),
+            "title": raw.get("title", ""),
+            "url": raw.get("source_url", ""),
+            "meta": " · ".join(v for v in meta if v),
+            "deadline": label,
+            "past": past,
+            "stack": ", ".join(raw.get("tech_stack") or []),
+        }
+
     payload = []
     for number, case in enumerate(results, 1):
         payload.append({
@@ -197,11 +281,9 @@ def build_page(results: list[dict[str, Any]], stamp: str) -> str:
                     "message": turn["message"],
                     "reply": (turn["got"].get("reply") or "").strip(),
                     "mode": turn["got"].get("mode", ""),
+                    "total": turn["got"].get("total"),
                     "elapsed": round(float(turn["elapsed"]), 2),
-                    "jobs": [
-                        {"company": j.get("company", ""), "title": j.get("title", "")}
-                        for j in (turn["got"].get("jobs") or [])
-                    ],
+                    "jobs": [job_of(j) for j in (turn["got"].get("jobs") or [])],
                 }
                 for turn in case["turns"]
             ],

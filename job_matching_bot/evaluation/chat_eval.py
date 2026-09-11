@@ -17,7 +17,9 @@
 
 1. `--router` 말을 가른 결과를 대조한다. 서버가 필요 없다.
 2. `--run`   앱이 보는 응답을 대조한다. 서버를 띄워 놓고 부른다.
-3. `--sheet` 답 문장만 사람이 매길 페이지를 만든다.
+3. `--sheet` 답 문장만 사람이 매길 페이지를 만들고, `--score` 가 그 결과를 읽는다.
+   매긴 파일은 `fixtures/labels/chat-<실행시각>.csv` 로 둔다. 회차마다 한 파일이고
+   지우지 않는다 — 고치기 전 숫자가 남아 있어야 좋아졌다고 말할 수 있다.
 
 ## 왜 라우터를 따로 재는가
 
@@ -48,17 +50,20 @@
     python -m job_matching_bot.evaluation.chat_eval --router
     python -m job_matching_bot.evaluation.chat_eval --run
     python -m job_matching_bot.evaluation.chat_eval --sheet
+    python -m job_matching_bot.evaluation.chat_eval --score
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from collections import Counter
 from typing import Any
 
 from job_matching_bot.config import ARTIFACTS_DIR, FIXTURES_DIR
@@ -67,11 +72,97 @@ CASES = FIXTURES_DIR / "chat_cases.json"
 RUNS_DIR = ARTIFACTS_DIR / "chat_eval"
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 
-# 반말로 끝나는 말. 하나라도 있으면 존댓말 약속을 어긴 것으로 본다.
-_CASUAL_ENDINGS = (
-    "해봐", "그래", "알아", "해줄게", "있어.", "없어.", "야.", "지.", "거든.",
-    "하자", "해라", "인가", "같아.", "볼까", "돼.", "이야.", "이지.",
-)
+# ── 답 규율 ───────────────────────────────────────────────────
+#
+# 정답은 없지만 **사람 없이도 확실히 틀렸다고 말할 수 있는 것**들이다. 답이 좋은지는
+# 여기서 묻지 않는다 — 그건 취향이 섞이고, 취향을 결함으로 세면 숫자가 뜻을 잃는다.
+# 그건 채점 페이지에서 사람이 매긴다.
+
+OFF_TOPIC_MARK = "채용과 취업 준비에 대해서만"
+GUIDE_MARK = "공고를 찾으시려면"
+# 존댓말 종결. 하나도 없으면 반말로 답한 것으로 본다. 낱말 하나로 가르면 오판이 많다.
+_POLITE = re.compile(r"(요|다|까|죠)[.!?]|(요|다|까|죠)$", re.MULTILINE)
+_AB_LABEL = re.compile(r"(?<![A-Za-z])[AB](?=[는은이가의와과])")
+_MD_TABLE = re.compile(r"\|\s*-{2,}")
+_COUNT = re.compile(r"([\d,]+)\s*건")
+
+
+def rule_말투(got: dict) -> str | None:
+    """존댓말 종결이 하나도 없으면 반말로 답한 것이다.
+
+    사용자가 반말로 물으면 모델이 따라갔다. "알아. ... 줄여봐."로 답한 적이 있다.
+    처음 쓰는 도구가 먼저 말을 놓으면 친근한 게 아니라 무례하게 읽힌다.
+    """
+    reply = (got.get("reply") or "").strip()
+    if len(reply) < 10 or _POLITE.search(reply):
+        return None
+    return f"존댓말 종결이 없다: {reply[:40]}"
+
+
+def rule_건수(got: dict) -> str | None:
+    """답에 적은 건수가 실제 결과와 다르면 안 된다.
+
+    검색 답은 결과로 조립하지만 질문 답은 모델이 쓴다. 표에 없는 숫자가 섞이면
+    없는 공고를 있다고 말하는 셈이다.
+    """
+    total = got.get("total", 0)
+    if not total:
+        return None
+    numbers = {int(n.replace(",", "")) for n in _COUNT.findall(got.get("reply") or "")}
+    if numbers and total not in numbers:
+        return f"답의 건수 {sorted(numbers)}에 실제 {total}건이 없다"
+    return None
+
+
+def rule_표라는말(got: dict) -> str | None:
+    """사용자는 표를 본 적이 없다. "표에 없다"는 말은 무슨 표인지 모를 소리다."""
+    reply = got.get("reply") or ""
+    if "표에" in reply or "표를 보면" in reply:
+        return "답에 '표' 이야기가 나온다"
+    return None
+
+
+def rule_마크다운표(got: dict) -> str | None:
+    """대화창은 표를 그리지 않는다. 막대 기호만 줄줄이 나온다."""
+    return "마크다운 표를 그렸다" if _MD_TABLE.search(got.get("reply") or "") else None
+
+
+def rule_인사에안내금지(got: dict) -> str | None:
+    return "인사에 사용법 안내가 나갔다" if GUIDE_MARK in (got.get("reply") or "") else None
+
+
+def rule_범위밖고정문구(got: dict) -> str | None:
+    """정해진 말이 그대로 나가야 한다. 모델이 쓴 문장이 새면 안 된다."""
+    reply = got.get("reply") or ""
+    if OFF_TOPIC_MARK not in reply:
+        return f"정해진 거절 문구가 아니다: {reply[:40]}"
+    if got.get("jobs"):
+        return "범위 밖인데 공고가 붙어 나갔다"
+    return None
+
+
+def rule_면접후결정(got: dict) -> str | None:
+    """왜 못 하는지 밝혀야 한다. 그냥 0건이라고 하면 조건을 빼 보라는 말이 나간다."""
+    if "면접 후 결정" not in (got.get("reply") or ""):
+        return "급여로 줄 세울 수 없는 이유를 밝히지 않았다"
+    return None
+
+
+def rule_ab라벨(got: dict) -> str | None:
+    """"A"와 "B"는 프롬프트 안에서 붙인 이름이다. 사용자는 본 적이 없다."""
+    return "공고를 A/B로 불렀다" if _AB_LABEL.search(got.get("reply") or "") else None
+
+
+RULES = {
+    "말투": rule_말투,
+    "건수": rule_건수,
+    "표라는말": rule_표라는말,
+    "마크다운표": rule_마크다운표,
+    "인사에안내금지": rule_인사에안내금지,
+    "범위밖고정문구": rule_범위밖고정문구,
+    "면접후결정": rule_면접후결정,
+    "ab라벨": rule_ab라벨,
+}
 
 
 def ask(base_url: str, body: dict, timeout: int = 120) -> tuple[dict, float]:
@@ -149,10 +240,14 @@ def check(expect: dict, sent: dict, got: dict, elapsed: float) -> list[tuple[str
         add("이력서 범위", got.get("resume_scope") == expect["resume_scope"],
             f"{expect['resume_scope']} ↔ {got.get('resume_scope')}")
 
-    if "polite" in expect:
-        reply = got.get("reply") or ""
-        casual = [e for e in _CASUAL_ENDINGS if e in reply]
-        add("존댓말", not casual, f"반말 흔적 {casual}" if casual else "없음")
+    if expect.get("polite"):
+        # 존댓말은 규율 검사와 같은 것을 본다. 잣대가 둘이면 어느 쪽이 맞는지 모른다.
+        detail = rule_말투(got)
+        add("규율 말투", detail is None, detail or "존댓말")
+
+    for name in expect.get("rules") or []:
+        detail = RULES[name](got)
+        add(f"규율 {name}", detail is None, detail or "지킴")
 
     add("응답 시간", elapsed < 30.0, f"{elapsed:.1f}초")
     return out
@@ -163,12 +258,12 @@ def check(expect: dict, sent: dict, got: dict, elapsed: float) -> list[tuple[str
 # 응답으로 나오는 것. `check`가 본다.
 HTTP_KEYS = frozenset({
     "mode", "mode_not", "filters", "roles_not", "filters_empty",
-    "deadline_set", "picked_rank", "resume_scope", "polite",
+    "deadline_set", "picked_rank", "resume_scope", "polite", "rules",
 })
 # 응답에 안 나오는 것. `check_router`가 본다.
 ROUTER_KEYS = frozenset({
-    "intent", "topic_not", "counts_jobs", "job_refs", "unavailable",
-    "requirement_query_nonempty",
+    "intent", "topic", "topic_not", "counts_jobs", "job_refs",
+    "refers_to_last_answer", "unavailable", "requirement_query_nonempty",
 })
 
 
@@ -202,6 +297,12 @@ def check_router(expect: dict, turn: Any) -> list[tuple[str, bool, str]]:
     if "intent" in expect:
         add("갈래 intent", turn.intent == expect["intent"],
             f"{expect['intent']} ↔ {turn.intent}")
+    if "topic" in expect:
+        add("갈래 topic", turn.topic == expect["topic"],
+            f"{expect['topic']} ↔ {turn.topic}")
+    if "refers_to_last_answer" in expect:
+        add("방금 그거", turn.refers_to_last_answer is expect["refers_to_last_answer"],
+            f"{expect['refers_to_last_answer']} ↔ {turn.refers_to_last_answer}")
     if "topic_not" in expect:
         add("갈래 topic(아님)", turn.topic != expect["topic_not"],
             f"{expect['topic_not']} 이면 안 됨 ↔ {turn.topic}")
@@ -347,6 +448,58 @@ def _report(results: list[dict], elapsed: float) -> None:
                         print(f"      “{t['message'][:28]}”  {name}: {detail}")
 
 
+# ── 사람이 매긴 것을 읽는다 ──────────────────────────────────
+
+LABELS_DIR = FIXTURES_DIR / "labels"
+
+
+def latest_labels() -> Path | None:
+    """가장 최근 챗봇 채점표. 회차마다 한 파일이고 지우지 않는다."""
+    found = sorted(LABELS_DIR.glob("chat-*.csv"))
+    return found[-1] if found else None
+
+
+def read_labels(path: Path) -> list[dict[str, str]]:
+    # 브라우저가 엑셀용으로 BOM을 붙여 내려준다. utf-8-sig가 그걸 먹는다.
+    import csv
+
+    return list(csv.DictReader(path.read_text(encoding="utf-8-sig").splitlines()))
+
+
+def score(path: Path) -> int:
+    """근거와 지어냄을 센다. 숫자 둘이 전부다.
+
+    **지어냄이 있으면 그 건수가 답이다.** 근거율이 아무리 높아도 없는 마감일을
+    말하는 답이 섞여 있으면 나머지도 못 믿는다. 그래서 따로 세고 따로 보여 준다.
+    """
+    rows = read_labels(path)
+    if not rows:
+        print(f"{path} 가 비었습니다.")
+        return 1
+
+    ground = Counter(r.get("근거", "").strip() for r in rows)
+    made_up = [r for r in rows if r.get("지어냄", "").strip() == "있음"]
+    judged = ground["근거 있음"] + ground["일반론"]
+
+    print(f"\n{path.name} · {len(rows)}건")
+    print(f"\n{'근거':16}{'건수':>6}")
+    for name in ("근거 있음", "일반론", "해당 없음"):
+        print(f"  {name:14}{ground[name]:>6}")
+    if judged:
+        print(f"\n근거율 {ground['근거 있음'] / judged * 100:.0f}%"
+              f"  ({ground['근거 있음']}/{judged})"
+              f"  — 공고로 답했어야 하는 {judged}건 중")
+    else:
+        print("\n공고로 답할 물음이 한 건도 없었습니다.")
+
+    print(f"\n지어냄 {len(made_up)}건")
+    for row in made_up:
+        note = (row.get("메모") or "").strip()
+        print(f"  {row.get('id', '?')} — {row.get('물음', '')[:34]}"
+              + (f"\n      {note}" if note else ""))
+    return 0
+
+
 def latest_run() -> Path | None:
     """가장 최근 `--run` 결과. 라우터 결과에는 답 문장이 없으니 세지 않는다."""
     runs = sorted(p for p in RUNS_DIR.glob("*.json") if not p.stem.endswith("-router"))
@@ -361,10 +514,18 @@ def main() -> int:
                         help="말을 가른 결과만 대조한다. 서버가 필요 없다")
     parser.add_argument("--run", action="store_true", help="케이스를 돌려 정답과 대조한다")
     parser.add_argument("--sheet", action="store_true", help="답 문장을 사람이 매길 페이지를 만든다")
+    parser.add_argument("--score", action="store_true", help="사람이 매긴 채점표를 읽어 센다")
+    parser.add_argument("--labels", type=Path, default=None)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--run-file", type=Path, default=None)
     args = parser.parse_args()
 
+    if args.score:
+        path = args.labels or latest_labels()
+        if path is None:
+            print(f"채점표가 없습니다. --sheet 로 매긴 뒤 {LABELS_DIR} 에 두세요.")
+            return 1
+        return score(path)
     if args.router:
         run_router()
         return 0
