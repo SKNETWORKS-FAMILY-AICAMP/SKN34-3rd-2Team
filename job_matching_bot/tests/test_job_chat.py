@@ -571,10 +571,6 @@ class JobQuestionTest(ChatTestCase):
         self.assertEqual({}, self.asked, "없는 공고로 LLM을 부르지 않는다")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class JobReferenceTest(ChatTestCase):
     """"2번 자세히 봐줘" — 직전 목록에서 자리를 가리킨 말.
 
@@ -721,3 +717,7 @@ class JobCompareTest(ChatTestCase):
         )
         self.assertEqual("안내", result.mode)
         self.assertIn("비교할 공고를 찾지 못했어요", result.reply)
+
+
+if __name__ == "__main__":
+    unittest.main()
