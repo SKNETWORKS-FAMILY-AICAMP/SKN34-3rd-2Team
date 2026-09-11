@@ -159,6 +159,34 @@ class HeaderTableTest(unittest.TestCase):
         self.assertIn("ㆍWordpress 경험자", sections.preferred)
         self.assertNotIn("ㆍ개발에 대한 기본지식 보유자", sections.preferred)
 
+    def test_a_heading_row_in_thead_is_still_found(self):
+        """머리글이 `<thead>`, 내용이 `<tbody>`면 둘은 형제가 아니다.
+
+        `find_next_sibling`으로 찾다가 조용히 건너뛰고 있었다. 실제 공고
+        SARAMIN-54681126 이 그 모양이고, 자격요건이 빈 것으로 읽혀 `경력 : 해당 분야
+        5년 이상` 같은 진짜 요건이 통째로 사라졌다.
+        """
+        html = """
+        <html><body>
+          <div class="jv_cont"><h1>PM</h1><dl><dt>경력</dt><dd>경력</dd></dl></div>
+          <div class="jv_cont">
+            <h2>상세요강</h2>
+            <table>
+              <thead><tr><th>모집부문</th><th>담당업무</th><th>자격요건</th><th>근무지역</th></tr></thead>
+              <tbody><tr>
+                <th>데이터센터 구축</th>
+                <td>ㅇ 설계·구축 총괄</td>
+                <td>ㅇ 경력 : 해당 분야 5년 이상</td>
+                <td>본사</td>
+              </tr></tbody>
+            </table>
+          </div>
+        </body></html>
+        """
+        body = parse_detail(html, "1", URL)["description"]
+        self.assertIn("자격요건\nㅇ 경력 : 해당 분야 5년 이상", body)
+        self.assertIn("ㅇ 경력 : 해당 분야 5년 이상", split_sections(body).required)
+
     def test_a_mismatched_row_is_left_alone(self):
         """rowspan 등으로 칸 수가 안 맞으면 건드리지 않는다. 잘못 붙이느니 그대로 둔다."""
         html = TABLE_HTML.replace("<td>웹 프론트엔드</td>", "")

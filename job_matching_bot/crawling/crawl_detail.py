@@ -137,7 +137,10 @@ def _unfold_header_tables(soup: BeautifulSoup, node: Any) -> Any:
         labels = head.find_all(["th", "td"], recursive=False)
         if not labels or any(cell.name != "th" for cell in labels):
             continue
-        body = head.find_next_sibling("tr")
+        # 형제가 아니라 **문서 순서로 다음 행**을 찾는다. 머리글이 `<thead>`, 내용이
+        # `<tbody>`에 나뉘어 있으면 둘은 형제가 아니라서 `find_next_sibling`이 못 찾는다.
+        # 실제 공고 상당수가 그 모양이고, 그래서 표 펴기가 조용히 건너뛰고 있었다.
+        body = head.find_next("tr")
         if body is None:
             continue
         values = body.find_all(["th", "td"], recursive=False)
