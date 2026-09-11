@@ -119,7 +119,8 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
         ? '${_steps[index].$2} 완료'
         : '${_steps[index].$2} 진행 중';
 
-    return Center(
+    return Align(
+      alignment: Alignment.centerLeft,
       heightFactor: 1,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 342),
@@ -127,10 +128,16 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
           mainAxisSize: MainAxisSize.min,
           children: [
             ClipRect(
+              clipper: const _RobotMotionClipper(),
               child: Stack(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(48, 22, 5, 16),
+                    padding: const EdgeInsets.fromLTRB(
+                      48,
+                      22,
+                      5,
+                      16,
+                    ),
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
@@ -292,6 +299,19 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
       ),
     );
   }
+}
+
+// Allow horizontal motion without adding layout space that shifts the group.
+// Keep the lower edge clipped so the completed robot falls out of view.
+class _RobotMotionClipper extends CustomClipper<Rect> {
+  const _RobotMotionClipper();
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(-48, 0, size.width + 48, size.height);
+
+  @override
+  bool shouldReclip(_RobotMotionClipper oldClipper) => false;
 }
 
 class _ClipboardClip extends StatelessWidget {
