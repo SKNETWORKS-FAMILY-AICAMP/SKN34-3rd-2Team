@@ -990,14 +990,17 @@ class ChatService(_LivenessMixin):
             {
                 "job": _job_text(record.job),
                 "resume": resume or "(없음)",
-                "question": request.message,
+                "question": _without_ordinal(request.message),
             }
         )
         return schemas.JobChatResponse(
             mode="공고",
             reply=answer.answer,
             filters=previous,
-            total=0,
+            # 어느 공고를 두고 답했는지 함께 보낸다. 없으면 화면이 답만 띄우고
+            # 사용자는 그게 자기가 가리킨 공고인지 확인할 길이 없다.
+            jobs=[_job_to_chat_job(record.job)],
+            total=1,
             suggestions=answer.followups[:3],
         )
 
@@ -1159,6 +1162,29 @@ def _to_chat_job(hit) -> schemas.JobChatJob:
         deadline=hit.deadline,
         tech_stack=hit.tech_stack,
     )
+
+
+_ORDINAL_PHRASE = re.compile(
+    r"(?:\d+\s*번(?:째)?|첫\s*번째|두\s*번째|세\s*번째|네\s*번째|다섯\s*번째)"
+    r"\s*(?:거|것|공고|건)?\s*(?:이랑|하고|과|와|은|는|이|가|을|를|의)?"
+)
+
+
+def _without_ordinal(message: str) -> str:
+    """"2번 자세히 봐줘" 에서 자리를 가리키는 말을 뺀다.
+
+    번호는 **서버가 이미 풀었다.** 그 말을 그대로 LLM에 넘기면, 공고 원문 하나만
+    보고 있는 모델이 "2번"을 본문 속 항목 번호로 읽는다. 실제로 이렇게 답했다.
+
+        이 공고에는 번호가 매겨진 항목이 없어 '2번'이 무엇을 뜻하는지 확인하기
+        어렵습니다. 자세히 보고 싶은 항목을 말씀해 주세요.
+
+    빼고 나서 남는 것이 없으면(그냥 "2번") 무엇을 묻는지 모르므로 공고 전체를
+    설명해 달라고 바꾼다.
+    """
+    without = _ORDINAL_PHRASE.sub(" ", message)
+    without = re.sub(r"\s+", " ", without).strip(" ,.·")
+    return without or "이 공고가 어떤 일을 하는 자리인지 알려 주세요."
 
 
 def _job_to_chat_job(job) -> schemas.JobChatJob:

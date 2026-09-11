@@ -985,3 +985,65 @@ class AskJobLivenessTest(ChatTestCase):
             message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"]))
         self.assertEqual("안내", result.mode)
         self.assertIn("접수가 마감됐어요", result.reply)
+
+
+class OrdinalStrippedTest(unittest.TestCase):
+    """"2번"은 서버가 이미 풀었다. 그 말을 LLM에 그대로 넘기면 안 된다.
+
+    공고 원문 하나만 보고 있는 모델은 "2번"을 본문 속 항목 번호로 읽는다. 실제로
+    이렇게 답했다.
+
+        이 공고에는 번호가 매겨진 항목이 없어 '2번'이 무엇을 뜻하는지 확인하기
+        어렵습니다. 자세히 보고 싶은 항목을 말씀해 주세요.
+
+    사용자는 목록에서 2번을 가리킨 것이고 서버는 그 공고를 이미 찾아 놨다.
+    """
+
+    def strip(self, message):
+        from job_matching_bot.api.service import _without_ordinal
+        return _without_ordinal(message)
+
+    def test_the_number_goes_and_the_question_stays(self):
+        self.assertEqual("자세히 봐줘", self.strip("2번 자세히 봐줘"))
+        self.assertEqual("자격요건 알려줘", self.strip("첫 번째 거 자격요건 알려줘"))
+
+    def test_the_particle_goes_with_it(self):
+        """`3번 공고는` 에서 `는`만 남으면 물음이 깨진다."""
+        self.assertEqual("어디야?", self.strip("3번 공고는 어디야?"))
+        self.assertEqual("비슷한 거 더 있어?", self.strip("2번이랑 비슷한 거 더 있어?"))
+
+    def test_a_bare_number_becomes_a_real_question(self):
+        """그냥 "2번"이면 무엇을 묻는지 모른다. 빈 물음을 넘기지 않는다."""
+        asked = self.strip("2번")
+        self.assertNotEqual("", asked)
+        self.assertNotIn("2번", asked)
+
+    def test_a_question_without_an_ordinal_is_untouched(self):
+        for message in ("이 공고 자격요건 뭐야?", "나한테 맞아?", "연봉 나와 있어?"):
+            self.assertEqual(message, self.strip(message), message)
+
+
+class AskJobEchoesTheJobTest(ChatTestCase):
+    """어느 공고를 두고 답했는지 함께 보낸다.
+
+    없으면 화면이 답만 띄우고, 사용자는 그게 자기가 가리킨 공고인지 확인할 길이 없다.
+    """
+
+    def test_the_answered_job_comes_back(self):
+        result = self.ask(turn(intent="질문"), message="자격요건 알려줘", job_id="J3")
+        self.assertEqual("공고", result.mode)
+        self.assertEqual(["J3"], [j.job_id for j in result.jobs])
+        self.assertEqual(1, result.total)
+
+    def test_a_numbered_reference_echoes_the_right_one(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[2]),
+            message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertEqual(["J2"], [j.job_id for j in result.jobs])
+
+    def test_the_ordinal_is_not_sent_to_the_model(self):
+        self.ask(turn(intent="질문", job_refs=[2]),
+                 message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"])
+        self.assertNotIn("2번", self.asked["question"])
+        self.assertIn("자세히", self.asked["question"])
