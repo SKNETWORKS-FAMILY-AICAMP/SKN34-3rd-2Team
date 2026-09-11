@@ -1,4 +1,3 @@
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -139,16 +138,9 @@ class _StudyRoomNoteSourceScreenState
   }
 
   String _message(Object error) {
-    if (error is FirebaseFunctionsException) {
-      final raw = error.message?.trim() ?? '';
-      if (error.code == 'not-found' ||
-          raw.isEmpty ||
-          raw == 'internal' ||
-          raw == '[O]' ||
-          raw == 'internal [O]') {
-        return '수업 목록 기능을 아직 쓸 수 없습니다. 잠시 후 다시 시도해 주세요.';
-      }
-      return raw;
+    if (error is StudyNotesApiException) {
+      final raw = error.message.trim();
+      return raw.isEmpty ? '요청에 실패했습니다.' : raw;
     }
     return '요청에 실패했습니다.';
   }

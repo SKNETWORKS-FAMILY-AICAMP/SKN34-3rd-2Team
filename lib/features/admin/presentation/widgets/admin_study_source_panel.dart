@@ -33,7 +33,7 @@ class AdminStudySourcePanel extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         const Text(
-          '기수별 수업 저장소를 등록합니다. 학생은 활성 소스만 보고, 고른 범위만 정리합니다.',
+          '기수별 수업 저장소를 등록합니다. 공개 GitHub 저장소면 토큰 없이 됩니다. 학생은 활성 소스만 보고, 고른 범위만 정리합니다.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 12),

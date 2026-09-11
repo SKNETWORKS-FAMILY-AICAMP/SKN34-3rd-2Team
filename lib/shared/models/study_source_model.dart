@@ -99,7 +99,7 @@ class StudyNoteFileRef {
   }
 }
 
-/// Functions가 만든 공부방 노트
+/// 통합 서버(8000)가 git clone으로 만든 공부방 노트
 class StudyNoteModel {
   const StudyNoteModel({
     required this.id,
