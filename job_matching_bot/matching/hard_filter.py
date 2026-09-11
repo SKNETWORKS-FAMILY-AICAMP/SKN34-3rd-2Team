@@ -45,8 +45,20 @@ def normalize_term(text: str) -> str:
     return re.sub(r"[\s\-_/·.()\[\]]", "", text).lower()
 
 
-def _qualification_checks(job: Job, resume: ResumeProfile, passed: list[str], unknown: list[str]) -> None:
-    """전공·자격증·병역. 맞으면 통과, 확인할 수 없으면 확인 필요. 탈락시키지 않는다."""
+def _qualification_checks(
+    job: Job, resume: ResumeProfile,
+    passed: list[str], unknown: list[str], failed: list[str],
+) -> None:
+    """전공·자격증·병역.
+
+    **자격증만 탈락시킨다.** 자격요건에 적힌 필수 자격증이 없으면 지원해도 안 된다.
+    전공·병역은 확인 필요로 둔다 — 학과 이름이 제각각이고 병역은 이력서로 확인할
+    성격이 아니라, 잘라내면 억울한 탈락이 많다.
+
+    탈락으로 바꾸기 전에 추출을 먼저 손봤다. `홍보기사`·`운전기사`처럼 자격증이 아닌
+    말, `~ 등 IT 관련 자격증` 같은 예시 문장, 같은 자격증이 두 묶음에 든 경우를
+    걸러내 363건이 320건이 됐다. 그 상태가 아니면 자격 있는 사람이 탈락한다.
+    """
     if job.required_majors:
         resume_majors = [m.strip() for m in resume.majors if m.strip()]
         if not resume_majors:
@@ -79,7 +91,7 @@ def _qualification_checks(job: Job, resume: ResumeProfile, passed: list[str], un
         if any(_holds(cert) for cert in group):
             passed.append(f"자격증 요건 충족: {names}")
         else:
-            unknown.append(f"자격증 확인 필요: {names}")
+            failed.append(f"필수 자격증 {names}")
     if job.military_required:
         unknown.append("병역 조건 확인 필요 (병역필 또는 면제)")
 
@@ -137,7 +149,7 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
     else:
         unknown.append("학력 조건 미기재")
 
-    _qualification_checks(job, resume, passed, unknown)
+    _qualification_checks(job, resume, passed, unknown, failed)
 
     # 희망 지역을 안 골랐으면 지역은 따지지 않는다. 빈 목록을 그대로 아래로 흘리면
     # "어느 지역에도 안 맞는다"가 되어 거의 모든 공고가 탈락한다.

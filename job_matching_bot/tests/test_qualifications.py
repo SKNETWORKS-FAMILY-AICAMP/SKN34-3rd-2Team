@@ -97,19 +97,25 @@ class HardFilterQualificationTest(unittest.TestCase):
         self.assertIn("병역 조건 확인 필요 (병역필 또는 면제)", result["unknown"])
         self.assertEqual([], result["failed"])
 
-    def test_non_matching_resume_is_check_required_not_fail(self):
+    def test_a_wrong_major_is_check_required_but_a_missing_certificate_fails(self):
+        """전공과 자격증을 다르게 다룬다.
+
+        학과 이름은 제각각이라(첨단융합학부, 스마트팩토리과 …) 못 맞췄다고 잘라내면
+        억울한 탈락이 많다. 자격증은 이름이 정해져 있고, 자격요건에 적힌 것이 없으면
+        실제로 지원이 안 된다.
+        """
         resume = dataclasses.replace(
             mock_resumes()["backend_entry"], majors=["경영학과"], certifications=["SQLD"]
         )
         result = hard_filter(self._job(), resume)
-        self.assertEqual([], result["failed"])
-        self.assertTrue(any(text.startswith("전공 요건 미확인") for text in result["unknown"]))
-        self.assertIn("자격증 확인 필요: 정보처리기사", result["unknown"])
+        self.assertIn("필수 자격증 정보처리기사", result["failed"])
+        self.assertTrue(any("전공 요건 미확인" in u for u in result["unknown"]))
 
-    def test_missing_resume_info_is_check_required(self):
+    def test_a_resume_with_nothing_filled_in(self):
+        """전공도 자격증도 안 적은 이력서. 전공은 확인 필요, 자격증은 탈락이다."""
         result = hard_filter(self._job(), mock_resumes()["backend_entry"])
         self.assertIn("전공 확인 필요: 컴퓨터·소프트웨어", result["unknown"])
-        self.assertIn("자격증 확인 필요: 정보처리기사", result["unknown"])
+        self.assertIn("필수 자격증 정보처리기사", result["failed"])
 
 
 if __name__ == "__main__":

@@ -74,6 +74,19 @@ LANGUAGE_TESTS: frozenset[str] = frozenset(
 )
 _CERT_CONTEXT = re.compile(r"자격|기사|certified|opic|toeic|토익|토스|teps|jlpt|hsk|sqld|adsp", re.IGNORECASE)
 _GENERIC_GISA = re.compile(r"([가-힣A-Za-z]{2,12}(?:산업)?기사)")
+# `~기사`로 끝나지만 자격증이 아닌 말. 사람을 가리키거나(운전기사·배송기사) 글을
+# 가리킨다(홍보기사). 이걸 필수 자격증으로 잡으면 지원 가능한 사람이 탈락한다.
+_NOT_A_CERTIFICATE = frozenset({
+    "운전기사", "배송기사", "납품기사", "수행기사", "임원수행기사", "현장기사",
+    "홍보기사", "설치보조기사", "공사기사", "보조기사", "담당기사", "출장기사",
+    # 앞말이 잘려 나온 조각. 온전한 이름이 따로 잡히므로 버려도 잃는 것이 없다.
+    "처리기사", "측정기사", "진단기기사", "대기환기사", "안전산업기사", "보안기사",
+})
+# 예시로 든 문장. "정보처리기사 등 IT 관련 자격증 보유"는 그 자격증이 **필수**라는
+# 뜻이 아니다. 363건 중 21건(6%)이 이 모양이다. 탈락 조건으로 쓰면 안 된다.
+_EXAMPLE_LINE = re.compile(
+    r"등\s*(?:[가-힣A-Za-z]{1,6}\s*){0,3}자격|예\s*[:：]|중\s*택|이에\s*준하는"
+)
 # 한 줄에 여러 자격증이 나올 때 "이 중 하나"를 뜻하는 표시.
 _CERT_ALL = re.compile(r"및\s|모두\s*(?:보유|소지)|전부\s*(?:보유|소지)|둘\s*다")
 # 경력 연차. "경력 5년 이상", "3년 이상 10년 이하", "5~10년", "경력 : 3년".
@@ -166,7 +179,13 @@ def extract_qualifications(lines: list[str], *, preferred: bool = False) -> Qual
 
             # 어학 성적은 따로 담는다. 조건으로 걸 수 없는 것이라 섞으면 안 된다.
             langs = [c for c in found if c in LANGUAGE_TESTS]
-            certs = [c for c in found if c not in LANGUAGE_TESTS]
+            certs = [
+                c for c in found
+                if c not in LANGUAGE_TESTS and c not in _NOT_A_CERTIFICATE
+            ]
+            # "~ 등 관련 자격증"은 예시다. 필수로 걸면 지원 가능한 사람이 탈락한다.
+            if _EXAMPLE_LINE.search(line):
+                certs = []
 
             for name in langs:
                 if not any(normalize_term(name) == normalize_term(c) for c in result.language_tests):
@@ -191,10 +210,16 @@ def extract_qualifications(lines: list[str], *, preferred: bool = False) -> Qual
                 # **둘 다 가지라는 공고는 하나도 없었다.** 그래서 기본이 "이 중 하나"다.
                 # `및`·`모두`처럼 함께 요구하는 표시가 있을 때만 각각으로 나눈다.
                 if fresh:
-                    if len(fresh) > 1 and _CERT_ALL.search(line):
-                        result.certification_groups.extend([c] for c in fresh)
+                    # 이미 다른 묶음에 든 것은 빼고 새로 묶는다. 같은 자격증이 두 묶음에
+                    # 들어가면 하나만 가진 사람이 "나머지를 안 가졌다"고 걸린다.
+                    taken = {normalize_term(c) for g in result.certification_groups for c in g}
+                    group = [c for c in fresh if normalize_term(c) not in taken]
+                    if not group:
+                        pass
+                    elif len(group) > 1 and _CERT_ALL.search(line):
+                        result.certification_groups.extend([c] for c in group)
                     else:
-                        result.certification_groups.append(list(fresh))
+                        result.certification_groups.append(group)
 
         if preferred:
             continue
