@@ -54,6 +54,21 @@ def fit_order(fit: str | None) -> int:
 JOB_EXCERPT_CHARS = 1200
 # LLM 추론 강도. 대조 작업이라 낮춰도 근거 품질이 유지되고 응답이 크게 빨라진다.
 REASONING_EFFORT = "medium"
+# 챗봇이 말을 가르는 호출만 따로 낮춘다.
+#
+# 위 medium은 **추천 재정렬**을 재서 정한 값이다(`_build_generator` 설명의 표). 거기서는
+# low가 맞는 공고를 놓쳤다. 가르기는 그 값을 물려받았을 뿐 따로 재 본 적이 없었다.
+#
+# 재 봤다. 검색·질문·추천·잡담·범위밖·번호 가리키기·비교·급여까지 13가지를 넣고
+# 강도만 바꿨다.
+#
+#     low     13/13  평균 1.7초   (네 번 돌려 전부 13/13)
+#     medium  13/13  평균 3.0초
+#
+# 가르는 일은 깊이 생각할 것이 없다. 모든 말이 이 호출을 지나므로 여기서 줄면 전부
+# 줄어든다. 답을 쓰는 호출은 medium 그대로다 — 그건 글의 질이 걸린 일이다.
+# minimal은 이 모델이 받지 않는다.
+CHAT_EFFORT = "low"
 # 구조화 결과를 몇 벌까지 들고 있을지. 이력서 한 건이 몇 KB라 넉넉해도 가볍다.
 PROFILE_CACHE_SIZE = 64
 
@@ -638,8 +653,11 @@ class ChatService(_LivenessMixin):
 
     @property
     def generator(self):
+        """말을 가르고 조건을 뽑는 호출. 모든 말이 여기를 지난다(`CHAT_EFFORT` 참고)."""
         if self._generator is None:
-            self._generator = _build_generator(prompts.CHAT_PROMPT, schemas.ChatTurnOut)
+            self._generator = _build_generator(
+                prompts.CHAT_PROMPT, schemas.ChatTurnOut, effort=CHAT_EFFORT
+            )
         return self._generator
 
     @property
