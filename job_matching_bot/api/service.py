@@ -949,6 +949,19 @@ class ChatService(_LivenessMixin):
                 total=0,
             )
 
+        # 마감됐는지 확인한다. 마감일이 남아 있어도 회사가 채용을 마치면 먼저 닫는다.
+        # 검색·질문·비교는 이미 확인하는데 여기만 안 했다. 대화 안에서 방금 본 공고면
+        # 24시간 캐시가 있어 요청이 안 나가고, 어제 띄워 둔 화면을 오늘 다시 눌렀을 때만
+        # 실제로 열어 본다.
+        if not self.drop_dead([request.job_id]):
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="그 공고는 접수가 마감됐어요. 다른 공고를 찾아 드릴까요?",
+                filters=previous,
+                total=0,
+                suggestions=["비슷한 공고 더 보여줘"],
+            )
+
         # 이력서를 함께 받았으면 넘긴다. 이력서 화면에서 "나한테 맞아?"라고 물었는데
         # 공고만 읽고 "이력서를 볼 수 없어요"라고 답하던 것을 고친다.
         resume = (request.resume_text or "").strip()

@@ -856,3 +856,38 @@ class JobCompareTest(ChatTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AskJobLivenessTest(ChatTestCase):
+    """공고 하나를 놓고 물을 때도 마감을 확인한다.
+
+    마감일이 남아 있어도 회사가 채용을 마치면 먼저 닫는다. 검색·질문·비교는 이미
+    확인하는데 여기만 안 했다. 어제 띄워 둔 화면을 오늘 다시 눌러 "이 공고 자격요건
+    뭐야?"라고 물으면 마감된 공고를 열려 있는 것처럼 답했다.
+
+    같은 대화 안에서 방금 본 공고면 24시간 캐시가 있어 요청이 안 나간다.
+    """
+
+    def test_a_closed_job_is_not_answered(self):
+        service = self.service(turn(intent="질문"))
+        service.drop_dead = lambda ids: set()
+        result = service.chat(schemas.JobChatRequest(message="자격요건 알려줘", job_id="J1"))
+        self.assertEqual("안내", result.mode)
+        self.assertIn("접수가 마감됐어요", result.reply)
+        self.assertEqual({}, self.asked, "마감된 공고를 LLM에 넘기지 않는다")
+
+    def test_a_live_job_is_answered_as_before(self):
+        service = self.service(turn(intent="질문"))
+        service.drop_dead = lambda ids: set(ids)
+        result = service.chat(schemas.JobChatRequest(message="자격요건 알려줘", job_id="J1"))
+        self.assertEqual("공고", result.mode)
+        self.assertIn("1회사", self.asked["job"])
+
+    def test_the_check_runs_for_a_numbered_reference_too(self):
+        """"2번 자세히 봐줘"도 같은 길로 내려간다."""
+        service = self.service(turn(intent="질문", job_refs=[2]))
+        service.drop_dead = lambda ids: set()
+        result = service.chat(schemas.JobChatRequest(
+            message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"]))
+        self.assertEqual("안내", result.mode)
+        self.assertIn("접수가 마감됐어요", result.reply)
