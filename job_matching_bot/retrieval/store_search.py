@@ -127,6 +127,9 @@ class JobHit:
     deadline: str | None
     tech_stack: list[str]
     relevance: int = 0   # 3 제목 · 2 직무·기술 태그 · 1 본문에만
+    # 상세를 받아 본문까지 있는가. False면 목록에서만 본 공고다. 조건 검색에는
+    # 온전히 쓰이지만 "자격요건 알려줘"에는 답할 수 없어 원문 링크로 안내한다.
+    has_detail: bool = True
 
 
 @dataclass
@@ -144,7 +147,7 @@ _HIT_COLUMNS = (
 )
 
 
-def _to_hit(row, relevance: int) -> JobHit:
+def _to_hit(row, relevance: int, has_detail: bool = True) -> JobHit:
     return JobHit(
         job_id=row["job_id"],
         company=row["company"] or "",
@@ -156,6 +159,7 @@ def _to_hit(row, relevance: int) -> JobHit:
         deadline=(row["deadline"] or None),
         tech_stack=json.loads(row["tech_stack"] or "[]"),
         relevance=relevance,
+        has_detail=has_detail,
     )
 
 
@@ -258,22 +262,42 @@ def search(
             f"WHEN {' OR '.join(tag_parts)} THEN 2 ELSE 1 END"
         )
 
+    # 상세까지 있는 공고와, 목록에서만 본 공고를 함께 본다.
+    #
+    # 상세를 받아야 `jobs`에 들어가서 IT 밖 10개 대분류가 영영 0건이었다. "서울 영업직
+    # 있어?"에 없어서가 아니라 안 갖고 있어서 답을 못 했다. 목록에는 회사·제목·직무·
+    # 조건·링크가 다 있고, 조건 검색은 원래 그 값들로만 거른다.
+    #
+    # 조건 SQL은 두 표에 **그대로** 쓴다. `list_jobs_search` 뷰가 목록에 없는 칸을
+    # 상수로 채우고, 해석은 상세와 같은 파서를 쓴다. 그래서 섞여도 결과가 안 어긋난다.
+    #
+    # `has_detail`이 0인 것은 늘 뒤에 세운다. 본문이 있는 쪽이 먼저 보여야 한다.
+    body = (
+        f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance, 1 AS has_detail, "
+        "keywords, first_seen_at FROM jobs WHERE " + " AND ".join(where)
+        + " UNION ALL "
+        f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance, 0 AS has_detail, "
+        "keywords, first_seen_at FROM list_jobs_search WHERE " + " AND ".join(where)
+        # 상세를 받은 공고는 `jobs`에 있다. 같은 공고가 두 번 나오지 않게 뺀다.
+        + " AND source_job_id NOT IN (SELECT source_job_id FROM jobs)"
+    )
     sql = (
-        f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance FROM jobs WHERE "
-        + " AND ".join(where)
+        f"SELECT * FROM ({body}) "
         # 관련도가 같으면 태그를 적게 단 공고를 먼저. 직무 태그를 열 개씩 달아 둔
         # "전 직군 공개채용"은 무엇을 물어도 걸리므로, 그 일에 특화된 공고에 자리를 내준다.
-        + " ORDER BY relevance DESC, LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
+        " ORDER BY has_detail DESC, relevance DESC, LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
     )
 
-    # ORDER BY는 별칭을 쓰므로 값이 없다. 순서는 SELECT → WHERE → LIMIT.
+    # 값은 UNION 두 쪽에 똑같이 들어간다. 순서는 SELECT → WHERE 를 두 번, 그다음 LIMIT.
+    half = [*case_params, *params]
     connection = connect(store_path)
     try:
-        rows = connection.execute(sql, [*case_params, *params, SCAN_LIMIT]).fetchall()
+        rows = connection.execute(sql, [*half, *half, SCAN_LIMIT]).fetchall()
     finally:
         connection.close()
 
-    jobs = [_to_hit(row, int(row["relevance"] or 0)) for row in rows[:limit]]
+    jobs = [_to_hit(row, int(row["relevance"] or 0), bool(row["has_detail"]))
+            for row in rows[:limit]]
     return SearchResult(
         jobs=jobs,
         total=len(rows),

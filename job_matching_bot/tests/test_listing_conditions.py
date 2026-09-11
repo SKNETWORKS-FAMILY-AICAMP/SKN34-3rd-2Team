@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import unittest
 
+from datetime import date
+
 from job_matching_bot.ingestion.listing_conditions import (
     conditions_from_listing,
+    deadline_from_listing,
     split_condition_text,
 )
 
@@ -91,6 +94,54 @@ class InterpretTest(unittest.TestCase):
         self.assertEqual("미기재", got["region"])
         self.assertEqual("UNKNOWN", got["career_type"])
         self.assertEqual("미기재", got["education"])
+
+
+class DeadlineTest(unittest.TestCase):
+    """목록에도 마감일이 있다. 안 읽으면 마감된 공고가 검색에 계속 나온다.
+
+    표기가 `~09.30` 처럼 날짜이거나 `오늘마감`·`상시채용` 처럼 말이다. 목록 42,902건에서
+    `~09.30` 2,758건, `내일마감` 1,645건, `상시채용` 1,571건 순으로 많다.
+    """
+
+    TODAY = date(2026, 9, 11)
+
+    def test_a_date_becomes_a_deadline(self):
+        self.assertEqual("2026-09-30T23:59:59+09:00",
+                         deadline_from_listing("입사지원 ~09.30 21일 전 등록", self.TODAY))
+
+    def test_today_and_tomorrow(self):
+        self.assertEqual("2026-09-11T23:59:59+09:00",
+                         deadline_from_listing("입사지원 오늘마감", self.TODAY))
+        self.assertEqual("2026-09-12T23:59:59+09:00",
+                         deadline_from_listing("입사지원 내일마감 21일 전 등록", self.TODAY))
+
+    def test_a_date_just_past_is_this_year_not_next(self):
+        """처음에는 "과거면 내년"으로 두었다. 그러면 어제 마감한 공고가 내년으로 읽혀
+        영영 안 걸러진다. 목록에 남은 마감은 대개 막 지난 것이다."""
+        self.assertEqual("2026-09-05T23:59:59+09:00",
+                         deadline_from_listing("~09.05", self.TODAY))
+
+    def test_a_year_boundary_reads_forward(self):
+        """12월에 보는 `~01.15` 는 내년이 맞다."""
+        self.assertEqual("2027-01-15T23:59:59+09:00",
+                         deadline_from_listing("~01.15", date(2026, 12, 20)))
+
+    def test_a_year_boundary_reads_backward(self):
+        self.assertEqual("2025-12-28T23:59:59+09:00",
+                         deadline_from_listing("~12.28", date(2026, 1, 5)))
+
+    def test_open_ended_has_no_deadline(self):
+        """상시채용은 끝이 정해지지 않은 것이지 지난 것이 아니다."""
+        for text in ("입사지원 상시채용", "채용시 마감", "수시채용"):
+            self.assertIsNone(deadline_from_listing(text, self.TODAY), text)
+
+    def test_an_unreadable_text_gives_none_not_a_guess(self):
+        """None은 "마감일 없음"으로 읽혀 안 걸러진다. 못 읽을 때만 None이어야 한다."""
+        self.assertIsNone(deadline_from_listing("알 수 없음", self.TODAY))
+        self.assertIsNone(deadline_from_listing("", self.TODAY))
+
+    def test_an_impossible_date_is_not_invented(self):
+        self.assertIsNone(deadline_from_listing("~13.45", self.TODAY))
 
 
 if __name__ == "__main__":

@@ -109,6 +109,49 @@ CREATE TABLE IF NOT EXISTS link_checks (
     checked_at TEXT NOT NULL,
     alive INTEGER NOT NULL
 );
+-- 목록에서만 본 공고. **챗봇 검색만** 읽는다.
+--
+-- 상세를 받아야 `jobs`에 들어가므로 IT 밖 10개 대분류가 영영 0건이다. "서울 영업직
+-- 있어?"에 없어서가 아니라 안 갖고 있어서 답을 못 한다. 조건은 목록에 이미 있고
+-- `listing_conditions.py`가 가른다.
+--
+-- `jobs`와 따로 둔다. 같은 표에 두면 매주 일요일 목록 4만 건이 멀쩡한 상세 행을
+-- 덮으려 들고, `jobs`를 읽는 모든 곳(추천·하드 필터·시장 통계·팀원 공유)이
+-- "본문 없는 행"을 알아야 한다. 표를 나누면 그 위험이 아예 없다.
+--
+-- 열 이름을 `jobs`와 같게 둔다. 검색이 두 표를 같은 규칙으로 읽는다.
+CREATE TABLE IF NOT EXISTS list_jobs (
+    source_job_id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    source_url TEXT,
+    company TEXT,
+    title TEXT,
+    keywords TEXT,            -- 목록의 job_sectors. jobs.keywords와 같은 자리
+    region TEXT,
+    career_type TEXT,
+    min_career_years INTEGER,
+    education TEXT,
+    employment_type TEXT,
+    condition_text TEXT,      -- 가르기 전 원문. 규칙을 고칠 때 다시 볼 근거
+    deadline TEXT,            -- 목록의 `~09.30` `오늘마감` 을 읽은 값. 모르면 NULL
+    support_text TEXT,        -- 마감 표기 원문
+    seen_at TEXT NOT NULL,
+    first_seen_at TEXT
+);
+CREATE INDEX IF NOT EXISTS list_jobs_seen ON list_jobs(seen_at);
+-- 조건 검색이 `jobs`에 쓰는 SQL을 그대로 쓰기 위한 뷰. 목록에는 없는 칸을 상수로
+-- 채운다. 실제 값을 저장해 두면 늘 같은 값이 4만 줄 쌓이고, 나중에 "이게 진짜 값인가"
+-- 헷갈린다. 뷰로 두면 없다는 것이 드러난다.
+CREATE VIEW IF NOT EXISTS list_jobs_search AS
+SELECT
+    source_job_id, job_id, source_url, company, title, keywords,
+    region, career_type, min_career_years, education, employment_type,
+    'OPEN'  AS status,        -- 목록에 보이면 열려 있는 것으로 본다
+    deadline,                 -- `~09.30` `오늘마감` 을 읽은 값. 못 읽으면 NULL
+    '[]'    AS tech_stack,    -- 기술 태그는 상세에서만 나온다
+    ''      AS description,   -- 본문 없음. 이것이 상세 미수집의 표시다
+    seen_at, first_seen_at
+FROM list_jobs;
 CREATE TABLE IF NOT EXISTS list_sweeps (
     cat_mcls TEXT PRIMARY KEY,
     swept_at TEXT NOT NULL,
@@ -546,6 +589,86 @@ class SqliteJobStore:
             self.conn.execute(
                 "DELETE FROM list_seen WHERE seen_at < ?", ((at - timedelta(days=keep_days)).isoformat(),)
             )
+
+    def record_list_jobs(
+        self, records: Iterable[dict[str, Any]], at: datetime, *, keep_days: int = 60
+    ) -> int:
+        """목록 레코드를 `list_jobs`에 담는다. 챗봇 검색만 읽는 표다.
+
+        같은 공고가 여러 대분류에 나오므로 `source_job_id` 하나로 모은다. 조건은
+        `listing_conditions`가 가른다 — 상세와 **같은 파서**를 쓰므로 두 표가 섞여도
+        검색 결과가 어긋나지 않는다.
+
+        `first_seen_at`은 처음 값을 지킨다. 목록에서 오래 기다린 공고를 재는 근거다.
+        """
+        from job_matching_bot.ingestion.listing_conditions import (
+            conditions_from_listing,
+            deadline_from_listing,
+        )
+
+        stamp = at.isoformat()
+        rows = []
+        seen: set[str] = set()
+        for record in records:
+            job_id = str(record.get("source_job_id") or "")
+            if not job_id or job_id in seen:
+                continue
+            seen.add(job_id)
+            text = str(record.get("condition_text") or "")
+            cond = conditions_from_listing(text)
+            rows.append((
+                job_id,
+                f"SARAMIN-{job_id}",
+                str(record.get("source_url") or ""),
+                str(record.get("company") or ""),
+                str(record.get("title") or ""),
+                json.dumps(list(record.get("job_sectors") or []), ensure_ascii=False),
+                cond["region"],
+                cond["career_type"],
+                cond["min_career_years"],
+                cond["education"],
+                cond["employment_type"],
+                text,
+                deadline_from_listing(str(record.get("support_text") or ""), at.date()),
+                str(record.get("support_text") or ""),
+                stamp,
+                stamp,
+            ))
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO list_jobs (source_job_id, job_id, source_url, company, title, "
+                "keywords, region, career_type, min_career_years, education, employment_type, "
+                "condition_text, deadline, support_text, seen_at, first_seen_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(source_job_id) DO UPDATE SET "
+                "source_url = excluded.source_url, company = excluded.company, "
+                "title = excluded.title, keywords = excluded.keywords, "
+                "region = excluded.region, career_type = excluded.career_type, "
+                "min_career_years = excluded.min_career_years, education = excluded.education, "
+                "employment_type = excluded.employment_type, "
+                "condition_text = excluded.condition_text, deadline = excluded.deadline, "
+                "support_text = excluded.support_text, seen_at = excluded.seen_at",
+                rows,
+            )
+            # 목록에서 사라진 지 오래된 것은 지운다. 상세를 받은 공고는 `jobs`에 있으니
+            # 여기서 지워도 잃는 것이 없다.
+            self.conn.execute(
+                "DELETE FROM list_jobs WHERE seen_at < ?",
+                ((at - timedelta(days=keep_days)).isoformat(),),
+            )
+        return len(rows)
+
+    def get_listing(self, job_id: str) -> dict[str, Any] | None:
+        """목록에서만 본 공고 한 건. 상세를 받았으면 `jobs`에 있으므로 None을 돌려준다.
+
+        챗봇이 "2번 자격요건 알려줘"에 답하려다 `jobs`에서 못 찾았을 때 여기를 본다.
+        찾으면 마감된 것이 아니라 **아직 상세를 안 받은 것**이므로, 그렇게 말하고
+        원문 링크로 안내한다.
+        """
+        row = self.conn.execute(
+            "SELECT * FROM list_jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        return dict(row) if row is not None else None
 
     def source_job_ids(self, source: str, statuses: Iterable[str] | None = None) -> set[str]:
         sql, params = "SELECT source_job_id FROM jobs WHERE source = ?", [source]

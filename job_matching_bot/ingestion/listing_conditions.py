@@ -34,6 +34,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from datetime import date, datetime, timedelta, timezone
+
 from job_matching_bot.ingestion.saramin import (
     parse_career,
     parse_education,
@@ -118,3 +120,52 @@ def conditions_from_listing(text: str) -> dict[str, object]:
         "education": education,
         "employment_type": employment,
     }
+
+
+KST = timezone(timedelta(hours=9))
+
+# 목록의 마감 표기. `~09.30` 처럼 날짜로, 또는 말로 적힌다.
+_DEADLINE_DATE = re.compile(r"~\s*(\d{1,2})[./](\d{1,2})")
+_TODAY = re.compile(r"오늘\s*마감")
+_TOMORROW = re.compile(r"내일\s*마감")
+# 끝이 정해지지 않은 것. 마감일로 거르면 안 된다.
+_OPEN_ENDED = re.compile(r"상시\s*채용|채용\s*시\s*마감|수시\s*채용")
+
+
+def deadline_from_listing(support_text: str, today: date | None = None) -> str | None:
+    """목록의 마감 표기를 날짜로. 모르면 None.
+
+    None은 "마감일 없음"으로 읽혀 검색에서 안 걸러진다. 그래서 **읽을 수 없을 때만**
+    None을 준다. 상시채용도 None이다 — 끝이 정해지지 않은 것이지 지난 것이 아니다.
+
+    `~09.30` 에는 연도가 없다. 연도를 고를 때 **오늘에서 가장 가까운 쪽**을 쓴다.
+
+    처음에는 "과거면 내년"으로 두었는데, 그러면 어제 마감한 `~09.05` 가 내년 9월로
+    읽혀 영영 안 걸러진다. 목록에 남아 있는 마감은 대개 **막 지난 것**이지 1년 뒤가
+    아니다. 반대로 12월에 보는 `~01.15` 는 내년이 맞다. 두 경우를 다 맞추려면
+    올해·작년·내년 중 오늘과 가장 가까운 날을 고르면 된다.
+    """
+    text = (support_text or "").strip()
+    if not text or _OPEN_ENDED.search(text):
+        return None
+    now = today or datetime.now(KST).date()
+    if _TODAY.search(text):
+        return f"{now.isoformat()}T23:59:59+09:00"
+    if _TOMORROW.search(text):
+        return f"{(now + timedelta(days=1)).isoformat()}T23:59:59+09:00"
+    hit = _DEADLINE_DATE.search(text)
+    if not hit:
+        return None
+    month, day = int(hit.group(1)), int(hit.group(2))
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return None
+    candidates = []
+    for year in (now.year - 1, now.year, now.year + 1):
+        try:
+            candidates.append(date(year, month, day))
+        except ValueError:
+            continue
+    if not candidates:
+        return None
+    found = min(candidates, key=lambda d: abs((d - now).days))
+    return f"{found.isoformat()}T23:59:59+09:00"

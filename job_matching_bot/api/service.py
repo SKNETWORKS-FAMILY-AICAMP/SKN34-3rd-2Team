@@ -936,7 +936,12 @@ class ChatService(_LivenessMixin):
 
         with SqliteJobStore(self.store_path) as store:
             record = store.get(request.job_id)
+            listing = None if record is not None else store.get_listing(request.job_id)
         if record is None:
+            # 목록에서만 본 공고다. 마감된 것이 아니라 아직 상세를 안 받은 것이므로
+            # 그렇게 말하고 원문으로 보낸다. 없는 내용을 지어내지 않는다.
+            if listing is not None:
+                return self._listing_only(listing, previous)
             return schemas.JobChatResponse(
                 mode="안내",
                 reply="그 공고를 저장소에서 찾지 못했어요. 마감되어 내려갔을 수 있어요.",
@@ -1004,6 +1009,38 @@ class ChatService(_LivenessMixin):
             jobs=[_job_to_chat_job(r.job) for r in live],
             total=len(live),
             suggestions=answer.followups[:3],
+        )
+
+    @staticmethod
+    def _listing_only(listing: dict, previous) -> schemas.JobChatResponse:
+        """상세를 아직 안 받은 공고. 아는 것만 말하고 원문으로 보낸다."""
+        company = listing.get("company") or "이 공고"
+        conditions = (listing.get("condition_text") or "").strip()
+        return schemas.JobChatResponse(
+            mode="공고",
+            reply=(
+                f"{company}의 “{listing.get('title') or ''}” 공고는 "
+                "아직 상세 내용을 받아 오지 못했어요.\n"
+                + (f"목록에 적힌 조건은 {conditions} 입니다.\n" if conditions else "")
+                + "자격요건과 주요업무는 공고 원문에서 확인해 주세요."
+            ),
+            filters=previous,
+            jobs=[
+                schemas.JobChatJob(
+                    job_id=listing.get("job_id") or "",
+                    company=listing.get("company") or "",
+                    title=listing.get("title") or "",
+                    source_url=listing.get("source_url") or "",
+                    region=listing.get("region") or "미기재",
+                    career=store_search._career_label(
+                        listing.get("career_type") or "", listing.get("min_career_years")
+                    ),
+                    employment_type=listing.get("employment_type") or "미기재",
+                    deadline=None,
+                    tech_stack=[],
+                )
+            ],
+            total=1,
         )
 
     def _peek(self, filters, top_k: int) -> list[schemas.JobChatJob]:

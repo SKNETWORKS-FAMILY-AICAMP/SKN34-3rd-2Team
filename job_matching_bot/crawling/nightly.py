@@ -403,6 +403,11 @@ def main() -> int:
     store.record_list_seen(
         result.seen, {c: result.totals[c] for c in result.complete}, now
     )
+    # 목록에서 본 공고를 챗봇 검색용 표에 담는다. 상세를 안 받는 대분류도 여기 들어가
+    # "서울 영업직 있어?"에 답할 수 있다. `jobs`는 건드리지 않는다.
+    listed = store.record_list_jobs(result.records, now)
+    summary["list_jobs"] = listed
+    print(f"[목록 적재] 챗봇 검색용 {listed:,}건")
     observed = store.list_observed(
         SOURCE, seen_today=result.seen_today, as_of=now, within_days=OBSERVED_WINDOW_DAYS, authoritative=authoritative
     )

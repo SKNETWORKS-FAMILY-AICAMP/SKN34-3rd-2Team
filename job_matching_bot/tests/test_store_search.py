@@ -218,3 +218,76 @@ class StoreSearchTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ListingOnlySearchTest(unittest.TestCase):
+    """목록에서만 본 공고도 조건 검색에 잡힌다.
+
+    상세를 받아야 `jobs`에 들어가서 IT 밖 10개 대분류가 영영 0건이었다. "서울 영업직
+    있어?"에 없어서가 아니라 안 갖고 있어서 답을 못 했다. 목록에는 회사·제목·직무·
+    조건·링크가 다 있고, 조건 검색은 원래 그 값들로만 거른다.
+
+    `jobs` 표는 건드리지 않는다. 추천·하드 필터·시장 통계는 그대로다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "store.sqlite"
+        base = mock_jobs()[0]
+        detailed = replace(
+            base, job_id="SARAMIN-1", source_job_id="1", company="상세회사",
+            title="백엔드 개발자", region="서울 강남구", career_type="ENTRY",
+            employment_type="정규직", status="OPEN", deadline=None,
+            description="Python으로 서버를 만듭니다", keywords=["백엔드/서버개발"],
+        )
+        with SqliteJobStore(self.path) as store:
+            store.upsert([detailed], source="SARAMIN_POC", as_of=NOW)
+            store.record_list_jobs([
+                {"source_job_id": "1", "company": "상세회사", "title": "백엔드 개발자",
+                 "job_sectors": ["백엔드/서버개발"], "source_url": "https://x/1",
+                 "condition_text": "서울 강남구 신입 · 정규직 대학교(4년)↑"},
+                {"source_job_id": "2", "company": "목록회사", "title": "영업관리 신입 채용",
+                 "job_sectors": ["영업관리", "영업지원"], "source_url": "https://x/2",
+                 "condition_text": "서울 마포구 신입 · 정규직 고졸↑"},
+                {"source_job_id": "3", "company": "부산회사", "title": "영업관리",
+                 "job_sectors": ["영업관리"], "source_url": "https://x/3",
+                 "condition_text": "부산 해운대구 경력 3년↑ · 계약직 학력무관"},
+            ], NOW)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def find(self, **kwargs):
+        return search(self.path, JobFilters(**kwargs), limit=10, as_of=NOW)
+
+    def test_a_job_type_the_store_never_crawled_is_found(self):
+        titles = [h.title for h in self.find(roles=["영업"]).jobs]
+        self.assertEqual(2, len(titles))
+        self.assertIn("영업관리 신입 채용", titles)
+
+    def test_the_conditions_from_the_listing_actually_filter(self):
+        seoul = self.find(roles=["영업"], regions=["서울"]).jobs
+        self.assertEqual(["영업관리 신입 채용"], [h.title for h in seoul])
+
+    def test_the_career_condition_filters_too(self):
+        entry = self.find(roles=["영업"], career="신입").jobs
+        self.assertEqual(["영업관리 신입 채용"], [h.title for h in entry])
+
+    def test_a_posting_with_a_detail_is_not_shown_twice(self):
+        """같은 공고가 두 표에 다 있다. 상세 쪽만 한 번 나와야 한다."""
+        hits = self.find(roles=["백엔드"]).jobs
+        self.assertEqual(1, len(hits))
+        self.assertTrue(hits[0].has_detail)
+
+    def test_detailed_postings_come_first(self):
+        """본문이 있는 쪽이 먼저 보여야 한다."""
+        hits = self.find(roles=["백엔드", "영업"]).jobs
+        self.assertTrue(hits[0].has_detail)
+        self.assertFalse(hits[-1].has_detail)
+
+    def test_a_listing_only_hit_is_marked(self):
+        """챗봇이 이걸 보고 '상세 내용이 없어요, 링크를 확인해 주세요'로 답한다."""
+        hit = next(h for h in self.find(roles=["영업"]).jobs if h.title == "영업관리")
+        self.assertFalse(hit.has_detail)
+        self.assertEqual("https://x/3", hit.source_url)
+        self.assertEqual("경력 3년 이상", hit.career_label)
