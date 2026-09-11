@@ -30,9 +30,11 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
     unavailable = kwargs.pop("unavailable", "")
     job_refs = kwargs.pop("job_refs", [])
     topic = kwargs.pop("topic", "채용")
+    refers_to_last_answer = kwargs.pop("refers_to_last_answer", False)
     return schemas.ChatTurnOut(
         intent=intent,
         topic=topic,
+        refers_to_last_answer=refers_to_last_answer,
         counts_jobs=counts_jobs,
         requirement_query=requirement_query,
         unavailable=unavailable,
@@ -122,10 +124,12 @@ class ChatTestCase(unittest.TestCase):
         )
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
-            job_id=None, answered=None, resume_text=None, last_job_ids=None):
+            job_id=None, answered=None, resume_text=None, last_job_ids=None,
+            last_answer_job_ids=None):
         request = schemas.JobChatRequest(
             message=message, filters=filters, top_k=top_k, job_id=job_id,
             resume_text=resume_text, last_job_ids=last_job_ids or [],
+            last_answer_job_ids=last_answer_job_ids or [],
         )
         return self.service(out, answered=answered).chat(request)
 
@@ -764,6 +768,96 @@ class JobReferenceTest(ChatTestCase):
             last_job_ids=["J1", "J2", "J3"],
         )
         self.assertIn("7회사", self.asked["job"])
+
+
+class LastAnswerTest(ChatTestCase):
+    """"두 공고의 자격요건만 간단히 비교해줘" — 번호 없이 방금 그거를 가리킨 말.
+
+    비교 답을 받은 직후 챗봇이 스스로 내놓은 제안이 이 꼴이다. 그런데 번호가 없어
+    가리킨 자리가 없고, 서버는 대화를 저장하지 않아 방금 무엇을 견줬는지 모른다.
+    그래서 자기가 권한 말을 눌렀는데 **"두 공고의 자격요건 내용이 보이지 않아 비교할
+    수 없습니다"**라고 답했다.
+
+    `last_job_ids`로는 안 된다. 그건 번호가 가리킬 *목록*이고, 여기서 필요한 것은
+    직전 답이 다룬 *대상*이다. 둘은 다르다 — 비교하고 나서도 목록은 찾아 준 다섯 건
+    그대로여야 "아까 1번 3번"이 걸린다.
+    """
+
+    def test_two_discussed_jobs_are_compared_again(self):
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="두 공고의 자격요건만 간단히 비교해줘",
+            last_job_ids=["J1", "J2", "J3", "J4", "J5"],
+            last_answer_job_ids=["J2", "J5"],
+        )
+        self.assertEqual("비교", result.mode)
+        self.assertIn("2회사", self.compared["job_a"])
+        self.assertIn("5회사", self.compared["job_b"])
+
+    def test_one_discussed_job_is_asked_about(self):
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="이 공고 마감일이 언제야?",
+            last_job_ids=["J1", "J2", "J3"],
+            last_answer_job_ids=["J3"],
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("3회사", self.asked["job"])
+
+    def test_the_numbering_list_is_not_used_for_this(self):
+        """목록의 앞 두 건을 집으면 안 된다. 사용자가 말한 것은 방금 견준 두 건이다."""
+        self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="둘 다 신입 지원 가능해?",
+            last_job_ids=["J1", "J2", "J3", "J4", "J5"],
+            last_answer_job_ids=["J4", "J5"],
+        )
+        self.assertIn("4회사", self.compared["job_a"])
+        self.assertIn("5회사", self.compared["job_b"])
+
+    def test_too_many_to_pick_asks_back(self):
+        """직전 답이 다섯 건을 보여 줬는데 "두 공고"라고 하면 어느 둘인지 모른다.
+
+        앞의 둘을 집으면 사용자가 생각한 공고가 아닐 수 있고, 답은 그럴듯해서 틀린
+        줄도 모른다. 되묻는 편이 낫다.
+        """
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="두 공고 비교해줘",
+            last_job_ids=["J1", "J2", "J3", "J4", "J5"],
+            last_answer_job_ids=["J1", "J2", "J3", "J4", "J5"],
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("번호로 알려 주세요", result.reply)
+        self.assertEqual({}, self.compared)
+        self.assertEqual({}, self.asked)
+
+    def test_nothing_discussed_yet_says_so(self):
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True), message="두 공고 비교해줘"
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("앞에 보여 드린 공고가 없어요", result.reply)
+
+    def test_a_number_still_wins(self):
+        """번호를 댔으면 그 번호다. 목록에서 고른다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 3], refers_to_last_answer=False),
+            message="1번하고 3번 비교해줘",
+            last_job_ids=["J1", "J2", "J3"],
+            last_answer_job_ids=["J4", "J5"],
+        )
+        self.assertEqual("비교", result.mode)
+        self.assertIn("1회사", self.compared["job_a"])
+        self.assertIn("3회사", self.compared["job_b"])
+
+    def test_a_new_search_is_not_a_reference(self):
+        response = self.ask(
+            turn(roles=["백엔드"], refers_to_last_answer=False),
+            message="다른 공고도 보여줘",
+            last_answer_job_ids=["J1", "J2"],
+        )
+        self.assertEqual("검색", response.mode)
 
 
 class JobCompareTest(ChatTestCase):

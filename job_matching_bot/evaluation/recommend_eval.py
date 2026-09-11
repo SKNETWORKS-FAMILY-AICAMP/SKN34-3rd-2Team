@@ -45,12 +45,19 @@ from pathlib import Path
 
 from job_matching_bot.config import ARTIFACTS_DIR, FIXTURES_DIR
 from job_matching_bot.evaluation.grader_page import write_page
-from job_matching_bot.evaluation.app_resume import load_personas
+from job_matching_bot.evaluation.app_resume import EVAL_MOCKS, MOCKS, load_personas
 from job_matching_bot.ingestion.skill_extractor import extract_skills
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 # 이력서 원본은 앱과 같은 `scripts/resume_mocks.json` 하나다. 여기서 따로 갖지 않는다.
 LABELS = FIXTURES_DIR / "eval_labels.csv"
+
+# 어느 이력서 벌로 잴지. `--eval-resumes`가 바꾼다.
+#
+# 기본은 앱 목업 5종이다. `--eval-resumes`를 주면 평가 전용 5종을 쓴다. 프롬프트나
+# 가중치를 그 5종을 보고 고쳤다면 같은 것으로 다시 재면 안 된다 — 자기 데이터에 맞춘
+# 셈이라 항상 좋아 보인다.
+_RESUME_SET = {"path": MOCKS}
 RUNS_DIR = ARTIFACTS_DIR / "eval"
 
 # 채점표에서 사람이 채우는 칸. 비어 있으면 아직 라벨이 없는 줄이다.
@@ -150,7 +157,7 @@ def recommend(base_url: str, persona: dict, top_k: int = 5, timeout: int = 180) 
 
 
 def run(base_url: str, top_k: int) -> Path:
-    personas = load_personas()
+    personas = load_personas(_RESUME_SET["path"])
     rows: list[dict] = []
     raw: dict[str, dict] = {}
     started = time.time()
@@ -366,7 +373,7 @@ def score(run_path: Path, labels_path: Path) -> int:
         return 1
 
     raw = json.loads(run_path.read_text(encoding="utf-8"))
-    personas = load_personas()
+    personas = load_personas(_RESUME_SET["path"])
     items = build_items(raw, personas)
     checked = wrong = grade_hit = grade_total = 0
     unlabeled = 0
@@ -424,7 +431,14 @@ def main() -> int:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--labels", type=Path, default=LABELS)
     parser.add_argument("--run-file", type=Path, default=None, help="채점할 결과 원본. 기본은 가장 최근 것")
+    parser.add_argument(
+        "--eval-resumes", action="store_true",
+        help="앱 목업 대신 평가 전용 이력서 5종을 쓴다. 프롬프트를 목업으로 고쳤을 때 쓴다",
+    )
     args = parser.parse_args()
+    if args.eval_resumes:
+        _RESUME_SET["path"] = EVAL_MOCKS
+        print("평가 전용 이력서 5종을 씁니다 (앱 목업 아님)")
 
     if args.run:
         path = run(args.base_url, args.top_k)
@@ -440,7 +454,7 @@ def main() -> int:
         if path is None:
             print("결과가 없습니다. 먼저 --run 을 실행하세요.")
             return 1
-        personas = load_personas()
+        personas = load_personas(_RESUME_SET["path"])
         raw = json.loads(path.read_text(encoding="utf-8"))
         items = build_items(raw, personas)
         sheet = path.with_name(path.stem + "-채점표.csv")

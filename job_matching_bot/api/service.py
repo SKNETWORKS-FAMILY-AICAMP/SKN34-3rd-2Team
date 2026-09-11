@@ -735,7 +735,28 @@ class ChatService(_LivenessMixin):
             return self._ask_job(
                 request.model_copy(update={"job_id": picked_many[0]}), previous
             )
-        if turn.job_refs and not request.last_job_ids:
+        # "두 공고의 자격요건만" — 번호 없이 방금 이야기한 공고를 가리킨 말. 비교 뒤에
+        # 이어지는 물음이 대부분 이 꼴이라, 여기서 못 받으면 챗봇이 스스로 내놓은
+        # 제안을 눌렀는데 "공고가 보이지 않아 비교할 수 없다"고 답하게 된다.
+        if turn.refers_to_last_answer and request.last_answer_job_ids:
+            discussed = list(request.last_answer_job_ids)
+            if len(discussed) == 2:
+                return self._compare_jobs(request, previous, discussed)
+            if len(discussed) == 1:
+                return self._ask_job(
+                    request.model_copy(update={"job_id": discussed[0]}), previous
+                )
+            # 셋 이상이면 어느 것인지 고를 수 없다. 앞의 둘을 집으면 사용자가 생각한
+            # 공고가 아닐 수 있고, 답은 그럴듯해서 틀린 줄도 모른다.
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="어느 공고를 말씀하시는지 번호로 알려 주세요. 예를 들어 “1번하고 3번 비교해줘”처럼요.",
+                filters=previous,
+                total=0,
+                suggestions=["1번 자세히 봐줘", "1번하고 2번 비교해줘"],
+            )
+
+        if (turn.job_refs or turn.refers_to_last_answer) and not request.last_job_ids:
             return schemas.JobChatResponse(
                 mode="안내",
                 reply="앞에 보여 드린 공고가 없어요. 먼저 조건을 말씀해 주시면 목록을 보여 드릴게요.",

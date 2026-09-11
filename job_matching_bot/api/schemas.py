@@ -229,6 +229,15 @@ class ChatTurnOut(StrictModel):
             "'2번 자세히', '첫 번째 거' → [2], [1]. 가리킨 것이 없으면 빈 목록"
         ),
     )
+    # 번호 없이 "방금 그거"를 가리키는 말. 비교 뒤에 이어지는 물음이 대부분 이 꼴이다.
+    refers_to_last_answer: bool = Field(
+        default=False,
+        description=(
+            "번호를 대지 않고 직전 답이 다룬 공고를 가리키면 true. "
+            "'두 공고의 자격요건만', '이 공고 마감일은', '둘 다 신입 가능해?'가 그렇다. "
+            "새로 찾아 달라는 말이면 false"
+        ),
+    )
     resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(
         default="전체",
         description=(
@@ -283,7 +292,19 @@ class JobChatRequest(StrictModel):
     last_job_ids: list[str] = Field(
         default_factory=list,
         max_length=20,
-        description="직전 답에 나온 공고 id를 보여 준 순서대로. '2번'을 가리킬 때 쓴다",
+        description="찾아 준 목록의 공고 id를 보여 준 순서대로. '2번'을 가리킬 때 쓴다",
+    )
+    # **직전 답이 다룬 공고.** 위와 다르다. 위는 번호가 가리킬 *목록*이고 이쪽은 방금
+    # 이야기한 *대상*이다. 비교 답이면 견준 두 건, 공고 하나에 답했으면 그 한 건이다.
+    #
+    # 이게 없으면 비교 바로 뒤에 "두 공고의 자격요건만 간단히 비교해 주세요"라고 했을 때
+    # 답하지 못한다. 번호가 없어 가리킨 자리가 없고, 서버는 방금 무엇을 견줬는지
+    # 모르기 때문이다. 실제로 "두 공고의 자격요건 내용이 보이지 않아 비교할 수 없습니다"
+    # 라고 답했다. 그 말을 부른 제안 문구를 챗봇이 직접 내놓고도 그랬다.
+    last_answer_job_ids: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="직전 답이 다룬 공고 id를 보여 준 순서대로. '두 공고', '이 공고'가 가리키는 것",
     )
     # 공고를 놓고 물을 때 "나한테 맞아?"는 이력서를 봐야 답할 수 있다. 없으면 서버는
     # 공고만 읽고 답하므로, 앱은 이력서 화면에서 물을 때 평문을 함께 보낸다.

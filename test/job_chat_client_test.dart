@@ -288,6 +288,43 @@ void main() {
       expect((sent!['last_job_ids'] as List)[1], 'J3');
     });
 
+    test('직전 답이 다룬 공고는 따로 보낸다', () async {
+      // "두 공고의 자격요건만"에는 번호가 없다. 번호가 가리킬 목록과 방금 이야기한
+      // 대상은 다르다. 비교하고 나서도 목록은 찾아 준 다섯 건 그대로여야 한다.
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response());
+        }),
+      );
+
+      await api.chat(
+        message: '두 공고의 자격요건만 간단히 비교해줘',
+        lastJobIds: const ['J1', 'J2', 'J3', 'J4', 'J5'],
+        lastAnswerJobIds: const ['J2', 'J5'],
+      );
+
+      expect(sent!['last_job_ids'], ['J1', 'J2', 'J3', 'J4', 'J5']);
+      expect(sent!['last_answer_job_ids'], ['J2', 'J5']);
+    });
+
+    test('첫 질문에는 다룬 공고도 없다', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response());
+        }),
+      );
+
+      await api.chat(message: '백엔드 찾아줘');
+
+      expect(sent!['last_answer_job_ids'], isEmpty);
+    });
+
     test('공고를 골라 물을 때도 목록은 함께 간다', () async {
       Map<String, dynamic>? sent;
       final api = JobRecommendApiClient(

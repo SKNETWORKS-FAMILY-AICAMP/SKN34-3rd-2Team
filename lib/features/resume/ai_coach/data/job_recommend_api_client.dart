@@ -425,9 +425,12 @@ class JobRecommendApiClient {
   /// - 직전 조건(`filters`)을 함께 보내야 "서울만" 같은 말이 이어진다.
   /// - [jobId]를 주면 그 공고 하나에 대한 물음이 된다. 서버는 조건 해석을 건너뛰고
   ///   그 공고 원문만 근거로 답한다.
-  /// - [lastJobIds]는 직전 답에 나온 공고를 **보여 준 순서 그대로** 보낸다. 이게 있어야
+  /// - [lastJobIds]는 **찾아 준 목록**을 보여 준 순서 그대로 보낸다. 이게 있어야
   ///   "2번 자세히 봐줘"에 답할 수 있다. 서버는 대화를 저장하지 않으므로 직전에 무엇을
-  ///   보여 줬는지 모른다. 직전 응답의 `jobs`에서 그대로 뽑으면 된다.
+  ///   보여 줬는지 모른다.
+  /// - [lastAnswerJobIds]는 **직전 답이 다룬 공고**다. 위와 다르다. 위는 번호가 가리킬
+  ///   목록이고 이쪽은 방금 이야기한 대상이라, 비교 답이면 견준 두 건이 들어간다.
+  ///   이게 있어야 "두 공고의 자격요건만 간단히 비교해줘"에 답할 수 있다.
   Future<JobChatResponse> chat({
     required String message,
     JobChatFilters? filters,
@@ -436,6 +439,7 @@ class JobRecommendApiClient {
     // 공고 하나를 놓고 물을 때만 쓴다. "나한테 맞아?"는 이력서를 봐야 답이 된다.
     String? resumeText,
     List<String> lastJobIds = const [],
+    List<String> lastAnswerJobIds = const [],
   }) async {
     final decoded = await _post('/api/v1/jobs/chat', {
       'message': message,
@@ -444,6 +448,7 @@ class JobRecommendApiClient {
       'job_id': jobId,
       'resume_text': resumeText,
       'last_job_ids': lastJobIds,
+      'last_answer_job_ids': lastAnswerJobIds,
     });
     return JobChatResponse.fromMap(decoded);
   }

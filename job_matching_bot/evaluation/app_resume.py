@@ -35,6 +35,12 @@ from typing import Any, Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MOCKS = REPO_ROOT / "scripts" / "resume_mocks.json"
+# 평가 전용 이력서. 구조와 직렬화기는 위와 똑같고 사람만 다르다.
+#
+# 기존 5종으로 판정 프롬프트와 가중치를 고쳤다. 같은 것으로 다시 재면 자기 데이터에
+# 맞춘 셈이 되어 항상 좋아 보인다. 바꾼 것이 진짜 나아진 것인지는 **처음 보는
+# 이력서**로만 알 수 있다.
+EVAL_MOCKS = REPO_ROOT / "scripts" / "resume_mocks_eval.json"
 
 # 자기소개서 구간의 순서와 이름. `ResumeSelfIntroLabels`와 같아야 한다.
 SELF_INTRO_LABELS: list[tuple[str, str]] = [
@@ -53,6 +59,12 @@ EVAL_PREFERENCES: dict[str, dict[str, list[str]]] = {
     "backend_experienced_3y": {"regions": ["서울"], "employment_types": ["정규직"]},
     "data_entry_junior_college": {"regions": ["서울", "경기"], "employment_types": ["정규직"]},
     "embedded_entry_regional": {"regions": ["대전"], "employment_types": ["정규직"]},
+    # 평가 전용 5종
+    "qa_entry": {"regions": ["서울", "경기"], "employment_types": ["정규직"]},
+    "security_entry": {"regions": ["서울"], "employment_types": ["정규직"]},
+    "devops_experienced_2y": {"regions": ["서울"], "employment_types": ["정규직"]},
+    "ai_masters": {"regions": ["서울", "경기"], "employment_types": ["정규직"]},
+    "frontend_experienced_5y": {"regions": ["서울"], "employment_types": ["정규직"]},
 }
 
 
@@ -309,14 +321,15 @@ def profile_from_content(content: dict, today: date | None = None) -> dict:
 def load_personas(path: Path | None = None, today: date | None = None) -> dict[str, dict]:
     """앱 목업을 평가가 그대로 서버에 보낼 수 있는 모양으로 읽는다.
 
-    키는 사람이 읽는 제목이다. `[목업] ` 머리말은 떼어 채점 화면에서 짧게 보이게 한다.
+    키는 사람이 읽는 제목이다. `[목업]`·`[평가]` 머리말은 떼어 채점 화면에서 짧게
+    보이게 한다.
     """
     mocks = json.loads((path or MOCKS).read_text(encoding="utf-8"))["personas"]
     out: dict[str, dict] = {}
     for key, persona in mocks.items():
         content = persona["content"]
         prefs = EVAL_PREFERENCES.get(key, {"regions": [], "employment_types": []})
-        name = _text(persona["title"]).removeprefix("[목업]").strip()
+        name = _text(persona["title"]).removeprefix("[목업]").removeprefix("[평가]").strip()
         out[name] = {
             "resume_text": build_resume_text(content),
             "preferred_regions": list(prefs["regions"]),

@@ -198,8 +198,15 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// 돼?"처럼 짧은 말이 어느 공고 이야기인지 흐려지지 않는다.
   JobChatJob? _askingAbout;
 
-  /// 직전 답에 보여 준 공고 id를 화면에 나온 순서 그대로. "2번"을 가리킬 때 서버가 쓴다.
+  /// **찾아 준 목록.** 화면에 나온 순서 그대로. "2번"을 가리킬 때 서버가 쓴다.
   List<String> _lastShownJobIds = const [];
+
+  /// **직전 답이 다룬 공고.** 위와 다르다. 위는 번호가 가리킬 목록이고, 이쪽은 방금
+  /// 이야기한 대상이다. 비교 답이면 견준 두 건이 들어간다.
+  ///
+  /// "두 공고의 자격요건만 간단히 비교해줘"에는 번호가 없다. 이게 없으면 챗봇이
+  /// 스스로 권한 말을 눌렀는데 "공고가 보이지 않아 비교할 수 없다"고 답한다.
+  List<String> _lastAnswerJobIds = const [];
   bool _chatBusy = false;
 
   /// 기다리는 동안 보여줄 말. 추천은 11초쯤 걸리므로 무엇을 하는 중인지 밝힌다.
@@ -498,6 +505,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         // "2번 자세히 봐줘"에 답하려면 서버가 직전에 무엇을 보여 줬는지 알아야 한다.
         // 서버는 대화를 저장하지 않으므로 앱이 되돌려 준다.
         lastJobIds: _lastShownJobIds,
+        // "두 공고의 자격요건만"은 번호가 없다. 방금 이야기한 공고가 무엇인지
+        // 알려 줘야 답할 수 있다. 번호가 가리킬 목록과는 다른 값이다.
+        lastAnswerJobIds: _lastAnswerJobIds,
       );
       if (!mounted) return;
       setState(() {
@@ -507,6 +517,11 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           jobsInAnswer: [for (final job in result.jobs) job.jobId],
           previous: _lastShownJobIds,
         );
+        // 이쪽은 답에 공고가 들어 있으면 무엇이든 갈아 끼운다. 방금 이야기한 대상이
+        // 곧 그 공고들이다. 공고가 없는 답은 이야기한 대상도 없으니 그대로 둔다.
+        if (result.jobs.isNotEmpty) {
+          _lastAnswerJobIds = [for (final job in result.jobs) job.jobId];
+        }
         _messages.add(
           _ChatMessage.bot(
             result.reply,
@@ -2146,13 +2161,18 @@ class _ChatBubble extends StatelessWidget {
       alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         constraints: const BoxConstraints(maxWidth: 300),
+        // 답이 길면 말풍선이 배경에 묻혀 글자만 흩어져 보였다. 배경을 옅게라도
+        // 깔고 테두리를 둘러야 "여기까지가 한 답"이라는 게 보인다.
         decoration: BoxDecoration(
           color: message.isUser
               ? AppColors.primaryLight
-              : AppColors.surfaceVariant.withValues(alpha: 0.8),
+              : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
+          border: message.isUser
+              ? null
+              : Border.all(color: AppColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
