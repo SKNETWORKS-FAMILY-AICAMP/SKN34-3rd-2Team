@@ -9,6 +9,7 @@ import '../../../../shared/providers/firebase_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../data/resume_review_api_client.dart';
 import 'job_resume_review_dialog.dart';
+import 'job_recommendation_loading.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
@@ -212,6 +213,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   AiJobCoachResult? _result;
   bool _chatMode = false;
   bool _loading = false;
+  bool _recommendationCompleted = false;
+  String? _recommendationError;
   String? _error;
 
   /// 지금 진행 중인 추천 단계의 이름. 서버가 알려 준다. 아직 안 왔으면 null이다.
@@ -240,6 +243,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     setState(() {
       _result = null;
       _error = reason;
+      _recommendationError = null;
     });
     return false;
   }
@@ -494,7 +498,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         filters: _chatFilters,
         jobId: _askingAbout?.jobId,
         // 카드를 눌렀거나, 직전에 목록을 보여 줬으면 함께 보낸다(shouldSendResume).
-        resumeText: shouldSendResume(
+        resumeText:
+            shouldSendResume(
               askingAboutJob: _askingAbout != null,
               hasShownJobs: _lastShownJobIds.isNotEmpty,
             )
@@ -545,10 +550,17 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   }
 
   Future<void> _run() async {
-    if (!_guard(AiCoachFeature.jobRecommendation)) return;
+    if (_loading || !_guard(AiCoachFeature.jobRecommendation)) return;
     final requestedContent = widget.draftContent;
+    bool resumeUnchanged() => sameResumeContent(
+      widget.draftContent,
+      requestedContent.toMap(),
+    );
     setState(() {
       _loading = true;
+      _recommendationCompleted = false;
+      _recommendationError = null;
+      _result = null;
       _error = null;
       _stage = null;
       _stageResults.clear();
@@ -570,26 +582,35 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
               });
             },
           );
+      if (!mounted) return;
+      if (resumeUnchanged()) {
+        setState(() => _recommendationCompleted = true);
+        if (!MediaQuery.disableAnimationsOf(context)) {
+          await Future<void>.delayed(
+            JobRecommendationLoading.completionDuration,
+          );
+        }
+      }
+      if (!mounted) return;
+      // The draft can change during the completion animation as well.
+      setState(() {
+        if (resumeUnchanged()) {
+          _result = result;
+        } else {
+          _error = '추천 중 이력서가 변경됐습니다. 저장 후 다시 추천해 주세요.';
+        }
+      });
+    } on JobRecommendApiException catch (error) {
+      if (mounted) setState(() => _recommendationError = error.message);
+    } catch (error) {
+      if (mounted) setState(() => _recommendationError = '분석 실패: $error');
+    } finally {
       if (mounted) {
         setState(() {
-          if (sameResumeContent(
-            widget.draftContent,
-            requestedContent.toMap(),
-          )) {
-            _result = result;
-          } else {
-            _result = null;
-            _error = '추천 중 이력서가 변경됐습니다. 저장 후 다시 추천해 주세요.';
-          }
+          _loading = false;
+          _recommendationCompleted = false;
         });
       }
-    } on JobRecommendApiException catch (error) {
-      // 서버가 없거나 실패하면 추천하지 않는다. 이유를 그대로 보여 준다.
-      if (mounted) setState(() => _error = error.message);
-    } catch (error) {
-      if (mounted) setState(() => _error = '분석 실패: $error');
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -624,99 +645,116 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             )
           else
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(14),
-                children: [
-                  const SizedBox(height: 10),
-                  _CurrentResumeCard(
-                    content: widget.draftContent,
-                    readiness: _readiness,
-                    analyzing: _loading,
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    '빠른 실행',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.edit_outlined,
-                          iconColor: Color(0xFFFF6B5E),
-                          label: '이력서 첨삭',
-                          loading: false,
-                          // 첨삭할 내용이 하나라도 있으면 실행할 수 있다.
-                          enabled: _readiness.canAnalyzeResume,
-                          disabledTooltip: _readiness.blockedReason(
-                            AiCoachFeature.resumeAnalysis,
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.all(14),
+                    sliver: SliverList.list(
+                      children: [
+                        const SizedBox(height: 10),
+                        _CurrentResumeCard(
+                          content: widget.draftContent,
+                          readiness: _readiness,
+                          analyzing: _loading,
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          '빠른 실행',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
                           ),
-                          onPressed: _reviewResume,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.star_rounded,
-                          iconColor: Color(0xFFF4C430),
-                          label: '맞춤 공고 추천',
-                          loading: _loading,
-                          // 필수 항목이 하나라도 비면 추천하지 않는다.
-                          enabled: _readiness.canRecommendJobs,
-                          disabledTooltip: _readiness.blockedReason(
-                            AiCoachFeature.jobRecommendation,
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.edit_outlined,
+                                iconColor: Color(0xFFFF6B5E),
+                                label: '이력서 첨삭',
+                                loading: false,
+                                // 첨삭할 내용이 하나라도 있으면 실행할 수 있다.
+                                enabled: _readiness.canAnalyzeResume,
+                                disabledTooltip: _readiness.blockedReason(
+                                  AiCoachFeature.resumeAnalysis,
+                                ),
+                                onPressed: _reviewResume,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.star_rounded,
+                                iconColor: Color(0xFFF4C430),
+                                label: '맞춤 공고 추천',
+                                loading: _loading,
+                                // 필수 항목이 하나라도 비면 추천하지 않는다.
+                                enabled: _readiness.canRecommendJobs,
+                                disabledTooltip: _readiness.blockedReason(
+                                  AiCoachFeature.jobRecommendation,
+                                ),
+                                onPressed: _run,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.search_rounded,
+                                iconColor: Color(0xFF3B82F6),
+                                label: '채용공고 찾기',
+                                loading: false,
+                                // 공고 검색은 이력서 상태와 무관하다.
+                                enabled: true,
+                                disabledTooltip: null,
+                                onPressed: _openChat,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 14),
+                          _ErrorCard(message: _error!),
+                        ],
+                        if (_result == null &&
+                            !_loading &&
+                            _error == null &&
+                            _recommendationError == null) ...[
+                          const SizedBox(height: 26),
+                          const _EmptyState(),
+                        ],
+                        if (_result case final result?) ...[
+                          const SizedBox(height: 18),
+                          // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
+                          _RecommendationSection(
+                            result: result,
+                            onReview: widget.onResumeChanged == null
+                                ? null
+                                : _reviewJob,
                           ),
-                          onPressed: _run,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.search_rounded,
-                          iconColor: Color(0xFF3B82F6),
-                          label: '채용공고 찾기',
-                          loading: false,
-                          // 공고 검색은 이력서 상태와 무관하다.
-                          enabled: true,
-                          disabledTooltip: null,
-                          onPressed: _openChat,
-                        ),
-                      ),
-                    ],
+                          const SizedBox(height: 20),
+                        ],
+                      ],
+                    ),
                   ),
-                  if (_loading) ...[
-                    const SizedBox(height: 24),
-                    const Divider(height: 1),
-                    const SizedBox(height: 24),
-                    _RecommendProgress(
-                      current: _stage,
-                      results: _stageResults,
+                  if (_loading || _recommendationError != null)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: JobRecommendationLoading(
+                            current: _stage,
+                            results: _stageResults,
+                            completed: _recommendationCompleted,
+                            errorMessage: _recommendationError,
+                            onRetry: _run,
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    _ErrorCard(message: _error!),
-                  ],
-                  if (_result == null && !_loading && _error == null) ...[
-                    const SizedBox(height: 26),
-                    const _EmptyState(),
-                  ],
-                  if (_result case final result?) ...[
-                    const SizedBox(height: 18),
-                    // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
-                    _RecommendationSection(
-                      result: result,
-                      onReview: widget.onResumeChanged == null
-                          ? null
-                          : _reviewJob,
-                    ),
-                    const SizedBox(height: 20),
-                  ],
                 ],
               ),
             ),
@@ -861,445 +899,6 @@ class _ActionButton extends StatelessWidget {
       child: button,
     );
   }
-}
-
-/// 추천이 어디까지 갔는지 보여준다.
-///
-/// 추천은 15초쯤 걸린다. 막대 하나만 돌리면 멈춘 것과 구별되지 않고, 기다리는 사람은
-/// 무엇을 기다리는지 모른다. 서버가 단계마다 알려 주므로 그대로 세워 놓고, 끝난 단계에는
-/// 서버가 준 결과 한 줄을 남긴다.
-///
-/// 서버가 옛 버전이라 알림이 오지 않으면 [current]가 계속 null이다. 그때는 줄만 흐리게
-/// 서 있고 맨 위 막대가 돈다 — 예전과 같은 모습이라 나빠지지 않는다.
-class _RecommendProgress extends StatefulWidget {
-  const _RecommendProgress({required this.current, required this.results});
-
-  /// 진행 중인 단계 이름. 서버의 `RECOMMEND_STAGES`와 같은 값이다.
-  final String? current;
-
-  /// 끝난 단계가 남긴 결과 한 줄.
-  final Map<String, String> results;
-
-  @override
-  State<_RecommendProgress> createState() => _RecommendProgressState();
-}
-
-class _RecommendProgressState extends State<_RecommendProgress> {
-  /// 서버가 보내는 이름과 화면에 쓸 말. 순서가 곧 표시 순서다.
-  static const _steps = <(String, String)>[
-    ('resume', '이력서 읽기'),
-    ('search', '공고 찾기'),
-    ('filter', '지원 조건 비교'),
-    ('judge', '직무 근거 비교'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final index = widget.current == null
-        ? -1
-        : _steps.indexWhere((step) => step.$1 == widget.current);
-    final activeIndex = index < 0 ? 0 : index;
-    final activeLabel = _steps[activeIndex].$2;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Text(
-          '이력서와 채용공고를 연결하고 있어요',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          '이력서의 경험과 채용공고의 요구사항을 비교합니다.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: AppColors.textHint),
-        ),
-        const SizedBox(height: 20),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 350),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(width: 2),
-              const _AnimatedRobot(),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(18, 22, 16, 14),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.72),
-                      width: 1.4,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.07),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned(
-                        top: -30,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            width: 42,
-                            height: 13,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Container(
-                                width: 12,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  '공고를 고르고 있어요',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '${activeIndex + 1}/${_steps.length}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: AppColors.textHint,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          for (var i = 0; i < _steps.length; i++)
-                            _ProgressStep(
-                              label: _steps[i].$2,
-                              detail: widget.results[_steps[i].$1],
-                              state: index < 0
-                                  ? (i == 0
-                                        ? _StepState.running
-                                        : _StepState.waiting)
-                                  : i < index
-                                  ? _StepState.done
-                                  : i == index
-                                  ? (widget.results.containsKey(_steps[i].$1)
-                                        ? _StepState.done
-                                        : _StepState.running)
-                                  : _StepState.waiting,
-                              last: i == _steps.length - 1,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(strokeWidth: 1.8),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '$activeLabel 진행 중',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// 영상 시안의 작은 작업 로봇을 벡터 위젯으로 재구성했다.
-class _AnimatedRobot extends StatefulWidget {
-  const _AnimatedRobot();
-
-  @override
-  State<_AnimatedRobot> createState() => _AnimatedRobotState();
-}
-
-class _AnimatedRobotState extends State<_AnimatedRobot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _bob;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1050),
-    )..repeat(reverse: true);
-    _bob = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _bob,
-    builder: (context, child) => Transform.translate(
-      offset: Offset(0, -2 + (_bob.value * 4)),
-      child: child,
-    ),
-    child: SizedBox(
-      width: 54,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 38,
-            height: 28,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: AppColors.primary, width: 1.6),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  top: -9,
-                  left: 18,
-                  child: Container(
-                    width: 2,
-                    height: 9,
-                    color: AppColors.primary,
-                  ),
-                ),
-                Positioned(
-                  top: -12,
-                  left: 15,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-                const Positioned(
-                  left: 9,
-                  top: 10,
-                  child: _RobotEye(),
-                ),
-                const Positioned(
-                  right: 9,
-                  top: 10,
-                  child: _RobotEye(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 3),
-          Container(
-            width: 28,
-            height: 25,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
-              border: Border.all(color: AppColors.primary, width: 1.5),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: const Icon(
-              Icons.bolt_rounded,
-              size: 15,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Container(
-            width: 34,
-            height: 2,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.25),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _RobotEye extends StatelessWidget {
-  const _RobotEye();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 5,
-    height: 5,
-    decoration: const BoxDecoration(
-      color: AppColors.primary,
-      shape: BoxShape.circle,
-    ),
-  );
-}
-
-enum _StepState { done, running, waiting }
-
-class _ProgressStep extends StatelessWidget {
-  const _ProgressStep({
-    required this.label,
-    required this.detail,
-    required this.state,
-    required this.last,
-  });
-
-  final String label;
-  final String? detail;
-  final _StepState state;
-  final bool last;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (state) {
-      _StepState.done => AppColors.success,
-      _StepState.running => AppColors.primary,
-      _StepState.waiting => AppColors.textHint,
-    };
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: switch (state) {
-                _StepState.done => Icon(
-                  Icons.check_circle,
-                  size: 16,
-                  color: color,
-                ),
-                _StepState.running => const Padding(
-                  padding: EdgeInsets.all(1.5),
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                _StepState.waiting => Icon(
-                  Icons.circle_outlined,
-                  size: 16,
-                  color: color,
-                ),
-              },
-            ),
-            if (!last)
-              Container(
-                width: 2,
-                height: detail == null ? 22 : 34,
-                margin: const EdgeInsets.symmetric(vertical: 2),
-                color: state == _StepState.done
-                    ? AppColors.success
-                    : AppColors.border,
-              ),
-          ],
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(bottom: last ? 0 : 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: state == _StepState.done
-                              ? AppColors.success
-                              : state == _StepState.waiting
-                              ? AppColors.textHint
-                              : AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    if (state == _StepState.running) ...[
-                      const SizedBox(width: 8),
-                      const _ProgressStateBadge(),
-                    ],
-                  ],
-                ),
-                if (detail case final line?) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    line,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProgressStateBadge extends StatelessWidget {
-  const _ProgressStateBadge();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-    decoration: BoxDecoration(
-      color: const Color(0xFFEFF6FF),
-      borderRadius: BorderRadius.circular(99),
-    ),
-    child: const Text(
-      '진행 중',
-      style: TextStyle(
-        fontSize: 9.5,
-        fontWeight: FontWeight.w700,
-        color: AppColors.primary,
-      ),
-    ),
-  );
 }
 
 class _EmptyState extends StatelessWidget {
@@ -2436,9 +2035,7 @@ class _ChatBubble extends StatelessWidget {
               ? AppColors.primaryLight
               : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
-          border: message.isUser
-              ? null
-              : Border.all(color: AppColors.border),
+          border: message.isUser ? null : Border.all(color: AppColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
