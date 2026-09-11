@@ -280,8 +280,11 @@ class LmsStudentChatbot:
             model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
             dimensions=int(os.getenv("OPENAI_EMBEDDING_DIMENSION", "1536")),
         )
+        # 공지·정책 인덱스는 채용공고 인덱스와 이름이 다르다. `PINECONE_INDEX_NAME`을
+        # 그대로 쓰면 채용공고 쪽 설정(`job-posting`)을 물려받아 엉뚱한 인덱스를 뒤진다.
+        # 키를 KEY1/KEY2로 나눈 것과 같은 이유로 인덱스 이름도 따로 받는다.
         self.index = Pinecone(api_key=os.environ["PINECONE_API_KEY2"]).Index(
-            os.getenv("PINECONE_INDEX_NAME", "student"),
+            os.getenv("PINECONE_STUDENT_INDEX_NAME", "student"),
         )
         self.supervisor_chain = (
             ChatPromptTemplate.from_messages([
