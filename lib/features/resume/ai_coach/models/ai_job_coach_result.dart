@@ -12,6 +12,10 @@ class AiJobCoachResult {
     this.searchQuery = '',
     this.profileSummary = '',
     this.warnings = const [],
+    this.promptVersion = '',
+    this.model = '',
+    this.reasoningEffort = '',
+    this.reranked = false,
   });
 
   final bool testMode;
@@ -32,6 +36,10 @@ class AiJobCoachResult {
 
   /// 서버가 근거 검증에서 제거한 내용.
   final List<String> warnings;
+  final String promptVersion;
+  final String model;
+  final String reasoningEffort;
+  final bool reranked;
 
   factory AiJobCoachResult.fromMap(Map<String, dynamic> map) {
     final skillAnalysis = _map(map['skillAnalysis']);
@@ -74,6 +82,10 @@ extension AiJobCoachResultCopy on AiJobCoachResult {
       searchQuery: searchQuery,
       profileSummary: profileSummary,
       warnings: warnings,
+      promptVersion: promptVersion,
+      model: model,
+      reasoningEffort: reasoningEffort,
+      reranked: reranked,
     );
   }
 }

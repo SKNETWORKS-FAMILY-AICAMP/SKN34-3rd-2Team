@@ -130,6 +130,9 @@ class JobRecommendResponse {
     required this.reranked,
     required this.warnings,
     required this.notice,
+    this.promptVersion = '',
+    this.model = '',
+    this.reasoningEffort = '',
   });
 
   final List<JobRecommendation> recommendations;
@@ -144,6 +147,9 @@ class JobRecommendResponse {
   /// 근거 검증에서 제거된 내용.
   final List<String> warnings;
   final String notice;
+  final String promptVersion;
+  final String model;
+  final String reasoningEffort;
 
   factory JobRecommendResponse.fromMap(Map<String, dynamic> map) {
     final items = map['recommendations'];
@@ -161,6 +167,9 @@ class JobRecommendResponse {
       reranked: map['reranked'] as bool? ?? false,
       warnings: (map['warnings'] as List?)?.whereType<String>().toList() ?? const [],
       notice: map['notice'] as String? ?? '',
+      promptVersion: map['prompt_version'] as String? ?? '',
+      model: map['model'] as String? ?? '',
+      reasoningEffort: map['reasoning_effort'] as String? ?? '',
     );
   }
 }
@@ -281,6 +290,9 @@ class JobChatResponse {
     required this.jobs,
     required this.total,
     required this.suggestions,
+    this.promptVersion = '',
+    this.model = '',
+    this.reasoningEffort = '',
   });
 
   /// 서버가 어떤 갈래로 답했는지. 검색 / 질문 / 공고 / 안내.
@@ -301,6 +313,9 @@ class JobChatResponse {
 
   /// 다음에 좁힐 거리. 사용자가 그대로 눌러 보낼 수 있는 말이다.
   final List<String> suggestions;
+  final String promptVersion;
+  final String model;
+  final String reasoningEffort;
 
   factory JobChatResponse.fromMap(Map<String, dynamic> map) {
     final items = map['jobs'];
@@ -319,6 +334,9 @@ class JobChatResponse {
           : const [],
       total: (map['total'] as num?)?.toInt() ?? 0,
       suggestions: JobChatFilters._strings(map['suggestions']),
+      promptVersion: map['prompt_version'] as String? ?? '',
+      model: map['model'] as String? ?? '',
+      reasoningEffort: map['reasoning_effort'] as String? ?? '',
     );
   }
 }

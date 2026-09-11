@@ -3,19 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/constants/ai_ops_types.dart';
 import '../../../shared/models/ai_ops_models.dart';
 import '../../../shared/providers/ai_ops_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 
-/// 관리자 — AI 문제 생성 품질 / 채택률
+/// 관리자 — LLM 기능 운영 (로그·지연·피드백·버전)
 class AdminAiQualityScreen extends ConsumerWidget {
   const AdminAiQualityScreen({super.key});
+
+  static const _filters = <(String?, String)>[
+    (null, '전체'),
+    ('assessment', '문제생성'),
+    (AiOpsTypes.jobChat, '공고챗봇'),
+    (AiOpsTypes.jobRecommend, '추천'),
+    (AiOpsTypes.resumeReview, '첨삭'),
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cohortName = ref.watch(effectiveCohortNameProvider);
     final logsAsync = ref.watch(aiGenerationLogsProvider);
     final stats = ref.watch(aiQualityStatsProvider);
+    final typeFilter = ref.watch(aiQualityTypeFilterProvider);
     final feedback =
         ref.watch(aiQuestionFeedbackProvider).asData?.value ?? const [];
 
@@ -37,38 +47,66 @@ class AdminAiQualityScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '문제 생성 로그 · 채택률 · 프롬프트 버전별 성과\n'
-              '다음 확장: 오답→추천도 같은 type/outcome 파이프라인으로 연결',
+              'LLM 기능 운영 — 생성 로그 · 지연 · 피드백 · 프롬프트 버전 비교\n'
+              '문제생성 · 공고챗봇 · 맞춤 추천 · 이력서 첨삭',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
                 height: 1.4,
               ),
             ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final (value, label) in _filters)
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: typeFilter == value,
+                    onSelected: (_) {
+                      ref
+                          .read(aiQualityTypeFilterProvider.notifier)
+                          .select(value);
+                    },
+                  ),
+              ],
+            ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: [
+                _StatChip(label: '요청수', value: '${stats.totalRuns}'),
                 _StatChip(
-                  label: '생성 횟수',
-                  value: '${stats.totalRuns}',
-                ),
-                _StatChip(
-                  label: '생성 문항',
-                  value: '${stats.totalGenerated}',
-                ),
-                _StatChip(
-                  label: '채택률',
-                  value: '${(stats.adoptionRate * 100).toStringAsFixed(1)}%',
-                ),
-                _StatChip(
-                  label: '수정률',
-                  value: '${(stats.editRate * 100).toStringAsFixed(1)}%',
+                  label: '성공률',
+                  value: '${(stats.successRate * 100).toStringAsFixed(1)}%',
                 ),
                 _StatChip(
                   label: '평균 지연',
                   value: '${stats.avgLatencyMs.toStringAsFixed(0)}ms',
+                ),
+                _StatChip(
+                  label: 'p95 지연',
+                  value: '${stats.p95LatencyMs.toStringAsFixed(0)}ms',
+                ),
+                if (typeFilter == null || typeFilter == 'assessment') ...[
+                  _StatChip(
+                    label: '생성 문항',
+                    value: '${stats.totalGenerated}',
+                  ),
+                  _StatChip(
+                    label: '채택률',
+                    value: '${(stats.adoptionRate * 100).toStringAsFixed(1)}%',
+                  ),
+                  _StatChip(
+                    label: '수정률',
+                    value: '${(stats.editRate * 100).toStringAsFixed(1)}%',
+                  ),
+                ],
+                _StatChip(
+                  label: '유용률',
+                  value: '${(stats.usefulnessRate * 100).toStringAsFixed(1)}%',
                 ),
               ],
             ),
@@ -87,6 +125,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
               ...stats.byPromptVersion.entries.map((e) {
                 final g = e.value.generated;
                 final a = e.value.adopted + e.value.edited;
+                final useful = e.value.useful;
                 final rate = g <= 0 ? 0.0 : a / g;
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -96,7 +135,9 @@ class AdminAiQualityScreen extends ConsumerWidget {
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     subtitle: Text(
-                      '생성 $g · 채택+수정 $a · 채택률 ${(rate * 100).toStringAsFixed(1)}%',
+                      '생성 $g · 채택+수정 $a'
+                      '${g > 0 ? ' · 채택률 ${(rate * 100).toStringAsFixed(1)}%' : ''}'
+                      ' · 유용 피드백 $useful',
                     ),
                   ),
                 );
@@ -113,12 +154,14 @@ class AdminAiQualityScreen extends ConsumerWidget {
                 child: Center(child: CircularProgressIndicator()),
               ),
               error: (e, _) => ErrorView(message: '$e'),
-              data: (logs) {
+              data: (allLogs) {
+                final logs = filterLogsByType(allLogs, typeFilter);
                 if (logs.isEmpty) {
                   return Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
+                    padding: const EdgeInsets.symmetric(vertical: 24),
                     child: Text(
-                      '아직 AI 생성 로그가 없습니다.\n강사 성취도평가에서 문제 생성 AI를 실행해 보세요.',
+                      '아직 AI 생성 로그가 없습니다.\n'
+                      '문제 생성 AI · 취업 코치(챗봇/추천/첨삭)를 실행해 보세요.',
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                   );
@@ -132,11 +175,18 @@ class AdminAiQualityScreen extends ConsumerWidget {
                         fb.where((f) => f.outcome == 'edited').length;
                     final discarded =
                         fb.where((f) => f.outcome == 'discarded').length;
+                    final useful = fb
+                        .where(
+                          (f) => AiOpsOutcomes.isUseful(log.type, f.outcome),
+                        )
+                        .length;
                     return _LogCard(
                       log: log,
                       adopted: adopted,
                       edited: edited,
                       discarded: discarded,
+                      useful: useful,
+                      feedbackCount: fb.length,
                     );
                   }).toList(),
                 );
@@ -195,20 +245,29 @@ class _LogCard extends StatelessWidget {
     required this.adopted,
     required this.edited,
     required this.discarded,
+    required this.useful,
+    required this.feedbackCount,
   });
 
   final AiGenerationLogModel log;
   final int adopted;
   final int edited;
   final int discarded;
+  final int useful;
+  final int feedbackCount;
 
   @override
   Widget build(BuildContext context) {
     final when = log.createdAt?.toString().substring(0, 16) ?? '-';
-    final range = (log.dayFrom != null && log.dayTo != null)
-        ? '일수 ${log.dayFrom}~${log.dayTo}'
-        : '-';
     final ok = log.status == 'success';
+    final metaBits = <String>[
+      if (log.mode != null && log.mode!.isNotEmpty) 'mode=${log.mode}',
+      if (log.jobCount != null) 'jobs=${log.jobCount}',
+      if (log.appliedCount != null) 'applied=${log.appliedCount}',
+      if (log.topK != null) 'topK=${log.topK}',
+      if (log.reviewMode != null && log.reviewMode!.isNotEmpty)
+        'review=${log.reviewMode}',
+    ];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -219,6 +278,22 @@ class _LogCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    AiOpsTypes.label(log.type),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -260,12 +335,20 @@ class _LogCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '${log.promptVersion} · ${log.model} · $range · 생성 ${log.generatedCount}',
+              log.isAssessment
+                  ? '${log.promptVersion} · ${log.model} · '
+                        '일수 ${log.dayFrom ?? '-'}~${log.dayTo ?? '-'} · '
+                        '생성 ${log.generatedCount}'
+                  : '${log.promptVersion} · ${log.model}'
+                        '${metaBits.isEmpty ? '' : ' · ${metaBits.join(' · ')}'}',
               style: const TextStyle(fontSize: 12, height: 1.35),
             ),
             const SizedBox(height: 4),
             Text(
-              '피드백 채택 $adopted · 수정 $edited · 폐기 $discarded',
+              log.isAssessment
+                  ? '피드백 채택 $adopted · 수정 $edited · 폐기 $discarded'
+                  : '피드백 $feedbackCount · 유용 $useful'
+                        '${adopted + edited + discarded > 0 ? ' · 채택 $adopted · 수정 $edited · 폐기 $discarded' : ''}',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,

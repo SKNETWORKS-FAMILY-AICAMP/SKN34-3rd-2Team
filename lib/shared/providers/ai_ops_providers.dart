@@ -1,27 +1,55 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../constants/ai_ops_types.dart';
 import '../models/ai_ops_models.dart';
 import '../providers/cohort_providers.dart';
 import '../providers/firebase_providers.dart';
 
+/// Admin AI 품질 type 필터. null = 전체
+final aiQualityTypeFilterProvider =
+    NotifierProvider.autoDispose<_AiQualityTypeFilter, String?>(
+      _AiQualityTypeFilter.new,
+    );
+
+class _AiQualityTypeFilter extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? type) => state = type;
+}
+
 class AiQualityStats {
   const AiQualityStats({
     required this.totalRuns,
+    required this.successRuns,
     required this.totalGenerated,
     required this.adopted,
     required this.edited,
     required this.discarded,
+    required this.usefulOutcomes,
+    required this.totalOutcomes,
     required this.avgLatencyMs,
+    required this.p95LatencyMs,
     required this.byPromptVersion,
   });
 
   final int totalRuns;
+  final int successRuns;
   final int totalGenerated;
   final int adopted;
   final int edited;
   final int discarded;
+  final int usefulOutcomes;
+  final int totalOutcomes;
   final double avgLatencyMs;
-  final Map<String, ({int generated, int adopted, int edited})> byPromptVersion;
+  final double p95LatencyMs;
+  final Map<String, ({int generated, int adopted, int edited, int useful})>
+  byPromptVersion;
+
+  double get successRate {
+    if (totalRuns <= 0) return 0;
+    return successRuns / totalRuns;
+  }
 
   double get adoptionRate {
     if (totalGenerated <= 0) return 0;
@@ -33,77 +61,105 @@ class AiQualityStats {
     if (denom <= 0) return 0;
     return edited / denom;
   }
+
+  double get usefulnessRate {
+    if (totalOutcomes <= 0) return 0;
+    return usefulOutcomes / totalOutcomes;
+  }
 }
 
 final aiGenerationLogsProvider =
     StreamProvider.autoDispose<List<AiGenerationLogModel>>((ref) {
-  final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value(const []);
-  return ref
-      .watch(firestoreProvider)
-      .collection('aiGenerationLogs')
-      .where('cohortId', isEqualTo: cohortId)
-      .orderBy('createdAt', descending: true)
-      .limit(50)
-      .snapshots()
-      .map(
-        (s) => s.docs.map(AiGenerationLogModel.fromFirestore).toList(),
-      );
-});
+      final cohortId = ref.watch(effectiveCohortIdProvider);
+      if (cohortId == null) return Stream.value(const []);
+      return ref
+          .watch(firestoreProvider)
+          .collection('aiGenerationLogs')
+          .where('cohortId', isEqualTo: cohortId)
+          .orderBy('createdAt', descending: true)
+          .limit(100)
+          .snapshots()
+          .map(
+            (s) => s.docs.map(AiGenerationLogModel.fromFirestore).toList(),
+          );
+    });
 
 final aiQuestionFeedbackProvider =
     StreamProvider.autoDispose<List<AiQuestionFeedbackModel>>((ref) {
-  final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value(const []);
-  return ref
-      .watch(firestoreProvider)
-      .collection('aiQuestionFeedback')
-      .where('cohortId', isEqualTo: cohortId)
-      .limit(500)
-      .snapshots()
-      .map(
-        (s) => s.docs.map(AiQuestionFeedbackModel.fromFirestore).toList(),
-      );
-});
+      final cohortId = ref.watch(effectiveCohortIdProvider);
+      if (cohortId == null) return Stream.value(const []);
+      return ref
+          .watch(firestoreProvider)
+          .collection('aiQuestionFeedback')
+          .where('cohortId', isEqualTo: cohortId)
+          .limit(500)
+          .snapshots()
+          .map(
+            (s) => s.docs.map(AiQuestionFeedbackModel.fromFirestore).toList(),
+          );
+    });
+
+List<AiGenerationLogModel> filterLogsByType(
+  List<AiGenerationLogModel> logs,
+  String? typeFilter,
+) {
+  if (typeFilter == null || typeFilter.isEmpty) return logs;
+  if (typeFilter == 'assessment') {
+    return logs.where((l) => AiOpsTypes.assessmentTypes.contains(l.type)).toList();
+  }
+  return logs.where((l) => l.type == typeFilter).toList();
+}
 
 final aiQualityStatsProvider = Provider.autoDispose<AiQualityStats>((ref) {
-  final logs = ref.watch(aiGenerationLogsProvider).asData?.value ?? const [];
+  final allLogs = ref.watch(aiGenerationLogsProvider).asData?.value ?? const [];
+  final typeFilter = ref.watch(aiQualityTypeFilterProvider);
+  final logs = filterLogsByType(allLogs, typeFilter);
   final feedback =
       ref.watch(aiQuestionFeedbackProvider).asData?.value ?? const [];
+  final logIds = logs.map((l) => l.id).toSet();
+  final logTypeById = {for (final l in logs) l.id: l.type};
 
   var totalGenerated = 0;
-  var latencySum = 0;
-  var latencyN = 0;
-  final byVersion = <String, ({int generated, int adopted, int edited})>{};
+  var successRuns = 0;
+  final latencies = <int>[];
+  final byVersion =
+      <String, ({int generated, int adopted, int edited, int useful})>{};
 
   for (final log in logs) {
-    if (log.status != 'success') continue;
-    totalGenerated += log.generatedCount;
-    if (log.latencyMs > 0) {
-      latencySum += log.latencyMs;
-      latencyN++;
+    if (log.status == 'success') {
+      successRuns++;
+      totalGenerated += log.generatedCount;
     }
+    if (log.latencyMs > 0) latencies.add(log.latencyMs);
     final key = log.promptVersion.isEmpty ? '(unknown)' : log.promptVersion;
-    final cur = byVersion[key] ?? (generated: 0, adopted: 0, edited: 0);
+    final cur =
+        byVersion[key] ?? (generated: 0, adopted: 0, edited: 0, useful: 0);
     byVersion[key] = (
-      generated: cur.generated + log.generatedCount,
+      generated: cur.generated + (log.status == 'success' ? log.generatedCount : 0),
       adopted: cur.adopted,
       edited: cur.edited,
+      useful: cur.useful,
     );
   }
 
   var adopted = 0;
   var edited = 0;
   var discarded = 0;
+  var usefulOutcomes = 0;
+  var totalOutcomes = 0;
   for (final f in feedback) {
+    if (!logIds.contains(f.logId)) continue;
+    totalOutcomes++;
+    final logType = logTypeById[f.logId] ?? f.type ?? '';
+    if (AiOpsOutcomes.isUseful(logType, f.outcome)) usefulOutcomes++;
     switch (f.outcome) {
-      case 'adopted':
+      case AiOpsOutcomes.adopted:
         adopted++;
         break;
-      case 'edited':
+      case AiOpsOutcomes.edited:
         edited++;
         break;
-      case 'discarded':
+      case AiOpsOutcomes.discarded:
         discarded++;
         break;
     }
@@ -111,21 +167,38 @@ final aiQualityStatsProvider = Provider.autoDispose<AiQualityStats>((ref) {
         (f.promptVersion == null || f.promptVersion!.isEmpty)
             ? '(unknown)'
             : f.promptVersion!;
-    final cur = byVersion[key] ?? (generated: 0, adopted: 0, edited: 0);
+    final cur =
+        byVersion[key] ?? (generated: 0, adopted: 0, edited: 0, useful: 0);
     byVersion[key] = (
       generated: cur.generated,
-      adopted: cur.adopted + (f.outcome == 'adopted' ? 1 : 0),
-      edited: cur.edited + (f.outcome == 'edited' ? 1 : 0),
+      adopted: cur.adopted + (f.outcome == AiOpsOutcomes.adopted ? 1 : 0),
+      edited: cur.edited + (f.outcome == AiOpsOutcomes.edited ? 1 : 0),
+      useful:
+          cur.useful +
+          (AiOpsOutcomes.isUseful(logType, f.outcome) ? 1 : 0),
     );
+  }
+
+  latencies.sort();
+  double avg = 0;
+  double p95 = 0;
+  if (latencies.isNotEmpty) {
+    avg = latencies.reduce((a, b) => a + b) / latencies.length;
+    final idx = ((latencies.length - 1) * 0.95).round();
+    p95 = latencies[idx].toDouble();
   }
 
   return AiQualityStats(
     totalRuns: logs.length,
+    successRuns: successRuns,
     totalGenerated: totalGenerated,
     adopted: adopted,
     edited: edited,
     discarded: discarded,
-    avgLatencyMs: latencyN == 0 ? 0 : latencySum / latencyN,
+    usefulOutcomes: usefulOutcomes,
+    totalOutcomes: totalOutcomes,
+    avgLatencyMs: avg,
+    p95LatencyMs: p95,
     byPromptVersion: byVersion,
   );
 });

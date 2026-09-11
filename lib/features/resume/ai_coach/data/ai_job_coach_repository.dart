@@ -69,6 +69,10 @@ class AiJobCoachRepository {
       searchQuery: response.searchQuery,
       profileSummary: response.profileSummary,
       warnings: response.warnings,
+      promptVersion: response.promptVersion,
+      model: response.model,
+      reasoningEffort: response.reasoningEffort,
+      reranked: response.reranked,
     );
   }
 }

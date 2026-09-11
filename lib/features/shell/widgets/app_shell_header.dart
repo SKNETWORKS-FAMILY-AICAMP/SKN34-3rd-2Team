@@ -35,19 +35,28 @@ class AppShellHeader extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: 36,
+                  height: 36,
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.school_rounded,
                     color: Colors.white,
-                    size: 18,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Image.asset(
+                    'assets/brand/playdata.jpg',
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Text(
                   AppConstants.appName,
                   style: TextStyle(
@@ -112,13 +121,13 @@ class _CohortSelectorState extends ConsumerState<_CohortSelector> {
           orElse: () => cohorts.first,
         );
 
+        final menuWidth = _menuWidth(context, cohorts, _width);
+
         return Align(
           alignment: Alignment.centerLeft,
           child: MenuAnchor(
-            crossAxisUnconstrained: false,
-            style: _width > 0
-                ? AppMenuStyles.matchedPanel(_width)
-                : AppMenuStyles.panel,
+            crossAxisUnconstrained: true,
+            style: AppMenuStyles.matchedPanel(menuWidth),
             alignmentOffset: const Offset(0, 2),
             builder: (context, controller, _) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -145,12 +154,8 @@ class _CohortSelectorState extends ConsumerState<_CohortSelector> {
                 MenuItemButton(
                   onPressed: () => selectCohort(ref, cohort.cohortId),
                   style: ButtonStyle(
-                    minimumSize: _width > 0
-                        ? WidgetStatePropertyAll(Size(_width, 40))
-                        : null,
-                    maximumSize: _width > 0
-                        ? WidgetStatePropertyAll(Size(_width, 64))
-                        : null,
+                    minimumSize: WidgetStatePropertyAll(Size(menuWidth, 40)),
+                    maximumSize: WidgetStatePropertyAll(Size(menuWidth, 64)),
                     backgroundColor: WidgetStateProperty.resolveWith((states) {
                       final selectedItem =
                           cohort.cohortId == selected.cohortId;
@@ -174,7 +179,8 @@ class _CohortSelectorState extends ConsumerState<_CohortSelector> {
                   ),
                   child: Text(
                     _cohortLabel(cohort),
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    softWrap: false,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: cohort.cohortId == selected.cohortId
@@ -190,6 +196,29 @@ class _CohortSelectorState extends ConsumerState<_CohortSelector> {
       },
     );
   }
+}
+
+double _menuWidth(
+  BuildContext context,
+  List<CohortModel> cohorts,
+  double triggerWidth,
+) {
+  const style = TextStyle(fontSize: 13, fontWeight: FontWeight.w600);
+  var textWidth = 0.0;
+  for (final cohort in cohorts) {
+    final painter = TextPainter(
+      text: TextSpan(text: _cohortLabel(cohort), style: style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+    )..layout();
+    if (painter.width > textWidth) textWidth = painter.width;
+  }
+
+  // 체크 아이콘 + 항목 패딩 + 메뉴 내부 여백. 글자 끝이 잘리지 않게 넉넉히.
+  final content = textWidth + 18 + 28 + 48;
+  final screen = MediaQuery.sizeOf(context).width - 24;
+  final floor = triggerWidth > 0 ? triggerWidth : 180.0;
+  return content.clamp(floor, screen);
 }
 
 String _cohortLabel(CohortModel cohort) => cohort.status == CohortStatus.active
@@ -220,7 +249,7 @@ class _CohortTrigger extends StatelessWidget {
         onTap: onPressed,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 360, minHeight: 36),
+          constraints: const BoxConstraints(minHeight: 36),
           padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),

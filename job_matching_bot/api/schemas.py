@@ -167,6 +167,10 @@ class RecommendResponse(StrictModel):
     notice: str = (
         "추천 순서는 이력서와 공고의 관련도이며 합격 가능성이나 지원자 점수가 아닙니다."
     )
+    # LLMOps — 원문 없이 버전만. 앱이 aiGenerationLogs에 옮긴다.
+    prompt_version: str = ""
+    model: str = ""
+    reasoning_effort: str = ""
 
 
 # ── 공고 찾아보기 챗봇 ──────────────────────────────────
@@ -347,6 +351,9 @@ class JobChatResponse(StrictModel):
     suggestions: list[str] = Field(
         default_factory=list, description="다음에 더 좁힐 거리. 그대로 눌러 보낼 수 있는 말"
     )
+    prompt_version: str = ""
+    model: str = ""
+    reasoning_effort: str = ""
 
 
 class HealthResponse(StrictModel):

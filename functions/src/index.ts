@@ -41,6 +41,7 @@ export {
   generateAssessmentQuestions,
   recordAiQuestionFeedback,
 } from "./assessments";
+export {recordAiGenerationLog, recordAiOutcomeFeedback} from "./aiOps";
 export {getCurriculumYoutubeRecommendations} from "./youtubeRecommendations";
 import {settleMissionsOnApproval} from "./missions";
 

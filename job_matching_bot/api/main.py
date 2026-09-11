@@ -30,6 +30,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from job_matching_bot.api import schemas
+from job_matching_bot.api.ops_meta import (
+    JOB_CHAT_PROMPT_VERSION,
+    JOB_RECOMMEND_PROMPT_VERSION,
+    openai_model,
+    reasoning_effort,
+)
 from job_matching_bot.api.service import (
     ChatService,
     RecommendService,
@@ -38,6 +44,26 @@ from job_matching_bot.api.service import (
 )
 from job_matching_bot.env import ensure_loaded
 from job_matching_bot.retrieval.pinecone_index import client, index_name
+
+
+def _with_recommend_ops(response: schemas.RecommendResponse) -> schemas.RecommendResponse:
+    return response.model_copy(
+        update={
+            "prompt_version": JOB_RECOMMEND_PROMPT_VERSION,
+            "model": openai_model(),
+            "reasoning_effort": reasoning_effort(),
+        }
+    )
+
+
+def _with_chat_ops(response: schemas.JobChatResponse) -> schemas.JobChatResponse:
+    return response.model_copy(
+        update={
+            "prompt_version": JOB_CHAT_PROMPT_VERSION,
+            "model": openai_model(),
+            "reasoning_effort": reasoning_effort(),
+        }
+    )
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
@@ -148,7 +174,7 @@ def resume_profile(request: schemas.ProfileRequest) -> schemas.ResumeProfileOut:
 @app.post("/api/v1/jobs/recommend", response_model=schemas.RecommendResponse)
 def recommend(request: schemas.RecommendRequest) -> schemas.RecommendResponse:
     try:
-        return _service.recommend(request)
+        return _with_recommend_ops(_service.recommend(request))
     except SearchUnavailable as error:
         # 검색이나 조건 판정이 실패하면 추천하지 않는다. 근거 없는 목록을 보여 주지 않는다.
         raise HTTPException(status_code=503, detail=str(error)) from error
@@ -182,7 +208,9 @@ async def recommend_stream(request: schemas.RecommendRequest) -> StreamingRespon
 
     def work() -> None:
         try:
-            result = _service.recommend(request, progress=progress)
+            result = _with_recommend_ops(
+                _service.recommend(request, progress=progress)
+            )
             push({"event": "done", "result": result.model_dump(mode="json")})
         except SearchUnavailable as error:
             push({"event": "error", "detail": str(error)})
@@ -211,6 +239,6 @@ async def recommend_stream(request: schemas.RecommendRequest) -> StreamingRespon
 def chat(request: schemas.JobChatRequest) -> schemas.JobChatResponse:
     """말로 공고를 찾는다. 앱은 직전 응답의 `filters`를 그대로 실어 보내 대화를 잇는다."""
     try:
-        return _chat.chat(request)
+        return _with_chat_ops(_chat.chat(request))
     except StoreUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
