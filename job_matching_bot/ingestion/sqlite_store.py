@@ -315,6 +315,21 @@ class SqliteJobStore:
                 found[(row["source"], row["source_job_id"])] = row
         return found
 
+    def _lifecycle(self, keys: list[tuple[str, str]]) -> dict[tuple[str, str], sqlite3.Row]:
+        """`refresh`가 이어받을 값. `_existing_light`보다 생애주기 열을 더 가져온다."""
+        found: dict[tuple[str, str], sqlite3.Row] = {}
+        for chunk in _chunks(keys, self._IN_CHUNK):
+            marks = ", ".join("(?, ?)" for _ in chunk)
+            params = [v for key in chunk for v in key]
+            rows = self.conn.execute(
+                "SELECT source, source_job_id, content_hash, first_seen_at, last_seen_at, "
+                f"status, missing_runs, revisions FROM jobs WHERE (source, source_job_id) IN (VALUES {marks})",
+                params,
+            )
+            for row in rows:
+                found[(row["source"], row["source_job_id"])] = row
+        return found
+
     def refresh(self, collected: Iterable[Job], *, as_of: datetime = AS_OF) -> dict[str, list[str]]:
         """이미 저장된 공고를 **다시 파싱한 내용으로만** 덮어쓴다.
 
@@ -325,11 +340,16 @@ class SqliteJobStore:
 
         `first_seen_at`과 `revisions`는 이어받는다. 저장소에 없는 공고는 건너뛴다 —
         새 공고를 들이는 것은 `upsert`가 할 일이다.
+
+        **상태와 미관측 횟수는 손대지 않는다.** 다시 파싱하는 것은 저장해 둔 글을
+        다시 읽는 일이지, 그 공고가 아직 살아 있는지 확인하는 일이 아니다. 처음에는
+        `resolve_status`로 다시 계산했는데, 그 판정이 9일 전에 고정된 `AS_OF`를 기준으로
+        해서 만료·삭제된 공고 7,090건이 한꺼번에 OPEN으로 되살아났다. 살아 있는지는
+        목록 관측과 링크 확인이 정하는 것이고, 여기서 알 수 있는 것이 아니다.
         """
         collected = list(collected)
-        timestamp = as_of.isoformat()
         keys = [(job.source, job.source_job_id) for job in collected]
-        existing = self._existing_light(list(dict.fromkeys(keys)))
+        existing = self._lifecycle(list(dict.fromkeys(keys)))
         result: dict[str, list[str]] = {"changed": [], "same": [], "unknown": []}
         with self.conn:
             for job in collected:
@@ -342,9 +362,9 @@ class SqliteJobStore:
                     JobRecord(
                         job=job,
                         first_seen_at=previous["first_seen_at"],
-                        last_seen_at=timestamp,
-                        status=resolve_status(job, as_of),
-                        missing_runs=0,
+                        last_seen_at=previous["last_seen_at"],
+                        status=previous["status"],
+                        missing_runs=int(previous["missing_runs"]),
                         revisions=int(previous["revisions"]) + (1 if changed else 0),
                     )
                 )

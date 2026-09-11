@@ -216,6 +216,34 @@ class RefreshTest(unittest.TestCase):
         same_hash = replace(self.jobs[0], description="글자는 다르지만 지문은 그대로")
         self.assertEqual([self.jobs[0].job_id], self.store.refresh([same_hash], as_of=AS_OF)["same"])
 
+    def test_an_expired_posting_does_not_come_back_to_life(self):
+        """**이 테스트가 있는 이유.** 처음에는 `resolve_status`로 상태를 다시 계산했다.
+        그 판정이 9일 전에 고정된 `AS_OF`를 기준으로 해서, 실제로 돌려 보니 만료·삭제된
+        공고 7,090건이 한꺼번에 OPEN으로 되살아났다.
+
+        다시 파싱하는 것은 저장해 둔 글을 다시 읽는 일이지, 그 공고가 아직 살아 있는지
+        확인하는 일이 아니다. 살아 있는지는 목록 관측과 링크 확인이 정한다.
+        """
+        gone = self.jobs[0]
+        record = self._record(gone.job_id)
+        self.store.put(replace(record, status=STATUS_EXPIRED, missing_runs=2))
+        self.store.refresh([replace(gone, description="다시 파싱한 본문", content_hash="새-지문")])
+        after = self._record(gone.job_id)
+        self.assertEqual(STATUS_EXPIRED, after.status)
+        self.assertEqual(2, after.missing_runs, "미관측 횟수도 건드리지 않는다")
+
+    def test_a_removed_posting_stays_removed(self):
+        gone = self.jobs[1]
+        self.store.put(replace(self._record(gone.job_id), status=STATUS_REMOVED, missing_runs=3))
+        self.store.refresh([gone])
+        self.assertEqual(STATUS_REMOVED, self._record(gone.job_id).status)
+
+    def test_the_last_seen_date_is_not_moved_forward(self):
+        """다시 파싱한 날을 "마지막으로 본 날"로 적으면 사라진 공고가 살아 있어 보인다."""
+        before = self._record(self.jobs[0].job_id).last_seen_at
+        self.store.refresh([replace(self.jobs[0], description="바뀐 본문", content_hash="새-지문")])
+        self.assertEqual(before, self._record(self.jobs[0].job_id).last_seen_at)
+
     def test_a_posting_the_store_never_had_is_not_added(self):
         """새 공고를 들이는 것은 `upsert`가 할 일이다."""
         stranger = replace(self.jobs[0], job_id="NEW-1", source_job_id="99999")
