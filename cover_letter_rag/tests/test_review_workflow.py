@@ -51,6 +51,73 @@ def test_followup_is_bound_to_question_and_version():
         prepare_answers(request.model_copy(update={'answers': [answer.model_copy(update={'question_id': 'fake'})]}), first.model_dump(), first.input_hash, first.item_refs)
 
 
+def test_gap_audit_allows_questions_but_never_rewrites_resume():
+    calls = []
+
+    def generate(data):
+        calls.append(data)
+        if len(calls) == 1:
+            return ResumeReviewGeneration(summary='첫 검토', section_reviews=[])
+        return ResumeReviewGeneration(
+            summary='누락 점검',
+            section_reviews=[],
+            sentence_reviews=[SentenceReview(
+                field_path='projects[0].description',
+                original_quote='API 응답 시간을 20% 개선했습니다.',
+                reason='다른 표현 제안',
+                suggested_revision='API 응답 성능을 20% 개선했습니다.',
+                evidence_quotes=['API 응답 시간을 20% 개선했습니다.'],
+            )],
+            questions=[ReviewQuestion(
+                field_path='projects[0].description',
+                topic='scope',
+                question='본인이 직접 담당한 API 범위는 어디까지인가요?',
+                reason='담당 범위가 아직 확인되지 않았습니다.',
+                priority=1,
+            )],
+        )
+
+    service = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generate,
+    )
+    first = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1', resume_id='resume-1', request_id='initial-audit-test',
+        ),
+    )
+    audited = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1',
+            resume_id='resume-1',
+            request_id='gap-audit-test',
+            previous_review_id=first.review_id,
+            expected_input_hash=first.input_hash,
+            review_phase='gap_audit',
+        ),
+    )
+
+    assert '누락 점검 단계' in calls[1]['review_scope']
+    assert audited.sentence_reviews == []
+    assert [question.topic for question in audited.questions] == ['scope']
+
+
+def test_gap_audit_requires_previous_review_and_no_answers():
+    service = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generation,
+    )
+    with pytest.raises(ReviewInputError):
+        service.review(
+            'valid-token',
+            FirestoreResumeReviewRequest(
+                cohort_id='cohort-1',
+                resume_id='resume-1',
+                review_phase='gap_audit',
+            ),
+        )
+
+
 def test_followup_prompt_is_limited_to_the_answered_resume_item():
     fields = {
         'projects[0].description': '첫 번째 프로젝트 설명',

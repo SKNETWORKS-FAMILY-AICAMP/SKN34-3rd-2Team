@@ -184,7 +184,7 @@ def enforce_resume_review_grounding(
         normalized_reviews.append(review)
 
     generation.section_reviews = normalized_reviews
-    generation.confirmation_questions = _deduplicate(all_questions)[:10]
+    generation.confirmation_questions = _deduplicate(all_questions)[:30]
     return generation, _deduplicate(warnings)
 
 
