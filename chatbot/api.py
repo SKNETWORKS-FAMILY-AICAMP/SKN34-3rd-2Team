@@ -2,29 +2,28 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
-from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Iterator
 
 import firebase_admin
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
-from firebase_admin import auth, credentials, firestore
+from firebase_admin import auth, credentials, firestore, storage
 from pydantic import BaseModel, Field
 
+from chatbot.firebase_student_context import (
+    load_student_context,
+    load_unit_period_context,
+    parse_schedule_date,
+)
 from chatbot.student_chatbot import LmsStudentChatbot, create_student_chatbot
-from chatbot.unit_period import calculate_unit_period_context
 
 router = APIRouter(prefix="/api/v1/student-chatbot", tags=["student-chatbot"])
-KST = timezone(timedelta(hours=9), name="Asia/Seoul")
 THREAD_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
-DATE_RE = re.compile(
-    r"(?:(\d{4})\s*(?:년|[./-])\s*)?"
-    r"(\d{1,2})\s*(?:월|[./-])\s*(\d{1,2})\s*일?"
-)
 
 
 class InitRequest(BaseModel):
@@ -35,26 +34,7 @@ class ChatRequest(InitRequest):
     question: str = Field(min_length=1, max_length=2000)
 
 
-def _to_kst_date(value: Any) -> date | None:
-    if isinstance(value, datetime):
-        return (value.replace(tzinfo=KST) if value.tzinfo is None else value.astimezone(KST)).date()
-    if isinstance(value, date):
-        return value
-    return None
-
-
-def _parse_schedule_date(label: str, course_start: date) -> date | None:
-    match = DATE_RE.search(label.strip())
-    if not match:
-        return None
-    year = int(match.group(1)) if match.group(1) else course_start.year
-    month, day = int(match.group(2)), int(match.group(3))
-    if not match.group(1) and month < course_start.month:
-        year += 1
-    try:
-        return date(year, month, day)
-    except ValueError:
-        return None
+_parse_schedule_date = parse_schedule_date
 
 
 @lru_cache
@@ -63,7 +43,13 @@ def _firebase_app():
         return firebase_admin.get_app()
     except ValueError:
         project_id = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
-        options = {"projectId": project_id} if project_id else None
+        options = None
+        if project_id:
+            options = {
+                "projectId": project_id,
+                "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
+                or f"{project_id}.firebasestorage.app",
+            }
         return firebase_admin.initialize_app(credentials.ApplicationDefault(), options)
 
 
@@ -89,59 +75,38 @@ def _student_session(authorization: str | None = Header(default=None)) -> dict[s
         raise HTTPException(status_code=401, detail="Firebase 로그인이 만료됐습니다") from exc
 
 
-def _load_unit_context(session: dict[str, Any], today: date | None = None) -> dict[str, Any]:
-    db, cohort, uid = session["db"], session["cohort"], session["uid"]
-    cohort_data = db.collection("cohorts").document(cohort).get().to_dict() or {}
-    start, end = _to_kst_date(cohort_data.get("startDate")), _to_kst_date(cohort_data.get("endDate"))
-    if not start or not end:
-        return {"unavailable_reason": "기수의 개강일 또는 종강일이 등록되지 않았습니다"}
-
-    scheduled_dates: set[date] = set()
-    sheets = list(
-        db.collection("cohorts").document(cohort).collection("curriculumSheets")
-        .order_by("uploadedAt", direction=firestore.Query.DESCENDING).limit(1).stream()
-    )
-    if sheets:
-        for row in (sheets[0].to_dict() or {}).get("rows", []):
-            parsed = _parse_schedule_date(str(row.get("dateLabel") or ""), start)
-            if parsed and start <= parsed <= end:
-                scheduled_dates.add(parsed)
-
-    attendance: dict[date, str] = {}
-    records = (
-        db.collection("cohorts").document(cohort).collection("attendances")
-        .where("userId", "==", uid).stream()
-    )
-    for document in records:
-        data = document.to_dict() or {}
-        try:
-            day = date.fromisoformat(str(data.get("dateKey") or ""))
-        except ValueError:
-            continue
-        status = str(data.get("status") or ("present" if data.get("type") == "checkIn" else ""))
-        if status:
-            attendance[day] = status
-
-    return calculate_unit_period_context(
-        start,
-        end,
-        today=today or datetime.now(KST).date(),
-        scheduled_dates=scheduled_dates,
-        attendance_records=attendance,
-    )
+_load_unit_context = load_unit_period_context
 
 
 @lru_cache
 def get_student_chatbot() -> LmsStudentChatbot:
-    return create_student_chatbot()
+    app = _firebase_app()
+    db = firestore.client(app=app)
+    project_id = app.project_id
+    bucket_name = os.getenv("FIREBASE_STORAGE_BUCKET") or (
+        f"{project_id}.firebasestorage.app" if project_id else None
+    )
+    bucket = storage.bucket(bucket_name, app=app)
+
+    def loader(uid: str, cohort: str, scopes: list[Any], query: str) -> dict[str, Any]:
+        return load_student_context(
+            db=db,
+            bucket=bucket,
+            uid=uid,
+            cohort=cohort,
+            scopes=scopes,
+            query=query,
+        )
+
+    return create_student_chatbot(student_context_loader=loader)
 
 
 def _chat_inputs(request: InitRequest, session: dict[str, Any]) -> dict[str, Any]:
-    safe_uid = re.sub(r"[^A-Za-z0-9._-]", "_", session["uid"])[:40]
+    uid_key = hashlib.sha256(session["uid"].encode()).hexdigest()[:24]
     return {
-        "thread_id": f"{safe_uid}.{request.thread_id}",
+        "thread_id": f"{uid_key}.{request.thread_id}",
+        "student_uid": session["uid"],
         "cohort": session["cohort"],
-        "unit_period_context": _load_unit_context(session),
     }
 
 
@@ -155,7 +120,7 @@ def initialize_chatbot(
     return {
         "thread_id": request.thread_id,
         "cohort": inputs["cohort"],
-        "unit_period_context": inputs["unit_period_context"],
+        "unit_period_context": _load_unit_context(session),
     }
 
 

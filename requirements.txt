@@ -35,6 +35,7 @@ xlrd>=2
 
 # 공고 데이터 공유 (Firebase Storage)
 firebase-admin>=7,<8
+pypdf>=5,<7
 
 # 첨삭 API 설정 및 .env 로딩
 pydantic-settings>=2.7,<3
