@@ -22,6 +22,7 @@ from datetime import date
 from pathlib import Path
 
 from job_matching_bot.evaluation.app_resume import (
+    EVAL_MOCKS,
     MOCKS,
     build_resume_text,
     education_level_of,
@@ -214,6 +215,45 @@ class MatchesTheAppTest(unittest.TestCase):
             for field in ("education_level", "career_years", "majors", "certifications"):
                 with self.subTest(key=key, field=field):
                     self.assertEqual(want[field], got[field])
+
+
+class EvalPersonaTest(unittest.TestCase):
+    """평가 전용 이력서 5종. 앱 목업과 **다른 사람**이어야 한다.
+
+    기존 5종으로 판정 프롬프트와 가중치를 고쳤다. 같은 것으로 다시 재면 자기 데이터에
+    맞춘 셈이라 항상 좋아 보인다. 그래서 직무·연차·학력·자격증이 겹치지 않게 골랐다.
+    """
+
+    def setUp(self):
+        self.eval = load_personas(EVAL_MOCKS)
+        self.app = load_personas(MOCKS)
+
+    def test_there_are_five(self):
+        self.assertEqual(5, len(self.eval))
+
+    def test_none_of_them_is_an_app_persona(self):
+        self.assertEqual(set(), set(self.eval) & set(self.app))
+
+    def test_every_one_can_be_sent_as_is(self):
+        for name, persona in self.eval.items():
+            with self.subTest(name):
+                self.assertGreater(len(persona["resume_text"]), 20)
+                for field in ("preferred_regions", "preferred_employment_types",
+                              "education_level", "career_years", "majors", "certifications"):
+                    self.assertIn(field, persona)
+
+    def test_they_cover_the_paths_we_changed(self):
+        """오늘 바꾼 판정 경로를 실제로 건드려야 재는 뜻이 있다."""
+        levels = {p["education_level"] for p in self.eval.values()}
+        self.assertIn("석사", levels, "새 학력 판정을 건드려야 한다")
+        self.assertIn("초대졸", levels)
+        years = {p["career_years"] for p in self.eval.values()}
+        self.assertTrue(any(y >= 2 for y in years), "신입 전용 공고 거르기를 건드려야 한다")
+        certs = {c for p in self.eval.values() for c in p["certifications"]}
+        self.assertIn("정보처리기사", certs, "필수 자격증 통과 쪽을 건드려야 한다")
+
+    def test_the_eval_prefix_is_dropped_from_the_name(self):
+        self.assertTrue(all(not n.startswith("[평가]") for n in self.eval))
 
 
 if __name__ == "__main__":
