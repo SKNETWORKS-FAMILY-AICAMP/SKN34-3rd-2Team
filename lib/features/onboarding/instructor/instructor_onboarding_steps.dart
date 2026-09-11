@@ -25,7 +25,7 @@ abstract final class InstructorOnboarding {
     OnboardingStep(
       id: 'attendance_confirm',
       title: '확인 버튼',
-      body: '호명한 학생이 자리에 있으면 확인, 없으면 보류를 남깁니다.',
+      body: '호명한 학생이 자리에 있으면 확인을 누릅니다. 없으면 옆의 보류입니다.',
       targetId: InstructorOnboardingTargets.attendanceConfirm,
       route: RoutePaths.instructor,
       skippableIfMissing: true,
@@ -33,14 +33,14 @@ abstract final class InstructorOnboarding {
     OnboardingStep(
       id: 'nav_resumes',
       title: '이력서관리',
-      body: '학생 이력서 제출·피드백을 검토하는 메뉴입니다.',
+      body: '학생이 피드백을 요청한 이력서를 열어 피드백을 남기는 메뉴입니다.',
       targetId: InstructorOnboardingTargets.navResumes,
       route: RoutePaths.instructorResumes,
     ),
     OnboardingStep(
       id: 'resumes_stats',
       title: '이력서 현황',
-      body: '작성 중·제출·승인 현황을 확인하고 목록에서 검토합니다.',
+      body: '피드백 요청을 누르면 요청이 들어온 이력서만 추립니다. 목록에서 열어 피드백을 남깁니다.',
       targetId: InstructorOnboardingTargets.resumesStats,
       route: RoutePaths.instructorResumes,
       skippableIfMissing: true,
@@ -90,7 +90,7 @@ abstract final class InstructorOnboarding {
     OnboardingStep(
       id: 'nav_mypage',
       title: '마이페이지',
-      body: '프로필·비밀번호를 관리합니다. 여기서 온보딩을 다시 볼 수도 있습니다.',
+      body: '프로필·비밀번호를 관리합니다. 여기서 이용 안내를 다시 볼 수도 있습니다.',
       targetId: InstructorOnboardingTargets.navMyPage,
       route: RoutePaths.instructorMyPage,
     ),

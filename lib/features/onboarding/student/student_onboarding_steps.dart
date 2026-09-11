@@ -6,7 +6,7 @@ abstract final class StudentOnboarding {
   static const tourId = 'student';
   static const version = 1;
 
-  /// 약 13스텝: 네비 10 + CTA 3
+  /// 14스텝: 네비 10 + CTA 3 + 마이페이지
   static const steps = <OnboardingStep>[
     OnboardingStep(
       id: 'nav_dashboard',
@@ -18,7 +18,7 @@ abstract final class StudentOnboarding {
     OnboardingStep(
       id: 'dashboard_calendar',
       title: '출석 캘린더',
-      body: '이번 달 출석 상태를 캘린더에서 확인할 수 있습니다.',
+      body: '월별 출석 상태를 캘린더에서 확인할 수 있습니다.',
       targetId: StudentOnboardingTargets.dashboardCalendar,
       route: RoutePaths.dashboard,
       skippableIfMissing: true,
@@ -26,21 +26,21 @@ abstract final class StudentOnboarding {
     OnboardingStep(
       id: 'attendance_form',
       title: '출결 폼',
-      body: '지각·조퇴·결석 등 예외 출결은 출결 폼으로 제출합니다.',
+      body: '예외 출결을 제출하는 구글 폼입니다. 누르면 새 창이 열립니다.',
       targetId: StudentOnboardingTargets.attendanceForm,
       route: RoutePaths.dashboard,
     ),
     OnboardingStep(
       id: 'nav_resume',
       title: '이력서 관리',
-      body: '이력서를 작성하고 피드백을 받는 메뉴입니다.',
+      body: '이력서를 작성하고 피드백을 요청합니다. 피드백이 오면 확인하고 답글을 남길 수 있습니다.',
       targetId: StudentOnboardingTargets.navResume,
       route: RoutePaths.resume,
     ),
     OnboardingStep(
       id: 'nav_study',
       title: '학습실',
-      body: '주간 학습 자료와 과제를 확인합니다.',
+      body: '배정된 인프런 강의와 이번 주 커리큘럼 YouTube 추천을 확인합니다.',
       targetId: StudentOnboardingTargets.navStudyRoom,
       route: RoutePaths.studyRoom,
     ),
@@ -62,7 +62,7 @@ abstract final class StudentOnboarding {
     OnboardingStep(
       id: 'nav_seating',
       title: '자리 배치',
-      body: '오늘 내 좌석 위치를 확인합니다.',
+      body: '게시된 좌석 배치에서 내 자리를 확인합니다.',
       targetId: StudentOnboardingTargets.navSeating,
       route: RoutePaths.seating,
     ),
@@ -83,7 +83,7 @@ abstract final class StudentOnboarding {
     OnboardingStep(
       id: 'nav_records',
       title: '기록실',
-      body: '출석·학습 기록을 모아 봅니다.',
+      body: '블로그·스터디·자격증 기록을 제출하고 관리합니다.',
       targetId: StudentOnboardingTargets.navRecords,
       route: RoutePaths.records,
     ),
@@ -100,6 +100,13 @@ abstract final class StudentOnboarding {
       body: '공개된 평가에 응시하고 결과를 확인합니다.',
       targetId: StudentOnboardingTargets.navAssessments,
       route: RoutePaths.assessments,
+    ),
+    // 앱바는 어느 화면에나 있으므로 옮겨 다니지 않는다. route를 비워 둔다.
+    OnboardingStep(
+      id: 'nav_mypage',
+      title: '마이페이지',
+      body: '프로필·비밀번호를 관리합니다. 여기서 이용 안내를 다시 볼 수도 있습니다.',
+      targetId: StudentOnboardingTargets.navMyPage,
     ),
   ];
 }
