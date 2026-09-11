@@ -440,6 +440,12 @@ playdata_venv\Scripts\activate
 python -m uvicorn job_matching_bot.api.main:app --host 127.0.0.1 --port 8000
 ```
 
+이력서 첨삭·학생 챗봇까지 한 번에 띄우려면 통합 진입점을 사용합니다(권장).
+
+```powershell
+python -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1 --port 8000
+```
+
 `http://127.0.0.1:8000/health` 가 `{"status":"ok", ...}` 를 주면 됩니다. Pinecone·OpenAI 키는
 루트 `.env`에서 읽습니다. Functions 배포 전에는 `scripts/sync-functions-env.ps1`로 생성된 `functions/.env`가 사용됩니다.
 
