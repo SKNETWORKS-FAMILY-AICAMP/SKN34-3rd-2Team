@@ -304,12 +304,13 @@
     },
     {
       "id": "number-is-not-a-ref",
-      "note": "숫자처럼 보여도 자리를 가리키는 말이 아니다",
+      "note": "숫자처럼 보여도 자리를 가리키는 말이 아니다. 경력 연차다 — 그 숫자로 걸러야 한다",
       "turns": [
         {
           "message": "3년차인데 갈 만한 데 있어?",
           "expect": {
-            "job_refs": []
+            "job_refs": [],
+            "career_years": 3
           }
         }
       ]
@@ -575,6 +576,21 @@
               "말투",
               "면접후결정"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "career-years-entry",
+      "note": "신입이라고만 하면 연차를 지어내지 않는다. 0으로 박으면 연차 미기재 공고가 빠진다",
+      "turns": [
+        {
+          "message": "신입인데 갈 만한 데 있어?",
+          "expect": {
+            "filters": {
+              "career": "신입"
+            },
+            "career_years_unset": true
           }
         }
       ]

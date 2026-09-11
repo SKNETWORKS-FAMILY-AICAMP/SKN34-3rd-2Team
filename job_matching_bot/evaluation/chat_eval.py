@@ -210,6 +210,14 @@ def check(expect: dict, sent: dict, got: dict, elapsed: float) -> list[tuple[str
         # "서울 백엔드"에서 keywords 에 무언가 더 담겨도 검색은 여전히 걸린다.
         add(f"조건 {field}", all(w in have for w in want), f"{want} ⊂ {have}")
 
+    if "career_years" in expect:
+        add("조건 career_years", filters.get("career_years") == expect["career_years"],
+            f"{expect['career_years']} ↔ {filters.get('career_years')}")
+    if expect.get("career_years_unset"):
+        # 0으로 박으면 연차 미기재 공고가 통째로 빠진다. 안 밝힌 것과 0년차는 다르다.
+        add("조건 career_years(없음)", filters.get("career_years") is None,
+            f"null 이어야 함 ↔ {filters.get('career_years')}")
+
     want_career = (expect.get("filters") or {}).get("career")
     if want_career is not None:
         add("조건 career", filters.get("career") == want_career,
@@ -259,6 +267,7 @@ def check(expect: dict, sent: dict, got: dict, elapsed: float) -> list[tuple[str
 HTTP_KEYS = frozenset({
     "mode", "mode_not", "filters", "roles_not", "filters_empty",
     "deadline_set", "picked_rank", "resume_scope", "polite", "rules",
+    "career_years", "career_years_unset",
 })
 # 응답에 안 나오는 것. `check_router`가 본다.
 ROUTER_KEYS = frozenset({
