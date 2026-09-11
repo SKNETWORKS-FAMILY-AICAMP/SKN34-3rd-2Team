@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/routing/route_paths.dart';
@@ -50,6 +51,38 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _isSaving = false;
   bool _dirty = false;
   bool _showAiCoach = false;
+  bool _coachVisibilityInitialized = false;
+
+  static const _coachVisibilityPreference = 'resume_ai_coach_open';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_coachVisibilityInitialized) return;
+    _coachVisibilityInitialized = true;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
+    // 넓은 편집 화면에서는 코치를 기본으로 열고, 좁은 화면에서는 본문을 먼저 보인다.
+    _showAiCoach = wide;
+    if (wide) unawaited(_restoreCoachVisibility());
+  }
+
+  Future<void> _restoreCoachVisibility() async {
+    final preferences = await SharedPreferences.getInstance();
+    final saved = preferences.getBool(_coachVisibilityPreference);
+    if (!mounted || saved == null) return;
+    setState(() => _showAiCoach = saved);
+  }
+
+  void _setCoachVisible(bool visible) {
+    if (_showAiCoach == visible) return;
+    setState(() => _showAiCoach = visible);
+    unawaited(_saveCoachVisibility(visible));
+  }
+
+  Future<void> _saveCoachVisibility(bool visible) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_coachVisibilityPreference, visible);
+  }
 
   /// 화면에 들어왔을 때 이미 있던 피드백의 id. 이 뒤에 온 것만 배너로 알린다.
   /// 들어올 때마다 알리면 잔소리가 된다.
@@ -80,16 +113,19 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   static const double _minResumeHeight = 200;
 
   /// 손잡이가 차지하는 폭. 보이는 선은 1px이지만 잡히는 폭은 이만큼이다.
-  static const double _handleWidth = 12;
+  static const double _handleWidth = 28;
+
   /// 너비만 따로 들고 있는다. `setState`로 두면 끌 때마다 이력서 화면 전체를
   /// 다시 그린다 — 입력칸 수십 개짜리 화면을 초당 60번 다시 만들어 눈에 띄게 버벅인다.
   /// 알림값으로 두면 아래의 `ValueListenableBuilder` 안쪽만 다시 그린다.
-  final ValueNotifier<double> _panelWidth =
-      ValueNotifier<double>(_panelDefaultWidth);
+  final ValueNotifier<double> _panelWidth = ValueNotifier<double>(
+    _panelDefaultWidth,
+  );
 
   /// 좁은 화면에서의 패널 높이. 너비와 같은 이유로 알림값이다.
-  final ValueNotifier<double> _panelHeight =
-      ValueNotifier<double>(_panelDefaultHeight);
+  final ValueNotifier<double> _panelHeight = ValueNotifier<double>(
+    _panelDefaultHeight,
+  );
 
   /// 끌기를 시작한 순간의 너비·높이. 커서까지의 거리를 여기서 뺀다.
   double? _dragStartWidth;
@@ -121,6 +157,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   late final ScrollController _scrollController;
   late final Map<String, GlobalKey> _sectionKeys;
   String? _selectedSection;
+
   /// 이 이력서를 검토하는 사람인가(강사·관리자). 관리자만 보던 것을 넓혔다 —
   /// 강사는 관리자가 아니라 학생용 화면을 받았고, 남의 이력서에 저장을
   /// 시도해 'permission-denied' 가 났다.
@@ -185,7 +222,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   ///
   /// [announce]가 true면 채운 항목을 스낵바로 알린다(첫 로드). 프로필 스트림이
   /// 아직 안 왔으면 조용히 건너뛰고, 기본정보 섹션의 버튼으로 다시 시도할 수 있다.
-  bool _prefillBasicInfoFromProfile(ResumeModel resume, {required bool announce}) {
+  bool _prefillBasicInfoFromProfile(
+    ResumeModel resume, {
+    required bool announce,
+  }) {
     if (ref.read(canReviewResumesProvider)) return false;
     final user = ref.read(currentUserProvider).value;
     if (user == null) return false;
@@ -272,7 +312,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   void _markDirty() {
     final resume = _resume;
-    if (resume == null || _isReadOnly(isReviewer: _isReviewer, resume: resume)) return;
+    if (resume == null || _isReadOnly(isReviewer: _isReviewer, resume: resume))
+      return;
     // 이미 고쳐진 상태면 다시 그릴 이유가 없다. 처음 한 번만 화면이 바뀐다.
     if (_dirty) return;
     setState(() => _dirty = true);
@@ -286,8 +327,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
         title: const Text('저장하지 않은 변경'),
         content: const Text('저장하지 않은 내용이 있습니다. 나가시겠습니까?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('계속 작성')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('나가기')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('계속 작성'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('나가기'),
+          ),
         ],
       ),
     );
@@ -310,7 +357,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
     // 내가 단 답글은 나에게 온 피드백이 아니다.
     final arrived = all
-        .where((f) => !_feedbackIdsOnOpen!.contains(f.id) && !f.isReplyOn(resume))
+        .where(
+          (f) => !_feedbackIdsOnOpen!.contains(f.id) && !f.isReplyOn(resume),
+        )
         .length;
     if (arrived <= 0 || _bannerDismissed) return const SizedBox.shrink();
     return Container(
@@ -327,7 +376,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
           Expanded(
             child: Text(
               '새 피드백 $arrived건이 도착했습니다. 종을 눌러 확인하세요.',
-              style: const TextStyle(fontSize: 12.5, color: AppColors.primaryDark),
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.primaryDark,
+              ),
             ),
           ),
           IconButton(
@@ -357,24 +409,24 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   /// 항목 하나. 아래에 그 항목의 댓글을 붙인다. 여기 한 곳만 고치면 모든 항목에 붙는다.
   Widget _section(String key, Widget child, ResumeModel resume) => KeyedSubtree(
-        key: _sectionKeys[key],
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            child,
-            SectionFeedbackThread(
-              resume: resume,
-              sectionKey: key,
-              expanded: _openThreads.contains(key),
-              onToggle: () => setState(() {
-                _openThreads.contains(key)
-                    ? _openThreads.remove(key)
-                    : _openThreads.add(key);
-              }),
-            ),
-          ],
+    key: _sectionKeys[key],
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        child,
+        SectionFeedbackThread(
+          resume: resume,
+          sectionKey: key,
+          expanded: _openThreads.contains(key),
+          onToggle: () => setState(() {
+            _openThreads.contains(key)
+                ? _openThreads.remove(key)
+                : _openThreads.add(key);
+          }),
         ),
-      );
+      ],
+    ),
+  );
 
   /// 부르는 곳마다 resume 을 적지 않도록 한 번 묶어 둔다.
   Widget Function(String, Widget) _sectionOf(ResumeModel resume) =>
@@ -392,11 +444,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     bool incrementRevision = true,
   }) async {
     final isReviewer = ref.read(canReviewResumesProvider);
-    if (_isReadOnly(isReviewer: isReviewer, resume: resume) && status == null) return;
+    if (_isReadOnly(isReviewer: isReviewer, resume: resume) && status == null)
+      return;
     setState(() => _isSaving = true);
     try {
       final cohortId = ref.read(effectiveCohortIdProvider)!;
-      await ref.read(lmsRepositoryProvider).updateResume(
+      await ref
+          .read(lmsRepositoryProvider)
+          .updateResume(
             cohortId: cohortId,
             resumeId: widget.resumeId,
             title: _title.trim().isEmpty ? '새 이력서' : _title.trim(),
@@ -431,8 +486,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
           '강사·관리자에게 피드백을 요청합니다. 요청해야 이력서가 전달되고, 요청한 뒤에도 계속 수정할 수 있습니다.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('피드백 요청')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('피드백 요청'),
+          ),
         ],
       ),
     );
@@ -452,15 +513,23 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
         title: const Text('이력서 승인'),
         content: const Text('이 이력서를 승인합니다. 학생은 승인 뒤에도 계속 수정할 수 있습니다.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('승인')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('승인'),
+          ),
         ],
       ),
     );
     if (ok != true || !mounted) return;
     setState(() => _isSaving = true);
     try {
-      await ref.read(lmsRepositoryProvider).approveResume(
+      await ref
+          .read(lmsRepositoryProvider)
+          .approveResume(
             cohortId: ref.read(effectiveCohortIdProvider)!,
             resumeId: widget.resumeId,
           );
@@ -502,7 +571,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     final resumeAsync = ref.watch(resumeDetailProvider(widget.resumeId));
 
     return resumeAsync.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: ErrorView(message: e.toString())),
       data: (resume) {
         if (resume == null) {
@@ -513,7 +583,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
         }
         _initFromResume(resume);
         // 첫 로드 때 프로필 스트림이 아직 안 왔으면 도착한 뒤 한 번만 자동으로 채운다.
-        if (!_profilePrefillTried && ref.watch(currentUserProvider).value != null) {
+        if (!_profilePrefillTried &&
+            ref.watch(currentUserProvider).value != null) {
           _profilePrefillTried = true;
           _prefillBasicInfoFromProfile(resume, announce: true);
         }
@@ -548,7 +619,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
               ),
               leadingWidth: 110,
               actions: [
-                if (!isReviewer && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit)
+                if (!isReviewer &&
+                    resume.canStudentEdit &&
+                    _viewMode == _ResumeViewMode.edit)
                   ResumeMockMenu(
                     onPick: (title, content) {
                       setState(() {
@@ -556,48 +629,25 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         // 기본정보는 사용자가 적었거나 프로필에서 채워진 값을 지키고,
                         // 목업은 빈 칸과 그 아래 섹션만 채운다.
                         _content = content.copyWith(
-                          basicInfo: mergeBasicInfo(_content.basicInfo, content.basicInfo),
+                          basicInfo: mergeBasicInfo(
+                            _content.basicInfo,
+                            content.basicInfo,
+                          ),
                         );
                       });
                       _markDirty();
                     },
                   ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFF4ADE80),
-                        Color(0xFF22C55E),
-                        Color(0xFF15803D),
-                      ],
+                if (MediaQuery.sizeOf(context).width < 1000)
+                  IconButton(
+                    tooltip: _showAiCoach ? 'AI 코치 접기' : 'AI 코치 열기',
+                    onPressed: () => _setCoachVisible(!_showAiCoach),
+                    icon: Icon(
+                      _showAiCoach
+                          ? Icons.keyboard_arrow_down
+                          : Icons.auto_awesome,
                     ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x3316A34A),
-                        blurRadius: 7,
-                        offset: Offset(0, 3),
-                      ),
-                    ],
                   ),
-                  child: FilledButton.icon(
-                    onPressed: () => setState(() => _showAiCoach = !_showAiCoach),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      surfaceTintColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                    ),
-                    icon: const Icon(Icons.auto_awesome, size: 16),
-                    label: const Text('AI 취업 코치'),
-                  ),
-                ),
-                const SizedBox(width: 4),
                 // 종. 누르면 아래로 말풍선이 내려온다. 오른쪽 패널을 쓰지 않으므로
                 // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
                 FeedbackBell(
@@ -609,8 +659,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (!resume.isApproved || isReviewer)
                   _ModeToggle(
                     isEdit: _viewMode == _ResumeViewMode.edit,
-                    onEdit: () => setState(() => _viewMode = _ResumeViewMode.edit),
-                    onDoc: () => setState(() => _viewMode = _ResumeViewMode.doc),
+                    onEdit: () =>
+                        setState(() => _viewMode = _ResumeViewMode.edit),
+                    onDoc: () =>
+                        setState(() => _viewMode = _ResumeViewMode.doc),
                   ),
                 if (_viewMode == _ResumeViewMode.doc) ...[
                   const SizedBox(width: 8),
@@ -620,7 +672,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     icon: const Icon(Icons.picture_as_pdf_outlined),
                   ),
                 ],
-                if (!isReviewer && resume.canStudentEdit && _viewMode == _ResumeViewMode.edit) ...[
+                if (!isReviewer &&
+                    resume.canStudentEdit &&
+                    _viewMode == _ResumeViewMode.edit) ...[
                   const SizedBox(width: 8),
                   OutlinedButton(
                     onPressed: _isSaving ? null : () => _save(resume: resume),
@@ -629,7 +683,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   if (!resume.isSubmitted) ...[
                     const SizedBox(width: 8),
                     FilledButton.icon(
-                      onPressed: _isSaving ? null : () => _submitRequest(resume),
+                      onPressed: _isSaving
+                          ? null
+                          : () => _submitRequest(resume),
                       icon: const Icon(Icons.send, size: 16),
                       label: const Text('피드백 요청'),
                     ),
@@ -668,17 +724,26 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (resume.isSubmitted && !resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     color: AppColors.primaryLight,
                     child: const Text(
                       '피드백 요청됨 — 계속 수정할 수 있습니다.',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
                 if (resume.isApproved)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     color: AppColors.success.withValues(alpha: 0.12),
                     child: const Text(
                       '승인 완료 — 더 이상 수정할 수 없습니다.',
@@ -725,18 +790,23 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     info: _content.basicInfo,
                                     readOnly: readOnly,
                                     onChanged: (info) {
-                                      _updateContent(_content.copyWith(basicInfo: info));
+                                      _updateContent(
+                                        _content.copyWith(basicInfo: info),
+                                      );
                                       _markDirty();
                                     },
                                     onPrefill: readOnly
                                         ? null
                                         : () {
-                                            final changed = _prefillBasicInfoFromProfile(
-                                              resume,
-                                              announce: false,
-                                            );
+                                            final changed =
+                                                _prefillBasicInfoFromProfile(
+                                                  resume,
+                                                  announce: false,
+                                                );
                                             setState(() {});
-                                            ScaffoldMessenger.of(context).showSnackBar(
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
                                               SnackBar(
                                                 content: Text(
                                                   changed
@@ -755,9 +825,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     data: _content.coreCompetencies,
                                     readOnly: readOnly,
                                     onChanged: (d) {
-                                      _updateContent(_content.copyWith(
+                                      _updateContent(
+                                        _content.copyWith(
                                           coreCompetencies: d,
-                                        ));
+                                        ),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -769,7 +841,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.experience,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(experience: items));
+                                      _updateContent(
+                                        _content.copyWith(experience: items),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -781,7 +855,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.education,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(education: items));
+                                      _updateContent(
+                                        _content.copyWith(education: items),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -793,7 +869,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.techStack,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(techStack: items));
+                                      _updateContent(
+                                        _content.copyWith(techStack: items),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -805,9 +883,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.certifications,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(
+                                      _updateContent(
+                                        _content.copyWith(
                                           certifications: items,
-                                        ));
+                                        ),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -819,7 +899,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.awards,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(awards: items));
+                                      _updateContent(
+                                        _content.copyWith(awards: items),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -831,9 +913,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.trainingExperience,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(
+                                      _updateContent(
+                                        _content.copyWith(
                                           trainingExperience: items,
-                                        ));
+                                        ),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -845,9 +929,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.otherActivities,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(
+                                      _updateContent(
+                                        _content.copyWith(
                                           otherActivities: items,
-                                        ));
+                                        ),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -859,7 +945,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     items: _content.projects,
                                     readOnly: readOnly,
                                     onChanged: (items) {
-                                      _updateContent(_content.copyWith(projects: items));
+                                      _updateContent(
+                                        _content.copyWith(projects: items),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -871,9 +959,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     data: _content.selfIntroduction,
                                     readOnly: readOnly,
                                     onChanged: (d) {
-                                      _updateContent(_content.copyWith(
+                                      _updateContent(
+                                        _content.copyWith(
                                           selfIntroduction: d,
-                                        ));
+                                        ),
+                                      );
                                       _markDirty();
                                     },
                                   ),
@@ -915,12 +1005,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                   await _save(resume: resume);
                                   return !_dirty;
                                 },
-                          onResumeChanged: isReviewer ? null : (content) => setState(() {
-                            _content = content;
-                            _dirty = false;
-                          }),
+                          onResumeChanged: isReviewer
+                              ? null
+                              : (content) => setState(() {
+                                  _content = content;
+                                  _dirty = false;
+                                }),
                           isSidebar: wide,
-                          onClose: () => setState(() => _showAiCoach = false),
+                          onClose: () => _setCoachVisible(false),
                         );
                       }
                       final rightPanel = Stack(
@@ -939,11 +1031,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       // 이미 안쪽에 있어 닫힌 동안에는 자리를 차지하지 않는다.
                       if (!wide) {
                         // 이력서 본문을 최소 200px 남기고, 패널도 200px을 지킨다.
-                        final panelMaxHeight = (constraints.maxHeight -
-                                _minResumeHeight -
-                                _handleWidth)
-                            .clamp(_panelMinHeight, 900)
-                            .toDouble();
+                        final panelMaxHeight =
+                            (constraints.maxHeight -
+                                    _minResumeHeight -
+                                    _handleWidth)
+                                .clamp(_panelMinHeight, 900)
+                                .toDouble();
                         return Column(
                           children: [
                             Expanded(child: resumeScroll),
@@ -989,11 +1082,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
                       // 이력서 본문을 최소 560px 남기고, 오른쪽 패널은 최소 360px을 지킨다.
                       // 화면 크기가 달라져도 조절해 둔 폭을 안전한 범위 안에서만 쓴다.
-                      final panelMaxWidth = (constraints.maxWidth -
-                              _minResumeWidth -
-                              _handleWidth)
-                          .clamp(_panelMinWidth, 900)
-                          .toDouble();
+                      final panelMaxWidth =
+                          (constraints.maxWidth -
+                                  _minResumeWidth -
+                                  _handleWidth)
+                              .clamp(_panelMinWidth, 900)
+                              .toDouble();
 
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1007,27 +1101,35 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                             // 패널 자체는 여기 그대로 넘어와 다시 만들어지지 않는다.
                             child: rightPanel,
                             builder: (context, raw, panel) {
-                              final width =
-                                  raw.clamp(_panelMinWidth, panelMaxWidth);
+                              final width = raw.clamp(
+                                _panelMinWidth,
+                                panelMaxWidth,
+                              );
                               return Row(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Offstage(
-                                    offstage: !hasRightPanel,
-                                    child: _PanelResizeHandle(
+                                  if (hasRightPanel)
+                                    _PanelResizeHandle(
                                       onStart: () => _dragStartWidth = width,
                                       onUpdate: (dx) {
                                         // 왼쪽으로 끌면(거리가 음수) 넓어진다.
                                         _panelWidth.value =
                                             ((_dragStartWidth ?? width) - dx)
-                                                .clamp(_panelMinWidth,
-                                                    panelMaxWidth);
+                                                .clamp(
+                                                  _panelMinWidth,
+                                                  panelMaxWidth,
+                                                );
                                       },
                                       onReset: () => _panelWidth.value =
                                           _panelDefaultWidth,
+                                      onToggle: () => _setCoachVisible(false),
+                                    )
+                                  else
+                                    _CoachEdgeToggle(
+                                      expanded: false,
+                                      onPressed: () => _setCoachVisible(true),
                                     ),
-                                  ),
                                   SizedBox(
                                     width: hasRightPanel ? width : 0,
                                     child: DecoratedBox(
@@ -1079,6 +1181,7 @@ class _PanelResizeHandle extends StatefulWidget {
     required this.onStart,
     required this.onUpdate,
     required this.onReset,
+    this.onToggle,
     this.axis = Axis.vertical,
   });
 
@@ -1089,13 +1192,13 @@ class _PanelResizeHandle extends StatefulWidget {
   final VoidCallback onStart;
   final ValueChanged<double> onUpdate;
   final VoidCallback onReset;
+  final VoidCallback? onToggle;
 
   @override
   State<_PanelResizeHandle> createState() => _PanelResizeHandleState();
 }
 
 class _PanelResizeHandleState extends State<_PanelResizeHandle> {
-  bool _hovered = false;
   bool _dragging = false;
   double _start = 0;
 
@@ -1110,50 +1213,105 @@ class _PanelResizeHandleState extends State<_PanelResizeHandle> {
 
   @override
   Widget build(BuildContext context) {
-    final active = _hovered || _dragging;
     const thickness = _ResumeEditScreenState._handleWidth;
     return MouseRegion(
       cursor: _isVertical
           ? SystemMouseCursors.resizeColumn
           : SystemMouseCursors.resizeRow,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        // 크기 조절은 아래 Listener가 맡는다. 여기서는 되돌리기만 받는다.
-        onDoubleTap: widget.onReset,
-        child: Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (event) {
-            _start = _along(event.position);
-            widget.onStart();
-            setState(() => _dragging = true);
-          },
-          onPointerMove: (event) {
-            if (!_dragging) return;
-            widget.onUpdate(_along(event.position) - _start);
-          },
-          onPointerUp: (_) => _stop(),
-          onPointerCancel: (_) => _stop(),
-          child: SizedBox(
-            width: _isVertical ? thickness : double.infinity,
-            height: _isVertical ? null : thickness,
-            child: Center(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                // 끄는 방향과 직각으로 얇게 눕는다. 두께만 커졌다 작아진다.
-                width: _isVertical ? (active ? 3 : 1) : double.infinity,
-                // 길이를 안 주면 Center 안에서 0이 된다. 크기가 없는 상자는 히트
-                // 테스트를 할 수 없어, 마우스가 지나갈 때마다 단언문이 매 프레임
-                // 터지고 화면이 눈에 띄게 버벅인다.
-                height: _isVertical ? double.infinity : (active ? 3 : 1),
-                color: active ? AppColors.primary : AppColors.border,
+      child: SizedBox(
+        width: _isVertical ? thickness : double.infinity,
+        height: _isVertical ? null : thickness,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                onDoubleTap: widget.onReset,
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (event) {
+                    _start = _along(event.position);
+                    widget.onStart();
+                    setState(() => _dragging = true);
+                  },
+                  onPointerMove: (event) {
+                    if (!_dragging) return;
+                    widget.onUpdate(_along(event.position) - _start);
+                  },
+                  onPointerUp: (_) => _stop(),
+                  onPointerCancel: (_) => _stop(),
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      width: _isVertical ? 1 : double.infinity,
+                      height: _isVertical ? double.infinity : 1,
+                      color: AppColors.border,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+            if (_isVertical && widget.onToggle != null)
+              _CoachEdgeToggle(
+                expanded: true,
+                onPressed: widget.onToggle!,
+              ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _CoachEdgeToggle extends StatefulWidget {
+  const _CoachEdgeToggle({required this.expanded, required this.onPressed});
+
+  final bool expanded;
+  final VoidCallback onPressed;
+
+  @override
+  State<_CoachEdgeToggle> createState() => _CoachEdgeToggleState();
+}
+
+class _CoachEdgeToggleState extends State<_CoachEdgeToggle> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) => setState(() => _hovered = true),
+    onExit: (_) => setState(() => _hovered = false),
+    child: AnimatedOpacity(
+      opacity: 1,
+      duration: const Duration(milliseconds: 120),
+      child: Material(
+        color: Colors.white,
+        elevation: _hovered ? 4 : 1,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(
+            color: _hovered ? const Color(0xFF171717) : AppColors.border,
+          ),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: InkWell(
+          onTap: widget.onPressed,
+          borderRadius: BorderRadius.circular(9),
+          child: SizedBox(
+            width: 28,
+            height: 56,
+            child: Icon(
+              widget.expanded
+                  ? Icons.chevron_right_rounded
+                  : Icons.chevron_left_rounded,
+              size: 22,
+              color: const Color(0xFF171717),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _ModeToggle extends StatelessWidget {
@@ -1228,7 +1386,10 @@ class _FlatSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 8),
         const Divider(height: 1, color: AppColors.border),
         const SizedBox(height: 16),
@@ -1257,6 +1418,7 @@ class _Field extends StatefulWidget {
   final String value;
   final bool readOnly;
   final ValueChanged<String> onChanged;
+
   /// null이면 입력한 내용만큼 높이가 늘어나며 내부 스크롤을 만들지 않는다.
   final int? maxLines;
   final int? minLines;
@@ -1305,7 +1467,10 @@ class _FieldState extends State<_Field> {
             if (widget.label.isNotEmpty)
               Text(
                 widget.label,
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
               ),
             if (widget.label.isNotEmpty) const SizedBox(height: 2),
             Text(
@@ -1412,7 +1577,10 @@ class _ItemCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('항목 ${index + 1}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                '항목 ${index + 1}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               const Spacer(),
               if (!readOnly)
                 IconButton(
@@ -1496,7 +1664,10 @@ class _TitleSectionState extends State<_TitleSection> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('이력서 제목', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text(
+                '이력서 제목',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               if (widget.readOnly)
                 Text(
@@ -1506,10 +1677,18 @@ class _TitleSectionState extends State<_TitleSection> {
               else
                 TextField(
                   controller: _controller,
-                  decoration: const InputDecoration(hintText: '새 이력서', border: InputBorder.none),
+                  decoration: const InputDecoration(
+                    hintText: '새 이력서',
+                    border: InputBorder.none,
+                  ),
                   maxLength: 100,
-                  buildCounter: (_, {required currentLength, required isFocused, maxLength}) =>
-                      null,
+                  buildCounter:
+                      (
+                        _, {
+                        required currentLength,
+                        required isFocused,
+                        maxLength,
+                      }) => null,
                   onChanged: widget.onChanged,
                 ),
             ],
@@ -1518,7 +1697,10 @@ class _TitleSectionState extends State<_TitleSection> {
         if (!widget.readOnly)
           Text(
             '${widget.title.length}/100',
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
           ),
       ],
     );
@@ -1600,10 +1782,10 @@ class _BasicInfoSection extends StatelessWidget {
               onTap: readOnly
                   ? null
                   : () => _pickDate(
-                        context,
-                        info.birthDate,
-                        (v) => onChanged(info.copyWith(birthDate: v)),
-                      ),
+                      context,
+                      info.birthDate,
+                      (v) => onChanged(info.copyWith(birthDate: v)),
+                    ),
               onChanged: (v) => onChanged(info.copyWith(birthDate: v)),
             ),
             _IconField(
@@ -1761,7 +1943,10 @@ class _IconFieldState extends State<_IconField> {
                     children: [
                       Text(
                         widget.label,
-                        style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textHint,
+                        ),
                       ),
                       Text(
                         widget.value.isEmpty ? '미작성' : widget.value,
@@ -1858,22 +2043,50 @@ class _ExperienceSection extends StatelessWidget {
             return _ItemCard(
               index: i,
               readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
+              onDelete: () =>
+                  onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(label: '회사명', value: item.company, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(company: v))),
-                  _Field(label: '직무', value: item.role, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(role: v))),
-                  _Field(label: '시작일', value: item.startDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(startDate: v))),
-                  _Field(label: '종료일', value: item.endDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(endDate: v))),
+                  _Field(
+                    label: '회사명',
+                    value: item.company,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(company: v)),
+                  ),
+                  _Field(
+                    label: '직무',
+                    value: item.role,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(role: v)),
+                  ),
+                  _Field(
+                    label: '시작일',
+                    value: item.startDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(startDate: v)),
+                  ),
+                  _Field(
+                    label: '종료일',
+                    value: item.endDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(endDate: v)),
+                  ),
                   if (!readOnly)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       value: item.isCurrent,
                       title: const Text('재직 중'),
-                      onChanged: (v) => _update(i, item.copyWith(isCurrent: v ?? false)),
+                      onChanged: (v) =>
+                          _update(i, item.copyWith(isCurrent: v ?? false)),
                     ),
-                  _Field(label: '업무 설명', value: item.description, readOnly: readOnly, maxLines: 3, onChanged: (v) => _update(i, item.copyWith(description: v))),
+                  _Field(
+                    label: '업무 설명',
+                    value: item.description,
+                    readOnly: readOnly,
+                    maxLines: 3,
+                    onChanged: (v) => _update(i, item.copyWith(description: v)),
+                  ),
                 ],
               ),
             );
@@ -1881,7 +2094,8 @@ class _ExperienceSection extends StatelessWidget {
           if (!readOnly)
             _AddButton(
               label: '항목 추가',
-              onPressed: () => onChanged([...items, ResumeExperienceItem.empty()]),
+              onPressed: () =>
+                  onChanged([...items, ResumeExperienceItem.empty()]),
             ),
         ],
       ),
@@ -1919,15 +2133,41 @@ class _EducationSection extends StatelessWidget {
             return _ItemCard(
               index: i,
               readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
+              onDelete: () =>
+                  onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(label: '학교명', value: item.school, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(school: v))),
-                  _Field(label: '전공', value: item.major, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(major: v))),
-                  _Field(label: '시작일', value: item.startDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(startDate: v))),
-                  _Field(label: '종료일', value: item.endDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(endDate: v))),
-                  _Field(label: '상태 (졸업/재학/수료)', value: item.status, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(status: v))),
+                  _Field(
+                    label: '학교명',
+                    value: item.school,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(school: v)),
+                  ),
+                  _Field(
+                    label: '전공',
+                    value: item.major,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(major: v)),
+                  ),
+                  _Field(
+                    label: '시작일',
+                    value: item.startDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(startDate: v)),
+                  ),
+                  _Field(
+                    label: '종료일',
+                    value: item.endDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(endDate: v)),
+                  ),
+                  _Field(
+                    label: '상태 (졸업/재학/수료)',
+                    value: item.status,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(status: v)),
+                  ),
                 ],
               ),
             );
@@ -1935,7 +2175,8 @@ class _EducationSection extends StatelessWidget {
           if (!readOnly)
             _AddButton(
               label: '항목 추가',
-              onPressed: () => onChanged([...items, ResumeEducationItem.empty()]),
+              onPressed: () =>
+                  onChanged([...items, ResumeEducationItem.empty()]),
             ),
         ],
       ),
@@ -1999,13 +2240,30 @@ class _CertificationsSection extends StatelessWidget {
             return _ItemCard(
               index: i,
               readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
+              onDelete: () =>
+                  onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(label: '자격명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
-                  _Field(label: '발급기관', value: item.issuer, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(issuer: v))),
-                  _Field(label: '취득일', value: item.acquiredDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(acquiredDate: v))),
+                  _Field(
+                    label: '자격명',
+                    value: item.name,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(name: v)),
+                  ),
+                  _Field(
+                    label: '발급기관',
+                    value: item.issuer,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(issuer: v)),
+                  ),
+                  _Field(
+                    label: '취득일',
+                    value: item.acquiredDate,
+                    readOnly: readOnly,
+                    onChanged: (v) =>
+                        _update(i, item.copyWith(acquiredDate: v)),
+                  ),
                 ],
               ),
             );
@@ -2013,7 +2271,8 @@ class _CertificationsSection extends StatelessWidget {
           if (!readOnly)
             _AddButton(
               label: '항목 추가',
-              onPressed: () => onChanged([...items, ResumeCertificationItem.empty()]),
+              onPressed: () =>
+                  onChanged([...items, ResumeCertificationItem.empty()]),
             ),
         ],
       ),
@@ -2051,14 +2310,37 @@ class _AwardsSection extends StatelessWidget {
             return _ItemCard(
               index: i,
               readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
+              onDelete: () =>
+                  onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(label: '수상명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
-                  _Field(label: '기관', value: item.organization, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(organization: v))),
-                  _Field(label: '날짜', value: item.date, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(date: v))),
-                  _Field(label: '설명', value: item.description, readOnly: readOnly, maxLines: 2, onChanged: (v) => _update(i, item.copyWith(description: v))),
+                  _Field(
+                    label: '수상명',
+                    value: item.name,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(name: v)),
+                  ),
+                  _Field(
+                    label: '기관',
+                    value: item.organization,
+                    readOnly: readOnly,
+                    onChanged: (v) =>
+                        _update(i, item.copyWith(organization: v)),
+                  ),
+                  _Field(
+                    label: '날짜',
+                    value: item.date,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(date: v)),
+                  ),
+                  _Field(
+                    label: '설명',
+                    value: item.description,
+                    readOnly: readOnly,
+                    maxLines: 2,
+                    onChanged: (v) => _update(i, item.copyWith(description: v)),
+                  ),
                 ],
               ),
             );
@@ -2104,15 +2386,43 @@ class _TrainingSection extends StatelessWidget {
             return _ItemCard(
               index: i,
               readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
+              onDelete: () =>
+                  onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(label: '과정명', value: item.course, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(course: v))),
-                  _Field(label: '기관', value: item.organization, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(organization: v))),
-                  _Field(label: '시작일', value: item.startDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(startDate: v))),
-                  _Field(label: '종료일', value: item.endDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(endDate: v))),
-                  _Field(label: '설명', value: item.description, readOnly: readOnly, maxLines: 2, onChanged: (v) => _update(i, item.copyWith(description: v))),
+                  _Field(
+                    label: '과정명',
+                    value: item.course,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(course: v)),
+                  ),
+                  _Field(
+                    label: '기관',
+                    value: item.organization,
+                    readOnly: readOnly,
+                    onChanged: (v) =>
+                        _update(i, item.copyWith(organization: v)),
+                  ),
+                  _Field(
+                    label: '시작일',
+                    value: item.startDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(startDate: v)),
+                  ),
+                  _Field(
+                    label: '종료일',
+                    value: item.endDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(endDate: v)),
+                  ),
+                  _Field(
+                    label: '설명',
+                    value: item.description,
+                    readOnly: readOnly,
+                    maxLines: 2,
+                    onChanged: (v) => _update(i, item.copyWith(description: v)),
+                  ),
                 ],
               ),
             );
@@ -2120,7 +2430,8 @@ class _TrainingSection extends StatelessWidget {
           if (!readOnly)
             _AddButton(
               label: '항목 추가',
-              onPressed: () => onChanged([...items, ResumeTrainingItem.empty()]),
+              onPressed: () =>
+                  onChanged([...items, ResumeTrainingItem.empty()]),
             ),
         ],
       ),
@@ -2158,14 +2469,36 @@ class _ActivitiesSection extends StatelessWidget {
             return _ItemCard(
               index: i,
               readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
+              onDelete: () =>
+                  onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(label: '활동명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
-                  _Field(label: '시작일', value: item.startDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(startDate: v))),
-                  _Field(label: '종료일', value: item.endDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(endDate: v))),
-                  _Field(label: '설명', value: item.description, readOnly: readOnly, maxLines: 2, onChanged: (v) => _update(i, item.copyWith(description: v))),
+                  _Field(
+                    label: '활동명',
+                    value: item.name,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(name: v)),
+                  ),
+                  _Field(
+                    label: '시작일',
+                    value: item.startDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(startDate: v)),
+                  ),
+                  _Field(
+                    label: '종료일',
+                    value: item.endDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(endDate: v)),
+                  ),
+                  _Field(
+                    label: '설명',
+                    value: item.description,
+                    readOnly: readOnly,
+                    maxLines: 2,
+                    onChanged: (v) => _update(i, item.copyWith(description: v)),
+                  ),
                 ],
               ),
             );
@@ -2173,7 +2506,8 @@ class _ActivitiesSection extends StatelessWidget {
           if (!readOnly)
             _AddButton(
               label: '항목 추가',
-              onPressed: () => onChanged([...items, ResumeActivityItem.empty()]),
+              onPressed: () =>
+                  onChanged([...items, ResumeActivityItem.empty()]),
             ),
         ],
       ),
@@ -2211,15 +2545,41 @@ class _ProjectsSection extends StatelessWidget {
             return _ItemCard(
               index: i,
               readOnly: readOnly,
-              onDelete: () => onChanged(items.where((x) => x.id != item.id).toList()),
+              onDelete: () =>
+                  onChanged(items.where((x) => x.id != item.id).toList()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(label: '프로젝트명', value: item.name, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(name: v))),
-                  _Field(label: '시작일', value: item.startDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(startDate: v))),
-                  _Field(label: '종료일', value: item.endDate, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(endDate: v))),
-                  _Field(label: '역할', value: item.role, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(role: v))),
-                  _Field(label: '기술스택', value: item.techStack, readOnly: readOnly, onChanged: (v) => _update(i, item.copyWith(techStack: v))),
+                  _Field(
+                    label: '프로젝트명',
+                    value: item.name,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(name: v)),
+                  ),
+                  _Field(
+                    label: '시작일',
+                    value: item.startDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(startDate: v)),
+                  ),
+                  _Field(
+                    label: '종료일',
+                    value: item.endDate,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(endDate: v)),
+                  ),
+                  _Field(
+                    label: '역할',
+                    value: item.role,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(role: v)),
+                  ),
+                  _Field(
+                    label: '기술스택',
+                    value: item.techStack,
+                    readOnly: readOnly,
+                    onChanged: (v) => _update(i, item.copyWith(techStack: v)),
+                  ),
                   _Field(
                     label: '설명',
                     value: item.description,
@@ -2231,7 +2591,13 @@ class _ProjectsSection extends StatelessWidget {
                     scrollPhysics: const NeverScrollableScrollPhysics(),
                     onChanged: (v) => _update(i, item.copyWith(description: v)),
                   ),
-                  _Field(label: 'URL (선택)', value: item.url, readOnly: readOnly, keyboardType: TextInputType.url, onChanged: (v) => _update(i, item.copyWith(url: v))),
+                  _Field(
+                    label: 'URL (선택)',
+                    value: item.url,
+                    readOnly: readOnly,
+                    keyboardType: TextInputType.url,
+                    onChanged: (v) => _update(i, item.copyWith(url: v)),
+                  ),
                 ],
               ),
             );
@@ -2272,7 +2638,10 @@ class _SelfIntroSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
                 _Field(
                   label: '부제목',

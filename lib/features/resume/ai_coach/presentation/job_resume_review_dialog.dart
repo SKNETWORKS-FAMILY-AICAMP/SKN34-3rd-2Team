@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../data/resume_review_api_client.dart';
 
+enum _ReviewBusyKind { review, answer, apply, undo }
+
 class JobResumeReviewDialog extends StatefulWidget {
   const JobResumeReviewDialog({
     super.key,
@@ -48,6 +50,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final List<_ReviewChatMessage> _suggestionQueue = [];
   final Map<String, GlobalKey> _previewSectionKeys = {};
   bool _busy = false, _changed = false;
+  _ReviewBusyKind? _busyKind;
+  int _busyStage = 0;
   bool _mutationPending = false;
   bool _gapAuditScheduled = false;
   bool _gapAuditStarted = false;
@@ -80,9 +84,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<void> _run(
+    Future<void> Function() action, {
+    _ReviewBusyKind kind = _ReviewBusyKind.review,
+  }) async {
     setState(() {
       _busy = true;
+      _busyKind = kind;
+      _busyStage = 0;
       _error = null;
     });
     try {
@@ -90,12 +99,24 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyKind = null;
+          _busyStage = 0;
+        });
+      }
     }
   }
 
+  void _setBusyStage(int stage) {
+    if (mounted) setState(() => _busyStage = stage);
+  }
+
   Future<void> _review() => _run(() async {
+    _setBusyStage(0);
     await _ensureTailoredResume();
+    _setBusyStage(1);
     if (_reviewRequest == null) {
       final snapshot = await widget.client.context(
         widget.cohortId,
@@ -122,9 +143,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         },
       };
     }
+    _setBusyStage(2);
     _result = await widget.client.review(_reviewRequest!);
+    _setBusyStage(4);
     _appendReview(_result!, isFirstReview: _messages.isEmpty);
-  });
+  }, kind: _ReviewBusyKind.review);
 
   Future<void> _ensureTailoredResume() async {
     if (widget.generalReview || _tailoredResumeId != null) return;
@@ -418,7 +441,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _result = await widget.client.review(request);
         _gapAuditFinished = true;
         _appendReview(_result!, isFirstReview: false, isGapAudit: true);
-      });
+      }, kind: _ReviewBusyKind.answer);
     });
   }
 
@@ -590,7 +613,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         isFirstReview: false,
         answeredFieldPath: question['field_path'] as String?,
       );
-    });
+    }, kind: _ReviewBusyKind.answer);
   }
 
   Future<void> _applySuggestion(List<int> indices) async {
@@ -609,6 +632,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   }
 
   Future<void> _apply() => _run(() async {
+    _setBusyStage(0);
     _mutationPending = true;
     _changed = false;
     _applyRequest ??= {
@@ -622,6 +646,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     final application = await _mutate(
       () => widget.client.apply(_applyRequest!),
     );
+    _setBusyStage(1);
     // The server has rebased this review to the persisted content.  Keep the
     // next answer on the current snapshot rather than the pre-apply hash.
     _result!['input_hash'] = application['input_hash'];
@@ -632,6 +657,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       });
     }
     await _reload();
+    _setBusyStage(2);
     if (!mounted) return;
     final nextSuggestion = _takeNextSuggestion();
     if (nextSuggestion != null) {
@@ -652,7 +678,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       return;
     }
     _scheduleGapAudit();
-  });
+  }, kind: _ReviewBusyKind.apply);
 
   Future<void> _undoSuggestion(Map<String, dynamic> item) async {
     if (_busy || item['_undo_available'] != true) return;
@@ -684,7 +710,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           item['_undo_available'] = false;
         });
       }
-    });
+    }, kind: _ReviewBusyKind.undo);
   }
 
   Future<Map<String, dynamic>> _mutate(
@@ -779,6 +805,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                     final chat = _ReviewChatPane(
                       messages: _messages,
                       busy: _busy,
+                      busyKind: _busyKind,
+                      busyStage: _busyStage,
                       error: _error,
                       resultAvailable: _result != null,
                       reviewCompleted: reviewCompleted,
@@ -965,16 +993,34 @@ class _ResumeDraftPreview extends StatelessWidget {
                     highlightedFieldPath: highlightedFieldPath,
                     itemKeys: sectionKeys,
                   )
+                else if (entry.key == 'techStack' &&
+                    (map[entry.key] as List? ?? const []).isNotEmpty)
+                  _TechStackPreview(
+                    key: sectionKeys[entry.key],
+                    items: (map[entry.key] as List? ?? const [])
+                        .whereType<Map>()
+                        .map((item) => Map<String, dynamic>.from(item))
+                        .toList(),
+                    highlighted: _highlighted(entry.key),
+                  )
+                else if (_compactConfig.containsKey(entry.key) &&
+                    (map[entry.key] as List? ?? const []).isNotEmpty)
+                  _CompactItemsPreview(
+                    key: sectionKeys[entry.key],
+                    title: entry.value,
+                    items: (map[entry.key] as List? ?? const [])
+                        .whereType<Map>()
+                        .map((item) => Map<String, dynamic>.from(item))
+                        .toList(),
+                    config: _compactConfig[entry.key]!,
+                    highlighted: _highlighted(entry.key),
+                  )
                 else if (_render(map[entry.key]).isNotEmpty)
                   _PreviewSection(
                     key: sectionKeys[entry.key],
                     title: entry.value,
                     text: _render(map[entry.key]),
-                    highlighted:
-                        highlightedFieldPath?.startsWith('${entry.key}.') ==
-                            true ||
-                        highlightedFieldPath?.startsWith('${entry.key}[') ==
-                            true,
+                    highlighted: _highlighted(entry.key),
                   ),
             ],
           ),
@@ -982,6 +1028,57 @@ class _ResumeDraftPreview extends StatelessWidget {
       ),
     );
   }
+
+  bool _highlighted(String key) =>
+      highlightedFieldPath?.startsWith('$key.') == true ||
+      highlightedFieldPath?.startsWith('$key[') == true;
+
+  static const _compactConfig = <String, _CompactItemConfig>{
+    'experience': _CompactItemConfig(
+      primary: 'company',
+      secondary: ['role'],
+      startDate: 'startDate',
+      endDate: 'endDate',
+      description: 'description',
+    ),
+    'education': _CompactItemConfig(
+      primary: 'school',
+      secondary: ['major', 'status'],
+      startDate: 'startDate',
+      endDate: 'endDate',
+    ),
+    'certifications': _CompactItemConfig(
+      primary: 'name',
+      secondary: ['issuer'],
+      singleDate: 'acquiredDate',
+    ),
+    'awards': _CompactItemConfig(
+      primary: 'name',
+      secondary: ['organization'],
+      singleDate: 'date',
+      description: 'description',
+    ),
+    'trainingExperience': _CompactItemConfig(
+      primary: 'course',
+      secondary: ['organization'],
+      startDate: 'startDate',
+      endDate: 'endDate',
+      description: 'description',
+    ),
+    'otherActivities': _CompactItemConfig(
+      primary: 'name',
+      startDate: 'startDate',
+      endDate: 'endDate',
+      description: 'description',
+    ),
+    'projects': _CompactItemConfig(
+      primary: 'name',
+      secondary: ['role', 'techStack'],
+      startDate: 'startDate',
+      endDate: 'endDate',
+      description: 'description',
+    ),
+  };
 
   static String _render(Object? value) {
     if (value is String) return value.trim();
@@ -998,6 +1095,250 @@ class _ResumeDraftPreview extends StatelessWidget {
     }
     return '';
   }
+}
+
+class _CompactItemConfig {
+  const _CompactItemConfig({
+    required this.primary,
+    this.secondary = const [],
+    this.startDate,
+    this.endDate,
+    this.singleDate,
+    this.description,
+  });
+
+  final String primary;
+  final List<String> secondary;
+  final String? startDate;
+  final String? endDate;
+  final String? singleDate;
+  final String? description;
+}
+
+class _CompactItemsPreview extends StatelessWidget {
+  const _CompactItemsPreview({
+    super.key,
+    required this.title,
+    required this.items,
+    required this.config,
+    required this.highlighted,
+  });
+
+  final String title;
+  final List<Map<String, dynamic>> items;
+  final _CompactItemConfig config;
+  final bool highlighted;
+
+  String _text(Map<String, dynamic> item, String? key) =>
+      key == null ? '' : (item[key] as String? ?? '').trim();
+
+  String _date(Map<String, dynamic> item) {
+    final single = _text(item, config.singleDate);
+    if (single.isNotEmpty) return single;
+    final start = _text(item, config.startDate);
+    final end = _text(item, config.endDate);
+    if (start.isEmpty) return end;
+    if (end.isEmpty) return start;
+    return '$start – $end';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = items
+        .where((item) => _text(item, config.primary).isNotEmpty)
+        .toList();
+    if (filled.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+      decoration: highlighted ? _previewHighlightDecoration : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PreviewSectionTitle(title: title, highlighted: highlighted),
+          const SizedBox(height: 9),
+          for (var index = 0; index < filled.length; index++) ...[
+            _CompactItemRow(
+              primary: _text(filled[index], config.primary),
+              metadata: [
+                ...config.secondary.map((key) => _text(filled[index], key)),
+                _date(filled[index]),
+              ].where((value) => value.isNotEmpty).toList(),
+              description: _text(filled[index], config.description),
+            ),
+            if (index != filled.length - 1) const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactItemRow extends StatelessWidget {
+  const _CompactItemRow({
+    required this.primary,
+    required this.metadata,
+    required this.description,
+  });
+
+  final String primary;
+  final List<String> metadata;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF8FAFC),
+      border: Border.all(color: const Color(0xFFE5E7EB)),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                primary,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (metadata.isNotEmpty) ...[
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  metadata.join(' · '),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (description.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            description,
+            style: const TextStyle(fontSize: 11, height: 1.45),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _TechStackPreview extends StatelessWidget {
+  const _TechStackPreview({
+    super.key,
+    required this.items,
+    required this.highlighted,
+  });
+
+  final List<Map<String, dynamic>> items;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = items.where((item) {
+      return (item['name'] as String? ?? '').trim().isNotEmpty;
+    }).toList();
+    if (filled.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+      decoration: highlighted ? _previewHighlightDecoration : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PreviewSectionTitle(title: '기술 스택', highlighted: highlighted),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              for (final item in filled)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: (item['name'] as String? ?? '').trim(),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        if ((item['level'] as String? ?? '').trim().isNotEmpty)
+                          TextSpan(
+                            text: '  ${(item['level'] as String).trim()}',
+                            style: const TextStyle(color: Color(0xFF6B7280)),
+                          ),
+                      ],
+                    ),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _previewHighlightDecoration = BoxDecoration(
+  color: Color(0xFFFFFBEA),
+  border: Border.fromBorderSide(
+    BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+  ),
+  borderRadius: BorderRadius.all(Radius.circular(8)),
+);
+
+class _PreviewSectionTitle extends StatelessWidget {
+  const _PreviewSectionTitle({required this.title, required this.highlighted});
+
+  final String title;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Text(
+        title,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF1D4ED8),
+        ),
+      ),
+      if (highlighted) ...[
+        const SizedBox(width: 7),
+        const Text(
+          'AI 질문 대상',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFFB45309),
+          ),
+        ),
+      ],
+    ],
+  );
 }
 
 class _SelfIntroductionPreview extends StatelessWidget {
@@ -1135,6 +1476,8 @@ class _ReviewChatPane extends StatelessWidget {
   const _ReviewChatPane({
     required this.messages,
     required this.busy,
+    required this.busyKind,
+    required this.busyStage,
     required this.error,
     required this.resultAvailable,
     required this.reviewCompleted,
@@ -1155,6 +1498,8 @@ class _ReviewChatPane extends StatelessWidget {
 
   final List<_ReviewChatMessage> messages;
   final bool busy;
+  final _ReviewBusyKind? busyKind;
+  final int busyStage;
   final String? error;
   final bool resultAvailable;
   final bool reviewCompleted;
@@ -1245,9 +1590,17 @@ class _ReviewChatPane extends StatelessWidget {
                     onUndo: onUndo,
                   ),
                 if (busy)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 10),
-                    child: LinearProgressIndicator(),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: busyKind == _ReviewBusyKind.review
+                        ? _InitialReviewProgress(
+                            currentStage: busyStage,
+                            generalReview: generalReview,
+                          )
+                        : _ReviewInlineProgress(
+                            kind: busyKind ?? _ReviewBusyKind.answer,
+                            currentStage: busyStage,
+                          ),
                   ),
                 if (error != null)
                   Container(
@@ -1316,6 +1669,296 @@ class _ReviewChatPane extends StatelessWidget {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _InitialReviewProgress extends StatelessWidget {
+  const _InitialReviewProgress({
+    required this.currentStage,
+    required this.generalReview,
+  });
+
+  final int currentStage;
+  final bool generalReview;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = generalReview
+        ? const [
+            '기본 이력서 불러오기',
+            '이력서 항목 확인',
+            '경험 근거 비교',
+            '수정안과 확인 질문 준비',
+          ]
+        : const [
+            '선택 공고 원문 확인',
+            '이력서 문항별 비교',
+            '부족한 근거 선별',
+            '확인 질문과 수정안 준비',
+          ];
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  generalReview ? '이력서 첨삭 준비 중' : '공고 맞춤 첨삭 준비 중',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${(currentStage + 1).clamp(1, steps.length)} / ${steps.length} 단계',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            generalReview
+                ? '이력서의 문장과 경험 근거를 문항별로 확인합니다.'
+                : '선택한 공고 기준으로 첨삭 항목을 준비하고 있어요.',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            '보통 15초 정도 걸립니다. 창을 닫지 않고 잠시 기다려 주세요.',
+            style: TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
+          ),
+          const SizedBox(height: 14),
+          for (var index = 0; index < steps.length; index++)
+            _ReviewProgressRow(
+              label: steps[index],
+              state: index < currentStage
+                  ? _ReviewStepState.done
+                  : index == currentStage
+                  ? _ReviewStepState.running
+                  : _ReviewStepState.waiting,
+              last: index == steps.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewInlineProgress extends StatelessWidget {
+  const _ReviewInlineProgress({required this.kind, required this.currentStage});
+
+  final _ReviewBusyKind kind;
+  final int currentStage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (kind != _ReviewBusyKind.apply) {
+      final label = switch (kind) {
+        _ReviewBusyKind.answer => '답변을 검토하고 다음 보완 항목을 준비하고 있어요',
+        _ReviewBusyKind.undo => '변경 내용을 되돌리고 있어요',
+        _ReviewBusyKind.review => '이력서를 분석하고 있어요',
+        _ReviewBusyKind.apply => '',
+      };
+      return _CompactBusyCard(label: label);
+    }
+
+    const steps = ['수정안 저장', '변경 내용 확인', '다음 보완 항목 준비'];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '수정안 반영 중',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF166534),
+                  ),
+                ),
+              ),
+              Text(
+                '${(currentStage + 1).clamp(1, steps.length)} / ${steps.length} 단계',
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF65A30D),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (var index = 0; index < steps.length; index++)
+            _ReviewProgressRow(
+              label: steps[index],
+              state: index < currentStage
+                  ? _ReviewStepState.done
+                  : index == currentStage
+                  ? _ReviewStepState.running
+                  : _ReviewStepState.waiting,
+              last: index == steps.length - 1,
+              compact: true,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactBusyCard extends StatelessWidget {
+  const _CompactBusyCard({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFEFF6FF),
+      border: Border.all(color: const Color(0xFFBFDBFE)),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+enum _ReviewStepState { done, running, waiting }
+
+class _ReviewProgressRow extends StatelessWidget {
+  const _ReviewProgressRow({
+    required this.label,
+    required this.state,
+    required this.last,
+    this.compact = false,
+  });
+
+  final String label;
+  final _ReviewStepState state;
+  final bool last;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (state) {
+      _ReviewStepState.done => const Color(0xFF16A34A),
+      _ReviewStepState.running => const Color(0xFF2563EB),
+      _ReviewStepState.waiting => const Color(0xFF94A3B8),
+    };
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: switch (state) {
+                _ReviewStepState.done => Icon(
+                  Icons.check_circle,
+                  size: 16,
+                  color: color,
+                ),
+                _ReviewStepState.running => const Padding(
+                  padding: EdgeInsets.all(1.5),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                _ReviewStepState.waiting => Icon(
+                  Icons.circle_outlined,
+                  size: 16,
+                  color: color,
+                ),
+              },
+            ),
+            if (!last)
+              Container(
+                width: 1.5,
+                height: compact ? 10 : 14,
+                margin: const EdgeInsets.symmetric(vertical: 2),
+                color: state == _ReviewStepState.done
+                    ? const Color(0xFF86EFAC)
+                    : const Color(0xFFE2E8F0),
+              ),
+          ],
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: last ? 0 : (compact ? 4 : 8)),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: state == _ReviewStepState.done
+                          ? const Color(0xFF16A34A)
+                          : state == _ReviewStepState.waiting
+                          ? const Color(0xFF94A3B8)
+                          : const Color(0xFF2563EB),
+                    ),
+                  ),
+                ),
+                if (state == _ReviewStepState.running) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: const Text(
+                      '진행 중',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2563EB),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
