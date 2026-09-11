@@ -16,7 +16,10 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
+
+from job_matching_bot.matching.skill_normalize import canonical_skill
 
 KST = timezone(timedelta(hours=9))
 
@@ -49,6 +52,44 @@ CONFUSABLE = {
 }
 
 
+@lru_cache(maxsize=1)
+def _tag_spellings() -> dict[str, list[str]]:
+    """표준키 → 사람인이 실제로 붙인 태그 표기.
+
+    사람인은 `SpringBoot`, `Node.js`, `RestAPI`로 붙이는데 사람은 `Spring Boot`,
+    `Node JS`, `REST API`라고 친다. 친 글자를 그대로 찾으면 하나도 안 걸린다.
+
+        Spring Boot   태그에 걸린 공고 0건 → SpringBoot 로 찾으면 354건
+        REST API      0건 → RestAPI 301건
+        K8s           5건 → Kubernetes 221건
+
+    표기를 접는 `canonical_skill`은 이미 있고 적재할 때 쓴다. 검색이 안 썼다.
+
+    저장소를 고치지 않는다. 태그는 보여 줄 글이기도 해서 원문이 남아야 하고, 칸을
+    더 만들면 29,000건을 다시 써야 한다. 찾을 때만 접는다.
+    """
+    from job_matching_bot.ingestion.saramin_tech_vocab import load_codes
+
+    spellings: dict[str, list[str]] = {}
+    for row in load_codes():
+        name = str(row["kewd_name"]).strip()
+        if not name:
+            continue
+        spellings.setdefault(canonical_skill(name), [])
+        if name not in spellings[canonical_skill(name)]:
+            spellings[canonical_skill(name)].append(name)
+    return spellings
+
+
+def spellings_of(term: str) -> list[str]:
+    """이 말을 찾을 때 함께 걸 표기. 사용자가 친 말이 늘 맨 앞이다."""
+    found = [term]
+    for name in _tag_spellings().get(canonical_skill(term), []):
+        if name.lower() != term.strip().lower():
+            found.append(name)
+    return found
+
+
 def _like_or_regex(column: str, term: str) -> tuple[str, list[object]]:
     """한 컬럼에서 한 말을 찾는 조건. 헷갈리는 말이면 뒤에 오는 글자를 본다.
 
@@ -60,6 +101,17 @@ def _like_or_regex(column: str, term: str) -> tuple[str, list[object]]:
     # 한 공고에 Java 와 Javascript 가 둘 다 있으면 Java 쪽이 걸린다. 빼면 진짜 Java
     # 공고를 잃는다.
     return f"RE_HAS(?, {column})", [pattern]
+
+
+def _match(column: str, term: str) -> tuple[str, list[object]]:
+    """한 컬럼에서 이 말을 찾는 조건. 표기 변형을 전부 건다."""
+    parts: list[str] = []
+    values: list[object] = []
+    for spelling in spellings_of(term):
+        sql, vals = _like_or_regex(column, spelling)
+        parts.append(sql)
+        values.extend(vals)
+    return "(" + " OR ".join(parts) + ")", values
 
 
 def _re_has(pattern: str, text: str | None) -> int:
@@ -221,7 +273,7 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
         for term in terms:
             parts = []
             for column in ("title", "keywords", "tech_stack", "description"):
-                sql, values = _like_or_regex(column, term)
+                sql, values = _match(column, term)
                 parts.append(sql)
                 params.extend(values)
             clauses.append("(" + " OR ".join(parts) + ")")
@@ -247,13 +299,13 @@ def search(
     if terms:
         title_parts, tag_parts = [], []
         for term in terms:
-            sql, values = _like_or_regex("title", term)
+            sql, values = _match("title", term)
             title_parts.append(sql)
             case_params.extend(values)
         for term in terms:
             pieces = []
             for column in ("keywords", "tech_stack"):
-                sql, values = _like_or_regex(column, term)
+                sql, values = _match(column, term)
                 pieces.append(sql)
                 case_params.extend(values)
             tag_parts.append("(" + " OR ".join(pieces) + ")")

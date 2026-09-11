@@ -1112,7 +1112,7 @@ class ChatService(_LivenessMixin):
         # 제목·태그에 직접 맞은 건수를 따로 말한다. 본문에 말이 스친 범용 공고까지
         # 뭉뚱그려 세면 실제보다 훨씬 많아 보인다.
         if result.strong and result.strong < result.total:
-            counted = f"{result.total}건 중 직무가 맞는 건 {result.strong}건이에요"
+            counted = f"{result.total}건 중 {_matched_what(filters)} 맞는 건 {result.strong}건이에요"
         else:
             counted = f"{result.total}건" + ("이 넘어요" if result.scanned_cap else "이에요")
         shown = len(result.jobs)
@@ -1148,6 +1148,20 @@ _UNAVAILABLE_NEXT = {
     "합격 가능성": ["내 이력서로 추천해줘", "신입도 되는 공고"],
     "회사 평판": ["대기업 공고만", "서울 공고 보여줘"],
 }
+
+
+def _matched_what(filters) -> str:
+    """무엇이 맞았다고 말할지. 찾은 것이 직무냐 기술이냐에 따라 다르다.
+
+    늘 "직무가 맞는 건"이라고 썼다. "Spring Boot 쓰는 회사 있어?"에도 그랬는데
+    Spring Boot는 직무가 아니라 기술이다. 조건을 둘 다 걸었거나 자유 키워드로 찾았으면
+    무엇이라 부를지 정할 수 없으니 걸린 자리를 그대로 말한다.
+    """
+    if filters.roles and not filters.skills:
+        return "직무가"
+    if filters.skills and not filters.roles:
+        return "기술이"
+    return "제목·태그에"
 
 
 def _to_chat_job(hit) -> schemas.JobChatJob:
