@@ -71,6 +71,17 @@ SMALL_TALK_FALLBACK = (
 )
 
 
+# 채용 밖의 일을 시켰을 때. **이 말은 모델이 쓰지 않는다.**
+#
+# 프롬프트로 "채용 이야기만 하라"고 이르는 것과, 답을 쓰는 단계로 아예 안 보내는 것은
+# 다르다. 앞은 모델이 매번 지켜 줘야 하지만 뒤는 지킬 일이 없다. 실제로 "호구"라는
+# 말 하나에 뜻풀이와 "이 말을 부드럽게 바꿔 말해줘" 같은 제안까지 붙어 나갔다.
+OFF_TOPIC_REPLY = (
+    "저는 채용과 취업 준비에 대해서만 도와드릴 수 있어요.\n"
+    "공고를 찾거나, 무엇을 준비하면 좋을지 물어봐 주세요."
+)
+
+
 def _progress_reporter(
     progress: Callable[[str, str | None], None] | None,
 ) -> Callable[..., None]:
@@ -686,6 +697,17 @@ class ChatService(_LivenessMixin):
                 filters=previous,
                 total=0,
                 suggestions=["서울 백엔드 신입", "마감 임박한 공고"],
+            )
+
+        # 채용 밖의 일을 시킨 말. 갈래를 가르기 전에 여기서 끊는다. 모델이 쓴 문장을
+        # 쓰지 않고 정해진 말을 내보내므로, 답하지 말아야 할 것에 답할 길이 없다.
+        if turn.off_topic:
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply=OFF_TOPIC_REPLY,
+                filters=previous,
+                total=0,
+                suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
             )
 
         if turn.unavailable:

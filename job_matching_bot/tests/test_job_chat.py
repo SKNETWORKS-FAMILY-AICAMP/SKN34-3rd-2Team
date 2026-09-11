@@ -29,8 +29,10 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
     requirement_query = kwargs.pop("requirement_query", "")
     unavailable = kwargs.pop("unavailable", "")
     job_refs = kwargs.pop("job_refs", [])
+    off_topic = kwargs.pop("off_topic", False)
     return schemas.ChatTurnOut(
         intent=intent,
+        off_topic=off_topic,
         counts_jobs=counts_jobs,
         requirement_query=requirement_query,
         unavailable=unavailable,
@@ -193,6 +195,59 @@ class SearchTest(ChatTestCase):
         self.assertTrue(job.job_id and job.company and job.title)
         self.assertEqual("신입", job.career)
         self.assertEqual("정규직", job.employment_type)
+
+
+class OffTopicTest(ChatTestCase):
+    """채용 밖의 일을 시킨 말. **답을 쓰는 단계로 보내지 않는다.**
+
+    "호구"라고만 보냈더니 그 말의 뜻을 풀이하고 "이 말을 부드럽게 바꿔 말해줘"라는
+    제안까지 붙여 내보냈다. 답을 쓰는 단계로 넘어가면 모델은 무엇이든 답한다.
+    말투로 타이르는 것과 그 단계로 못 가게 막는 것은 다르다. 여기서는 막는다.
+    """
+
+    def test_the_answer_is_ours_not_the_models(self):
+        """모델이 뜻풀이를 적어 보내도 그 문장은 나가지 않는다."""
+        response = self.ask(
+            turn(intent="질문", off_topic=True, understood="'호구'는 이용당하기 쉬운 사람이라는 뜻입니다."),
+            message="호구",
+        )
+        self.assertEqual("안내", response.mode)
+        self.assertNotIn("이용당하기", response.reply)
+        self.assertIn("채용과 취업 준비", response.reply)
+
+    def test_no_one_is_asked_to_write_an_answer(self):
+        self.ask(turn(intent="질문", off_topic=True), message="파이썬 코드 짜줘")
+        self.assertEqual({}, self.advised, "답을 쓰는 단계를 부르지 않는다")
+        self.assertEqual({}, self.asked)
+        self.assertEqual({}, self.compared)
+
+    def test_it_does_not_search_either(self):
+        """조건이 뽑혀 있어도 목록을 내지 않는다. 물어본 것이 공고가 아니다."""
+        response = self.ask(
+            turn(intent="검색", off_topic=True, roles=["백엔드"]), message="바보"
+        )
+        self.assertEqual([], response.jobs)
+        self.assertEqual(0, response.total)
+        self.assertEqual({}, self.found)
+
+    def test_the_suggestions_point_back_to_what_we_do(self):
+        response = self.ask(turn(off_topic=True), message="호구")
+        self.assertTrue(response.suggestions)
+        self.assertIn("서울 백엔드 신입", response.suggestions)
+
+    def test_previous_conditions_survive(self):
+        """상관없는 말 한마디에 앞 대화를 잃으면 다시 처음부터 말해야 한다."""
+        previous = schemas.ChatFilters(roles=["백엔드"], regions=["서울"])
+        response = self.ask(turn(off_topic=True), message="호구", filters=previous)
+        self.assertEqual(["백엔드"], response.filters.roles)
+        self.assertEqual(["서울"], response.filters.regions)
+
+    def test_a_greeting_is_not_off_topic(self):
+        """인사까지 막으면 처음 화면으로 돌아간다. 막을 것은 시키는 말이다."""
+        response = self.ask(
+            turn(intent="잡담", off_topic=False, understood="안녕하세요!"), message="안녕"
+        )
+        self.assertEqual("안녕하세요!", response.reply)
 
 
 class SmallTalkTest(ChatTestCase):

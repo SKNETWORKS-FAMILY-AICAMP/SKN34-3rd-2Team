@@ -203,6 +203,19 @@ class ChatTurnOut(StrictModel):
         )
     )
     filters: ChatFilters
+    # 채용 밖의 일을 시키는 말. 이게 true면 서비스는 답을 쓰는 단계를 아예 건너뛴다.
+    #
+    # "호구"라고만 보냈더니 그 말의 뜻을 풀이하고 "이 말을 부드럽게 바꿔 말해줘" 같은
+    # 제안까지 달아 내보냈다. 답을 쓰는 단계로 넘어가면 모델은 무엇이든 답한다.
+    # 말투로 타이르는 대신 그 단계로 못 가게 막는다.
+    off_topic: bool = Field(
+        default=False,
+        description=(
+            "채용·취업과 상관없는 요청이면 true. 단어 뜻 풀이, 번역, 코드 작성, "
+            "일반 상식, 글 대신 써 주기, 욕설·시비가 그렇다. "
+            "인사나 가벼운 잡담은 false로 둔다"
+        ),
+    )
     counts_jobs: bool = Field(
         default=False,
         description="공고를 세어서 답할 질문이면 true. 조언을 구하는 말이면 false",
