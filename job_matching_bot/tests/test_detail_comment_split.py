@@ -71,6 +71,49 @@ class CommentSplitTest(unittest.TestCase):
         self.assertNotIn("관리자 메모", parse_detail(html, "1", URL)["description"])
 
 
+# 같은 장치인데 글자 조각이 서로 다른 `<span>` 안에 들어간 모양. 실제 공고
+# SARAMIN-54871593 이 이렇다. 주석만 지워서는 안 붙는다.
+SPAN_HTML = """
+<html><body>
+  <div class="jv_cont"><h1>웹 개발자</h1><dl><dt>경력</dt><dd>신입</dd></dl></div>
+  <div class="jv_cont">
+    <h2>상세요강</h2>
+    <p><span>PHP(Laravel), ja</span><!--x--><span>vasc</span><!--x--><span>ript(Vue.js), SQL</span></p>
+    <p>ㆍ<b>경력</b> : 신입</p>
+  </div>
+</body></html>
+"""
+
+
+class SpanSplitTest(unittest.TestCase):
+    """조각이 태그 경계를 넘어 갈라진 경우.
+
+    `smooth()`는 같은 부모 안의 이웃한 글자만 합친다. 서로 다른 `<span>` 안에 있으면
+    주석을 지워도 그대로 갈라져 있다. 줄을 나누지 않는 인라인 태그를 벗겨야 붙는다.
+    """
+
+    def setUp(self):
+        self.body = parse_detail(SPAN_HTML, "1", URL)["description"]
+
+    def test_the_word_crosses_the_tag_boundary(self):
+        self.assertIn("PHP(Laravel), javascript(Vue.js), SQL", self.body)
+
+    def test_the_skill_names_are_found(self):
+        found = extract_skills(self.body)
+        for name in ("JavaScript", "PHP", "SQL", "Vue.js"):
+            self.assertIn(name, found, f"{name} 이(가) 안 잡혔다")
+
+    def test_an_inline_tag_does_not_split_a_line(self):
+        """`ㆍ<b>경력</b> : 신입` 이 세 줄이 되면 안 된다."""
+        self.assertIn("ㆍ경력 : 신입", self.body)
+
+    def test_block_tags_still_break_lines(self):
+        """인라인만 벗긴다. `<p>`가 내는 줄바꿈은 그대로다."""
+        lines = self.body.splitlines()
+        self.assertIn("PHP(Laravel), javascript(Vue.js), SQL", lines)
+        self.assertIn("ㆍ경력 : 신입", lines)
+
+
 # 같은 공고의 표 부분. 머리글 행과 내용 행이 따로 있다.
 TABLE_HTML = """
 <html><body>

@@ -104,6 +104,14 @@ def _guard_allowed(url: str) -> None:
 
 
 
+# 글자를 이어 읽어야 하는 태그. 화면에서 줄을 나누지 않는 것들이다.
+INLINE_TAGS = (
+    "span", "b", "i", "em", "strong", "u", "font", "small", "big",
+    "sub", "sup", "mark", "code", "abbr", "s", "strike", "ins", "del",
+    "label", "time", "q", "cite", "var", "kbd", "samp", "a", "nobr", "wbr",
+)
+
+
 def _unfold_header_tables(soup: BeautifulSoup, node: Any) -> Any:
     """머리글 행이 따로 있는 표를 `머리글 → 그 칸 내용` 순서로 편다.
 
@@ -161,6 +169,16 @@ def _drop_comments(node: Any) -> Any:
     """
     for comment in node.find_all(string=lambda t: isinstance(t, Comment)):
         comment.extract()
+    # 주석을 지워도 글자 조각이 **서로 다른 태그 안**에 있으면 아직 갈라져 있다.
+    # 실제 공고에 이런 모양이 있다.
+    #
+    #     PHP(Laravel), ja</span><!--x--><span>vasc</span><!--x--><span>ript(Vue.js)
+    #
+    # `smooth()`는 같은 부모 안의 이웃한 글자만 합치므로 태그 경계를 못 넘는다.
+    # 줄을 나누지 않는 인라인 태그를 벗겨 한 부모 밑으로 모은 뒤 합친다.
+    # `<p>`·`<br>`·`<li>` 같은 진짜 줄바꿈은 그대로 둔다.
+    for tag in node.find_all(INLINE_TAGS):
+        tag.unwrap()
     node.smooth()
     return node
 
