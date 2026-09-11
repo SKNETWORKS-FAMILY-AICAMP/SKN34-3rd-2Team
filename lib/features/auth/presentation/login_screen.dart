@@ -8,6 +8,7 @@ import '../../../shared/demo/demo_accounts.dart';
 import '../providers/auth_providers.dart';
 import '../providers/login_exit_hold_provider.dart';
 import 'widgets/login_brand_stage.dart';
+import 'widgets/login_fixed_frame.dart';
 
 /// 폐쇄형 로그인 화면 — 시네마틱 다크 스테이지
 class LoginScreen extends ConsumerStatefulWidget {
@@ -111,66 +112,73 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final wide = size.width >= 900;
-
     return Scaffold(
       backgroundColor: const Color(0xFF05070F),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: LoginBrandStage(
-              exiting: _loginSucceeded,
-              exitProgress: _exitCtrl,
+      resizeToAvoidBottomInset: false,
+      body: LoginFixedFrame(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: LoginBrandStage(
+                exiting: _loginSucceeded,
+                exitProgress: _exitCtrl,
+              ),
             ),
-          ),
-          SafeArea(
-            child: AnimatedBuilder(
-              animation: _exitCtrl,
-              builder: (context, child) {
-                return Opacity(
-                  opacity: 1 - _fadeOut.value,
-                  child: Transform.scale(
-                    scale: _scaleDown.value,
-                    alignment: wide ? Alignment.centerLeft : Alignment.center,
-                    child: child,
-                  ),
-                );
-              },
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: wide ? 48 : 24,
-                    vertical: 24,
-                  ),
-                  child: Align(
-                    alignment: wide ? Alignment.centerLeft : Alignment.center,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: _LoginCard(
-                        formKey: _formKey,
-                        emailController: _emailController,
-                        passwordController: _passwordController,
-                        obscurePassword: _obscurePassword,
-                        isLoading: _isLoading,
-                        loginSucceeded: _loginSucceeded,
-                        showQuickLogin: _showQuickLogin,
-                        onToggleObscure: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                        onToggleQuickLogin: () => setState(
-                          () => _showQuickLogin = !_showQuickLogin,
-                        ),
-                        onLogin: _handleLogin,
-                        onQuickLogin: _quickLogin,
-                      ),
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _exitCtrl,
+                builder: (context, child) {
+                  return Opacity(
+                    opacity: 1 - _fadeOut.value,
+                    child: Transform.scale(
+                      scale: _scaleDown.value,
+                      alignment: Alignment.centerLeft,
+                      child: child,
                     ),
-                  ),
+                  );
+                },
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final minHeight = (constraints.maxHeight - 48)
+                        .clamp(0.0, double.infinity);
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 48,
+                        vertical: 24,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: minHeight),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            width: 400,
+                            child: _LoginCard(
+                              formKey: _formKey,
+                              emailController: _emailController,
+                              passwordController: _passwordController,
+                              obscurePassword: _obscurePassword,
+                              isLoading: _isLoading,
+                              loginSucceeded: _loginSucceeded,
+                              showQuickLogin: _showQuickLogin,
+                              onToggleObscure: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                              onToggleQuickLogin: () => setState(
+                                () => _showQuickLogin = !_showQuickLogin,
+                              ),
+                              onLogin: _handleLogin,
+                              onQuickLogin: _quickLogin,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -253,6 +261,7 @@ class _LoginCard extends StatelessWidget {
         child: Form(
           key: formKey,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(

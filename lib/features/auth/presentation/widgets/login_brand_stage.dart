@@ -9,6 +9,7 @@ class LoginBrandStage extends StatefulWidget {
     super.key,
     this.exiting = false,
     this.exitProgress,
+    this.canvasSize,
   });
 
   /// 로그인 성공 퇴장 중
@@ -16,6 +17,9 @@ class LoginBrandStage extends StatefulWidget {
 
   /// 0→1: PLAYDATA 패널 확대(속으로 진입) 진행도
   final Animation<double>? exitProgress;
+
+  /// 궤도·로고 배치 기준. 생략하면 [LoginFixedFrame]이 넣어 준 캔버스 크기.
+  final Size? canvasSize;
 
   @override
   State<LoginBrandStage> createState() => _LoginBrandStageState();
@@ -62,7 +66,7 @@ class _LoginBrandStageState extends State<LoginBrandStage>
       onHover: widget.exiting
           ? null
           : (e) {
-              final size = MediaQuery.sizeOf(context);
+              final size = widget.canvasSize ?? MediaQuery.sizeOf(context);
               setState(() {
                 _pointer = Offset(
                   (e.localPosition.dx / size.width - 0.5).clamp(-0.5, 0.5),
@@ -81,6 +85,7 @@ class _LoginBrandStageState extends State<LoginBrandStage>
         ]),
         builder: (context, _) {
           return _DarkOrbitStage(
+            canvasSize: widget.canvasSize ?? MediaQuery.sizeOf(context),
             pulse: Curves.easeInOut.transform(_pulse.value),
             orbit: _orbit.value,
             pointer: widget.exiting ? Offset.zero : _pointer,
@@ -95,6 +100,7 @@ class _LoginBrandStageState extends State<LoginBrandStage>
 
 class _DarkOrbitStage extends StatelessWidget {
   const _DarkOrbitStage({
+    required this.canvasSize,
     required this.pulse,
     required this.orbit,
     required this.pointer,
@@ -102,6 +108,7 @@ class _DarkOrbitStage extends StatelessWidget {
     required this.exitT,
   });
 
+  final Size canvasSize;
   final double pulse;
   final double orbit;
   final Offset pointer;
@@ -110,13 +117,12 @@ class _DarkOrbitStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final wide = size.width >= 900;
+    final size = canvasSize;
     final parallax = Offset(pointer.dx * 22, pointer.dy * 14);
 
-    final cx = size.width * (wide ? 0.72 : 0.68) + parallax.dx;
+    final cx = size.width * 0.72 + parallax.dx;
     final cy = size.height * 0.48 + parallax.dy;
-    final rx = size.width * (wide ? 0.16 : 0.2);
+    final rx = size.width * 0.16;
     final ry = size.height * 0.22;
 
     Offset onOrbit(double turn, {double radiusScale = 1}) {
@@ -129,8 +135,8 @@ class _DarkOrbitStage extends StatelessWidget {
 
     final skPos = onOrbit(0.15, radiusScale: 1.05);
     final encorePos = onOrbit(math.pi * 0.95, radiusScale: 0.92);
-    final hubW = wide ? 260.0 : 180.0;
-    final hubH = wide ? 150.0 : 108.0;
+    const hubW = 260.0;
+    const hubH = 150.0;
 
     // 패널 중심 → 화면 중심으로 이동하며 확대
     final zoomT = Curves.easeInCubic.transform(exitT.clamp(0.0, 1.0));
@@ -147,7 +153,6 @@ class _DarkOrbitStage extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const _StageWash(),
         Positioned(
           left: cx - 160,
           top: cy - 160,
@@ -227,10 +232,10 @@ class _DarkOrbitStage extends StatelessWidget {
           ),
         ),
         _BrandPanel(
-          left: skPos.dx - (wide ? 74 : 56),
-          top: skPos.dy - (wide ? 74 : 56),
-          width: wide ? 148 : 112,
-          height: wide ? 148 : 112,
+          left: skPos.dx - 74,
+          top: skPos.dy - 74,
+          width: 148,
+          height: 148,
           rotation: 0.2 + orbit * 0.4,
           elevation: 16,
           glow: const Color(0xFFF15A22),
@@ -241,10 +246,10 @@ class _DarkOrbitStage extends StatelessWidget {
           ),
         ),
         _BrandPanel(
-          left: encorePos.dx - (wide ? 68 : 52),
-          top: encorePos.dy - (wide ? 68 : 52),
-          width: wide ? 136 : 104,
-          height: wide ? 136 : 104,
+          left: encorePos.dx - 68,
+          top: encorePos.dy - 68,
+          width: 136,
+          height: 136,
           rotation: -0.12 - orbit * 0.3,
           elevation: 14,
           glow: const Color(0xFF2BBBAD),
@@ -335,13 +340,15 @@ class _OrbitRingPainter extends CustomPainter {
       oldDelegate.progress != progress;
 }
 
-class _StageWash extends StatelessWidget {
-  const _StageWash();
+class LoginStageWash extends StatelessWidget {
+  const LoginStageWash({super.key, this.child});
+
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
+    return DecoratedBox(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -354,6 +361,7 @@ class _StageWash extends StatelessWidget {
           stops: [0.0, 0.35, 0.7, 1.0],
         ),
       ),
+      child: child,
     );
   }
 }
