@@ -1,6 +1,14 @@
-"""LMS 학생 챗봇 전용 FastAPI 서버.
+"""LMS 학생 챗봇 단독 FastAPI 서버.
 
-실행: uvicorn chatbot.main:app --reload --port 8001
+기본 개발 환경에서는 취업 코치 통합 서버에 포함되어 있으므로 이 파일을 따로 띄울 필요가 없다.
+
+    python -m uvicorn app.integrated:app --app-dir cover_letter_rag --port 8000
+
+챗봇만 따로 띄워 개발할 때만 사용한다.
+
+    uvicorn chatbot.main:app --reload --port 8001
+
+이 경우 Flutter는 --dart-define=STUDENT_CHATBOT_API_URL=http://127.0.0.1:8001 로 맞춘다.
 """
 
 import os

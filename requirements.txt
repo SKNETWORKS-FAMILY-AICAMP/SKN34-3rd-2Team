@@ -9,6 +9,8 @@
 # 맞춘다. 한쪽만 올리면 다른 쪽이 깨진다.
 #
 #   python -m uvicorn app.integrated:app --app-dir cover_letter_rag --port 8000
+#
+# 학생 LMS 챗봇(chatbot/)도 이 통합 서버에 포함된다. 서버 하나만 띄우면 된다.
 
 # LLM 추출 — OpenAI. CLOVA Studio도 OpenAI 호환 엔드포인트라 같은 패키지를 쓴다.
 openai>=1.60

@@ -21,9 +21,6 @@ from pydantic import BaseModel, Field
 from vectordb.policy_ingestion import load_env
 
 load_env()
-os.environ["LANGSMITH_TRACING"] = "true"
-os.environ["LANGSMITH_ENDPOINT"] = "https://apac.api.smith.langchain.com"
-os.environ["LANGSMITH_PROJECT"] = "SKN34-3rd-2Team"
 
 Namespace = Literal["policy", "notice", "project_reference"]
 StudentDataScope = Literal[

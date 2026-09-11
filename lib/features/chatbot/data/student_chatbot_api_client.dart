@@ -3,10 +3,17 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../resume/ai_coach/data/job_recommend_api_client.dart';
+
+/// 학생 챗봇 API 접속 설정.
+///
+/// 챗봇은 취업 코치 통합 서버(`app.integrated`, 기본 `127.0.0.1:8000`)에 포함되어
+/// 있어 기본 주소를 추천 API와 공유한다. 챗봇만 따로 띄웠다면
+/// `--dart-define=STUDENT_CHATBOT_API_URL=http://127.0.0.1:8001` 로 바꾼다.
 abstract final class StudentChatbotApiConfig {
   static const baseUrl = String.fromEnvironment(
     'STUDENT_CHATBOT_API_URL',
-    defaultValue: 'http://127.0.0.1:8001',
+    defaultValue: JobRecommendApiConfig.baseUrl,
   );
 }
 
