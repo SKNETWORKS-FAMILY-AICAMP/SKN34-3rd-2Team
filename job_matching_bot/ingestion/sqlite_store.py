@@ -226,7 +226,11 @@ class SqliteJobStore:
         `CREATE TABLE IF NOT EXISTS`는 표가 있으면 아무것도 하지 않아서, 컬럼만
         늘리면 기존 저장소에는 반영되지 않는다. 값이 없는 옛 행은 NULL로 남는다.
         """
-        for table, column, kind in (("list_seen", "first_seen_at", "TEXT"),):
+        for table, column, kind in (
+            ("list_seen", "first_seen_at", "TEXT"),
+            ("list_jobs", "deadline", "TEXT"),
+            ("list_jobs", "support_text", "TEXT"),
+        ):
             have = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")}
             if column not in have:
                 with self.conn:
