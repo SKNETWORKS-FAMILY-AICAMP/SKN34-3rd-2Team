@@ -486,11 +486,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         message: text,
         filters: _chatFilters,
         jobId: _askingAbout?.jobId,
-        // 공고를 놓고 물을 때만 보낸다. 공고를 안 고른 검색·질문은 이력서가
-        // 필요 없고, 보내 봐야 쓰이지 않는다.
-        resumeText: _askingAbout == null
-            ? null
-            : buildResumeText(widget.draftContent),
+        // 카드를 눌렀거나, 직전에 목록을 보여 줬으면 함께 보낸다(shouldSendResume).
+        resumeText: shouldSendResume(
+              askingAboutJob: _askingAbout != null,
+              hasShownJobs: _lastShownJobIds.isNotEmpty,
+            )
+            ? buildResumeText(widget.draftContent)
+            : null,
         // "2번 자세히 봐줘"에 답하려면 서버가 직전에 무엇을 보여 줬는지 알아야 한다.
         // 서버는 대화를 저장하지 않으므로 앱이 되돌려 준다.
         lastJobIds: _lastShownJobIds,
