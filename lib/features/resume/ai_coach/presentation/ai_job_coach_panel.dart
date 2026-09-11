@@ -2219,34 +2219,51 @@ class _ChatBubble extends StatelessWidget {
             ],
             if (message.suggestions.isNotEmpty && onSuggestion != null) ...[
               const SizedBox(height: 8),
-              // 제안이 길면 칩이 말풍선 밖으로 나가 글자가 잘렸다. 칩은 글자만큼
-              // 넓어지려 하므로 줄바꿈할 자리를 직접 알려 줘야 한다. 말풍선 너비에서
-              // 칩 안쪽 여백을 뺀 만큼이 글자가 쓸 수 있는 자리다.
-              LayoutBuilder(
-                builder: (context, constraints) => Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final suggestion in message.suggestions)
-                      ActionChip(
-                        label: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: constraints.maxWidth - 28,
-                          ),
-                          child: Text(
-                            suggestion,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        ),
-                        onPressed: () => onSuggestion!(suggestion),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                  ],
+              // 제안은 문장이라 한 줄에 안 들어간다. Chip은 높이가 한 줄로 고정되어
+              // 폭을 좁혀 줘도 글자가 잘렸다. 줄이 늘어나는 만큼 키가 크는 버튼으로
+              // 바꾼다. 나란히 놓을 것도 아니어서 한 줄에 하나씩 세로로 쌓는다.
+              for (final suggestion in message.suggestions) ...[
+                const SizedBox(height: 6),
+                _SuggestionButton(
+                  text: suggestion,
+                  onTap: () => onSuggestion!(suggestion),
                 ),
-              ),
+              ],
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 눌러 보낼 수 있는 제안 한 줄. 문장이 길면 줄을 바꾸고 키가 커진다.
+class _SuggestionButton extends StatelessWidget {
+  const _SuggestionButton({required this.text, required this.onTap});
+
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 11,
+            height: 1.35,
+            color: AppColors.primary,
+          ),
         ),
       ),
     );
