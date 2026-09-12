@@ -160,6 +160,13 @@ class MainShellScreen extends ConsumerWidget {
                     railDark,
                     railPalette,
                   ),
+                  // 투어 중에는 눌리지 않게 막는데, 그러면 글씨가 기본 흐림색으로
+                  // 바뀐다. 어두운 앱바 위에서는 그 색이 배경에 묻혀 "출결 폼"을
+                  // 설명하는 단계에서 정작 글씨가 사라진다. 잠겨도 색은 그대로 둔다.
+                  disabledForegroundColor: ShellChrome.actionForeground(
+                    railDark,
+                    railPalette,
+                  ),
                 ),
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: const Text('출결 폼'),
