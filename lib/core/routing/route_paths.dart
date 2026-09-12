@@ -9,6 +9,9 @@ abstract final class RoutePaths {
   static const dashboard = '/';
   static const resume = '/resume';
   static const studyRoom = '/study-room';
+  static const studyRoomNotes = '/study-room/notes';
+  static String studyRoomNoteSource(String sourceId) =>
+      '/study-room/notes/$sourceId';
   static const board = '/board';
   static const records = '/records';
   static const recordsCreate = '/records/create';

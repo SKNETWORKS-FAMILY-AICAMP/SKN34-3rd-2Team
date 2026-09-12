@@ -9,12 +9,14 @@ class StudyRoomPageHeader extends StatelessWidget {
     super.key,
     required this.user,
     this.cohortName,
+    this.title = '학습실',
     this.subtitle = '배정된 인프런 강의를 확인하세요.',
     this.showProfile = true,
   });
 
   final UserModel user;
   final String? cohortName;
+  final String title;
   final String subtitle;
   final bool showProfile;
 
@@ -30,7 +32,7 @@ class StudyRoomPageHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '학습실',
+                title,
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,

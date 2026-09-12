@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
+import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
@@ -57,6 +60,8 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                     cohortName: cohortName,
                     subtitle: '배정된 인프런 강의와 이번 주 커리큘럼 YouTube 추천을 확인하세요.',
                   ),
+                  const SizedBox(height: 20),
+                  const _StudyRoomEntryCard(),
                   const SizedBox(height: 20),
                   const YoutubeRecommendationSection(),
                   const SizedBox(height: 28),
@@ -150,6 +155,51 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _StudyRoomEntryCard extends StatelessWidget {
+  const _StudyRoomEntryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '공부방',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '수업 저장소에서 날짜·폴더·파일을 골라 복습 노트를 만듭니다.',
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton(
+            onPressed: () => context.go(RoutePaths.studyRoomNotes),
+            child: const Text('공부방 열기'),
+          ),
+        ],
+      ),
     );
   }
 }

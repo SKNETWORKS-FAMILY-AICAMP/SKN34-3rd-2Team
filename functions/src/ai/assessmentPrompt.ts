@@ -1,8 +1,14 @@
 /**
  * AI 성취도평가 출제 프롬프트 버전.
- * 이후 wrong_answer_recommend 등 type별 PROMPT_VERSION을 같은 패턴으로 추가한다.
+ * 루트 .env의 ASSESSMENT_PROMPT_VERSION이 있으면 그 값을 쓰고, 없으면 기본값.
+ * Functions에 반영하려면 sync-functions-env 후 firebase deploy --only functions.
  */
-export const ASSESSMENT_PROMPT_VERSION = "assess_q_v2";
+export const ASSESSMENT_PROMPT_VERSION_DEFAULT = "assess_q_v2";
+
+export function assessmentPromptVersion(): string {
+  const fromEnv = process.env.ASSESSMENT_PROMPT_VERSION?.trim();
+  return fromEnv || ASSESSMENT_PROMPT_VERSION_DEFAULT;
+}
 export const ASSESSMENT_MODEL = "gpt-4o-mini";
 
 export const ASSESSMENT_SYSTEM_PROMPT = `당신은 코딩 부트캠프 성취도 평가 출제자입니다.

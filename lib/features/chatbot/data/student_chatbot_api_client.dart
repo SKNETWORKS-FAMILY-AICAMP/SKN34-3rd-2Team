@@ -35,13 +35,22 @@ class StudentChatbotApiClient {
   void close() => _client.close();
 
   Future<void> initialize(String threadId) async {
-    final response = await _client
-        .post(
-          Uri.parse('$_baseUrl/api/v1/student-chatbot/init'),
-          headers: await _headers(),
-          body: jsonEncode({'thread_id': threadId}),
-        )
-        .timeout(const Duration(seconds: 120));
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('$_baseUrl/api/v1/student-chatbot/init'),
+            headers: await _headers(),
+            body: jsonEncode({'thread_id': threadId}),
+          )
+          .timeout(const Duration(seconds: 120));
+    } on TimeoutException {
+      throw const FormatException('챗봇 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.');
+    } on http.ClientException {
+      throw const FormatException(
+        '챗봇 서버에 연결하지 못했습니다. 통합 서버(8000)가 켜져 있는지 확인하세요.',
+      );
+    }
     if (response.statusCode != 200) {
       throw FormatException(_errorMessage(response.statusCode, response.body));
     }
@@ -59,9 +68,18 @@ class StudentChatbotApiClient {
           ..headers.addAll(await _headers())
           ..body = jsonEncode({'thread_id': threadId, 'question': question});
 
-    final response = await _client
-        .send(request)
-        .timeout(const Duration(seconds: 120));
+    final http.StreamedResponse response;
+    try {
+      response = await _client
+          .send(request)
+          .timeout(const Duration(seconds: 120));
+    } on TimeoutException {
+      throw const FormatException('챗봇 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.');
+    } on http.ClientException {
+      throw const FormatException(
+        '챗봇 서버에 연결하지 못했습니다. 통합 서버(8000)가 켜져 있는지 확인하세요.',
+      );
+    }
     if (response.statusCode != 200) {
       final body = await response.stream.bytesToString();
       throw FormatException(_errorMessage(response.statusCode, body));

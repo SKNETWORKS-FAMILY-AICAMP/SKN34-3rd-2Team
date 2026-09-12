@@ -11,6 +11,7 @@ import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
 import '../models/inflearn_package_model.dart';
+import '../models/study_source_model.dart';
 import '../models/youtube_recommendation_model.dart';
 import '../models/cohort_model.dart';
 import '../models/domain_models.dart';
@@ -1219,6 +1220,56 @@ class LmsRepository {
     required String packageId,
   }) async {
     await cohortSub(cohortId, 'inflearnPackages').doc(packageId).delete();
+  }
+
+  // ── Study sources (공부방) ──
+
+  Stream<List<StudySourceModel>> watchStudySources(String cohortId) {
+    return cohortSub(cohortId, 'studySources')
+        .orderBy('sortOrder')
+        .snapshots()
+        .map((s) => s.docs.map(StudySourceModel.fromFirestore).toList());
+  }
+
+  Stream<List<StudySourceModel>> watchActiveStudySources(String cohortId) {
+    return cohortSub(cohortId, 'studySources')
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((s) {
+          final list = s.docs.map(StudySourceModel.fromFirestore).toList()
+            ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+          return list;
+        });
+  }
+
+  Stream<List<StudyNoteModel>> watchReadyStudyNotes(String uid) {
+    return _firestore
+        .collection(FirestorePaths.users)
+        .doc(uid)
+        .collection('studyNotes')
+        .where('status', isEqualTo: 'ready')
+        .snapshots()
+        .map((s) => s.docs.map(StudyNoteModel.fromFirestore).toList());
+  }
+
+  Future<String> createStudySource({
+    required String cohortId,
+    required StudySourceModel source,
+  }) async {
+    final ref = cohortSub(cohortId, 'studySources').doc();
+    await ref.set(source.toFirestore(isCreate: true));
+    return ref.id;
+  }
+
+  Future<void> updateStudySource({
+    required String cohortId,
+    required String sourceId,
+    required Map<String, dynamic> updates,
+  }) async {
+    await cohortSub(cohortId, 'studySources').doc(sourceId).update({
+      ...updates,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ── YouTube Recommendations (학습실 관심사 추천) ──
