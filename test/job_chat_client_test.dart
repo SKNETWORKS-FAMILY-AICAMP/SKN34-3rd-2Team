@@ -54,6 +54,22 @@ http.Response _json(Map<String, dynamic> body, {int status = 200}) => http.Respo
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
+/// 공고 카드 여러 장. `job_id`만 다르고 나머지는 같다 — 여기서 보는 것은 **순서**다.
+List<Map<String, dynamic>> _jobsInOrder(List<String> jobIds) => [
+  for (final id in jobIds)
+    {
+      'job_id': id,
+      'company': '$id회사',
+      'title': '백엔드 개발자',
+      'source_url': 'https://example.com/jobs/$id',
+      'region': '서울 강남구',
+      'career': '신입',
+      'employment_type': '정규직',
+      'deadline': null,
+      'tech_stack': <String>[],
+    },
+];
+
 void main() {
   group('공고 찾기 챗봇', () {
     test('첫 질문은 조건 없이 보내고, 응답의 조건을 읽어 둔다', () async {
@@ -207,6 +223,127 @@ void main() {
       expect(job.deadline, isNull);
       expect(job.techStack, isEmpty);
       expect(job.career, '경력무관');
+    });
+  });
+
+  /// "2번 자세히 봐줘" 가 걸리는 자리.
+  ///
+  /// 서버는 대화를 저장하지 않으므로 직전에 무엇을 보여 줬는지 모른다. 앱이
+  /// `last_job_ids`로 되돌려 준다. **순서가 곧 번호다.** 여기서 한 칸 어긋나면
+  /// 사용자가 가리킨 것과 다른 공고를 놓고 답하는데, 답 자체는 그럴듯해서
+  /// 틀린 줄도 모른다.
+  group('직전에 보여 준 목록', () {
+    test('첫 질문에는 되돌려 줄 목록이 없다', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response());
+        }),
+      );
+
+      await api.chat(message: '백엔드 찾아줘');
+
+      expect(sent!['last_job_ids'], isEmpty, reason: '앞에 보여 준 것이 없다');
+    });
+
+    test('보여 준 순서 그대로 실어 보낸다', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response());
+        }),
+      );
+
+      // 검색 결과가 id 순으로 오지 않는다. 정렬해 보내면 번호가 어긋난다.
+      await api.chat(message: '2번 자세히 봐줘', lastJobIds: const ['J7', 'J3', 'J1']);
+
+      expect(sent!['last_job_ids'], ['J7', 'J3', 'J1']);
+    });
+
+    test('답에 나온 공고 순서가 다음 턴의 번호가 된다', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response(jobs: _jobsInOrder(['J7', 'J3', 'J1'])));
+        }),
+      );
+
+      final shown = await api.chat(message: '백엔드 찾아줘');
+      expect([for (final job in shown.jobs) job.jobId], ['J7', 'J3', 'J1'],
+          reason: '화면에 그려지는 순서가 곧 1·2·3번이다');
+
+      await api.chat(
+        message: '2번 자세히 봐줘',
+        lastJobIds: [for (final job in shown.jobs) job.jobId],
+      );
+
+      // 서버는 이 목록의 두 번째, 즉 J3을 놓고 답한다.
+      expect(sent!['last_job_ids'], ['J7', 'J3', 'J1']);
+      expect((sent!['last_job_ids'] as List)[1], 'J3');
+    });
+
+    test('직전 답이 다룬 공고는 따로 보낸다', () async {
+      // "두 공고의 자격요건만"에는 번호가 없다. 번호가 가리킬 목록과 방금 이야기한
+      // 대상은 다르다. 비교하고 나서도 목록은 찾아 준 다섯 건 그대로여야 한다.
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response());
+        }),
+      );
+
+      await api.chat(
+        message: '두 공고의 자격요건만 간단히 비교해줘',
+        lastJobIds: const ['J1', 'J2', 'J3', 'J4', 'J5'],
+        lastAnswerJobIds: const ['J2', 'J5'],
+      );
+
+      expect(sent!['last_job_ids'], ['J1', 'J2', 'J3', 'J4', 'J5']);
+      expect(sent!['last_answer_job_ids'], ['J2', 'J5']);
+    });
+
+    test('첫 질문에는 다룬 공고도 없다', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response());
+        }),
+      );
+
+      await api.chat(message: '백엔드 찾아줘');
+
+      expect(sent!['last_answer_job_ids'], isEmpty);
+    });
+
+    test('공고를 골라 물을 때도 목록은 함께 간다', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response(jobs: const []));
+        }),
+      );
+
+      // 카드를 눌러 물은 뒤에도 "3번은?"으로 돌아갈 수 있어야 한다.
+      await api.chat(
+        message: '신입도 돼?',
+        jobId: 'J3',
+        lastJobIds: const ['J7', 'J3', 'J1'],
+      );
+
+      expect(sent!['job_id'], 'J3');
+      expect(sent!['last_job_ids'], ['J7', 'J3', 'J1']);
     });
   });
 }

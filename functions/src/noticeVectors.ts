@@ -6,7 +6,7 @@ import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {db} from "./firebase";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
-const pineconeApiKey = defineSecret("PINECONE_API_KEY");
+const pineconeApiKey = defineSecret("PINECONE_API_KEY2");
 const secrets = [openaiApiKey, pineconeApiKey];
 
 const INDEX_NAME = "student";

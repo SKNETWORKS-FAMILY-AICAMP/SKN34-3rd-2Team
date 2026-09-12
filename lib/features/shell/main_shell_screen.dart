@@ -108,7 +108,8 @@ class MainShellScreen extends ConsumerWidget {
     final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
     final location = GoRouterState.of(context).matchedLocation;
     final preview = ref.watch(profilePhotoPreviewProvider);
-    final tourActive = ref.watch(onboardingTourProvider)?.active == true &&
+    final tourActive =
+        ref.watch(onboardingTourProvider)?.active == true &&
         ref.watch(onboardingTourProvider)?.tourId == 'student';
     final railDark = ref.watch(sideRailDarkModeProvider);
 
@@ -118,9 +119,7 @@ class MainShellScreen extends ConsumerWidget {
           icon: item.icon,
           label: item.label,
           path: item.path,
-          itemKey: wide
-              ? OnboardingTargetRegistry.keyOf(item.targetId)
-              : null,
+          itemKey: wide ? OnboardingTargetRegistry.keyOf(item.targetId) : null,
         ),
     ];
 
@@ -152,9 +151,9 @@ class MainShellScreen extends ConsumerWidget {
                 onPressed: tourActive
                     ? null
                     : () => launchUrl(
-                          Uri.parse(AttendanceForm.url),
-                          mode: LaunchMode.externalApplication,
-                        ),
+                        Uri.parse(AttendanceForm.url),
+                        mode: LaunchMode.externalApplication,
+                      ),
                 style: TextButton.styleFrom(
                   foregroundColor: ShellChrome.actionForeground(railDark),
                 ),
@@ -166,20 +165,23 @@ class MainShellScreen extends ConsumerWidget {
               Center(
                 child: Padding(
                   padding: const EdgeInsets.only(right: 12),
-                  child: ProfileNavChip(
-                    user: user,
-                    style: ProfileNavChipStyle.appBar,
-                    onTap: tourActive
-                        ? () {}
-                        : () => context.go(RoutePaths.myPage),
+                  child: KeyedSubtree(
+                    key: OnboardingTargetRegistry.keyOf(
+                      StudentOnboardingTargets.navMyPage,
+                    ),
+                    child: ProfileNavChip(
+                      user: user,
+                      style: ProfileNavChipStyle.appBar,
+                      onTap: tourActive
+                          ? () {}
+                          : () => context.go(RoutePaths.myPage),
+                    ),
                   ),
                 ),
               ),
           ],
         ),
-        drawer: wide
-            ? null
-            : _AppDrawer(user: user, tourActive: tourActive),
+        drawer: wide ? null : _AppDrawer(user: user, tourActive: tourActive),
         body: Row(
           children: [
             if (wide)

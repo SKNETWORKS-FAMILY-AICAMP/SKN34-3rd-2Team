@@ -16,7 +16,11 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
+
+from job_matching_bot.matching.hard_filter import ENTRY_ONLY_MAX_YEARS
+from job_matching_bot.matching.skill_normalize import canonical_skill
 
 KST = timezone(timedelta(hours=9))
 
@@ -49,6 +53,44 @@ CONFUSABLE = {
 }
 
 
+@lru_cache(maxsize=1)
+def _tag_spellings() -> dict[str, list[str]]:
+    """표준키 → 사람인이 실제로 붙인 태그 표기.
+
+    사람인은 `SpringBoot`, `Node.js`, `RestAPI`로 붙이는데 사람은 `Spring Boot`,
+    `Node JS`, `REST API`라고 친다. 친 글자를 그대로 찾으면 하나도 안 걸린다.
+
+        Spring Boot   태그에 걸린 공고 0건 → SpringBoot 로 찾으면 354건
+        REST API      0건 → RestAPI 301건
+        K8s           5건 → Kubernetes 221건
+
+    표기를 접는 `canonical_skill`은 이미 있고 적재할 때 쓴다. 검색이 안 썼다.
+
+    저장소를 고치지 않는다. 태그는 보여 줄 글이기도 해서 원문이 남아야 하고, 칸을
+    더 만들면 29,000건을 다시 써야 한다. 찾을 때만 접는다.
+    """
+    from job_matching_bot.ingestion.saramin_tech_vocab import load_codes
+
+    spellings: dict[str, list[str]] = {}
+    for row in load_codes():
+        name = str(row["kewd_name"]).strip()
+        if not name:
+            continue
+        spellings.setdefault(canonical_skill(name), [])
+        if name not in spellings[canonical_skill(name)]:
+            spellings[canonical_skill(name)].append(name)
+    return spellings
+
+
+def spellings_of(term: str) -> list[str]:
+    """이 말을 찾을 때 함께 걸 표기. 사용자가 친 말이 늘 맨 앞이다."""
+    found = [term]
+    for name in _tag_spellings().get(canonical_skill(term), []):
+        if name.lower() != term.strip().lower():
+            found.append(name)
+    return found
+
+
 def _like_or_regex(column: str, term: str) -> tuple[str, list[object]]:
     """한 컬럼에서 한 말을 찾는 조건. 헷갈리는 말이면 뒤에 오는 글자를 본다.
 
@@ -60,6 +102,17 @@ def _like_or_regex(column: str, term: str) -> tuple[str, list[object]]:
     # 한 공고에 Java 와 Javascript 가 둘 다 있으면 Java 쪽이 걸린다. 빼면 진짜 Java
     # 공고를 잃는다.
     return f"RE_HAS(?, {column})", [pattern]
+
+
+def _match(column: str, term: str) -> tuple[str, list[object]]:
+    """한 컬럼에서 이 말을 찾는 조건. 표기 변형을 전부 건다."""
+    parts: list[str] = []
+    values: list[object] = []
+    for spelling in spellings_of(term):
+        sql, vals = _like_or_regex(column, spelling)
+        parts.append(sql)
+        values.extend(vals)
+    return "(" + " OR ".join(parts) + ")", values
 
 
 def _re_has(pattern: str, text: str | None) -> int:
@@ -87,6 +140,7 @@ class JobFilters:
     skills: list[str] = field(default_factory=list)         # 기술 (Python, React)
     regions: list[str] = field(default_factory=list)        # 시·도 (서울, 경기)
     career: str = "무관"                                     # 신입 / 경력 / 무관
+    career_years: int | None = None                         # 몇 년차인지 말했으면
     employment_types: list[str] = field(default_factory=list)
     deadline_within_days: int | None = None                 # 마감 임박만 보기
     keywords: list[str] = field(default_factory=list)       # 그 밖의 말
@@ -95,7 +149,8 @@ class JobFilters:
     def is_empty(self) -> bool:
         return not any(
             [self.roles, self.skills, self.regions, self.employment_types,
-             self.keywords, self.deadline_within_days, self.career != "무관"]
+             self.keywords, self.deadline_within_days, self.career != "무관",
+             self.career_years is not None]
         )
 
     def summary(self) -> str:
@@ -105,7 +160,10 @@ class JobFilters:
             *(f"{region}" for region in self.regions),
             *self.employment_types,
         ]
-        if self.career != "무관":
+        if self.career_years is not None:
+            # 무엇으로 걸렀는지 그대로 보인다. 해석이 틀렸으면 사용자가 알아채야 한다.
+            parts.append(f"{self.career_years}년차")
+        elif self.career != "무관":
             parts.append(self.career)
         if self.deadline_within_days:
             parts.append(f"{self.deadline_within_days}일 내 마감")
@@ -127,6 +185,9 @@ class JobHit:
     deadline: str | None
     tech_stack: list[str]
     relevance: int = 0   # 3 제목 · 2 직무·기술 태그 · 1 본문에만
+    # 상세를 받아 본문까지 있는가. False면 목록에서만 본 공고다. 조건 검색에는
+    # 온전히 쓰이지만 "자격요건 알려줘"에는 답할 수 없어 원문 링크로 안내한다.
+    has_detail: bool = True
 
 
 @dataclass
@@ -144,7 +205,7 @@ _HIT_COLUMNS = (
 )
 
 
-def _to_hit(row, relevance: int) -> JobHit:
+def _to_hit(row, relevance: int, has_detail: bool = True) -> JobHit:
     return JobHit(
         job_id=row["job_id"],
         company=row["company"] or "",
@@ -156,6 +217,7 @@ def _to_hit(row, relevance: int) -> JobHit:
         deadline=(row["deadline"] or None),
         tech_stack=json.loads(row["tech_stack"] or "[]"),
         relevance=relevance,
+        has_detail=has_detail,
     )
 
 
@@ -201,6 +263,19 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
         where.append("career_type IN (" + ", ".join("?" for _ in types) + ")")
         params.extend(types)
 
+    # 몇 년차인지 말했으면 **모자란 공고를 뺀다.** "3년차인데 갈 만한 데"에 경력 5년
+    # 이상 공고가 나갔었다. 추천 쪽 하드 필터와 같은 규칙으로 본다.
+    #
+    # 연차 미기재(`min_career_years IS NULL`)는 빼지 않는다. 미기재인 것은 연차이지
+    # "이 사람에게 안 맞는다"는 사실이 아니다. 여기는 검색이라 빠지면 사용자가 아예
+    # 못 본다 — 판단할 거리를 남기는 쪽이 낫다.
+    if filters.career_years is not None:
+        where.append("(min_career_years IS NULL OR min_career_years <= ?)")
+        params.append(filters.career_years)
+        # 신입만 뽑는다고 적은 공고는 경력자에게 맞지 않는다. 경계는 하드 필터와 같다.
+        if filters.career_years >= ENTRY_ONLY_MAX_YEARS:
+            where.append("career_type != 'ENTRY'")
+
     if filters.employment_types:
         where.append("(" + " OR ".join("employment_type LIKE ?" for _ in filters.employment_types) + ")")
         params.extend(f"%{value}%" for value in filters.employment_types)
@@ -217,7 +292,7 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
         for term in terms:
             parts = []
             for column in ("title", "keywords", "tech_stack", "description"):
-                sql, values = _like_or_regex(column, term)
+                sql, values = _match(column, term)
                 parts.append(sql)
                 params.extend(values)
             clauses.append("(" + " OR ".join(parts) + ")")
@@ -243,13 +318,13 @@ def search(
     if terms:
         title_parts, tag_parts = [], []
         for term in terms:
-            sql, values = _like_or_regex("title", term)
+            sql, values = _match("title", term)
             title_parts.append(sql)
             case_params.extend(values)
         for term in terms:
             pieces = []
             for column in ("keywords", "tech_stack"):
-                sql, values = _like_or_regex(column, term)
+                sql, values = _match(column, term)
                 pieces.append(sql)
                 case_params.extend(values)
             tag_parts.append("(" + " OR ".join(pieces) + ")")
@@ -258,22 +333,42 @@ def search(
             f"WHEN {' OR '.join(tag_parts)} THEN 2 ELSE 1 END"
         )
 
+    # 상세까지 있는 공고와, 목록에서만 본 공고를 함께 본다.
+    #
+    # 상세를 받아야 `jobs`에 들어가서 IT 밖 10개 대분류가 영영 0건이었다. "서울 영업직
+    # 있어?"에 없어서가 아니라 안 갖고 있어서 답을 못 했다. 목록에는 회사·제목·직무·
+    # 조건·링크가 다 있고, 조건 검색은 원래 그 값들로만 거른다.
+    #
+    # 조건 SQL은 두 표에 **그대로** 쓴다. `list_jobs_search` 뷰가 목록에 없는 칸을
+    # 상수로 채우고, 해석은 상세와 같은 파서를 쓴다. 그래서 섞여도 결과가 안 어긋난다.
+    #
+    # `has_detail`이 0인 것은 늘 뒤에 세운다. 본문이 있는 쪽이 먼저 보여야 한다.
+    body = (
+        f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance, 1 AS has_detail, "
+        "keywords, first_seen_at FROM jobs WHERE " + " AND ".join(where)
+        + " UNION ALL "
+        f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance, 0 AS has_detail, "
+        "keywords, first_seen_at FROM list_jobs_search WHERE " + " AND ".join(where)
+        # 상세를 받은 공고는 `jobs`에 있다. 같은 공고가 두 번 나오지 않게 뺀다.
+        + " AND source_job_id NOT IN (SELECT source_job_id FROM jobs)"
+    )
     sql = (
-        f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance FROM jobs WHERE "
-        + " AND ".join(where)
+        f"SELECT * FROM ({body}) "
         # 관련도가 같으면 태그를 적게 단 공고를 먼저. 직무 태그를 열 개씩 달아 둔
         # "전 직군 공개채용"은 무엇을 물어도 걸리므로, 그 일에 특화된 공고에 자리를 내준다.
-        + " ORDER BY relevance DESC, LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
+        " ORDER BY has_detail DESC, relevance DESC, LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
     )
 
-    # ORDER BY는 별칭을 쓰므로 값이 없다. 순서는 SELECT → WHERE → LIMIT.
+    # 값은 UNION 두 쪽에 똑같이 들어간다. 순서는 SELECT → WHERE 를 두 번, 그다음 LIMIT.
+    half = [*case_params, *params]
     connection = connect(store_path)
     try:
-        rows = connection.execute(sql, [*case_params, *params, SCAN_LIMIT]).fetchall()
+        rows = connection.execute(sql, [*half, *half, SCAN_LIMIT]).fetchall()
     finally:
         connection.close()
 
-    jobs = [_to_hit(row, int(row["relevance"] or 0)) for row in rows[:limit]]
+    jobs = [_to_hit(row, int(row["relevance"] or 0), bool(row["has_detail"]))
+            for row in rows[:limit]]
     return SearchResult(
         jobs=jobs,
         total=len(rows),

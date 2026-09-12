@@ -23,8 +23,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable
 
-from job_matching_bot.api import prompts, schemas
+from job_matching_bot.api import abuse, prompts, schemas
 from job_matching_bot.matching.hard_filter import hard_filter
+from job_matching_bot.matching.pre_ranker import pre_rank, preferred_match, skill_match
 from job_matching_bot.retrieval import search as retrieval
 from job_matching_bot.retrieval import market_stats, store_search
 from job_matching_bot.schemas.job_posting import Job
@@ -40,16 +41,60 @@ SEARCH_TOP_K = 25
 RERANK_TOP_K = 12
 # 같은 회사가 목록을 채우지 않게 하는 상한.
 MAX_PER_COMPANY = 2
+
+# 적합도 순서. 판정을 못 받은 공고(None)는 판정된 '낮음' 뒤에 선다.
+_FIT_ORDER = {"높음": 0, "보통": 1, "낮음": 2}
+UNJUDGED_CONCERN = "AI 세부 분석을 완료하지 못했습니다. 검색 순서로만 배치했습니다."
+
+
+def fit_order(fit: str | None) -> int:
+    """정렬 키. 값이 없거나 모르는 값이면 맨 뒤."""
+    return _FIT_ORDER.get(fit or "", len(_FIT_ORDER))
 # 재정렬에 넘길 공고 본문 길이. 메타데이터 excerpt와 같게 두어 자르지 않는다.
 JOB_EXCERPT_CHARS = 1200
 # LLM 추론 강도. 대조 작업이라 낮춰도 근거 품질이 유지되고 응답이 크게 빨라진다.
 REASONING_EFFORT = "medium"
+# 챗봇이 말을 가르는 호출만 따로 낮춘다.
+#
+# 위 medium은 **추천 재정렬**을 재서 정한 값이다(`_build_generator` 설명의 표). 거기서는
+# low가 맞는 공고를 놓쳤다. 가르기는 그 값을 물려받았을 뿐 따로 재 본 적이 없었다.
+#
+# 재 봤다. 검색·질문·추천·잡담·범위밖·번호 가리키기·비교·급여까지 13가지를 넣고
+# 강도만 바꿨다.
+#
+#     low     13/13  평균 1.7초   (네 번 돌려 전부 13/13)
+#     medium  13/13  평균 3.0초
+#
+# 가르는 일은 깊이 생각할 것이 없다. 모든 말이 이 호출을 지나므로 여기서 줄면 전부
+# 줄어든다. 답을 쓰는 호출은 medium 그대로다 — 그건 글의 질이 걸린 일이다.
+# minimal은 이 모델이 받지 않는다.
+CHAT_EFFORT = "low"
 # 구조화 결과를 몇 벌까지 들고 있을지. 이력서 한 건이 몇 KB라 넉넉해도 가볍다.
 PROFILE_CACHE_SIZE = 64
 
 
 # 추천이 거치는 단계. 앱이 이 순서대로 줄을 세운다. 이름을 바꾸면 앱도 같이 고쳐야 한다.
 RECOMMEND_STAGES = ("resume", "search", "filter", "judge")
+
+
+# 잡담에 돌려줄 말은 모델이 쓴다. 이것은 모델이 아무 말도 안 돌려줬을 때의 자리다.
+# 빈 말풍선을 띄우느니 무엇을 물으면 되는지라도 보여 준다.
+SMALL_TALK_FALLBACK = (
+    "채용에 대한 것을 도와드릴 수 있어요.\n"
+    "공고를 찾으시려면 “서울 백엔드 신입”처럼, "
+    "궁금한 게 있으시면 “백엔드 신입은 뭘 준비해야 해?”처럼 물어보세요."
+)
+
+
+# 채용 밖의 일을 시켰을 때. **이 말은 모델이 쓰지 않는다.**
+#
+# 프롬프트로 "채용 이야기만 하라"고 이르는 것과, 답을 쓰는 단계로 아예 안 보내는 것은
+# 다르다. 앞은 모델이 매번 지켜 줘야 하지만 뒤는 지킬 일이 없다. 실제로 "호구"라는
+# 말 하나에 뜻풀이와 "이 말을 부드럽게 바꿔 말해줘" 같은 제안까지 붙어 나갔다.
+OFF_TOPIC_REPLY = (
+    "저는 채용과 취업 준비에 대해서만 도와드릴 수 있어요.\n"
+    "공고를 찾거나, 무엇을 준비하면 좋을지 물어봐 주세요."
+)
 
 
 def _progress_reporter(
@@ -411,36 +456,53 @@ class RecommendService(_LivenessMixin):
         except Exception as error:
             raise SearchUnavailable(f"조건 판정에 실패했습니다: {type(error).__name__}") from error
 
-        candidates = candidates[:RERANK_TOP_K]
-        # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없고, 걸러 낸 만큼
-        # 뒤 후보가 올라와 자리를 채운다.
+        # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없다. 자르기는 그
+        # 다음이다 — 먼저 잘라 버리면 마감된 만큼 자리가 비고 뒤 후보가 올라오지
+        # 못한다. 확인 대상이 늘지만(최대 25건) 한 번에 여는 요청이라 시간은 같다.
         alive = self.drop_dead([hit.job_id for hit, _, _ in candidates])
         if len(alive) < len(candidates):
             warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
             candidates = [c for c in candidates if c[0].job_id in alive]
+        # 벡터 순위와 기술 겹침을 섞어 다시 세운다. 벡터 유사도는 후보 안에서 거의
+        # 평평해서(실측 폭 0.042~0.140) 그 순서만으로는 누구를 LLM에 보낼지 가리기
+        # 어렵다. 기술 정보가 없는 공고는 제자리에 남는다 — `pre_ranker` 참고.
+        matches = [skill_match(job, profile.skills) for _, job, _ in candidates]
+        # 공고가 우대한다고 적은 자격증·전공을 가졌으면 조금 얹는다. 못 맞췄다고
+        # 빼지는 않는다 — 우대사항은 없어도 지원에 지장이 없다.
+        preferred = [
+            preferred_match(job, resume_profile.certifications, resume_profile.majors)
+            for _, job, _ in candidates
+        ]
+        candidates = pre_rank(
+            candidates, [hit.score for hit, _, _ in candidates], matches, preferred
+        )
+        candidates = candidates[:RERANK_TOP_K]
         say("filter", f"조건을 통과한 {len(candidates)}건이 남았어요")
 
         say("judge")
         fits, reranked = self.rerank(request.resume_text, candidates, warnings)
 
-        order = {"높음": 0, "보통": 1, "낮음": 2}
+        # 같은 적합도 안에서는 다시 세운 순서를 쓴다. 예전에는 벡터 순위였는데,
+        # 판정을 예측하는 힘이 더 약한 신호였다(+0.26 대 +0.42).
         rows: list[tuple[int, int, schemas.Recommendation]] = []
-        for hit, job, filter_result in candidates:
+        for position, (hit, job, filter_result) in enumerate(candidates):
             fit = fits.get(job.job_id)
             if fit is not None:
                 fit = self.verify(fit, request.resume_text, job, warnings)
             rows.append(
                 (
-                    order.get(fit.fit, 1) if fit else 1,
-                    hit.rank,
+                    fit_order(fit.fit if fit else None),
+                    position,
                     schemas.Recommendation(
                         job_id=job.job_id,
                         company=job.company,
                         title=job.title,
                         source_url=job.source_url,
-                        fit=fit.fit if fit else "보통",
+                        # 판정을 못 받은 공고는 '보통'으로 올려 보내지 않는다. 판정된
+                        # '낮음'보다 위에 서는 것이 말이 안 된다. 가장 낮게 두고 사유를 남긴다.
+                        fit=fit.fit if fit else "낮음",
                         reasons=fit.reasons if fit else [],
-                        concerns=fit.concerns if fit else [],
+                        concerns=fit.concerns if fit else [UNJUDGED_CONCERN],
                         conditions=schemas.Conditions(
                             region=job.region,
                             employment_type=job.employment_type,
@@ -483,6 +545,35 @@ def _quote_in(quote: str, source: str) -> bool:
     if not normalized:
         return False
     return normalized in _normalize_quote(source)
+
+
+def _resolve_job_refs(refs: list[int], last_job_ids: list[str]) -> list[str]:
+    """가리킨 자리를 모두 job_id로 바꾼다. 범위를 벗어난 번호는 버린다.
+
+    같은 번호를 두 번 말해도 한 번만 담는다. "1번하고 1번 비교해줘"는 비교가 아니다.
+    """
+    found: list[str] = []
+    for ref in refs:
+        if 1 <= ref <= len(last_job_ids):
+            job_id = last_job_ids[ref - 1]
+            if job_id not in found:
+                found.append(job_id)
+    return found
+
+
+def _resolve_job_ref(refs: list[int], last_job_ids: list[str]) -> str | None:
+    """"2번"을 직전 목록의 job_id로 바꾼다. 가리킨 자리가 없으면 None.
+
+    서버는 대화를 저장하지 않는다. 직전에 무엇을 보여 줬는지는 앱이 `last_job_ids`로
+    되돌려 줘야 안다. 그래서 목록을 안 받았거나 범위를 벗어난 번호는 조용히 넘긴다 —
+    엉뚱한 공고를 집는 것보다 못 알아들었다고 하는 편이 낫다.
+
+    여러 개를 가리켰으면 첫 번째만 쓴다. 비교는 아직 못 한다.
+    """
+    for ref in refs:
+        if 1 <= ref <= len(last_job_ids):
+            return last_job_ids[ref - 1]
+    return None
 
 
 def _career_label(job: Job) -> str:
@@ -534,12 +625,22 @@ class ChatService(_LivenessMixin):
     """
 
     def __init__(self, generator=None, store_path: Path | None = None,
-                 adviser=None, job_asker=None, finder=None):
+                 adviser=None, job_asker=None, finder=None, comparer=None):
         self._generator = generator
         self._store_path = store_path
         self._adviser = adviser
         self._job_asker = job_asker
         self._finder = finder
+        self._comparer = comparer
+
+    @property
+    def comparer(self):
+        """공고 둘을 맞대어 답을 쓰는 함수."""
+        if self._comparer is None:
+            from job_matching_bot.api.prompts_compare import JOB_COMPARE_PROMPT
+
+            self._comparer = _build_generator(JOB_COMPARE_PROMPT, schemas.ChatAnswerOut)
+        return self._comparer
 
     @property
     def finder(self):
@@ -552,8 +653,11 @@ class ChatService(_LivenessMixin):
 
     @property
     def generator(self):
+        """말을 가르고 조건을 뽑는 호출. 모든 말이 여기를 지난다(`CHAT_EFFORT` 참고)."""
         if self._generator is None:
-            self._generator = _build_generator(prompts.CHAT_PROMPT, schemas.ChatTurnOut)
+            self._generator = _build_generator(
+                prompts.CHAT_PROMPT, schemas.ChatTurnOut, effort=CHAT_EFFORT
+            )
         return self._generator
 
     @property
@@ -582,6 +686,17 @@ class ChatService(_LivenessMixin):
 
         previous = request.filters or schemas.ChatFilters()
 
+        # 모델을 부르기 전에 막는 한 겹. 여기 걸리면 호출이 0이다.
+        # 적어 둔 말만 잡는다. 나머지는 아래에서 모델이 가른다(`off_topic`).
+        if abuse.is_abuse(request.message):
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply=OFF_TOPIC_REPLY,
+                filters=previous,
+                total=0,
+                suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
+            )
+
         # 공고를 골라 물은 경우. 무슨 말이든 그 공고에 대한 물음이므로 의도를 가르지 않는다.
         if request.job_id:
             return self._ask_job(request, previous)
@@ -593,21 +708,68 @@ class ChatService(_LivenessMixin):
             }
         )
 
-        if turn.unavailable:
-            return self._unavailable(turn.unavailable, previous)
-
-        if turn.intent == "잡담":
+        # 여기가 문이다. **채용이라고 짚은 말만** 아래로 내려간다.
+        #
+        # 막을 것을 고르는 대신 답해도 되는 것을 짚게 했다. 애매한 말은 통과하지 않고
+        # 막힌다. 아래 어느 단계도 모델이 쓴 문장을 쓰지 않으므로, 답하지 말아야 할
+        # 것에 답할 길이 없다.
+        if turn.topic == "그 밖":
             return schemas.JobChatResponse(
                 mode="안내",
-                reply=(
-                    "채용에 대한 것을 도와드릴 수 있어요.\n"
-                    "공고를 찾으시려면 \u201c서울 백엔드 신입\u201d처럼, "
-                    "궁금한 게 있으시면 \u201c백엔드 신입은 뭘 준비해야 해?\u201d처럼 물어보세요."
-                ),
+                reply=OFF_TOPIC_REPLY,
                 filters=previous,
                 total=0,
                 suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
             )
+        if turn.topic == "인사":
+            return self._small_talk(turn, previous)
+
+        # "2번 자세히 봐줘" — 직전 목록에서 자리를 가리킨 말. 그 공고 하나에 대한 물음이
+        # 되므로 조건 검색으로 내려보내지 않는다. 사용자가 카드를 다시 누르지 않아도 된다.
+        # 자리를 **둘 이상** 가리켰으면 비교다. 따로 의도를 두지 않는다 — 개수가 곧
+        # 신호이고, LLM이 한 번 더 가를 일을 만들지 않는 편이 틀릴 여지가 적다.
+        picked_many = _resolve_job_refs(turn.job_refs, request.last_job_ids)
+        if len(picked_many) >= 2:
+            return self._compare_jobs(request, previous, picked_many[:2])
+        if picked_many:
+            return self._ask_job(
+                request.model_copy(update={"job_id": picked_many[0]}), previous
+            )
+        # "두 공고의 자격요건만" — 번호 없이 방금 이야기한 공고를 가리킨 말. 비교 뒤에
+        # 이어지는 물음이 대부분 이 꼴이라, 여기서 못 받으면 챗봇이 스스로 내놓은
+        # 제안을 눌렀는데 "공고가 보이지 않아 비교할 수 없다"고 답하게 된다.
+        if turn.refers_to_last_answer and request.last_answer_job_ids:
+            discussed = list(request.last_answer_job_ids)
+            if len(discussed) == 2:
+                return self._compare_jobs(request, previous, discussed)
+            if len(discussed) == 1:
+                return self._ask_job(
+                    request.model_copy(update={"job_id": discussed[0]}), previous
+                )
+            # 셋 이상이면 어느 것인지 고를 수 없다. 앞의 둘을 집으면 사용자가 생각한
+            # 공고가 아닐 수 있고, 답은 그럴듯해서 틀린 줄도 모른다.
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="어느 공고를 말씀하시는지 번호로 알려 주세요. 예를 들어 “1번하고 3번 비교해줘”처럼요.",
+                filters=previous,
+                total=0,
+                suggestions=["1번 자세히 봐줘", "1번하고 2번 비교해줘"],
+            )
+
+        if (turn.job_refs or turn.refers_to_last_answer) and not request.last_job_ids:
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="앞에 보여 드린 공고가 없어요. 먼저 조건을 말씀해 주시면 목록을 보여 드릴게요.",
+                filters=previous,
+                total=0,
+                suggestions=["서울 백엔드 신입", "마감 임박한 공고"],
+            )
+
+        if turn.unavailable:
+            return self._unavailable(turn.unavailable, previous)
+
+        if turn.intent == "잡담":
+            return self._small_talk(turn, previous)
 
         if turn.intent == "추천":
             # 챗봇은 이력서를 받지 않는다. 앱이 이 mode를 보고 추천으로 넘긴다.
@@ -679,6 +841,22 @@ class ChatService(_LivenessMixin):
             jobs=[_to_chat_job(hit) for hit in shown],
             total=result.total,
             suggestions=_suggestions(filters, result),
+        )
+
+    @staticmethod
+    def _small_talk(turn, previous) -> schemas.JobChatResponse:
+        """인사에는 인사로. **모델을 한 번 더 부르지 않는다.**
+
+        "안녕"에 사용법 안내가 돌아오면 사람과 말하는 것 같지 않다. 그렇다고 답을 쓰는
+        호출을 붙이면 인사 한 마디에 두 번을 부르게 된다. 갈래를 가르며 이미 받아 둔
+        `understood`를 그대로 쓴다.
+        """
+        return schemas.JobChatResponse(
+            mode="안내",
+            reply=turn.understood.strip() or SMALL_TALK_FALLBACK,
+            filters=previous,
+            total=0,
+            suggestions=["서울 백엔드 신입", "요즘 많이 요구하는 기술이 뭐야?"],
         )
 
     @staticmethod
@@ -779,12 +957,30 @@ class ChatService(_LivenessMixin):
 
         with SqliteJobStore(self.store_path) as store:
             record = store.get(request.job_id)
+            listing = None if record is not None else store.get_listing(request.job_id)
         if record is None:
+            # 목록에서만 본 공고다. 마감된 것이 아니라 아직 상세를 안 받은 것이므로
+            # 그렇게 말하고 원문으로 보낸다. 없는 내용을 지어내지 않는다.
+            if listing is not None:
+                return self._listing_only(listing, previous)
             return schemas.JobChatResponse(
                 mode="안내",
                 reply="그 공고를 저장소에서 찾지 못했어요. 마감되어 내려갔을 수 있어요.",
                 filters=previous,
                 total=0,
+            )
+
+        # 마감됐는지 확인한다. 마감일이 남아 있어도 회사가 채용을 마치면 먼저 닫는다.
+        # 검색·질문·비교는 이미 확인하는데 여기만 안 했다. 대화 안에서 방금 본 공고면
+        # 24시간 캐시가 있어 요청이 안 나가고, 어제 띄워 둔 화면을 오늘 다시 눌렀을 때만
+        # 실제로 열어 본다.
+        if not self.drop_dead([request.job_id]):
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="그 공고는 접수가 마감됐어요. 다른 공고를 찾아 드릴까요?",
+                filters=previous,
+                total=0,
+                suggestions=["비슷한 공고 더 보여줘"],
             )
 
         # 이력서를 함께 받았으면 넘긴다. 이력서 화면에서 "나한테 맞아?"라고 물었는데
@@ -794,15 +990,94 @@ class ChatService(_LivenessMixin):
             {
                 "job": _job_text(record.job),
                 "resume": resume or "(없음)",
-                "question": request.message,
+                "question": _without_ordinal(request.message),
             }
         )
         return schemas.JobChatResponse(
             mode="공고",
             reply=answer.answer,
             filters=previous,
-            total=0,
+            # 어느 공고를 두고 답했는지 함께 보낸다. 없으면 화면이 답만 띄우고
+            # 사용자는 그게 자기가 가리킨 공고인지 확인할 길이 없다.
+            jobs=[_job_to_chat_job(record.job)],
+            total=1,
             suggestions=answer.followups[:3],
+        )
+
+    def _compare_jobs(self, request, previous, job_ids: list[str]) -> schemas.JobChatResponse:
+        """공고 둘을 맞대어 답한다. 두 공고 원문과 이력서만 근거로 쓴다.
+
+        마감된 공고를 비교하면 답이 헛돈다. 사용자가 그 공고를 본 뒤 시간이 지났을 수
+        있으므로 여기서 다시 확인한다. 한쪽만 살아 있으면 비교가 아니라 그 하나에 대한
+        답으로 내려간다 — 없는 공고를 상대로 견주게 하는 것보다 낫다.
+        """
+        from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
+
+        with SqliteJobStore(self.store_path) as store:
+            records = [store.get(job_id) for job_id in job_ids]
+        alive = self.drop_dead([r.job.job_id for r in records if r is not None])
+        live = [r for r in records if r is not None and r.job.job_id in alive]
+
+        if len(live) < 2:
+            if len(live) == 1:
+                return self._ask_job(
+                    request.model_copy(update={"job_id": live[0].job.job_id}), previous
+                )
+            return schemas.JobChatResponse(
+                mode="안내",
+                reply="비교할 공고를 찾지 못했어요. 마감되어 내려갔을 수 있어요.",
+                filters=previous,
+                total=0,
+            )
+
+        resume = (request.resume_text or "").strip()
+        answer = self.comparer(
+            {
+                "job_a": _job_text(live[0].job),
+                "job_b": _job_text(live[1].job),
+                "resume": resume or "(없음)",
+                "question": request.message,
+            }
+        )
+        return schemas.JobChatResponse(
+            mode="비교",
+            reply=answer.answer,
+            filters=previous,
+            jobs=[_job_to_chat_job(r.job) for r in live],
+            total=len(live),
+            suggestions=answer.followups[:3],
+        )
+
+    @staticmethod
+    def _listing_only(listing: dict, previous) -> schemas.JobChatResponse:
+        """상세를 아직 안 받은 공고. 아는 것만 말하고 원문으로 보낸다."""
+        company = listing.get("company") or "이 공고"
+        conditions = (listing.get("condition_text") or "").strip()
+        return schemas.JobChatResponse(
+            mode="공고",
+            reply=(
+                f"{company}의 “{listing.get('title') or ''}” 공고는 "
+                "아직 상세 내용을 받아 오지 못했어요.\n"
+                + (f"목록에 적힌 조건은 {conditions} 입니다.\n" if conditions else "")
+                + "자격요건과 주요업무는 공고 원문에서 확인해 주세요."
+            ),
+            filters=previous,
+            jobs=[
+                schemas.JobChatJob(
+                    job_id=listing.get("job_id") or "",
+                    company=listing.get("company") or "",
+                    title=listing.get("title") or "",
+                    source_url=listing.get("source_url") or "",
+                    region=listing.get("region") or "미기재",
+                    career=store_search._career_label(
+                        listing.get("career_type") or "", listing.get("min_career_years")
+                    ),
+                    employment_type=listing.get("employment_type") or "미기재",
+                    deadline=None,
+                    tech_stack=[],
+                )
+            ],
+            total=1,
         )
 
     def _peek(self, filters, top_k: int) -> list[schemas.JobChatJob]:
@@ -837,7 +1112,7 @@ class ChatService(_LivenessMixin):
         # 제목·태그에 직접 맞은 건수를 따로 말한다. 본문에 말이 스친 범용 공고까지
         # 뭉뚱그려 세면 실제보다 훨씬 많아 보인다.
         if result.strong and result.strong < result.total:
-            counted = f"{result.total}건 중 직무가 맞는 건 {result.strong}건이에요"
+            counted = f"{result.total}건 중 {_matched_what(filters)} 맞는 건 {result.strong}건이에요"
         else:
             counted = f"{result.total}건" + ("이 넘어요" if result.scanned_cap else "이에요")
         shown = len(result.jobs)
@@ -875,6 +1150,20 @@ _UNAVAILABLE_NEXT = {
 }
 
 
+def _matched_what(filters) -> str:
+    """무엇이 맞았다고 말할지. 찾은 것이 직무냐 기술이냐에 따라 다르다.
+
+    늘 "직무가 맞는 건"이라고 썼다. "Spring Boot 쓰는 회사 있어?"에도 그랬는데
+    Spring Boot는 직무가 아니라 기술이다. 조건을 둘 다 걸었거나 자유 키워드로 찾았으면
+    무엇이라 부를지 정할 수 없으니 걸린 자리를 그대로 말한다.
+    """
+    if filters.roles and not filters.skills:
+        return "직무가"
+    if filters.skills and not filters.roles:
+        return "기술이"
+    return "제목·태그에"
+
+
 def _to_chat_job(hit) -> schemas.JobChatJob:
     return schemas.JobChatJob(
         job_id=hit.job_id,
@@ -886,6 +1175,45 @@ def _to_chat_job(hit) -> schemas.JobChatJob:
         employment_type=hit.employment_type,
         deadline=hit.deadline,
         tech_stack=hit.tech_stack,
+    )
+
+
+_ORDINAL_PHRASE = re.compile(
+    r"(?:\d+\s*번(?:째)?|첫\s*번째|두\s*번째|세\s*번째|네\s*번째|다섯\s*번째)"
+    r"\s*(?:거|것|공고|건)?\s*(?:이랑|하고|과|와|은|는|이|가|을|를|의)?"
+)
+
+
+def _without_ordinal(message: str) -> str:
+    """"2번 자세히 봐줘" 에서 자리를 가리키는 말을 뺀다.
+
+    번호는 **서버가 이미 풀었다.** 그 말을 그대로 LLM에 넘기면, 공고 원문 하나만
+    보고 있는 모델이 "2번"을 본문 속 항목 번호로 읽는다. 실제로 이렇게 답했다.
+
+        이 공고에는 번호가 매겨진 항목이 없어 '2번'이 무엇을 뜻하는지 확인하기
+        어렵습니다. 자세히 보고 싶은 항목을 말씀해 주세요.
+
+    빼고 나서 남는 것이 없으면(그냥 "2번") 무엇을 묻는지 모르므로 공고 전체를
+    설명해 달라고 바꾼다.
+    """
+    without = _ORDINAL_PHRASE.sub(" ", message)
+    without = re.sub(r"\s+", " ", without).strip(" ,.·")
+    return without or "이 공고가 어떤 일을 하는 자리인지 알려 주세요."
+
+
+def _job_to_chat_job(job) -> schemas.JobChatJob:
+    """저장소의 `Job`을 화면에 보여 줄 모양으로. `_to_chat_job`은 검색 결과용이라
+    `career_label`을 이미 갖고 있지만, 저장소에서 바로 꺼낸 것은 그 값을 만들어야 한다."""
+    return schemas.JobChatJob(
+        job_id=job.job_id,
+        company=job.company,
+        title=job.title,
+        source_url=job.source_url,
+        region=job.region or "",
+        career=store_search._career_label(job.career_type or "", job.min_career_years),
+        employment_type=job.employment_type or "",
+        deadline=job.deadline,
+        tech_stack=list(job.tech_stack),
     )
 
 
@@ -915,6 +1243,7 @@ def _to_job_filters(filters: schemas.ChatFilters):
         skills=filters.skills,
         regions=filters.regions,
         career=filters.career,
+        career_years=filters.career_years,
         employment_types=filters.employment_types,
         deadline_within_days=filters.deadline_within_days,
         keywords=filters.keywords,

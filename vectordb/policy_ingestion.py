@@ -594,15 +594,15 @@ def upload_records(
 ) -> dict[str, Any]:
     if not records:
         return {"upserted": 0, "stats": {}}
-    if not os.getenv("OPENAI_API_KEY") or not os.getenv("PINECONE_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY와 PINECONE_API_KEY가 필요합니다")
+    if not os.getenv("OPENAI_API_KEY") or not os.getenv("PINECONE_API_KEY2"):
+        raise RuntimeError("OPENAI_API_KEY와 PINECONE_API_KEY2가 필요합니다")
     try:
         from openai import OpenAI
         from pinecone import Pinecone, ServerlessSpec
     except ImportError as exc:
         raise RuntimeError("openai와 pinecone 패키지가 필요합니다") from exc
     openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=2)
-    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY2"])
     index_name = "student"
     namespace = "policy"
     dimension = int(os.getenv("OPENAI_EMBEDDING_DIMENSION", "1536"))

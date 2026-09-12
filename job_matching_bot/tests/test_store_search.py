@@ -218,3 +218,185 @@ class StoreSearchTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ListingOnlySearchTest(unittest.TestCase):
+    """목록에서만 본 공고도 조건 검색에 잡힌다.
+
+    상세를 받아야 `jobs`에 들어가서 IT 밖 10개 대분류가 영영 0건이었다. "서울 영업직
+    있어?"에 없어서가 아니라 안 갖고 있어서 답을 못 했다. 목록에는 회사·제목·직무·
+    조건·링크가 다 있고, 조건 검색은 원래 그 값들로만 거른다.
+
+    `jobs` 표는 건드리지 않는다. 추천·하드 필터·시장 통계는 그대로다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "store.sqlite"
+        base = mock_jobs()[0]
+        detailed = replace(
+            base, job_id="SARAMIN-1", source_job_id="1", company="상세회사",
+            title="백엔드 개발자", region="서울 강남구", career_type="ENTRY",
+            employment_type="정규직", status="OPEN", deadline=None,
+            description="Python으로 서버를 만듭니다", keywords=["백엔드/서버개발"],
+        )
+        with SqliteJobStore(self.path) as store:
+            store.upsert([detailed], source="SARAMIN_POC", as_of=NOW)
+            store.record_list_jobs([
+                {"source_job_id": "1", "company": "상세회사", "title": "백엔드 개발자",
+                 "job_sectors": ["백엔드/서버개발"], "source_url": "https://x/1",
+                 "condition_text": "서울 강남구 신입 · 정규직 대학교(4년)↑"},
+                {"source_job_id": "2", "company": "목록회사", "title": "영업관리 신입 채용",
+                 "job_sectors": ["영업관리", "영업지원"], "source_url": "https://x/2",
+                 "condition_text": "서울 마포구 신입 · 정규직 고졸↑"},
+                {"source_job_id": "3", "company": "부산회사", "title": "영업관리",
+                 "job_sectors": ["영업관리"], "source_url": "https://x/3",
+                 "condition_text": "부산 해운대구 경력 3년↑ · 계약직 학력무관"},
+            ], NOW)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def find(self, **kwargs):
+        return search(self.path, JobFilters(**kwargs), limit=10, as_of=NOW)
+
+    def test_a_job_type_the_store_never_crawled_is_found(self):
+        titles = [h.title for h in self.find(roles=["영업"]).jobs]
+        self.assertEqual(2, len(titles))
+        self.assertIn("영업관리 신입 채용", titles)
+
+    def test_the_conditions_from_the_listing_actually_filter(self):
+        seoul = self.find(roles=["영업"], regions=["서울"]).jobs
+        self.assertEqual(["영업관리 신입 채용"], [h.title for h in seoul])
+
+    def test_the_career_condition_filters_too(self):
+        entry = self.find(roles=["영업"], career="신입").jobs
+        self.assertEqual(["영업관리 신입 채용"], [h.title for h in entry])
+
+    def test_a_posting_with_a_detail_is_not_shown_twice(self):
+        """같은 공고가 두 표에 다 있다. 상세 쪽만 한 번 나와야 한다."""
+        hits = self.find(roles=["백엔드"]).jobs
+        self.assertEqual(1, len(hits))
+        self.assertTrue(hits[0].has_detail)
+
+    def test_detailed_postings_come_first(self):
+        """본문이 있는 쪽이 먼저 보여야 한다."""
+        hits = self.find(roles=["백엔드", "영업"]).jobs
+        self.assertTrue(hits[0].has_detail)
+        self.assertFalse(hits[-1].has_detail)
+
+    def test_a_listing_only_hit_is_marked(self):
+        """챗봇이 이걸 보고 '상세 내용이 없어요, 링크를 확인해 주세요'로 답한다."""
+        hit = next(h for h in self.find(roles=["영업"]).jobs if h.title == "영업관리")
+        self.assertFalse(hit.has_detail)
+        self.assertEqual("https://x/3", hit.source_url)
+        self.assertEqual("경력 3년 이상", hit.career_label)
+
+
+class ListingSkipCategoryTest(unittest.TestCase):
+    """상세를 받는 대분류는 목록 표에 담지 않는다.
+
+    그쪽 공고는 며칠 안에 상세가 들어와 `jobs`에 자리를 잡는다. 목록에 담아 봐야
+    곧 검색에서 제외될 중복이고, 그동안 본문 없는 카드가 섞인다. 목록만으로 남겨야
+    하는 것은 **상세를 안 받기로 한 대분류**뿐이다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "store.sqlite"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    @staticmethod
+    def rec(job_id, cat, title="공고"):
+        return {"source_job_id": job_id, "cat_mcls": cat, "company": "회사",
+                "title": title, "job_sectors": ["영업관리"], "source_url": f"https://x/{job_id}",
+                "condition_text": "서울 마포구 신입 · 정규직 고졸↑", "support_text": "~12.31"}
+
+    def stored(self, records, skip=()):
+        with SqliteJobStore(self.path) as store:
+            store.record_list_jobs(records, NOW, skip_categories=skip)
+            rows = store.conn.execute(
+                "SELECT source_job_id FROM list_jobs ORDER BY source_job_id").fetchall()
+        return [r["source_job_id"] for r in rows]
+
+    def test_detail_categories_are_left_out(self):
+        kept = self.stored([self.rec("1", "2"), self.rec("2", "9"), self.rec("3", "4")],
+                           skip=("2", "9"))
+        self.assertEqual(["3"], kept)
+
+    def test_a_posting_in_both_is_left_out(self):
+        """같은 공고가 여러 대분류에 나온다. 하나라도 상세를 받는 쪽이면 건너뛴다."""
+        kept = self.stored([self.rec("7", "4"), self.rec("7", "2")], skip=("2",))
+        self.assertEqual([], kept)
+
+    def test_giving_no_skip_list_keeps_everything(self):
+        kept = self.stored([self.rec("1", "2"), self.rec("2", "4")])
+        self.assertEqual(["1", "2"], kept)
+
+
+class CareerYearsTest(unittest.TestCase):
+    """몇 년차인지 말했으면 모자란 공고를 뺀다.
+
+    "3년차인데 갈 만한 데 있어?"에 경력 5년 이상 공고가 나갔다. 경력이냐 신입이냐만
+    보고 숫자를 버렸기 때문이다. 사람이 채점하다 잡았다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "store.sqlite"
+        base = mock_jobs()[0]
+        made = [
+            ("any", "ANY", None),
+            ("y2", "EXPERIENCED", 2),
+            ("y5", "EXPERIENCED", 5),
+            ("blank", "EXPERIENCED", None),
+            ("entry", "ENTRY", None),
+        ]
+        jobs = [
+            replace(base, job_id=name, source_job_id=name, title="백엔드 개발자",
+                    description="서버를 만듭니다", tech_stack=[], keywords=["IT개발·데이터"],
+                    region="서울 강남구", career_type=kind, min_career_years=years,
+                    employment_type="정규직", deadline=None, status="OPEN")
+            for name, kind, years in made
+        ]
+        with SqliteJobStore(self.path) as store:
+            store.upsert(jobs, source="MOCK")
+
+    def found(self, **kwargs) -> set[str]:
+        result = search(self.path, JobFilters(roles=["백엔드"], **kwargs), limit=20, as_of=NOW)
+        return {hit.job_id for hit in result.jobs}
+
+    def test_a_posting_asking_more_years_is_dropped(self):
+        self.assertNotIn("y5", self.found(career_years=3))
+
+    def test_a_posting_within_reach_stays(self):
+        self.assertIn("y2", self.found(career_years=3))
+
+    def test_an_unstated_minimum_stays(self):
+        # 미기재인 것은 연차이지 "안 맞는다"는 사실이 아니다. 검색에서 빠지면
+        # 사용자가 아예 못 본다. 판단할 거리를 남긴다.
+        self.assertIn("blank", self.found(career_years=3))
+
+    def test_entry_only_postings_drop_for_the_experienced(self):
+        self.assertNotIn("entry", self.found(career_years=3))
+
+    def test_entry_only_postings_stay_for_a_first_year(self):
+        self.assertIn("entry", self.found(career_years=1))
+
+    def test_saying_nothing_about_years_changes_nothing(self):
+        self.assertEqual(self.found(), {"any", "y2", "y5", "blank", "entry"})
+
+
+class CareerYearsSummaryTest(unittest.TestCase):
+    def test_the_summary_says_the_year(self):
+        self.assertIn("3년차", JobFilters(career_years=3).summary())
+
+    def test_the_year_replaces_the_coarse_label(self):
+        # "경력 · 3년차"는 같은 말을 두 번 하는 것이다.
+        self.assertEqual(JobFilters(career="경력", career_years=3).summary(), "3년차")
+
+    def test_a_year_alone_is_not_an_empty_filter(self):
+        self.assertFalse(JobFilters(career_years=3).is_empty)

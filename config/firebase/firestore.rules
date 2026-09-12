@@ -323,7 +323,16 @@ service cloud.firestore {
               && request.resource.data.authorId == request.auth.uid
               && get(/databases/$(database)/documents/cohorts/$(cohortId)/resumes/$(resumeId)).data.userId
                 == request.auth.uid);
-          allow update, delete: if isAdmin();
+          // 지우는 것은 **자기가 쓴 글만**. 고치는 것은 아직 관리자만 한다.
+          // 글쓴이를 모르는 옛 기록은 관리자만 지울 수 있다.
+          allow delete: if isAdmin()
+            || (belongsToCohort(cohortId)
+              && resource.data.authorId is string
+              && resource.data.authorId == request.auth.uid)
+            || (isInstructorOfCohort(cohortId)
+              && resource.data.authorId is string
+              && resource.data.authorId == request.auth.uid);
+          allow update: if isAdmin();
         }
 
         match /revisions/{revisionId} {

@@ -30,15 +30,14 @@ class OnboardingTourState {
   OnboardingTourState copyWith({
     int? index,
     bool? active,
-  }) =>
-      OnboardingTourState(
-        tourId: tourId,
-        version: version,
-        uid: uid,
-        steps: steps,
-        index: index ?? this.index,
-        active: active ?? this.active,
-      );
+  }) => OnboardingTourState(
+    tourId: tourId,
+    version: version,
+    uid: uid,
+    steps: steps,
+    index: index ?? this.index,
+    active: active ?? this.active,
+  );
 }
 
 class OnboardingTourNotifier extends Notifier<OnboardingTourState?> {
@@ -87,6 +86,13 @@ class OnboardingTourNotifier extends Notifier<OnboardingTourState?> {
     state = s.copyWith(index: s.index + 1);
   }
 
+  void previous() {
+    final s = state;
+    if (s == null || !s.active) return;
+    if (s.index <= 0) return;
+    state = s.copyWith(index: s.index - 1);
+  }
+
   void skipCurrent() {
     final s = state;
     if (s == null || !s.active) return;
@@ -131,5 +137,5 @@ class OnboardingTourNotifier extends Notifier<OnboardingTourState?> {
 
 final onboardingTourProvider =
     NotifierProvider<OnboardingTourNotifier, OnboardingTourState?>(
-  OnboardingTourNotifier.new,
-);
+      OnboardingTourNotifier.new,
+    );

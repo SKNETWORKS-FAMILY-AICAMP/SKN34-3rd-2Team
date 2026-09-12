@@ -151,7 +151,7 @@ class PineconeJobStore:
     ) -> None:
         if index is None:
             if not settings.pinecone_api_key:
-                raise ValueError("PINECONE_API_KEY is not configured on the server")
+                raise ValueError("PINECONE_API_KEY1 is not configured on the server")
             index = _pinecone_index(
                 Pinecone(api_key=settings.pinecone_api_key), settings
             )

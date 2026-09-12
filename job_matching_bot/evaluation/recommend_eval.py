@@ -11,15 +11,19 @@
 
 ## 쓰는 법
 
-1. `--run` 으로 이력서 6종의 추천을 받는다. 파일 두 개가 만들어진다.
-   - `<시각>-읽기.md` — 공고 요건과 이력서를 나란히 놓고 **읽는** 문서
-   - `<시각>-채점표.csv` — 번호별로 **채우는** 표 (칸이 짧아 엑셀에서 편하다)
-2. 읽기 문서를 보며 판단하고, 채점표의 같은 번호 줄에 적는다.
-   - `사람_추천여부`: 이 공고가 이 사람에게 추천할 만한가 (예 / 아니오)
-   - `사람_등급`: 추천할 만하다면 높음 / 보통 (아니면 비워 둔다)
-   모델의 등급과 근거는 읽기 문서 각 항목 **맨 아래에 접혀** 있다. 먼저 스스로 정한 뒤 펼친다.
-3. 채운 파일을 `fixtures/eval_labels.csv` 로 저장하고 `--score` 를 돌린다.
+1. `--run` 으로 이력서 6종의 추천을 받는다. `<시각>-채점.html` 을 브라우저로 연다.
+2. 공고 요건과 이력서가 나란히 나온다. 키 하나로 매기고 다음으로 넘어간다.
+   - `1` 추천·높음 (직무가 같고 주된 기술이 겹친다)
+   - `2` 추천·보통 (직무는 같은데 주된 기술이 다르다)
+   - `3` 추천 안 함
+   모델의 등급과 근거는 **접혀** 있다. 먼저 스스로 정한 뒤 펼친다.
+   중간에 꺼도 된다 — 매긴 값은 브라우저에 남고 실행마다 따로 저장된다.
+3. 30건을 다 매기면 내려받기 단추가 나온다. 받은 파일을 `fixtures/eval_labels.csv` 로
+   옮기고 `--score` 를 돌린다.
 4. 이후 프롬프트·모델·추론 강도를 바꿀 때마다 `--run` 후 `--score` 로 비교한다.
+
+엑셀로 채우고 싶으면 함께 만들어지는 `<시각>-채점표.csv` 와 `<시각>-읽기.md` 를 쓴다.
+번호로 이어지는 예전 방식이다.
 
 정답은 사람이 매긴다. 모델이 낸 등급을 정답으로 쓰면 자기 답안을 자기가 채점하는 셈이라
 아무것도 검증하지 못한다.
@@ -31,6 +35,7 @@ import argparse
 import csv
 import html
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -39,10 +44,20 @@ from collections import Counter
 from pathlib import Path
 
 from job_matching_bot.config import ARTIFACTS_DIR, FIXTURES_DIR
+from job_matching_bot.evaluation.grader_page import write_page
+from job_matching_bot.evaluation.app_resume import EVAL_MOCKS, MOCKS, load_personas
+from job_matching_bot.ingestion.skill_extractor import extract_skills
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
-RESUMES = FIXTURES_DIR / "eval_resumes.json"
+# 이력서 원본은 앱과 같은 `scripts/resume_mocks.json` 하나다. 여기서 따로 갖지 않는다.
 LABELS = FIXTURES_DIR / "eval_labels.csv"
+
+# 어느 이력서 벌로 잴지. `--eval-resumes`가 바꾼다.
+#
+# 기본은 앱 목업 5종이다. `--eval-resumes`를 주면 평가 전용 5종을 쓴다. 프롬프트나
+# 가중치를 그 5종을 보고 고쳤다면 같은 것으로 다시 재면 안 된다 — 자기 데이터에 맞춘
+# 셈이라 항상 좋아 보인다.
+_RESUME_SET = {"path": MOCKS}
 RUNS_DIR = ARTIFACTS_DIR / "eval"
 
 # 채점표에서 사람이 채우는 칸. 비어 있으면 아직 라벨이 없는 줄이다.
@@ -59,6 +74,11 @@ def resume_skills(resume_text: str) -> str:
 
     `[기술스택]` 구간이 있으면 그것을 쓰고, 없으면 프로젝트·교육의 `기술:` 줄을 모은다.
     앱 이력서는 기술스택 항목이 따로 있지만, 평가용 이력서는 프로젝트 안에 적혀 있다.
+
+    둘 다 없으면 어휘 사전으로 본문에서 훑는다. 경력 이력서는 "Java, Spring Boot 기반
+    주문 시스템을 개발했습니다"처럼 문장 안에 기술을 적어서, 구간만 보면 기술이
+    하나도 없는 것처럼 보였다. 채점하는 사람이 옆에 놓고 볼 값이라 비어 있으면 곤란하다.
+    추천에는 쓰이지 않는다 — 그쪽은 LLM이 뽑은 `profile.skills` 를 쓴다.
     """
     stack: list[str] = []
     listed: list[str] = []
@@ -69,12 +89,14 @@ def resume_skills(resume_text: str) -> str:
             inside = stripped == "[기술스택]"
             continue
         if inside and stripped:
-            stack.append(stripped)
+            # 앱은 `Java (고급)` 처럼 숙련도를 괄호로 붙인다. 공고 기술과 나란히 볼
+            # 값이라 이름만 남긴다.
+            stack.append(re.sub(r"\s*\(.*\)$", "", stripped).strip())
         elif stripped.startswith("기술:"):
             listed.append(stripped[len("기술:"):].strip())
 
     if stack:
-        return " ".join(stack)
+        return ", ".join(stack)
     # 여러 프로젝트에 같은 기술이 나오면 한 번만 둔다.
     names: list[str] = []
     for line in listed:
@@ -82,7 +104,9 @@ def resume_skills(resume_text: str) -> str:
             name = name.strip()
             if name and name not in names:
                 names.append(name)
-    return ", ".join(names)
+    if names:
+        return ", ".join(names)
+    return ", ".join(extract_skills(resume_text))
 
 
 def unescape(text: str) -> str:
@@ -110,6 +134,10 @@ def job_details(job_ids: set[str]) -> dict[str, dict[str, str]]:
                 "공고_기술": ", ".join(skills),
                 "자격요건": sections.required[:MAX_REQUIREMENT_LINES],
                 "우대사항": sections.preferred[:MAX_REQUIREMENT_LINES],
+                "공고_자격증": ", ".join(job.required_certifications),
+                "공고_전공": ", ".join(job.required_majors),
+                "공고_우대자격증": ", ".join(job.preferred_certifications),
+                "공고_우대전공": ", ".join(job.preferred_majors),
             }
         return details
     finally:
@@ -129,7 +157,7 @@ def recommend(base_url: str, persona: dict, top_k: int = 5, timeout: int = 180) 
 
 
 def run(base_url: str, top_k: int) -> Path:
-    personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+    personas = load_personas(_RESUME_SET["path"])
     rows: list[dict] = []
     raw: dict[str, dict] = {}
     started = time.time()
@@ -156,8 +184,10 @@ def run(base_url: str, top_k: int) -> Path:
     rows = items
     print(f"\n{len(rows)}건 · {time.time() - started:.0f}초")
     print(f"결과 원본: {raw_path}")
-    print(f"읽기 문서: {doc}   ← 여기서 판단")
-    print(f"채점표:   {sheet}   ← 여기에 번호별로 적기")
+    page = write_page(raw_path.with_name(raw_path.stem + "-채점.html"), items, personas)
+    print(f"채점 페이지: {page}   ← 열어서 여기서 매기면 끝난다")
+    print(f"읽기 문서:  {doc}   (페이지 대신 문서로 보고 싶을 때)")
+    print(f"빈 채점표:  {sheet}   (엑셀로 채우고 싶을 때)")
     if not LABELS.exists():
         print(f"\n채점표를 엑셀로 열어 {LABEL_COLUMNS[0]}·{LABEL_COLUMNS[1]} 칸을 채운 뒤")
         print(f"{LABELS} 로 저장하세요. 그다음 --score 로 점수를 냅니다.")
@@ -198,7 +228,13 @@ def build_items(raw: dict, personas: dict) -> list[dict]:
                         str(conditions.get(key) or "")
                         for key in ("region", "career", "education", "employment_type")
                     ),
+                    "공고_자격증": detail.get("공고_자격증", ""),
+                    "공고_전공": detail.get("공고_전공", ""),
+                    "공고_우대자격증": detail.get("공고_우대자격증", ""),
+                    "공고_우대전공": detail.get("공고_우대전공", ""),
                     "이력서_기술": resume_skills(persona.get("resume_text", "")),
+                    "이력서_자격증": ", ".join(persona.get("certifications") or []),
+                    "이력서_전공": ", ".join(persona.get("majors") or []),
                 }
             )
     return items
@@ -337,7 +373,7 @@ def score(run_path: Path, labels_path: Path) -> int:
         return 1
 
     raw = json.loads(run_path.read_text(encoding="utf-8"))
-    personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+    personas = load_personas(_RESUME_SET["path"])
     items = build_items(raw, personas)
     checked = wrong = grade_hit = grade_total = 0
     unlabeled = 0
@@ -395,7 +431,14 @@ def main() -> int:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--labels", type=Path, default=LABELS)
     parser.add_argument("--run-file", type=Path, default=None, help="채점할 결과 원본. 기본은 가장 최근 것")
+    parser.add_argument(
+        "--eval-resumes", action="store_true",
+        help="앱 목업 대신 평가 전용 이력서 5종을 쓴다. 프롬프트를 목업으로 고쳤을 때 쓴다",
+    )
     args = parser.parse_args()
+    if args.eval_resumes:
+        _RESUME_SET["path"] = EVAL_MOCKS
+        print("평가 전용 이력서 5종을 씁니다 (앱 목업 아님)")
 
     if args.run:
         path = run(args.base_url, args.top_k)
@@ -411,15 +454,17 @@ def main() -> int:
         if path is None:
             print("결과가 없습니다. 먼저 --run 을 실행하세요.")
             return 1
-        personas = json.loads(RESUMES.read_text(encoding="utf-8"))["personas"]
+        personas = load_personas(_RESUME_SET["path"])
         raw = json.loads(path.read_text(encoding="utf-8"))
         items = build_items(raw, personas)
         sheet = path.with_name(path.stem + "-채점표.csv")
         _write_sheet(sheet, sheet_rows(items))
         doc = path.with_name(path.stem + "-읽기.md")
         _write_review_doc(doc, items, personas)
-        print(f"읽기 문서: {doc}")
-        print(f"채점표:   {sheet}")
+        page = write_page(path.with_name(path.stem + "-채점.html"), items, personas)
+        print(f"채점 페이지: {page}   ← 열어서 여기서 매기면 끝난다")
+        print(f"읽기 문서:  {doc}")
+        print(f"빈 채점표:  {sheet}")
         return 0
 
     if args.score:

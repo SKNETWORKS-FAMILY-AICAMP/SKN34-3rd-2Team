@@ -20,10 +20,15 @@ String? _adminTargetIdForPath(String path) => switch (path) {
       RoutePaths.admin => AdminOnboardingTargets.navDashboard,
       RoutePaths.adminCohorts => AdminOnboardingTargets.navCohorts,
       RoutePaths.adminStudents => AdminOnboardingTargets.navStudents,
+      RoutePaths.adminInstructors => AdminOnboardingTargets.navInstructors,
       RoutePaths.adminAttendance => AdminOnboardingTargets.navAttendance,
+      RoutePaths.adminSeatPresence => AdminOnboardingTargets.navSeatPresence,
       RoutePaths.adminSeating => AdminOnboardingTargets.navSeating,
       RoutePaths.adminAssessments => AdminOnboardingTargets.navAssessments,
+      RoutePaths.adminRecords => AdminOnboardingTargets.navRecords,
       RoutePaths.adminResumes => AdminOnboardingTargets.navResumes,
+      RoutePaths.adminFormTasks => AdminOnboardingTargets.navFormTasks,
+      RoutePaths.adminStudyRoom => AdminOnboardingTargets.navStudyRoom,
       RoutePaths.adminBoard => AdminOnboardingTargets.navBoard,
       RoutePaths.adminMileage => AdminOnboardingTargets.navMileage,
       RoutePaths.adminAiQuality => AdminOnboardingTargets.navAiQuality,
@@ -66,10 +71,11 @@ List<AppSideRailSection> _adminSections({required bool expandAll}) {
           path: RoutePaths.adminStudents,
           itemKey: keyFor(RoutePaths.adminStudents),
         ),
-        const AppSideRailItem(
+        AppSideRailItem(
           icon: Icons.badge_outlined,
           label: '강사 관리',
           path: RoutePaths.adminInstructors,
+          itemKey: keyFor(RoutePaths.adminInstructors),
         ),
       ],
     ),
@@ -84,10 +90,11 @@ List<AppSideRailSection> _adminSections({required bool expandAll}) {
           path: RoutePaths.adminAttendance,
           itemKey: keyFor(RoutePaths.adminAttendance),
         ),
-        const AppSideRailItem(
+        AppSideRailItem(
           icon: Icons.event_available_outlined,
           label: '자리 확인',
           path: RoutePaths.adminSeatPresence,
+          itemKey: keyFor(RoutePaths.adminSeatPresence),
         ),
         AppSideRailItem(
           icon: Icons.event_seat_rounded,
@@ -108,10 +115,11 @@ List<AppSideRailSection> _adminSections({required bool expandAll}) {
           path: RoutePaths.adminAssessments,
           itemKey: keyFor(RoutePaths.adminAssessments),
         ),
-        const AppSideRailItem(
+        AppSideRailItem(
           icon: Icons.history_rounded,
           label: '기록실',
           path: RoutePaths.adminRecords,
+          itemKey: keyFor(RoutePaths.adminRecords),
         ),
         AppSideRailItem(
           icon: Icons.description_rounded,
@@ -119,15 +127,17 @@ List<AppSideRailSection> _adminSections({required bool expandAll}) {
           path: RoutePaths.adminResumes,
           itemKey: keyFor(RoutePaths.adminResumes),
         ),
-        const AppSideRailItem(
+        AppSideRailItem(
           icon: Icons.ballot_outlined,
           label: '설문 · 제출',
           path: RoutePaths.adminFormTasks,
+          itemKey: keyFor(RoutePaths.adminFormTasks),
         ),
-        const AppSideRailItem(
+        AppSideRailItem(
           icon: Icons.menu_book_rounded,
           label: '학습실',
           path: RoutePaths.adminStudyRoom,
+          itemKey: keyFor(RoutePaths.adminStudyRoom),
         ),
       ],
     ),

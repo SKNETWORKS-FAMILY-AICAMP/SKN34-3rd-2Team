@@ -28,8 +28,18 @@ abstract final class JobRecommendApiConfig {
   /// LLM 재정렬이 평균 30초라 넉넉히 둔다.
   static const timeout = Duration(seconds: 90);
 
-  /// 서버 상한이 20이다. 화면에는 5~10건이면 충분하다.
-  static const topK = 10;
+  /// 화면에 보여줄 건수. 목록은 받은 만큼 다 그리므로 이 값이 곧 사용자가 보는 수다.
+  ///
+  /// 사람이 매긴 43건(이력서 5개 × 8~9건)으로 자를 자리를 재 봤다. 위에서부터
+  /// N건까지 보여줄 때 오추천율이 이렇게 움직인다.
+  ///
+  ///     5건 8%   6건 10%   7건 17%   8건 20%   9건 21%
+  ///
+  /// 7위부터 눈에 띄게 나빠진다. 6건까지가 오추천 10%로 완만하고, 그 자리에서
+  /// 사람이 좋다고 한 공고를 이력서당 5.4개 본다. 그래서 6으로 둔다.
+  ///
+  /// 등급·순위를 섞어 자르는 방법도 있었으나 규칙이 단순한 쪽을 택했다.
+  static const topK = 6;
 }
 
 class JobRecommendApiException implements Exception {
@@ -433,6 +443,12 @@ class JobRecommendApiClient {
   /// - 직전 조건(`filters`)을 함께 보내야 "서울만" 같은 말이 이어진다.
   /// - [jobId]를 주면 그 공고 하나에 대한 물음이 된다. 서버는 조건 해석을 건너뛰고
   ///   그 공고 원문만 근거로 답한다.
+  /// - [lastJobIds]는 **찾아 준 목록**을 보여 준 순서 그대로 보낸다. 이게 있어야
+  ///   "2번 자세히 봐줘"에 답할 수 있다. 서버는 대화를 저장하지 않으므로 직전에 무엇을
+  ///   보여 줬는지 모른다.
+  /// - [lastAnswerJobIds]는 **직전 답이 다룬 공고**다. 위와 다르다. 위는 번호가 가리킬
+  ///   목록이고 이쪽은 방금 이야기한 대상이라, 비교 답이면 견준 두 건이 들어간다.
+  ///   이게 있어야 "두 공고의 자격요건만 간단히 비교해줘"에 답할 수 있다.
   Future<JobChatResponse> chat({
     required String message,
     JobChatFilters? filters,
@@ -440,6 +456,8 @@ class JobRecommendApiClient {
     String? jobId,
     // 공고 하나를 놓고 물을 때만 쓴다. "나한테 맞아?"는 이력서를 봐야 답이 된다.
     String? resumeText,
+    List<String> lastJobIds = const [],
+    List<String> lastAnswerJobIds = const [],
   }) async {
     final decoded = await _post('/api/v1/jobs/chat', {
       'message': message,
@@ -447,6 +465,8 @@ class JobRecommendApiClient {
       'top_k': topK,
       'job_id': jobId,
       'resume_text': resumeText,
+      'last_job_ids': lastJobIds,
+      'last_answer_job_ids': lastAnswerJobIds,
     });
     return JobChatResponse.fromMap(decoded);
   }
