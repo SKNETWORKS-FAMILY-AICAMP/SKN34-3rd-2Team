@@ -142,6 +142,43 @@ class StudyNoteModel {
     return id;
   }
 
+  String get displayTitle {
+    if (scopeType == 'date') {
+      final raw = scopeValue?.toString() ?? '';
+      final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(raw);
+      if (match != null) {
+        return '${int.parse(match.group(2)!)}월 ${int.parse(match.group(3)!)}일 수업';
+      }
+      return raw.isEmpty ? '수업 노트' : raw;
+    }
+    if (scopeType == 'prefix') {
+      final path = scopeValue?.toString() ?? '';
+      if (path.isEmpty) return '폴더 노트';
+      final name = path.split('/').where((part) => part.isNotEmpty).lastOrNull;
+      return name == null || name == path ? path : name;
+    }
+    if (scopeType == 'files') {
+      if (files.length == 1) return fileNameOf(files.first.path);
+      if (files.isNotEmpty) return '선택한 파일 ${files.length}개';
+      if (scopeValue is List) return '선택한 파일 ${(scopeValue as List).length}개';
+      return '선택한 파일';
+    }
+    return '수업 노트';
+  }
+
+  String get displaySubtitle {
+    if (files.isEmpty) return scopeLabel;
+    if (files.length <= 2) {
+      return files.map((file) => fileNameOf(file.path)).join(' · ');
+    }
+    return '${fileNameOf(files.first.path)} 외 ${files.length - 1}개 파일';
+  }
+
+  static String fileNameOf(String path) {
+    final parts = path.split('/');
+    return parts.isEmpty ? path : parts.last;
+  }
+
   factory StudyNoteModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {

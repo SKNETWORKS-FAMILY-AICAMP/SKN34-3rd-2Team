@@ -116,6 +116,12 @@ service cloud.firestore {
       match /alertPopupDismissals/{popupId} {
         allow read, write: if isOwner(userId);
       }
+
+      // 공부방 개인 노트 (생성은 통합 서버 Admin SDK만)
+      match /studyNotes/{noteId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
     }
 
     // ── cohorts 컬렉션 ──
@@ -428,10 +434,9 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
-      // ── 공부방 노트 (생성·수정은 통합 서버 Admin SDK만) ──
+      // ── 공부방 노트 (레거시 기수 공용. 신규는 users/{uid}/studyNotes) ──
       match /studyNotes/{noteId} {
-        allow read: if isAdmin()
-          || (belongsToCohort(cohortId) && resource.data.status == 'ready');
+        allow read: if isAdmin();
         allow write: if false;
       }
 

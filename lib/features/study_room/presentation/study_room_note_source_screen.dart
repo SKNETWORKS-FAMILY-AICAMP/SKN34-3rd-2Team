@@ -165,6 +165,20 @@ class _StudyRoomNoteSourceScreenState
         final source = sources.asData?.value
             .where((item) => item.id == widget.sourceId)
             .firstOrNull;
+        if (_note?.isReady == true) {
+          return SingleChildScrollView(
+            child: studyRoomContentWrapper(
+              child: StudyNoteReader(
+                note: _note!,
+                sourceTitle: source?.title,
+                onClose: () => setState(() {
+                  _note = null;
+                  _actionError = null;
+                }),
+              ),
+            ),
+          );
+        }
         return SingleChildScrollView(
           child: studyRoomContentWrapper(
             child: Column(
@@ -181,12 +195,12 @@ class _StudyRoomNoteSourceScreenState
                 StudyRoomPageHeader(
                   user: user,
                   cohortName: cohortName,
-                  title: '공부방',
+                  title: source?.title ?? '공부방',
                   subtitle: source == null
-                      ? '범위를 고른 뒤 수업 노트를 만듭니다.'
-                      : '${source.title} · ${source.repoLabel}',
+                      ? '날짜·폴더·파일을 고르면 복습 노트를 만들어 줍니다.'
+                      : '${source.repoLabel} 수업에서 필요한 범위만 정리하세요.',
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 notes.when(
                   loading: () => const SizedBox.shrink(),
                   error: (_, _) => const SizedBox.shrink(),
@@ -200,114 +214,151 @@ class _StudyRoomNoteSourceScreenState
                       children: [
                         const Text(
                           '이미 만든 노트',
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: [
                             for (final note in mine)
                               ActionChip(
-                                label: Text(note.scopeLabel),
-                                onPressed: _busy ? null : () => _openExisting(note.id),
+                                avatar: Icon(
+                                  note.scopeType == 'date'
+                                      ? Icons.calendar_today_outlined
+                                      : note.scopeType == 'prefix'
+                                          ? Icons.folder_outlined
+                                          : Icons.description_outlined,
+                                  size: 16,
+                                  color: AppColors.primary,
+                                ),
+                                label: Text(note.displayTitle),
+                                onPressed: _busy
+                                    ? null
+                                    : () => _openExisting(note.id),
                               ),
                           ],
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
                       ],
                     );
                   },
                 ),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'date', label: Text('날짜')),
-                    ButtonSegment(value: 'folder', label: Text('폴더')),
-                    ButtonSegment(value: 'file', label: Text('파일')),
-                  ],
-                  selected: {_mode},
-                  onSelectionChanged: _busy
-                      ? null
-                      : (value) => setState(() {
+                if (_busy)
+                  const _GeneratingCard()
+                else
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '정리할 범위',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          '최근 수업일, 폴더, 파일 중에서 하나만 고르면 됩니다.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(
+                              value: 'date',
+                              icon: Icon(Icons.calendar_today_outlined, size: 16),
+                              label: Text('날짜'),
+                            ),
+                            ButtonSegment(
+                              value: 'folder',
+                              icon: Icon(Icons.folder_outlined, size: 16),
+                              label: Text('폴더'),
+                            ),
+                            ButtonSegment(
+                              value: 'file',
+                              icon: Icon(Icons.description_outlined, size: 16),
+                              label: Text('파일'),
+                            ),
+                          ],
+                          selected: {_mode},
+                          onSelectionChanged: (value) => setState(() {
                             _mode = value.first;
                             _pickerFiles = const [];
                             _actionError = null;
                           }),
-                ),
-                const SizedBox(height: 16),
-                if (_loadingTree)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_treeError != null)
-                  ErrorView(message: _treeError!, onRetry: _loadTree)
-                else
-                  _ScopePanel(
-                    mode: _mode,
-                    dates: _tree?.dates ?? const [],
-                    folders: _folders(source),
-                    files: _fileChoices,
-                    selectedDate: _selectedDate,
-                    selectedFolder: _selectedFolder,
-                    checked: _checked,
-                    maxFiles: _maxFiles,
-                    truncated: _tree?.truncated == true,
-                    busy: _busy,
-                    onDate: (value) => setState(() => _selectedDate = value),
-                    onFolder: (value) => setState(() => _selectedFolder = value),
-                    onToggleFile: (path, selected) {
-                      setState(() {
-                        if (selected) {
-                          if (_checked.length >= _maxFiles) return;
-                          _checked.add(path);
-                        } else {
-                          _checked.remove(path);
-                        }
-                      });
-                    },
-                    onGenerate: _onGenerate,
+                        ),
+                        const SizedBox(height: 16),
+                        if (_loadingTree)
+                          const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_treeError != null)
+                          ErrorView(message: _treeError!, onRetry: _loadTree)
+                        else
+                          _ScopePanel(
+                            mode: _mode,
+                            dates: _tree?.dates ?? const [],
+                            folders: _folders(source),
+                            files: _fileChoices,
+                            selectedDate: _selectedDate,
+                            selectedFolder: _selectedFolder,
+                            checked: _checked,
+                            maxFiles: _maxFiles,
+                            truncated: _tree?.truncated == true,
+                            busy: _busy,
+                            onDate: (value) =>
+                                setState(() => _selectedDate = value),
+                            onFolder: (value) =>
+                                setState(() => _selectedFolder = value),
+                            onToggleFile: (path, selected) {
+                              setState(() {
+                                if (selected) {
+                                  if (_checked.length >= _maxFiles) return;
+                                  _checked.add(path);
+                                } else {
+                                  _checked.remove(path);
+                                }
+                              });
+                            },
+                            onGenerate: _onGenerate,
+                          ),
+                      ],
+                    ),
                   ),
-                if (_busy) ...[
-                  const SizedBox(height: 20),
-                  const LinearProgressIndicator(),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '선택한 범위만 정리하는 중입니다. 잠시만 기다려 주세요.',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                ],
                 if (_actionError != null) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    _actionError!,
-                    style: const TextStyle(color: AppColors.error),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _actionError!,
+                      style: const TextStyle(color: AppColors.error),
+                    ),
                   ),
                 ],
-                if (_note?.isReady == true) ...[
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: StudyNoteMarkdown(data: _note!.reportMarkdown),
-                  ),
-                  const SizedBox(height: 12),
-                  StudyReviewPanel(markdown: _note!.reviewMarkdown),
-                ] else if (_note?.isFailed == true) ...[
+                if (_note?.isFailed == true) ...[
                   const SizedBox(height: 12),
                   Text(
                     _note?.errorMessage ?? '노트 생성에 실패했습니다.',
                     style: const TextStyle(color: AppColors.error),
-                  ),
-                ] else if (_note?.isGenerating == true) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _note?.message ?? '정리 중입니다.',
-                    style: const TextStyle(color: AppColors.textSecondary),
                   ),
                 ],
               ],
@@ -355,6 +406,38 @@ class _StudyRoomNoteSourceScreenState
   }
 }
 
+class _GeneratingCard extends StatelessWidget {
+  const _GeneratingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Column(
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 20),
+          Text(
+            '수업 노트를 만드는 중',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          SizedBox(height: 8),
+          Text(
+            '자료를 읽고 핵심만 정리하고 있어요.\n1~2분 정도 걸릴 수 있습니다.',
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.5, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ScopePanel extends StatelessWidget {
   const _ScopePanel({
     required this.mode,
@@ -388,6 +471,12 @@ class _ScopePanel extends StatelessWidget {
   final void Function(String path, bool selected) onToggleFile;
   final VoidCallback onGenerate;
 
+  String _dateLabel(String iso) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(iso);
+    if (match == null) return iso;
+    return '${int.parse(match.group(2)!)}월 ${int.parse(match.group(3)!)}일';
+  }
+
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[];
@@ -404,7 +493,12 @@ class _ScopePanel extends StatelessWidget {
     }
     if (mode == 'date') {
       if (dates.isEmpty) {
-        children.add(const Text('최근 30일 수업일이 없습니다.'));
+        children.add(
+          const Text(
+            '최근 30일 수업일이 없습니다. 폴더나 파일로 골라 보세요.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        );
       } else {
         children.add(
           Wrap(
@@ -413,7 +507,7 @@ class _ScopePanel extends StatelessWidget {
             children: [
               for (final date in dates)
                 ChoiceChip(
-                  label: Text(date),
+                  label: Text(_dateLabel(date)),
                   selected: selectedDate == date,
                   onSelected: busy ? null : (_) => onDate(date),
                 ),
@@ -423,14 +517,23 @@ class _ScopePanel extends StatelessWidget {
       }
       children.add(const SizedBox(height: 16));
       children.add(
-        FilledButton(
-          onPressed: busy || selectedDate == null ? null : onGenerate,
-          child: const Text('이 날짜 정리'),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: busy || selectedDate == null ? null : onGenerate,
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: const Text('이 날짜 정리하기'),
+          ),
         ),
       );
     } else if (mode == 'folder') {
       if (folders.isEmpty) {
-        children.add(const Text('선택할 폴더가 없습니다.'));
+        children.add(
+          const Text(
+            '선택할 폴더가 없습니다.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        );
       } else {
         children.add(
           Wrap(
@@ -449,9 +552,13 @@ class _ScopePanel extends StatelessWidget {
       }
       children.add(const SizedBox(height: 16));
       children.add(
-        FilledButton(
-          onPressed: busy || selectedFolder == null ? null : onGenerate,
-          child: const Text('이 폴더 정리'),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: busy || selectedFolder == null ? null : onGenerate,
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: const Text('이 폴더 정리하기'),
+          ),
         ),
       );
     } else {
@@ -463,30 +570,55 @@ class _ScopePanel extends StatelessWidget {
       );
       children.add(const SizedBox(height: 8));
       if (files.isEmpty) {
-        children.add(const Text('선택할 파일이 없습니다.'));
+        children.add(
+          const Text(
+            '선택할 파일이 없습니다.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        );
       } else {
         children.add(
-          Column(
-            children: [
-              for (final path in files)
-                CheckboxListTile(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: files.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (_, index) {
+                final path = files[index];
+                return CheckboxListTile(
                   value: checked.contains(path),
                   onChanged: busy
                       ? null
                       : (value) => onToggleFile(path, value == true),
-                  title: Text(path, style: const TextStyle(fontSize: 13)),
+                  title: Text(
+                    StudyNoteModel.fileNameOf(path),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    path,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textHint,
+                    ),
+                  ),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
-                ),
-            ],
+                );
+              },
+            ),
           ),
         );
       }
-      children.add(const SizedBox(height: 8));
+      children.add(const SizedBox(height: 12));
       children.add(
-        FilledButton(
-          onPressed: busy || checked.isEmpty ? null : onGenerate,
-          child: const Text('선택한 파일 정리'),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: busy || checked.isEmpty ? null : onGenerate,
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: const Text('선택한 파일 정리하기'),
+          ),
         ),
       );
     }

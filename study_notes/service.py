@@ -1,15 +1,14 @@
 """Firestore 소스/노트 문서를 다루는 공부방 서비스.
 
-문서 경로와 필드는 이전 Functions 구현(studyNotes.ts)과 같다. Flutter 화면은 그대로 동작한다.
-
-    cohorts/{cohortId}/studySources/{sourceId}   관리자가 등록한 수업 저장소
-    cohorts/{cohortId}/studyNotes/{noteId}       생성된 노트 (status: generating|ready|failed)
+    cohorts/{cohortId}/studySources/{sourceId}   관리자가 등록한 수업 저장소 (기수 공용)
+    users/{uid}/studyNotes/{noteId}              학생이 만든 개인 노트
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
@@ -122,8 +121,8 @@ def repo_cache(cohort_id: str, source: StudySource) -> RepoCache:
     return RepoCache(cohort_id, source.id, parse_repo_url(source.repo_url), source.branch)
 
 
-def note_ref(db: Client, cohort_id: str, note_id: str) -> DocumentReference:
-    return db.collection("cohorts").document(cohort_id).collection("studyNotes").document(note_id)
+def note_ref(db: Client, uid: str, note_id: str) -> DocumentReference:
+    return db.collection("users").document(uid).collection("studyNotes").document(note_id)
 
 
 # ── 범위(scope) ─────────────────────────────────────────────────────
@@ -191,9 +190,12 @@ def build_note_id(source_id: str, scope_type: ScopeType, value: str | list[str])
 
 
 def scope_label(scope_type: ScopeType, value: str | list[str]) -> str:
-    if scope_type == "files":
-        return "files " + ", ".join(value)  # type: ignore[arg-type]
-    return f"{scope_type} {value}"
+    if scope_type == "date":
+        return f"{value} 수업"
+    if scope_type == "prefix":
+        return f"폴더 {value}"
+    names = [str(path).rsplit("/", 1)[-1] for path in value]  # type: ignore[union-attr]
+    return "파일 " + ", ".join(names)
 
 
 # ── 직렬화 ──────────────────────────────────────────────────────────
@@ -204,6 +206,7 @@ def serialize_note(note_id: str, data: dict[str, Any], caller: Caller) -> dict[s
     base = {
         "noteId": note_id,
         "status": status,
+        "sourceId": data.get("sourceId") or "",
         "scopeType": data.get("scopeType"),
         "scopeValue": data.get("scopeValue"),
         "errorMessage": data.get("errorMessage"),
@@ -216,9 +219,6 @@ def serialize_note(note_id: str, data: dict[str, Any], caller: Caller) -> dict[s
             "files": data.get("files") or [],
         }
     if status == "generating":
-        can_see = caller.is_admin or data.get("generatingByUid") == caller.uid
-        if not can_see:
-            return {"noteId": note_id, "status": status, "message": "정리 중입니다."}
         return {**base, "message": "정리 중입니다."}
     return base
 
@@ -260,7 +260,7 @@ def get_note(
         resolved = build_note_id(source_id, st, normalize_scope_value(st, scope_value))
     if not resolved:
         raise _bad_request("noteId 또는 sourceId+scope가 필요합니다.")
-    snap = note_ref(db, cohort_id, resolved).get()
+    snap = note_ref(db, caller.uid, resolved).get()
     if not snap.exists:
         return {"noteId": resolved, "status": "missing"}
     return serialize_note(snap.id, snap.to_dict() or {}, caller)
@@ -298,6 +298,7 @@ def _claim(db: Client, ref: DocumentReference, source: StudySource, scope_type: 
             "scopeKey": scope_key,
             "status": "generating",
             "generatingByUid": uid,
+            "ownerUid": uid,
             "generatingStartedAt": gcf.SERVER_TIMESTAMP,
             "updatedAt": gcf.SERVER_TIMESTAMP,
             "errorMessage": gcf.DELETE_FIELD,
@@ -324,17 +325,19 @@ def _collect(cache: RepoCache, source: StudySource, scope_type: ScopeType,
 
 
 def _load_materials(cache: RepoCache, files: list[dict[str, str]]) -> list[Material]:
-    materials: list[Material] = []
-    for item in files:
+    def one(item: dict[str, str]) -> Material:
         raw = cache.read_file(item["commit"], item["path"])
         text = notebook_to_text(raw) if item["path"].lower().endswith(".ipynb") else raw
-        materials.append({
+        return {
             "path": item["path"],
             "commit": item["commit"][:8],
             "content": text[:MAX_CHARS_PER_FILE],
             "truncated": len(text) > MAX_CHARS_PER_FILE,
-        })
-    return materials
+        }
+
+    workers = min(4, max(1, len(files)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(one, files))
 
 
 def generate_note(db: Client, caller: Caller, cohort_id: str, source_id: str,
@@ -347,17 +350,16 @@ def generate_note(db: Client, caller: Caller, cohort_id: str, source_id: str,
 
     scope_key = build_scope_key(scope_type, scope_value)
     note_id = f"{source.id}_{scope_key}"
-    ref = note_ref(db, cohort_id, note_id)
+    ref = note_ref(db, caller.uid, note_id)
 
     kind, current = _claim(db, ref, source, scope_type, scope_value, scope_key, caller.uid)
     if kind == "ready":
         return serialize_note(note_id, current, caller)
     if kind == "generating":
-        mine = current.get("generatingByUid") == caller.uid or caller.is_admin
         return {
             "noteId": note_id,
             "status": "generating",
-            "message": "이미 정리 중입니다. 잠시 후 다시 열어 주세요." if mine else "다른 학생이 이 범위를 정리하는 중입니다.",
+            "message": "이미 정리 중입니다. 잠시 후 다시 열어 주세요.",
         }
 
     try:
@@ -382,6 +384,8 @@ def generate_note(db: Client, caller: Caller, cohort_id: str, source_id: str,
         )
         ref.set({
             "sourceId": source.id,
+            "cohortId": cohort_id,
+            "ownerUid": caller.uid,
             "scopeType": scope_type,
             "scopeValue": scope_value,
             "scopeKey": scope_key,
@@ -399,6 +403,7 @@ def generate_note(db: Client, caller: Caller, cohort_id: str, source_id: str,
         return {
             "noteId": note_id,
             "status": "ready",
+            "sourceId": source.id,
             "scopeType": scope_type,
             "scopeValue": scope_value,
             "reportMarkdown": report,

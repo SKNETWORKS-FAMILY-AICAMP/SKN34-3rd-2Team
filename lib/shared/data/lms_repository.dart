@@ -1242,8 +1242,11 @@ class LmsRepository {
         });
   }
 
-  Stream<List<StudyNoteModel>> watchReadyStudyNotes(String cohortId) {
-    return cohortSub(cohortId, 'studyNotes')
+  Stream<List<StudyNoteModel>> watchReadyStudyNotes(String uid) {
+    return _firestore
+        .collection(FirestorePaths.users)
+        .doc(uid)
+        .collection('studyNotes')
         .where('status', isEqualTo: 'ready')
         .snapshots()
         .map((s) => s.docs.map(StudyNoteModel.fromFirestore).toList());

@@ -307,9 +307,9 @@ final activeStudySourcesProvider =
 
 final readyStudyNotesProvider =
     StreamProvider.autoDispose<List<StudyNoteModel>>((ref) {
-  final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value([]);
-  return ref.watch(lmsRepositoryProvider).watchReadyStudyNotes(cohortId);
+  final uid = ref.watch(sessionUidProvider).value;
+  if (uid == null || uid.isEmpty) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchReadyStudyNotes(uid);
 });
 
 final youtubeRecommendationsProvider =

@@ -1250,7 +1250,7 @@ class DemoLmsRepository {
     yield [];
   }
 
-  Stream<List<StudyNoteModel>> watchReadyStudyNotes(String cohortId) async* {
+  Stream<List<StudyNoteModel>> watchReadyStudyNotes(String uid) async* {
     yield [];
   }
 

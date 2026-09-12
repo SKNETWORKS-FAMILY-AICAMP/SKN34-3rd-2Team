@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,6 +31,8 @@ _BRANCH_RE = re.compile(r"^[\w./-]+$")
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
+_sync_cache: dict[str, tuple[float, str]] = {}
+SYNC_TTL_SEC = 120
 
 
 class GitToolError(Exception):
@@ -179,10 +182,24 @@ class RepoCache:
         except GitToolError:
             return ""
 
-    def sync(self) -> str:
-        """clone 또는 fetch 후 브랜치 HEAD sha를 반환한다."""
+    def sync(self, *, force: bool = False) -> str:
+        """clone 또는 fetch 후 브랜치 HEAD sha를 반환한다.
+
+        같은 저장소는 2분 안이면 fetch를 건너뛴다. 트리 조회가 매번 GitHub에
+        나가지 않게 해서 화면 진입을 빠르게 한다.
+        """
+        cache_key = str(self.dir)
         with self._lock:
             cached = (self.dir / ".git").exists() or (self.dir / "HEAD").exists()
+            previous = _sync_cache.get(cache_key)
+            if (
+                not force
+                and cached
+                and previous
+                and time.monotonic() - previous[0] < SYNC_TTL_SEC
+                and self._origin_url() == self.repo.clone_url.rstrip("/")
+            ):
+                return previous[1]
             if cached and self._origin_url() == self.repo.clone_url.rstrip("/"):
                 run_git(
                     [
@@ -196,7 +213,9 @@ class RepoCache:
                 )
             else:
                 self._clone()
-            return run_git(["rev-parse", self.ref], cwd=self.dir).strip()
+            sha = run_git(["rev-parse", self.ref], cwd=self.dir).strip()
+            _sync_cache[cache_key] = (time.monotonic(), sha)
+            return sha
 
     # ── 조회 ────────────────────────────────────────────────────────
 
