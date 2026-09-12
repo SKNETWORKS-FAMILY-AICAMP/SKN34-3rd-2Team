@@ -1,5 +1,6 @@
 from app.models import TailoredResumeCreateRequest
 from app.tailored_resumes import TailoredResumeService
+from app.firebase_gateway import tailored_resume_title
 
 
 class Gateway:
@@ -44,3 +45,23 @@ def test_lists_only_saved_tailored_resume_metadata():
     item = service.list('user-1', 'c', 'r')[0]
     assert item.job_id == 'job'
     assert item.status == 'draft'
+
+
+def test_tailored_title_uses_only_real_student_and_company_values():
+    base = {
+        'title': '백엔드 기본 이력서',
+        'content': {'basicInfo': {'name': '김민준'}},
+    }
+
+    assert tailored_resume_title(base, '토마토에이아이') == (
+        '김민준 · 토마토에이아이 맞춤 이력서'
+    )
+    assert tailored_resume_title(base, '') == '백엔드 기본 이력서'
+
+
+def test_tailored_title_does_not_invent_missing_student_name():
+    base = {'title': '기본 이력서', 'content': {'basicInfo': {'name': ''}}}
+
+    assert tailored_resume_title(base, '토마토에이아이') == (
+        '토마토에이아이 맞춤 이력서'
+    )
