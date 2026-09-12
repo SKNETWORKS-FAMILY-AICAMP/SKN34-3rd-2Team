@@ -152,3 +152,101 @@ class RoundTripTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RefreshTest(unittest.TestCase):
+    """파서를 고친 뒤 몇백 건만 다시 파싱해 덮어쓰는 통로.
+
+    `upsert`로 이 일을 하면 안 된다. `upsert`는 이번 목록에 없는 공고를 전부
+    "안 보임" 한 번으로 세고, 그것이 쌓이면 REMOVED로 넘어간다. 다시 파싱하는
+    일은 크롤 한 바퀴가 아니므로 그 셈에 넣으면 안 된다. 실제로 사람인 파싱을
+    고친 뒤 272건만 다시 받아야 했고, 그때 `upsert`를 썼다면 나머지 22,000여 건이
+    한 번씩 안 보인 것으로 세졌을 것이다.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.store = SqliteJobStore(Path(self.temp.name) / "store.sqlite")
+        self.jobs = mock_jobs()
+        self.store.upsert(self.jobs, source=self.jobs[0].source, as_of=AS_OF)
+
+    def tearDown(self):
+        self.store.close()
+        self.temp.cleanup()
+
+    def _record(self, job_id):
+        return self.store.get(job_id)
+
+    def test_the_untouched_postings_are_not_counted_as_missing(self):
+        """이게 이 메서드가 있는 이유다."""
+        one = replace(self.jobs[0], description="다시 파싱한 본문입니다.")
+        self.store.refresh([one], as_of=AS_OF)
+        for job in self.jobs[1:]:
+            with self.subTest(job.job_id):
+                record = self._record(job.job_id)
+                self.assertEqual(0, record.missing_runs)
+                self.assertEqual(STATUS_OPEN, record.status)
+
+    def test_the_new_body_replaces_the_old_one(self):
+        # `content_hash`는 파서가 넣는 값이다. 다시 파싱하면 본문과 함께 바뀐다.
+        one = replace(self.jobs[0], description="ㆍ주요 개발 언어 : javascript", content_hash="새-지문")
+        result = self.store.refresh([one], as_of=AS_OF)
+        self.assertEqual([one.job_id], result["changed"])
+        self.assertIn("javascript", self._record(one.job_id).job.description)
+
+    def test_the_first_seen_date_is_kept(self):
+        """다시 파싱했다고 처음 본 날이 오늘로 바뀌면 안 된다."""
+        before = self._record(self.jobs[0].job_id).first_seen_at
+        self.store.refresh(
+            [replace(self.jobs[0], description="바뀐 본문", content_hash="새-지문")], as_of=AS_OF)
+        self.assertEqual(before, self._record(self.jobs[0].job_id).first_seen_at)
+
+    def test_an_unchanged_body_does_not_bump_the_revision(self):
+        result = self.store.refresh([self.jobs[0]], as_of=AS_OF)
+        self.assertEqual([self.jobs[0].job_id], result["same"])
+        self.assertEqual(0, self._record(self.jobs[0].job_id).revisions)
+
+    def test_a_changed_body_bumps_the_revision_once(self):
+        self.store.refresh(
+            [replace(self.jobs[0], description="바뀐 본문", content_hash="새-지문")], as_of=AS_OF)
+        self.assertEqual(1, self._record(self.jobs[0].job_id).revisions)
+
+    def test_the_parser_hash_decides_whether_it_changed(self):
+        """본문만 다르고 지문이 같으면 안 바뀐 것으로 본다. 판단은 파서 몫이다."""
+        same_hash = replace(self.jobs[0], description="글자는 다르지만 지문은 그대로")
+        self.assertEqual([self.jobs[0].job_id], self.store.refresh([same_hash], as_of=AS_OF)["same"])
+
+    def test_an_expired_posting_does_not_come_back_to_life(self):
+        """**이 테스트가 있는 이유.** 처음에는 `resolve_status`로 상태를 다시 계산했다.
+        그 판정이 9일 전에 고정된 `AS_OF`를 기준으로 해서, 실제로 돌려 보니 만료·삭제된
+        공고 7,090건이 한꺼번에 OPEN으로 되살아났다.
+
+        다시 파싱하는 것은 저장해 둔 글을 다시 읽는 일이지, 그 공고가 아직 살아 있는지
+        확인하는 일이 아니다. 살아 있는지는 목록 관측과 링크 확인이 정한다.
+        """
+        gone = self.jobs[0]
+        record = self._record(gone.job_id)
+        self.store.put(replace(record, status=STATUS_EXPIRED, missing_runs=2))
+        self.store.refresh([replace(gone, description="다시 파싱한 본문", content_hash="새-지문")])
+        after = self._record(gone.job_id)
+        self.assertEqual(STATUS_EXPIRED, after.status)
+        self.assertEqual(2, after.missing_runs, "미관측 횟수도 건드리지 않는다")
+
+    def test_a_removed_posting_stays_removed(self):
+        gone = self.jobs[1]
+        self.store.put(replace(self._record(gone.job_id), status=STATUS_REMOVED, missing_runs=3))
+        self.store.refresh([gone])
+        self.assertEqual(STATUS_REMOVED, self._record(gone.job_id).status)
+
+    def test_the_last_seen_date_is_not_moved_forward(self):
+        """다시 파싱한 날을 "마지막으로 본 날"로 적으면 사라진 공고가 살아 있어 보인다."""
+        before = self._record(self.jobs[0].job_id).last_seen_at
+        self.store.refresh([replace(self.jobs[0], description="바뀐 본문", content_hash="새-지문")])
+        self.assertEqual(before, self._record(self.jobs[0].job_id).last_seen_at)
+
+    def test_a_posting_the_store_never_had_is_not_added(self):
+        """새 공고를 들이는 것은 `upsert`가 할 일이다."""
+        stranger = replace(self.jobs[0], job_id="NEW-1", source_job_id="99999")
+        result = self.store.refresh([stranger], as_of=AS_OF)
+        self.assertEqual(["NEW-1"], result["unknown"])
+        self.assertEqual(len(self.jobs), self.store.count())

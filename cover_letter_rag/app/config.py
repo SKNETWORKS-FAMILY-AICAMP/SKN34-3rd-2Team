@@ -23,7 +23,11 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     openai_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = "medium"
     vector_store_provider: Literal["pinecone", "chroma"] = "pinecone"
-    pinecone_api_key: str | None = Field(default=None, repr=False)
+    # 채용공고 인덱스는 공지·정책 인덱스와 다른 계정을 쓴다. 키 이름을 나눠
+    # 두 인덱스가 서로의 자격증명을 물고 들어가지 않게 한다.
+    pinecone_api_key: str | None = Field(
+        default=None, repr=False, validation_alias="PINECONE_API_KEY1"
+    )
     pinecone_index_name: str = "job-postings"
     pinecone_namespace: str = "saramin"
     pinecone_index_host: str | None = None

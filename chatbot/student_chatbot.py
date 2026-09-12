@@ -262,7 +262,7 @@ class LmsStudentChatbot:
         k: int = 4,
         student_context_loader: StudentContextLoader | None = None,
     ) -> None:
-        missing = [name for name in ("OPENAI_API_KEY", "PINECONE_API_KEY") if not os.getenv(name)]
+        missing = [name for name in ("OPENAI_API_KEY", "PINECONE_API_KEY2") if not os.getenv(name)]
         if missing:
             raise RuntimeError(f"필수 환경변수가 없습니다: {', '.join(missing)}")
         if not 1 <= k <= 8:
@@ -280,8 +280,11 @@ class LmsStudentChatbot:
             model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
             dimensions=int(os.getenv("OPENAI_EMBEDDING_DIMENSION", "1536")),
         )
-        self.index = Pinecone(api_key=os.environ["PINECONE_API_KEY"]).Index(
-            os.getenv("PINECONE_INDEX_NAME", "student"),
+        # 공지·정책 인덱스는 채용공고 인덱스와 이름이 다르다. `PINECONE_INDEX_NAME`을
+        # 그대로 쓰면 채용공고 쪽 설정(`job-posting`)을 물려받아 엉뚱한 인덱스를 뒤진다.
+        # 키를 KEY1/KEY2로 나눈 것과 같은 이유로 인덱스 이름도 따로 받는다.
+        self.index = Pinecone(api_key=os.environ["PINECONE_API_KEY2"]).Index(
+            os.getenv("PINECONE_STUDENT_INDEX_NAME", "student"),
         )
         self.supervisor_chain = (
             ChatPromptTemplate.from_messages([

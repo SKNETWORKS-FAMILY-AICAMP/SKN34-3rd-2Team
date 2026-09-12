@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/firebase_providers.dart';
 import '../data/student_chatbot_api_client.dart';
+import 'robot_head_icon.dart';
 
 class StudentChatbotHost extends ConsumerStatefulWidget {
   const StudentChatbotHost({
@@ -27,6 +28,9 @@ class StudentChatbotHost extends ConsumerStatefulWidget {
 }
 
 class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
+  /// 로봇에 마우스를 올렸을 때 나오는 인사말.
+  static const _greeting = '안녕하세요! 궁금한 점이 있으신가요? 저를 눌러 주세요!';
+
   static const Map<String, String> _faqAnswers = {
     '출결 기준': '''**출결 기준**
 
@@ -122,6 +126,8 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
   final _scrollController = ScrollController();
   Map<String, String> _faqChoices = _faqAnswers;
   bool _open = false;
+  bool _hoveringLauncher = false;
+  int _robotBounce = 0;
   bool _searching = false;
   bool _initializing = false;
   bool _ready = false;
@@ -296,12 +302,18 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
+        const launcherSize = 112.0;
+        const launcherBottom = 4.0;
+        const panelBottom = launcherBottom + launcherSize + 8;
         final maxWidth = compact
             ? constraints.maxWidth - 24
             : constraints.maxWidth / 2;
         final minWidth = math.min(320.0, maxWidth);
         final defaultWidth = compact ? maxWidth : math.min(390.0, maxWidth);
-        final maxHeight = math.max(0.0, constraints.maxHeight - 92);
+        final maxHeight = math.max(
+          0.0,
+          constraints.maxHeight - panelBottom - 16,
+        );
         final minHeight = math.min(420.0, maxHeight);
         final width = (_panelWidth ?? defaultWidth)
             .clamp(minWidth, maxWidth)
@@ -316,7 +328,7 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
             if (_open)
               Positioned(
                 right: compact ? 12 : 20,
-                bottom: 76,
+                bottom: panelBottom,
                 child: _ChatPanel(
                   width: width,
                   height: height,
@@ -352,14 +364,49 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
                 ),
               ),
             Positioned(
-              right: compact ? 12 : 20,
-              bottom: 16,
-              child: FloatingActionButton(
-                heroTag: 'student-chatbot',
-                tooltip: _open ? '챗봇 닫기' : '학생 챗봇 열기',
-                onPressed: () => setState(() => _open = !_open),
-                child: Icon(
-                  _open ? Icons.close_rounded : Icons.smart_toy_rounded,
+              key: const ValueKey('student-chatbot-greeting'),
+              right: (compact ? 6 : 8) + launcherSize - 14,
+              bottom: launcherBottom + 38,
+              child: _LauncherGreeting(
+                visible: _hoveringLauncher && !_open,
+                text: _greeting,
+              ),
+            ),
+            Positioned(
+              key: const ValueKey('student-chatbot-launcher'),
+              right: compact ? 6 : 8,
+              bottom: launcherBottom,
+              child: MouseRegion(
+                onEnter: (_) => setState(() => _hoveringLauncher = true),
+                onExit: (_) => setState(() => _hoveringLauncher = false),
+                child: SizedBox.square(
+                  dimension: launcherSize,
+                  // 툴팁을 떼고 이름만 붙인다. 툴팁이 말풍선과 같이 뜨면 같은
+                  // 자리에서 같은 말을 두 번 하는 꼴이고, 한쪽 상태에만 달면
+                  // FloatingActionButton이 툴팁을 끼우고 빼면서 그 아래 로봇까지
+                  // 새로 만든다 — 누를 때마다 하던 늘어남 동작이 끊긴다.
+                  // 화면 낭독기에는 label이 버튼에 합쳐져 그대로 읽힌다.
+                  child: MergeSemantics(
+                    child: Semantics(
+                      label: _open ? '챗봇 닫기' : '학생 챗봇 열기',
+                      child: FloatingActionButton(
+                        heroTag: 'student-chatbot',
+                        tooltip: null,
+                        backgroundColor: Colors.transparent,
+                        elevation: 0,
+                        hoverElevation: 0,
+                        focusElevation: 0,
+                        highlightElevation: 0,
+                        disabledElevation: 0,
+                        splashColor: Colors.transparent,
+                        onPressed: () => setState(() {
+                          _robotBounce++;
+                          _open = !_open;
+                        }),
+                        child: RobotHeadIcon(size: 104, bounce: _robotBounce),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -551,14 +598,9 @@ class _ChatPanel extends StatelessWidget {
     color: AppColors.primary,
     child: Row(
       children: [
-        const CircleAvatar(
-          radius: 17,
-          backgroundColor: Colors.white,
-          child: Icon(
-            Icons.smart_toy_rounded,
-            color: AppColors.primary,
-            size: 20,
-          ),
+        const SizedBox.square(
+          dimension: 44,
+          child: Center(child: RobotHeadIcon(size: 44)),
         ),
         const SizedBox(width: 9),
         const Expanded(
@@ -839,6 +881,103 @@ class _ChatLoadingState extends State<_ChatLoading>
   }
 }
 
+/// 로봇에 마우스를 올리면 옆에서 말을 거는 말풍선.
+///
+/// 툴팁 대신 쓴다. 툴팁은 "학생 챗봇 열기"처럼 기능 이름만 말하지만, 이 자리에서
+/// 필요한 것은 말을 걸어도 된다는 신호다. 손가락으로 쓰는 화면에는 마우스가 없어
+/// 뜨지 않는다 — 거기서는 로봇을 누르는 것 말고 할 일이 없어 잃는 것이 없다.
+class _LauncherGreeting extends StatelessWidget {
+  const _LauncherGreeting({required this.visible, required this.text});
+
+  final bool visible;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 170);
+    // 말풍선은 늘 그 자리에 있고 투명도만 바뀐다. 마우스를 뗐을 때 툭 끊기지 않고
+    // 잦아든다. 포인터는 받지 않는다 — 받으면 말풍선 위에서 마우스가 로봇을
+    // 벗어난 것이 되어, 떴다 사라졌다 깜빡인다.
+    return IgnorePointer(
+      child: AnimatedSlide(
+        offset: visible ? Offset.zero : const Offset(0.05, 0),
+        duration: duration,
+        curve: Curves.easeOut,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: duration,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 208),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x1F0B2A6F),
+                        blurRadius: 14,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+              CustomPaint(
+                size: const Size(9, 14),
+                painter: const _GreetingTailPainter(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 말풍선에서 로봇 쪽으로 뻗는 꼬리.
+class _GreetingTailPainter extends CustomPainter {
+  const _GreetingTailPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 1)
+      ..lineTo(size.width, size.height / 2)
+      ..lineTo(0, size.height - 1);
+    canvas.drawPath(path, Paint()..color = AppColors.surface);
+    // 몸통과 같은 테두리를 두 빗변에만 긋는다. 밑변을 그으면 몸통과 꼬리 사이에
+    // 선이 하나 생겨 붙어 있지 않은 것처럼 보인다.
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = AppColors.border
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GreetingTailPainter oldDelegate) => false;
+}
+
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message, required this.highlight});
   final _ChatMessage message;
@@ -852,10 +991,9 @@ class _MessageBubble extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       if (!message.fromUser) ...[
-        const CircleAvatar(
-          radius: 14,
-          backgroundColor: AppColors.primary,
-          child: Icon(Icons.smart_toy_rounded, color: Colors.white, size: 16),
+        const SizedBox.square(
+          dimension: 40,
+          child: Center(child: RobotHeadIcon(size: 36)),
         ),
         const SizedBox(width: 7),
       ],

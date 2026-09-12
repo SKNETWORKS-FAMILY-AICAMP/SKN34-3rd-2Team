@@ -6,6 +6,7 @@
 
 import json
 import unittest
+from dataclasses import replace
 
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records
 from job_matching_bot.config import DEFAULT_SARAMIN_INPUT, REPO_ROOT
@@ -91,6 +92,72 @@ class CareerBranchTest(unittest.TestCase):
         result = hard_filter(job, resume)
         self.assertNotEqual("FAIL", result["status"])
         self.assertIn("경력 조건 충족 (연차 미기재, 경력 보유)", result["passed"])
+
+
+    def test_an_experienced_resume_fails_an_entry_only_posting(self):
+        """방향이 반대인 경우도 봐야 한다.
+
+        연차 조건을 오래 "이 사람이 모자라지 않은가"로만 봤다. 그래서 신입만 뽑는
+        공고가 경력자에게 그대로 통과했다. 사람이 매긴 43건에서 경력 3년 이력서에
+        "백엔드 개발자 (신입)" 공고가 올라왔고 사람이 걸렀다.
+        """
+        resume = mock_resumes()["backend_experienced_3y"]
+        result = hard_filter(_saramin_job("4", career="신입"), resume)
+        self.assertEqual("FAIL", result["status"])
+        self.assertIn("신입 채용 (경력자 대상 아님)", result["failed"])
+
+    def test_an_entry_resume_still_passes_an_entry_only_posting(self):
+        resume = mock_resumes()["backend_entry"]
+        result = hard_filter(_saramin_job("4", career="신입"), resume)
+        self.assertNotEqual("FAIL", result["status"])
+        self.assertIn("경력 조건 충족", result["passed"])
+
+    def test_an_open_posting_is_not_touched(self):
+        """`경력무관`은 신입 전용이 아니다. 경력자도 지원한다."""
+        resume = mock_resumes()["backend_experienced_3y"]
+        result = hard_filter(_saramin_job("5", career="경력무관"), resume)
+        self.assertNotEqual("FAIL", result["status"])
+
+
+class CertificationGroupBranchTest(unittest.TestCase):
+    """`대기환경기사 또는 산업위생관리기사` 는 하나만 있으면 된다.
+
+    묶지 않고 하나씩 따로 검사하면, 대기환경기사를 가진 사람이 나머지를 안 가졌다는
+    이유로 "확인 필요"가 붙는다. 이걸 탈락으로 바꾸면 자격 있는 사람이 떨어진다.
+    """
+
+    def _job(self, groups, flat=None):
+        return replace(
+            _saramin_job("9"),
+            required_certifications=flat if flat is not None else [c for g in groups for c in g],
+            required_certification_groups=groups,
+        )
+
+    def test_holding_one_of_the_group_is_enough(self):
+        resume = replace(mock_resumes()["backend_entry"], certifications=["대기환경기사"])
+        result = hard_filter(self._job([["대기환경기사", "산업위생관리기사"]]), resume)
+        self.assertIn("자격증 요건 충족: 대기환경기사, 산업위생관리기사", result["passed"])
+        self.assertEqual([], [u for u in result["unknown"] if "자격증" in u])
+
+    def test_holding_none_of_the_group_fails(self):
+        """자격요건에 적힌 필수 자격증이다. 하나도 없으면 지원해도 안 된다."""
+        resume = replace(mock_resumes()["backend_entry"], certifications=["SQLD"])
+        result = hard_filter(self._job([["대기환경기사", "산업위생관리기사"]]), resume)
+        self.assertIn("필수 자격증 대기환경기사, 산업위생관리기사", result["failed"])
+        self.assertEqual("FAIL", result["status"])
+
+    def test_separate_groups_are_checked_separately(self):
+        resume = replace(mock_resumes()["backend_entry"], certifications=["정보처리기사"])
+        result = hard_filter(self._job([["정보처리기사"], ["정보보안기사"]]), resume)
+        self.assertIn("자격증 요건 충족: 정보처리기사", result["passed"])
+        self.assertIn("필수 자격증 정보보안기사", result["failed"])
+
+    def test_an_old_row_without_groups_behaves_as_before(self):
+        """묶음 열이 비어 있는 옛 저장소 행. 재파싱 전까지 예전 규칙 그대로다."""
+        resume = replace(mock_resumes()["backend_entry"], certifications=["정보처리기사"])
+        result = hard_filter(self._job([], flat=["정보처리기사", "정보보안기사"]), resume)
+        self.assertIn("자격증 요건 충족: 정보처리기사", result["passed"])
+        self.assertIn("필수 자격증 정보보안기사", result["failed"])
 
 
 class EducationBranchTest(unittest.TestCase):

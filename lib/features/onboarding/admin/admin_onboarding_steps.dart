@@ -6,7 +6,7 @@ abstract final class AdminOnboarding {
   static const tourId = 'admin';
   static const version = 1;
 
-  /// 약 12스텝: 대표 네비 10 + CTA 2 (전체 메뉴는 돌리지 않음)
+  /// 17스텝: 사이드바 메뉴 15개 전부 + CTA 2
   static const steps = <OnboardingStep>[
     OnboardingStep(
       id: 'nav_dashboard',
@@ -30,6 +30,13 @@ abstract final class AdminOnboarding {
       route: RoutePaths.adminStudents,
     ),
     OnboardingStep(
+      id: 'nav_instructors',
+      title: '강사 관리',
+      body: '강사 계정을 등록하고 정보 수정·비밀번호 재발급을 합니다.',
+      targetId: AdminOnboardingTargets.navInstructors,
+      route: RoutePaths.adminInstructors,
+    ),
+    OnboardingStep(
       id: 'nav_attendance',
       title: '출석 관리',
       body: '기수별 당일 출석을 조회·수정하고 폼 반영을 확인합니다.',
@@ -43,6 +50,13 @@ abstract final class AdminOnboarding {
       targetId: AdminOnboardingTargets.attendanceDailyNotice,
       route: RoutePaths.adminAttendance,
       skippableIfMissing: true,
+    ),
+    OnboardingStep(
+      id: 'nav_seat_presence',
+      title: '자리 확인',
+      body: '오늘 좌석에 앉은 학생을 확인하고 확인·보류를 남깁니다.',
+      targetId: AdminOnboardingTargets.navSeatPresence,
+      route: RoutePaths.adminSeatPresence,
     ),
     OnboardingStep(
       id: 'nav_seating',
@@ -59,11 +73,32 @@ abstract final class AdminOnboarding {
       route: RoutePaths.adminAssessments,
     ),
     OnboardingStep(
+      id: 'nav_records',
+      title: '기록실',
+      body: '학생이 올린 자격증·스터디·블로그 기록을 승인하거나 반려합니다.',
+      targetId: AdminOnboardingTargets.navRecords,
+      route: RoutePaths.adminRecords,
+    ),
+    OnboardingStep(
       id: 'nav_resumes',
       title: '이력서',
-      body: '학생 이력서 제출·검토 현황을 봅니다.',
+      body: '학생이 피드백을 요청한 이력서를 열어 피드백을 남기고 승인합니다.',
       targetId: AdminOnboardingTargets.navResumes,
       route: RoutePaths.adminResumes,
+    ),
+    OnboardingStep(
+      id: 'nav_forms',
+      title: '설문 · 제출',
+      body: '설문을 등록하고 마감 일시와 제출 현황을 관리합니다.',
+      targetId: AdminOnboardingTargets.navFormTasks,
+      route: RoutePaths.adminFormTasks,
+    ),
+    OnboardingStep(
+      id: 'nav_study',
+      title: '학습실',
+      body: '인프런 강의 패키지를 등록하고 기수에 공개합니다.',
+      targetId: AdminOnboardingTargets.navStudyRoom,
+      route: RoutePaths.adminStudyRoom,
     ),
     OnboardingStep(
       id: 'nav_board',

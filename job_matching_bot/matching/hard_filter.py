@@ -14,6 +14,9 @@ from job_matching_bot.schemas.resume import ResumeProfile
 
 # 초대졸(전문대 2,3년제)은 고졸과 대졸 사이다. 이 표는
 # functions/src/jobCoachScoring.ts 의 EDUCATION_RANK 와 같아야 한다.
+# 신입 전용 공고를 걸러낼 연차 경계. 이 값 이상이면 신입 전형 대상이 아니다.
+ENTRY_ONLY_MAX_YEARS = 2
+
 EDUCATION_RANK = {"학력무관": 0, "고졸": 1, "초대졸": 2, "대졸": 3, "석사": 4, "박사": 5}
 
 
@@ -42,8 +45,20 @@ def normalize_term(text: str) -> str:
     return re.sub(r"[\s\-_/·.()\[\]]", "", text).lower()
 
 
-def _qualification_checks(job: Job, resume: ResumeProfile, passed: list[str], unknown: list[str]) -> None:
-    """전공·자격증·병역. 맞으면 통과, 확인할 수 없으면 확인 필요. 탈락시키지 않는다."""
+def _qualification_checks(
+    job: Job, resume: ResumeProfile,
+    passed: list[str], unknown: list[str], failed: list[str],
+) -> None:
+    """전공·자격증·병역.
+
+    **자격증만 탈락시킨다.** 자격요건에 적힌 필수 자격증이 없으면 지원해도 안 된다.
+    전공·병역은 확인 필요로 둔다 — 학과 이름이 제각각이고 병역은 이력서로 확인할
+    성격이 아니라, 잘라내면 억울한 탈락이 많다.
+
+    탈락으로 바꾸기 전에 추출을 먼저 손봤다. `홍보기사`·`운전기사`처럼 자격증이 아닌
+    말, `~ 등 IT 관련 자격증` 같은 예시 문장, 같은 자격증이 두 묶음에 든 경우를
+    걸러내 363건이 320건이 됐다. 그 상태가 아니면 자격 있는 사람이 탈락한다.
+    """
     if job.required_majors:
         resume_majors = [m.strip() for m in resume.majors if m.strip()]
         if not resume_majors:
@@ -60,12 +75,23 @@ def _qualification_checks(job: Job, resume: ResumeProfile, passed: list[str], un
                     f"전공 요건 미확인: 공고 {', '.join(job.required_majors)} / 이력서 {', '.join(resume_majors)}"
                 )
     resume_certs = [normalize_term(c) for c in resume.certifications if c.strip()]
-    for cert in job.required_certifications:
+
+    def _holds(cert: str) -> bool:
         key = normalize_term(cert)
-        if any(key and (key in c or c in key) for c in resume_certs):
-            passed.append(f"자격증 요건 충족: {cert}")
+        return bool(key) and any(key in c or c in key for c in resume_certs)
+
+    # 한 묶음은 "이 중 하나"다. `대기환경기사 또는 산업위생관리기사`처럼 대안을 나열한
+    # 공고가 자격증이 잡힌 669건 중 과반이다. 하나씩 따로 검사하면 자격을 갖춘 사람이
+    # 나머지를 안 가졌다는 이유로 걸린다.
+    #
+    # 묶음이 없는 옛 저장소 행은 평평한 목록을 각각 한 묶음으로 본다. 예전과 같다.
+    groups = job.required_certification_groups or [[c] for c in job.required_certifications]
+    for group in groups:
+        names = ", ".join(group)
+        if any(_holds(cert) for cert in group):
+            passed.append(f"자격증 요건 충족: {names}")
         else:
-            unknown.append(f"자격증 확인 필요: {cert}")
+            failed.append(f"필수 자격증 {names}")
     if job.military_required:
         unknown.append("병역 조건 확인 필요 (병역필 또는 면제)")
 
@@ -99,6 +125,17 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
             failed.append(f"최소 경력 {job.min_career_years}년")
         else:
             passed.append("경력 조건 충족")
+    elif job.career_type == "ENTRY" and resume.career_years >= ENTRY_ONLY_MAX_YEARS:
+        # 신입만 뽑는다고 적은 공고다. 경력자에게는 맞지 않는다.
+        #
+        # 예전에는 ENTRY도 무조건 통과였다. 연차 조건을 "이 사람이 모자라지 않은가"로만
+        # 봤기 때문이다. 방향이 반대인 경우를 안 봤다. 사람이 매긴 43건에서 경력 3년
+        # 이력서에 "백엔드 개발자 (신입)" 공고가 올라왔고 사람이 걸렀다.
+        #
+        # 경계는 2년으로 둔다. 신입 공고는 사실상 0~1년차를 받는다. 2년차부터는
+        # 신입 전형에 넣을 자리가 아니다. 표본에 경력 이력서가 하나뿐이라 이 숫자는
+        # 관례에서 가져온 것이지 측정한 값이 아니다.
+        failed.append("신입 채용 (경력자 대상 아님)")
     elif job.career_type in ("ENTRY", "ANY"):
         passed.append("경력 조건 충족")
     else:
@@ -112,9 +149,13 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
     else:
         unknown.append("학력 조건 미기재")
 
-    _qualification_checks(job, resume, passed, unknown)
+    _qualification_checks(job, resume, passed, unknown, failed)
 
-    if job.region == "미기재":
+    # 희망 지역을 안 골랐으면 지역은 따지지 않는다. 빈 목록을 그대로 아래로 흘리면
+    # "어느 지역에도 안 맞는다"가 되어 거의 모든 공고가 탈락한다.
+    if not resume.preferred_regions:
+        passed.append("희망 지역 제한 없음")
+    elif job.region == "미기재":
         unknown.append("근무지역 미기재")
     elif is_nationwide(job.region) or NATIONWIDE in resume.preferred_regions:
         # 공고가 전국 근무이거나 사용자가 전국을 골랐으면 지역은 따지지 않는다.
@@ -124,7 +165,9 @@ def hard_filter(job: Job, resume: ResumeProfile) -> dict[str, Any]:
     else:
         failed.append(f"희망지역 불일치: {job.region}")
 
-    if job.employment_type == "미기재":
+    if not resume.preferred_employment_types:
+        passed.append("고용형태 제한 없음")
+    elif job.employment_type == "미기재":
         unknown.append("고용형태 미기재")
     elif job.employment_type in resume.preferred_employment_types:
         passed.append("희망 고용형태 일치")

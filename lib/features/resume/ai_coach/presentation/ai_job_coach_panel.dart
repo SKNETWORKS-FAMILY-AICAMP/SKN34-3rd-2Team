@@ -2,22 +2,23 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../shared/constants/ai_ops_types.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/services/ai_ops_service.dart';
+import '../../../../shared/constants/ai_ops_types.dart';
 import '../data/resume_review_api_client.dart';
 import 'job_resume_review_dialog.dart';
+import 'job_recommendation_loading.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
+import '../data/chat_job_refs.dart';
+import '../data/chat_text.dart';
 import '../data/resume_text_builder.dart';
 import '../models/ai_job_coach_result.dart';
 import '../models/resume_readiness.dart';
@@ -136,18 +137,21 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
     final client = ResumeReviewApiClient(token: () => user.getIdToken());
-    final ops = ref.read(aiOpsServiceProvider);
+    // 이 추천을 받아 첨삭까지 갔다는 표시. 추천이 실제로 쓰였는지를 이걸로 센다.
+    // 기다리지 않는다 — 로그 때문에 대화창이 늦게 뜨면 안 된다.
     final recommendLogId = _recommendLogId;
     if (recommendLogId != null) {
       unawaited(
-        ops.recordOutcome(
-          cohortId: cohort,
-          logId: recommendLogId,
-          outcome: AiOpsOutcomes.selectedForReview,
-          draftId: job.jobId,
-          promptVersion: _recommendPromptVersion,
-          type: AiOpsTypes.jobRecommend,
-        ),
+        ref
+            .read(aiOpsServiceProvider)
+            .recordOutcome(
+              cohortId: cohort,
+              logId: recommendLogId,
+              outcome: AiOpsOutcomes.selectedForReview,
+              draftId: job.jobId,
+              promptVersion: _recommendPromptVersion,
+              type: AiOpsTypes.jobRecommend,
+            ),
       );
     }
     try {
@@ -157,12 +161,12 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         builder: (_) => JobResumeReviewDialog(
           client: client,
           cohortId: cohort,
+          aiOps: ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           jobId: job.jobId,
           jobCompany: job.company,
           jobTitle: job.title,
           draft: widget.draftContent,
-          aiOps: ops,
           onChanged: (_) {
             // 공고별 사본은 서버에서 자동 저장한다. 기본 이력서 편집 상태에는
             // 전달하지 않아 다른 공고용 자리표시자가 바뀌지 않게 한다.
@@ -214,6 +218,16 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// 이걸 들고 있는 동안의 말은 전부 이 공고에 대한 물음으로 간다. 그래야 "신입도
   /// 돼?"처럼 짧은 말이 어느 공고 이야기인지 흐려지지 않는다.
   JobChatJob? _askingAbout;
+
+  /// **찾아 준 목록.** 화면에 나온 순서 그대로. "2번"을 가리킬 때 서버가 쓴다.
+  List<String> _lastShownJobIds = const [];
+
+  /// **직전 답이 다룬 공고.** 위와 다르다. 위는 번호가 가리킬 목록이고, 이쪽은 방금
+  /// 이야기한 대상이다. 비교 답이면 견준 두 건이 들어간다.
+  ///
+  /// "두 공고의 자격요건만 간단히 비교해줘"에는 번호가 없다. 이게 없으면 챗봇이
+  /// 스스로 권한 말을 눌렀는데 "공고가 보이지 않아 비교할 수 없다"고 답한다.
+  List<String> _lastAnswerJobIds = const [];
   bool _chatBusy = false;
 
   /// 기다리는 동안 보여줄 말. 추천은 11초쯤 걸리므로 무엇을 하는 중인지 밝힌다.
@@ -221,6 +235,12 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   AiJobCoachResult? _result;
   bool _chatMode = false;
   bool _loading = false;
+  bool _recommendationCompleted = false;
+  // 직전 추천을 남긴 로그의 id. 그 추천으로 무엇을 했는지(첨삭으로 넘어갔는지)를
+  // 나중에 이 id에 붙인다. 추천을 다시 돌리면 새 id로 덮인다.
+  String? _recommendLogId;
+  String? _recommendPromptVersion;
+  String? _recommendationError;
   String? _error;
 
   /// 지금 진행 중인 추천 단계의 이름. 서버가 알려 준다. 아직 안 왔으면 null이다.
@@ -228,12 +248,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
 
   /// 끝난 단계가 남긴 결과 한 줄. {단계 이름: "열린 공고에서 40건을 추렸어요"}
   final Map<String, String> _stageResults = {};
-
-  /// LLMOps: 직전 생성 로그 id (outcome 연결용)
-  String? _chatLogId;
-  String? _chatPromptVersion;
-  String? _recommendLogId;
-  String? _recommendPromptVersion;
 
   ResumeReadiness get _readiness => ResumeReadiness.of(widget.draftContent);
 
@@ -255,6 +269,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     setState(() {
       _result = null;
       _error = reason;
+      _recommendationError = null;
     });
     return false;
   }
@@ -271,7 +286,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
     final client = ResumeReviewApiClient(token: () => user.getIdToken());
-    final ops = ref.read(aiOpsServiceProvider);
     try {
       await showDialog<void>(
         context: context,
@@ -279,10 +293,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         builder: (_) => JobResumeReviewDialog(
           client: client,
           cohortId: cohort,
+          aiOps: ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           draft: widget.draftContent,
           generalReview: true,
-          aiOps: ops,
           onChanged: (content) {
             widget.onResumeChanged?.call(content);
             if (mounted) setState(() => _result = null);
@@ -335,9 +349,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         _ => '이력서를 읽고 공고를 고르는 중…',
       };
     });
-    final cohort = ref.read(effectiveCohortIdProvider);
-    final ops = ref.read(aiOpsServiceProvider);
-    final watch = Stopwatch()..start();
     try {
       final result = await ref
           .read(aiJobCoachRepositoryProvider)
@@ -347,26 +358,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             // 읽을 글만 좁힌다. 검증과 조건은 이력서 원본 그대로다.
             focus: scope == '전체' ? null : _scopedResume(scope),
           );
-      if (cohort != null) {
-        final logId = await ops.recordCoachLog(
-          type: AiOpsTypes.jobRecommend,
-          cohortId: cohort,
-          watch: watch,
-          success: true,
-          promptVersion: result.promptVersion,
-          model: result.model,
-          generatedCount: result.recommendations.length,
-          meta: {
-            'jobCount': result.recommendations.length,
-            'reranked': result.reranked,
-            'mode': 'chat_$scope',
-          },
-        );
-        _recommendLogId = logId;
-        _recommendPromptVersion = result.promptVersion.isEmpty
-            ? AiOpsPromptVersions.jobRecommend
-            : result.promptVersion;
-      }
       if (!mounted) return;
       setState(() {
         _result = result;
@@ -381,29 +372,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         );
       });
     } on JobRecommendApiException catch (error) {
-      if (cohort != null) {
-        await ops.recordCoachLog(
-          type: AiOpsTypes.jobRecommend,
-          cohortId: cohort,
-          watch: watch,
-          success: false,
-          error: error.message,
-          meta: {'mode': 'chat_$scope'},
-        );
-      }
       if (mounted)
         setState(() => _messages.add(_ChatMessage.bot(error.message)));
     } catch (error) {
-      if (cohort != null) {
-        await ops.recordCoachLog(
-          type: AiOpsTypes.jobRecommend,
-          cohortId: cohort,
-          watch: watch,
-          success: false,
-          error: error,
-          meta: {'mode': 'chat_$scope'},
-        );
-      }
       if (mounted) {
         setState(
           () => _messages.add(_ChatMessage.bot('공고를 고르지 못했습니다: $error')),
@@ -508,18 +479,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
 
   /// 공고 하나를 놓고 묻기 시작한다. 그만둘 때까지 모든 말이 이 공고로 간다.
   void _askAbout(JobChatJob job) {
-    final cohort = ref.read(effectiveCohortIdProvider);
-    final logId = _chatLogId;
-    if (cohort != null && logId != null) {
-      ref.read(aiOpsServiceProvider).recordOutcome(
-            cohortId: cohort,
-            logId: logId,
-            outcome: AiOpsOutcomes.clickedJob,
-            draftId: job.jobId,
-            promptVersion: _chatPromptVersion,
-            type: AiOpsTypes.jobChat,
-          );
-    }
     setState(() {
       _askingAbout = job;
       _messages.add(
@@ -544,22 +503,6 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (text.isEmpty || _chatBusy) return;
 
     final client = ref.read(jobRecommendApiClientProvider);
-    final cohort = ref.read(effectiveCohortIdProvider);
-    final ops = ref.read(aiOpsServiceProvider);
-    final fromSuggestion = preset != null;
-    if (fromSuggestion && cohort != null && _chatLogId != null) {
-      unawaited(
-        ops.recordOutcome(
-          cohortId: cohort,
-          logId: _chatLogId!,
-          outcome: AiOpsOutcomes.followedUp,
-          draftId: 'followup',
-          promptVersion: _chatPromptVersion,
-          type: AiOpsTypes.jobChat,
-        ),
-      );
-    }
-
     setState(() {
       _messages.add(_ChatMessage.user(text));
       _chatController.clear();
@@ -576,45 +519,39 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       return;
     }
 
-    final watch = Stopwatch()..start();
     try {
       final result = await client.chat(
         message: text,
         filters: _chatFilters,
         jobId: _askingAbout?.jobId,
-        // 공고를 놓고 물을 때만 보낸다. 공고를 안 고른 검색·질문은 이력서가
-        // 필요 없고, 보내 봐야 쓰이지 않는다.
-        resumeText: _askingAbout == null
-            ? null
-            : buildResumeText(widget.draftContent),
+        // 카드를 눌렀거나, 직전에 목록을 보여 줬으면 함께 보낸다(shouldSendResume).
+        resumeText:
+            shouldSendResume(
+              askingAboutJob: _askingAbout != null,
+              hasShownJobs: _lastShownJobIds.isNotEmpty,
+            )
+            ? buildResumeText(widget.draftContent)
+            : null,
+        // "2번 자세히 봐줘"에 답하려면 서버가 직전에 무엇을 보여 줬는지 알아야 한다.
+        // 서버는 대화를 저장하지 않으므로 앱이 되돌려 준다.
+        lastJobIds: _lastShownJobIds,
+        // "두 공고의 자격요건만"은 번호가 없다. 방금 이야기한 공고가 무엇인지
+        // 알려 줘야 답할 수 있다. 번호가 가리킬 목록과는 다른 값이다.
+        lastAnswerJobIds: _lastAnswerJobIds,
       );
       if (!mounted) return;
-      if (cohort != null) {
-        final logId = await ops.recordCoachLog(
-          type: AiOpsTypes.jobChat,
-          cohortId: cohort,
-          watch: watch,
-          success: true,
-          promptVersion: result.promptVersion,
-          model: result.model,
-          generatedCount: result.jobs.isEmpty ? 1 : result.jobs.length,
-          meta: {
-            'mode': result.mode,
-            'jobCount': result.jobs.length,
-            'topK': result.total,
-            'messageLength': text.length,
-            'resumeLength': _askingAbout == null
-                ? 0
-                : buildResumeText(widget.draftContent).length,
-          },
-        );
-        _chatLogId = logId;
-        _chatPromptVersion = result.promptVersion.isEmpty
-            ? AiOpsPromptVersions.jobChat
-            : result.promptVersion;
-      }
       setState(() {
         _chatFilters = result.filters;
+        _lastShownJobIds = nextShownJobIds(
+          mode: result.mode,
+          jobsInAnswer: [for (final job in result.jobs) job.jobId],
+          previous: _lastShownJobIds,
+        );
+        // 이쪽은 답에 공고가 들어 있으면 무엇이든 갈아 끼운다. 방금 이야기한 대상이
+        // 곧 그 공고들이다. 공고가 없는 답은 이야기한 대상도 없으니 그대로 둔다.
+        if (result.jobs.isNotEmpty) {
+          _lastAnswerJobIds = [for (final job in result.jobs) job.jobId];
+        }
         _messages.add(
           _ChatMessage.bot(
             result.reply,
@@ -629,29 +566,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         await _recommendInChat(result.resumeScope);
       }
     } on JobRecommendApiException catch (error) {
-      if (cohort != null) {
-        await ops.recordCoachLog(
-          type: AiOpsTypes.jobChat,
-          cohortId: cohort,
-          watch: watch,
-          success: false,
-          error: error.message,
-          meta: {'messageLength': text.length},
-        );
-      }
       if (!mounted) return;
       setState(() => _messages.add(_ChatMessage.bot(error.message)));
     } catch (error) {
-      if (cohort != null) {
-        await ops.recordCoachLog(
-          type: AiOpsTypes.jobChat,
-          cohortId: cohort,
-          watch: watch,
-          success: false,
-          error: error,
-          meta: {'messageLength': text.length},
-        );
-      }
       if (!mounted) return;
       setState(() => _messages.add(_ChatMessage.bot('공고를 찾지 못했습니다: $error')));
     } finally {
@@ -660,17 +577,27 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   }
 
   Future<void> _run() async {
-    if (!_guard(AiCoachFeature.jobRecommendation)) return;
+    if (_loading || !_guard(AiCoachFeature.jobRecommendation)) return;
     final requestedContent = widget.draftContent;
+    bool resumeUnchanged() => sameResumeContent(
+      widget.draftContent,
+      requestedContent.toMap(),
+    );
+    // 무엇이 나왔고 얼마나 걸렸는지 남긴다. 원문은 안 보내고 메타만 보낸다.
+    // 기수를 모르면(로그인 전) 남길 곳이 없으므로 건너뛴다. 로그가 실패해도
+    // 추천은 막지 않는다 — `recordCoachLog`가 실패 시 null을 돌려준다.
     final cohort = ref.read(effectiveCohortIdProvider);
     final ops = ref.read(aiOpsServiceProvider);
+    final watch = Stopwatch()..start();
     setState(() {
       _loading = true;
+      _recommendationCompleted = false;
+      _recommendationError = null;
+      _result = null;
       _error = null;
       _stage = null;
       _stageResults.clear();
     });
-    final watch = Stopwatch()..start();
     try {
       final result = await ref
           .read(aiJobCoachRepositoryProvider)
@@ -689,7 +616,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             },
           );
       if (cohort != null) {
-        final logId = await ops.recordCoachLog(
+        _recommendLogId = await ops.recordCoachLog(
           type: AiOpsTypes.jobRecommend,
           cohortId: cohort,
           watch: watch,
@@ -704,24 +631,28 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             'resumeLength': buildResumeText(requestedContent).length,
           },
         );
-        _recommendLogId = logId;
         _recommendPromptVersion = result.promptVersion.isEmpty
             ? AiOpsPromptVersions.jobRecommend
             : result.promptVersion;
       }
-      if (mounted) {
-        setState(() {
-          if (sameResumeContent(
-            widget.draftContent,
-            requestedContent.toMap(),
-          )) {
-            _result = result;
-          } else {
-            _result = null;
-            _error = '추천 중 이력서가 변경됐습니다. 저장 후 다시 추천해 주세요.';
-          }
-        });
+      if (!mounted) return;
+      if (resumeUnchanged()) {
+        setState(() => _recommendationCompleted = true);
+        if (!MediaQuery.disableAnimationsOf(context)) {
+          await Future<void>.delayed(
+            JobRecommendationLoading.completionDuration,
+          );
+        }
       }
+      if (!mounted) return;
+      // The draft can change during the completion animation as well.
+      setState(() {
+        if (resumeUnchanged()) {
+          _result = result;
+        } else {
+          _error = '추천 중 이력서가 변경됐습니다. 저장 후 다시 추천해 주세요.';
+        }
+      });
     } on JobRecommendApiException catch (error) {
       if (cohort != null) {
         await ops.recordCoachLog(
@@ -732,8 +663,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           error: error.message,
         );
       }
-      // 서버가 없거나 실패하면 추천하지 않는다. 이유를 그대로 보여 준다.
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _recommendationError = error.message);
     } catch (error) {
       if (cohort != null) {
         await ops.recordCoachLog(
@@ -744,9 +674,14 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           error: error,
         );
       }
-      if (mounted) setState(() => _error = '분석 실패: $error');
+      if (mounted) setState(() => _recommendationError = '분석 실패: $error');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _recommendationCompleted = false;
+        });
+      }
     }
   }
 
@@ -759,11 +694,11 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Header(
-            onClose: widget.onClose,
-            chatMode: _chatMode,
-            onToggleChat: () => setState(() => _chatMode = !_chatMode),
-          ),
+          if (_chatMode)
+            _Header(
+              onToggleChat: () => setState(() => _chatMode = false),
+              userName: widget.draftContent.basicInfo.name,
+            ),
           if (_chatMode)
             Expanded(
               child: _ChatView(
@@ -781,84 +716,116 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             )
           else
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(14),
-                children: [
-                  const SizedBox(height: 10),
-                  _ReadinessCard(
-                    readiness: _readiness,
-                    onSearchTap: _openChat,
-                    preferences:
-                        ref.watch(currentUserProvider).value?.jobPreferences ??
-                        const JobPreferences(),
-                    onEditPreferences: () => context.push(RoutePaths.myPage),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _ActionButton(
-                        icon: Icons.spellcheck_outlined,
-                        label: '이력서 첨삭',
-                        loading: false,
-                        // 첨삭할 내용이 하나라도 있으면 실행할 수 있다.
-                        enabled: _readiness.canAnalyzeResume,
-                        disabledTooltip: _readiness.blockedReason(
-                          AiCoachFeature.resumeAnalysis,
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.all(14),
+                    sliver: SliverList.list(
+                      children: [
+                        const SizedBox(height: 10),
+                        _CurrentResumeCard(
+                          content: widget.draftContent,
+                          readiness: _readiness,
+                          analyzing: _loading,
                         ),
-                        onPressed: _reviewResume,
-                      ),
-                      _ActionButton(
-                        icon: Icons.track_changes_outlined,
-                        label: '맞춤 공고 추천',
-                        loading: _loading,
-                        // 필수 항목이 하나라도 비면 추천하지 않는다.
-                        enabled: _readiness.canRecommendJobs,
-                        disabledTooltip: _readiness.blockedReason(
-                          AiCoachFeature.jobRecommendation,
+                        const SizedBox(height: 18),
+                        const Text(
+                          '빠른 실행',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
-                        onPressed: _run,
-                      ),
-                      _ActionButton(
-                        icon: Icons.chat_bubble_outline,
-                        label: '채용공고 찾기',
-                        loading: false,
-                        // 공고 검색은 이력서 상태와 무관하다.
-                        enabled: true,
-                        disabledTooltip: null,
-                        onPressed: _openChat,
-                      ),
-                    ],
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.edit_outlined,
+                                iconColor: Color(0xFFFF6B5E),
+                                label: '이력서 첨삭',
+                                loading: false,
+                                // 첨삭할 내용이 하나라도 있으면 실행할 수 있다.
+                                enabled: _readiness.canAnalyzeResume,
+                                disabledTooltip: _readiness.blockedReason(
+                                  AiCoachFeature.resumeAnalysis,
+                                ),
+                                onPressed: _reviewResume,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.star_rounded,
+                                iconColor: Color(0xFFF4C430),
+                                label: '맞춤 공고 추천',
+                                loading: _loading,
+                                // 필수 항목이 하나라도 비면 추천하지 않는다.
+                                enabled: _readiness.canRecommendJobs,
+                                disabledTooltip: _readiness.blockedReason(
+                                  AiCoachFeature.jobRecommendation,
+                                ),
+                                onPressed: _run,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.search_rounded,
+                                iconColor: Color(0xFF3B82F6),
+                                label: '채용공고 찾기',
+                                loading: false,
+                                // 공고 검색은 이력서 상태와 무관하다.
+                                enabled: true,
+                                disabledTooltip: null,
+                                onPressed: _openChat,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 14),
+                          _ErrorCard(message: _error!),
+                        ],
+                        if (_result == null &&
+                            !_loading &&
+                            _error == null &&
+                            _recommendationError == null) ...[
+                          const SizedBox(height: 26),
+                          const _EmptyState(),
+                        ],
+                        if (_result case final result?) ...[
+                          const SizedBox(height: 18),
+                          // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
+                          _RecommendationSection(
+                            result: result,
+                            onReview: widget.onResumeChanged == null
+                                ? null
+                                : _reviewJob,
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      ],
+                    ),
                   ),
-                  if (_loading) ...[
-                    const SizedBox(height: 20),
-                    _RecommendProgress(
-                      current: _stage,
-                      results: _stageResults,
+                  if (_loading || _recommendationError != null)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: JobRecommendationLoading(
+                            current: _stage,
+                            results: _stageResults,
+                            completed: _recommendationCompleted,
+                            errorMessage: _recommendationError,
+                            onRetry: _run,
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    _ErrorCard(message: _error!),
-                  ],
-                  if (_result == null &&
-                      !_loading &&
-                      _error == null) ...[
-                    const SizedBox(height: 26),
-                    const _EmptyState(),
-                  ],
-                  if (_result case final result?) ...[
-                    const SizedBox(height: 18),
-                    // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
-                    _RecommendationSection(
-                      result: result,
-                      onReview: widget.onResumeChanged == null
-                          ? null
-                          : _reviewJob,
-                    ),
-                    const SizedBox(height: 20),
-                  ],
                 ],
               ),
             ),
@@ -883,74 +850,60 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
 
 class _Header extends StatelessWidget {
   const _Header({
-    required this.onClose,
-    required this.chatMode,
     required this.onToggleChat,
+    required this.userName,
   });
 
-  final VoidCallback onClose;
-  final bool chatMode;
   final VoidCallback onToggleChat;
+  final String userName;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEDE9FE),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.auto_awesome,
-              size: 17,
-              color: Color(0xFF7C3AED),
+          InkWell(
+            onTap: onToggleChat,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFF171717),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.arrow_back_rounded,
+                size: 20,
+                color: Colors.white,
+              ),
             ),
           ),
-          const SizedBox(width: 9),
-          const Expanded(
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'AI 취업 코치',
+                const Text(
+                  '채용공고 찾기',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
                 Text(
-                  '근거 기반 공고 매칭 POC',
-                  style: TextStyle(
-                    fontSize: 10,
+                  userName.trim().isEmpty
+                      ? '나의 취업 코치'
+                      : '${userName.trim()} 님의 코치',
+                  style: const TextStyle(
+                    fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
                 ),
               ],
             ),
-          ),
-          IconButton(
-            tooltip: chatMode ? '코치 기능으로 돌아가기' : '챗봇으로 채용공고 찾기',
-            visualDensity: VisualDensity.compact,
-            onPressed: onToggleChat,
-            icon: Icon(
-              chatMode ? Icons.arrow_back : Icons.chat_bubble_outline,
-              size: 18,
-              color: chatMode
-                  ? AppColors.textSecondary
-                  : const Color(0xFF7C3AED),
-            ),
-          ),
-          IconButton(
-            tooltip: 'AI 코치 닫기',
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-            icon: const Icon(Icons.close, size: 18),
           ),
         ],
       ),
@@ -961,6 +914,7 @@ class _Header extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.icon,
+    required this.iconColor,
     required this.label,
     required this.loading,
     required this.enabled,
@@ -969,6 +923,7 @@ class _ActionButton extends StatelessWidget {
   });
 
   final IconData icon;
+  final Color iconColor;
   final String label;
   final bool loading;
   final bool enabled;
@@ -979,12 +934,33 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final button = OutlinedButton.icon(
+    final button = OutlinedButton(
       onPressed: (loading || !enabled) ? null : onPressed,
-      icon: Icon(icon, size: 15),
-      label: Text(label, style: const TextStyle(fontSize: 11)),
       style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        minimumSize: const Size.fromHeight(98),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 15),
+        foregroundColor: AppColors.textPrimary,
+        side: const BorderSide(color: AppColors.border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (loading)
+            const SizedBox(
+              width: 23,
+              height: 23,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Icon(icon, size: 26, color: enabled ? iconColor : null),
+          const SizedBox(height: 13),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
     if (enabled || disabledTooltip == null) return button;
@@ -992,168 +968,6 @@ class _ActionButton extends StatelessWidget {
     return Tooltip(
       message: disabledTooltip!,
       child: button,
-    );
-  }
-}
-
-/// 추천이 어디까지 갔는지 보여준다.
-///
-/// 추천은 15초쯤 걸린다. 막대 하나만 돌리면 멈춘 것과 구별되지 않고, 기다리는 사람은
-/// 무엇을 기다리는지 모른다. 서버가 단계마다 알려 주므로 그대로 세워 놓고, 끝난 단계에는
-/// 서버가 준 결과 한 줄을 남긴다.
-///
-/// 서버가 옛 버전이라 알림이 오지 않으면 [current]가 계속 null이다. 그때는 줄만 흐리게
-/// 서 있고 맨 위 막대가 돈다 — 예전과 같은 모습이라 나빠지지 않는다.
-class _RecommendProgress extends StatelessWidget {
-  const _RecommendProgress({required this.current, required this.results});
-
-  /// 진행 중인 단계 이름. 서버의 `RECOMMEND_STAGES`와 같은 값이다.
-  final String? current;
-
-  /// 끝난 단계가 남긴 결과 한 줄.
-  final Map<String, String> results;
-
-  /// 서버가 보내는 이름과 화면에 쓸 말. 순서가 곧 표시 순서다.
-  static const _steps = <(String, String)>[
-    ('resume', '이력서 읽기'),
-    ('search', '공고 찾기'),
-    ('filter', '조건 맞춰 보기'),
-    ('judge', '근거 맞대어 보기'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final index = current == null
-        ? -1
-        : _steps.indexWhere((step) => step.$1 == current);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (index < 0) ...[
-          const LinearProgressIndicator(minHeight: 3),
-          const SizedBox(height: 10),
-        ],
-        const Text(
-          '공고를 고르고 있어요',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 2),
-        const Text(
-          '보통 15초 정도 걸려요. 잠시만 기다려 주세요.',
-          style: TextStyle(fontSize: 11, color: AppColors.textHint),
-        ),
-        const SizedBox(height: 12),
-        for (var i = 0; i < _steps.length; i++)
-          _ProgressStep(
-            label: _steps[i].$2,
-            detail: results[_steps[i].$1],
-            // 진행 중인 것보다 앞이면 끝난 것이다. 알림이 안 오면 전부 대기 상태다.
-            state: index < 0
-                ? _StepState.waiting
-                : i < index
-                ? _StepState.done
-                : i == index
-                ? (results.containsKey(_steps[i].$1)
-                      ? _StepState.done
-                      : _StepState.running)
-                : _StepState.waiting,
-            last: i == _steps.length - 1,
-          ),
-      ],
-    );
-  }
-}
-
-enum _StepState { done, running, waiting }
-
-class _ProgressStep extends StatelessWidget {
-  const _ProgressStep({
-    required this.label,
-    required this.detail,
-    required this.state,
-    required this.last,
-  });
-
-  final String label;
-  final String? detail;
-  final _StepState state;
-  final bool last;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (state) {
-      _StepState.done => AppColors.success,
-      _StepState.running => AppColors.primary,
-      _StepState.waiting => AppColors.textHint,
-    };
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: switch (state) {
-                _StepState.done => Icon(
-                  Icons.check_circle,
-                  size: 16,
-                  color: color,
-                ),
-                _StepState.running => const Padding(
-                  padding: EdgeInsets.all(1.5),
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                _StepState.waiting => Icon(
-                  Icons.circle_outlined,
-                  size: 16,
-                  color: color,
-                ),
-              },
-            ),
-            if (!last)
-              Container(
-                width: 2,
-                height: detail == null ? 14 : 26,
-                margin: const EdgeInsets.symmetric(vertical: 2),
-                color: state == _StepState.done
-                    ? AppColors.success
-                    : AppColors.border,
-              ),
-          ],
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(bottom: last ? 0 : 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: state == _StepState.waiting
-                        ? AppColors.textHint
-                        : AppColors.textPrimary,
-                  ),
-                ),
-                if (detail case final line?) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    line,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -1943,136 +1757,103 @@ class _ErrorCard extends StatelessWidget {
   }
 }
 
-/// 필수 항목을 얼마나 채웠는지, 지금 무엇을 할 수 있는지 알려준다.
-class _ReadinessCard extends StatelessWidget {
-  const _ReadinessCard({
+/// Figma 시안의 "현재 분석 중인 이력서" 카드.
+class _CurrentResumeCard extends StatelessWidget {
+  const _CurrentResumeCard({
+    required this.content,
     required this.readiness,
-    required this.onSearchTap,
-    required this.preferences,
-    required this.onEditPreferences,
+    required this.analyzing,
   });
 
+  final ResumeContent content;
   final ResumeReadiness readiness;
-  final VoidCallback onSearchTap;
-  final JobPreferences preferences;
-  final VoidCallback onEditPreferences;
+  final bool analyzing;
 
   @override
   Widget build(BuildContext context) {
     final ready = readiness.canRecommendJobs;
-    final progress =
-        readiness.completedRequiredCount / readiness.totalRequiredCount;
+    final name = content.basicInfo.name.trim();
+    final skillCount = content.techStack.where((item) => item.isFilled).length;
+    final projectCount = content.projects.where((item) => item.isFilled).length;
 
     return Container(
-      padding: const EdgeInsets.all(11),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: ready
-            ? AppColors.success.withValues(alpha: 0.08)
-            : AppColors.surfaceVariant.withValues(alpha: 0.6),
-        border: Border.all(
-          color: ready
-              ? AppColors.success.withValues(alpha: 0.35)
-              : AppColors.border,
-        ),
-        borderRadius: BorderRadius.circular(10),
+        color: const Color(0xFFF7F6F4),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: [
-              Icon(
-                ready ? Icons.check_circle_outline : Icons.edit_note,
-                size: 16,
-                color: ready ? AppColors.success : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  ready
-                      ? '맞춤 공고 추천을 실행할 수 있습니다.'
-                      : '필수 항목 ${readiness.completedRequiredCount}/${readiness.totalRequiredCount} 작성됨',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 4,
-              backgroundColor: AppColors.border,
-              valueColor: AlwaysStoppedAnimation(
-                ready ? AppColors.success : AppColors.primary,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          // 희망 조건은 프로필에 있다. 비어 있어도 추천은 막지 않고 필터만 빠진다.
-          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  preferences.isEmpty
-                      ? '희망 조건 미입력 — 지역·고용형태 필터 없이 추천합니다.'
-                      : '희망 조건: ${preferences.summary}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    height: 1.5,
-                    color: AppColors.textSecondary,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '현재 분석 중인 이력서',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      name.isEmpty ? '현재 작성 중인 이력서' : '$name 님의 이력서',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
-              InkWell(
-                onTap: onEditPreferences,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 2),
-                  child: Text(
-                    '수정 →',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF7C3AED),
-                    ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: analyzing
+                      ? const Color(0xFFEFF6FF)
+                      : ready
+                      ? const Color(0xFFF0FDF4)
+                      : const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  analyzing
+                      ? '분석 중'
+                      : ready
+                      ? '준비 완료'
+                      : '작성 필요',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: analyzing
+                        ? const Color(0xFF2563EB)
+                        : ready
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFEA580C),
                   ),
                 ),
               ),
             ],
           ),
-          if (!ready) ...[
-            const SizedBox(height: 8),
-            Text(
-              '남은 항목: ${readiness.missingRequiredSectionLabels.join(', ')}',
-              style: const TextStyle(
-                fontSize: 11,
-                height: 1.5,
-                color: AppColors.textSecondary,
-              ),
+          const SizedBox(height: 16),
+          Text(
+            '기술 $skillCount개  ·  프로젝트 $projectCount개',
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
             ),
-            const SizedBox(height: 6),
-            // 이력서를 다 못 채웠어도 공고 검색은 막지 않는다.
-            InkWell(
-              onTap: onSearchTap,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 2),
-                child: Text(
-                  '먼저 채용공고만 둘러보기 →',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF7C3AED),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -2102,7 +1883,7 @@ class _AnalysisLabel extends StatelessWidget {
 }
 
 /// 챗봇으로 채용공고를 찾는 화면.
-class _ChatView extends StatelessWidget {
+class _ChatView extends StatefulWidget {
   const _ChatView({
     required this.messages,
     required this.controller,
@@ -2136,11 +1917,57 @@ class _ChatView extends StatelessWidget {
   final String? busyLabel;
 
   @override
+  State<_ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<_ChatView> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 답이 왔는데 화면은 그대로면 사용자가 직접 내려야 한다. 말이 길수록 어디까지
+    // 왔는지도 모른다. 새 말이 붙을 때마다 아래로 따라간다.
+    if (widget.messages.length != oldWidget.messages.length) {
+      _scrollToBottom();
+    }
+  }
+
+  /// 프레임이 그려진 뒤에 내린다. 지금 재면 새 말풍선의 높이가 아직 없다.
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final messages = widget.messages;
+    final busy = widget.busy;
+    final onAskAbout = widget.onAskAbout;
+    final onOpenDetail = widget.onOpenDetail;
+    final onSuggestion = widget.onSuggestion;
+    final busyLabel = widget.busyLabel;
+    final askingAbout = widget.askingAbout;
+    final onStopAsking = widget.onStopAsking;
+    final controller = widget.controller;
+    final onSend = widget.onSend;
     return Column(
       children: [
         Expanded(
           child: ListView.builder(
+            controller: _scroll,
             padding: const EdgeInsets.all(14),
             itemCount: messages.length,
             itemBuilder: (context, index) => _ChatBubble(
@@ -2270,21 +2097,21 @@ class _ChatBubble extends StatelessWidget {
       alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         constraints: const BoxConstraints(maxWidth: 300),
+        // 답이 길면 말풍선이 배경에 묻혀 글자만 흩어져 보였다. 배경을 옅게라도
+        // 깔고 테두리를 둘러야 "여기까지가 한 답"이라는 게 보인다.
         decoration: BoxDecoration(
           color: message.isUser
               ? AppColors.primaryLight
-              : AppColors.surfaceVariant.withValues(alpha: 0.8),
+              : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
+          border: message.isUser ? null : Border.all(color: AppColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.text,
-              style: const TextStyle(fontSize: 12, height: 1.5),
-            ),
+            _ChatText(message.text),
             // 이력서를 읽고 고른 공고. 적합도와 근거가 붙는다.
             for (final job in message.recommendations) ...[
               const SizedBox(height: 8),
@@ -2326,28 +2153,104 @@ class _ChatBubble extends StatelessWidget {
             ],
             if (message.suggestions.isNotEmpty && onSuggestion != null) ...[
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final suggestion in message.suggestions)
-                    ActionChip(
-                      label: Text(
-                        suggestion,
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      onPressed: () => onSuggestion!(suggestion),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                ],
-              ),
+              // 제안은 문장이라 한 줄에 안 들어간다. Chip은 높이가 한 줄로 고정되어
+              // 폭을 좁혀 줘도 글자가 잘렸다. 줄이 늘어나는 만큼 키가 크는 버튼으로
+              // 바꾼다. 나란히 놓을 것도 아니어서 한 줄에 하나씩 세로로 쌓는다.
+              for (final suggestion in message.suggestions) ...[
+                const SizedBox(height: 6),
+                _SuggestionButton(
+                  text: suggestion,
+                  onTap: () => onSuggestion!(suggestion),
+                ),
+              ],
             ],
           ],
         ),
       ),
     );
   }
+}
+
+/// 눌러 보낼 수 있는 제안 한 줄. 문장이 길면 줄을 바꾸고 키가 커진다.
+class _SuggestionButton extends StatelessWidget {
+  const _SuggestionButton({required this.text, required this.onTap});
+
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 11,
+            height: 1.35,
+            color: AppColors.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 답을 서식대로 그린다. 굵게와 항목 줄만 읽는다(`chat_text.dart`).
+class _ChatText extends StatelessWidget {
+  const _ChatText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = parseChatText(text);
+    if (blocks.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < blocks.length; i++) ...[
+          if (i > 0) const SizedBox(height: 6),
+          if (blocks[i].bullet)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(right: 6),
+                  child: Text('•', style: TextStyle(fontSize: 12, height: 1.5)),
+                ),
+                Expanded(child: _line(blocks[i])),
+              ],
+            )
+          else
+            _line(blocks[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _line(ChatBlock block) => Text.rich(
+    TextSpan(
+      children: [
+        for (final span in block.spans)
+          TextSpan(
+            text: span.text,
+            style: span.bold
+                ? const TextStyle(fontWeight: FontWeight.w700)
+                : null,
+          ),
+      ],
+    ),
+    style: const TextStyle(fontSize: 12, height: 1.5),
+  );
 }
 
 /// 이력서를 읽고 고른 공고 한 건. 조건 검색 카드와 달리 **왜 맞는지**를 함께 보여준다.

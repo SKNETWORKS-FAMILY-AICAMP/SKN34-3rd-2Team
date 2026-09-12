@@ -316,7 +316,7 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
                           }
                         },
                         icon: const Icon(Icons.tour_outlined, size: 18),
-                        label: const Text('온보딩 다시 보기'),
+                        label: const Text('이용 안내 다시보기'),
                       ),
                     ),
                   ],

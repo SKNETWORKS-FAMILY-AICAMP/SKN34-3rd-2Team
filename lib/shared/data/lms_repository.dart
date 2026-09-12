@@ -698,6 +698,31 @@ class LmsRepository {
     await batch.commit();
   }
 
+  /// 내가 쓴 피드백·답글을 지운다.
+  ///
+  /// 글 하나를 지우고 이력서의 건수를 같이 줄인다. 건수만 남으면 안 읽음 숫자가
+  /// 실제 글 수와 어긋나 영영 줄지 않는다.
+  ///
+  /// 답글이 달린 글을 지워도 답글은 남긴다. 남의 글을 대신 지우는 셈이 되고,
+  /// 화면은 부모 없는 답글을 첫 글로 올려 보여 준다.
+  Future<void> deleteResumeFeedback({
+    required String cohortId,
+    required String resumeId,
+    required String feedbackId,
+  }) async {
+    final batch = _firestore.batch();
+    batch.delete(
+      cohortSub(cohortId, 'resumes')
+          .doc(resumeId)
+          .collection('feedback')
+          .doc(feedbackId),
+    );
+    batch.update(cohortSub(cohortId, 'resumes').doc(resumeId), {
+      'feedbackCount': FieldValue.increment(-1),
+    });
+    await batch.commit();
+  }
+
   /// 피드백을 화면에서 읽었다. **여기서만** 읽음으로 넘어간다.
   ///
   /// 보는 사람에 따라 다른 자리에 적는다. 학생이 읽은 것과 검토자가 읽은 것이

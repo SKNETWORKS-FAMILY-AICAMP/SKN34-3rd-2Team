@@ -31,7 +31,9 @@ class RecommendRequest(StrictModel):
     career_years: float = Field(default=0, ge=0, le=60)
     majors: list[str] = Field(default_factory=list, max_length=10)
     certifications: list[str] = Field(default_factory=list, max_length=30)
-    top_k: int = Field(default=10, ge=1, le=20)
+    # 재정렬이 후보 12건까지만 판정하므로(service.RERANK_TOP_K) 그 위는 약속할 수 없다.
+    # 회사당 2건 제한과 마감 제외까지 겹치면 그보다 적게 올 수도 있다.
+    top_k: int = Field(default=10, ge=1, le=12)
     # 앱이 이력서를 저장할 때 미리 만들어 둔 구조화 결과. 있으면 서버는 다시 만들지 않는다.
     # 대기 시간이 2.7초 줄고, 무엇보다 **검색어가 고정되어 추천이 매번 흔들리지 않는다.**
     # 이력서를 고쳤으면 앱이 보내지 않으면 된다 — 그때는 서버가 새로 만든다.
@@ -184,6 +186,15 @@ class ChatFilters(StrictModel):
     skills: list[str] = Field(default_factory=list, description="기술. Python, React")
     regions: list[str] = Field(default_factory=list, description="지역. 서울, 경기")
     career: Literal["신입", "경력", "무관"] = "무관"
+    # 몇 년차인지. **`career`만으로는 부족하다.**
+    #
+    # "3년차인데 갈 만한 데 있어?"에 경력 5년 이상 공고가 나갔다. 경력이냐 신입이냐만
+    # 보고 숫자를 버렸기 때문이다. 저장소에 최소 연차가 있는데 안 읽었다. 추천 쪽
+    # 하드 필터는 이미 본다(`hard_filter`) — 챗봇 검색에만 없었다.
+    career_years: int | None = Field(
+        default=None, ge=0, le=50,
+        description="말한 연차. '3년차', '5년 경력' → 3, 5. 안 밝혔으면 null",
+    )
     employment_types: list[str] = Field(default_factory=list, description="정규직, 인턴")
     deadline_within_days: int | None = Field(
         default=None, description="마감 임박만 볼 때의 날짜 수. 아니면 null"
@@ -205,9 +216,40 @@ class ChatTurnOut(StrictModel):
         )
     )
     filters: ChatFilters
+    # 무엇에 대한 말인가. **"채용"일 때만 답을 쓰는 단계로 간다.**
+    #
+    # 처음에는 "상관없으면 막는다"(off_topic)로 두었다. 기본값이 통과라 모델이 애매하게
+    # 본 말은 전부 흘러 들어왔다. "호구"라고만 보냈는데 뜻풀이와 "이 말을 부드럽게 바꿔
+    # 말해줘" 같은 제안까지 달려 나간 적이 있다.
+    #
+    # 그래서 뒤집었다. 기본값을 두지 않고 셋 중 하나를 반드시 고르게 한다. 채용이라고
+    # 짚지 못한 말은 막힌다. 애매할 때 통과하는 것과 막히는 것은 다르다.
+    topic: Literal["채용", "인사", "그 밖"] = Field(
+        description=(
+            "채용·취업·공고·이력서·면접에 대한 말이면 채용. "
+            "인사와 짧은 예의치레면 인사. 그 밖은 전부 '그 밖'. "
+            "채용인지 아닌지 분명하지 않으면 '그 밖'으로 둔다"
+        )
+    )
     counts_jobs: bool = Field(
         default=False,
         description="공고를 세어서 답할 질문이면 true. 조언을 구하는 말이면 false",
+    )
+    job_refs: list[int] = Field(
+        default_factory=list,
+        description=(
+            "직전에 보여 준 목록에서 몇 번째를 가리켰는지. 1부터 센다. "
+            "'2번 자세히', '첫 번째 거' → [2], [1]. 가리킨 것이 없으면 빈 목록"
+        ),
+    )
+    # 번호 없이 "방금 그거"를 가리키는 말. 비교 뒤에 이어지는 물음이 대부분 이 꼴이다.
+    refers_to_last_answer: bool = Field(
+        default=False,
+        description=(
+            "번호를 대지 않고 직전 답이 다룬 공고를 가리키면 true. "
+            "'두 공고의 자격요건만', '이 공고 마감일은', '둘 다 신입 가능해?'가 그렇다. "
+            "새로 찾아 달라는 말이면 false"
+        ),
     )
     resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(
         default="전체",
@@ -253,6 +295,30 @@ class JobChatRequest(StrictModel):
         default=None,
         description="이 공고를 놓고 묻는 경우의 job_id. 있으면 그 공고를 근거로 답한다",
     )
+    # 직전 답에서 보여 준 공고의 job_id를 **화면에 나온 순서 그대로** 담는다.
+    #
+    # 이게 없으면 "2번 자세히 봐줘"에 답할 수 없다. 서버는 대화를 저장하지 않으므로
+    # 직전에 무엇을 보여 줬는지 모른다. 지금까지는 사용자가 공고 카드를 눌러
+    # `job_id`를 보내야만 그 공고를 놓고 물을 수 있었다.
+    #
+    # 앱은 직전 응답의 `jobs`에서 그대로 뽑아 보내면 된다. 응답에 새 필드가 필요 없다.
+    last_job_ids: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="찾아 준 목록의 공고 id를 보여 준 순서대로. '2번'을 가리킬 때 쓴다",
+    )
+    # **직전 답이 다룬 공고.** 위와 다르다. 위는 번호가 가리킬 *목록*이고 이쪽은 방금
+    # 이야기한 *대상*이다. 비교 답이면 견준 두 건, 공고 하나에 답했으면 그 한 건이다.
+    #
+    # 이게 없으면 비교 바로 뒤에 "두 공고의 자격요건만 간단히 비교해 주세요"라고 했을 때
+    # 답하지 못한다. 번호가 없어 가리킨 자리가 없고, 서버는 방금 무엇을 견줬는지
+    # 모르기 때문이다. 실제로 "두 공고의 자격요건 내용이 보이지 않아 비교할 수 없습니다"
+    # 라고 답했다. 그 말을 부른 제안 문구를 챗봇이 직접 내놓고도 그랬다.
+    last_answer_job_ids: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="직전 답이 다룬 공고 id를 보여 준 순서대로. '두 공고', '이 공고'가 가리키는 것",
+    )
     # 공고를 놓고 물을 때 "나한테 맞아?"는 이력서를 봐야 답할 수 있다. 없으면 서버는
     # 공고만 읽고 답하므로, 앱은 이력서 화면에서 물을 때 평문을 함께 보낸다.
     resume_text: str | None = Field(default=None, max_length=50_000)
@@ -271,7 +337,7 @@ class JobChatJob(StrictModel):
 
 
 class JobChatResponse(StrictModel):
-    mode: Literal["검색", "질문", "공고", "추천", "안내"] = Field(
+    mode: Literal["검색", "질문", "공고", "비교", "추천", "안내"] = Field(
         default="검색", description="앱이 답을 어떻게 보여 줄지 정하는 데 쓴다"
     )
     resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(

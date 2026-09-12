@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from job_matching_bot.config import AS_OF
+from job_matching_bot.ingestion.detail_quality import is_image_only_detail
 from job_matching_bot.ingestion.saramin_tech_vocab import split_tags
 from job_matching_bot.schemas.job_posting import Job
 
@@ -238,7 +239,10 @@ def normalize_saramin(
     from job_matching_bot.ingestion.qualifications import extract_qualifications
     from job_matching_bot.ingestion.requirement_sections import split_sections
 
-    qualifications = extract_qualifications(split_sections(description).required)
+    sections = split_sections(description)
+    qualifications = extract_qualifications(sections.required)
+    # 우대사항 구간의 전공·자격증. 조건으로 걸지 않고 보여 주기만 한다.
+    preferred_quals = extract_qualifications(sections.preferred, preferred=True)
 
     # 메타는 "경력무관"인데 자격요건이 연차를 요구하는 공고가 60건쯤 있다. 이대로 두면
     # 신입 이력서에 경력 5년 공고가 1위로 올라온다. 메타가 경력무관일 때만 본문으로
@@ -269,11 +273,20 @@ def normalize_saramin(
         preferred_skills=preferred,
         tech_stack=tech_stack,
         keywords=keywords,
-        body_is_image=bool(record.get("needs_human_review")),
+        # 크롤러가 이미지라고 표시했어도 글에 요건이 있으면 이미지 공고가 아니다.
+        # 저장소가 읽을 때 같은 규칙으로 뒤집는데, 쓸 때 다른 값을 넣으면 쓴 지문과
+        # 읽은 지문이 어긋난다. 실제로 4,316건이 그렇게 어긋나 다시 올려야 했다.
+        body_is_image=is_image_only_detail(description, record.get("needs_human_review")),
         required_majors=qualifications.majors,
         required_major_terms=qualifications.major_terms,
         required_certifications=qualifications.certifications,
+        required_certification_groups=qualifications.certification_groups,
+        required_language_tests=qualifications.language_tests,
         military_required=qualifications.military_required,
+        preferred_majors=preferred_quals.majors,
+        preferred_major_terms=preferred_quals.major_terms,
+        preferred_certifications=preferred_quals.certifications,
+        preferred_language_tests=preferred_quals.language_tests,
         career_type=career_type,
         min_career_years=min_years,
         education=education,

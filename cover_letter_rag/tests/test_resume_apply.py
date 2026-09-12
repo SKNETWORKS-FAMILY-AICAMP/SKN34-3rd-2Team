@@ -77,10 +77,13 @@ def gateway(monkeypatch):
 
 def test_apply_retry_and_undo_are_atomic(gateway):
     first = mutate(gateway, 'u', request())
+    assert gateway.store['review']['response']['input_hash'] == first.input_hash
     assert mutate(gateway, 'u', request()) == first
     undo = UndoRequest(cohort_id='c', resume_id='r', request_id='undo1', application_id='apply1', expected_input_hash=first.input_hash)
     restored = mutate(gateway, 'u', undo, True)
     assert gateway.store['resume']['content'] == CONTENT
+    assert gateway.store['review']['response']['input_hash'] == digest(CONTENT)
+    assert gateway.store['review']['response']['input_fields']['projects[0].description'] == 'API 개발. 테스트 작성.'
     assert mutate(gateway, 'u', undo, True) == restored
     assert gateway.store['resume/aiApplications/apply1']['before'] == CONTENT
 

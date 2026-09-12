@@ -11,6 +11,8 @@ abstract final class StudentOnboardingTargets {
   static const navMileage = 'student.nav.mileage';
   static const navAssessments = 'student.nav.assessments';
 
+  static const navMyPage = 'student.nav.myPage';
+
   static const attendanceForm = 'student.appBar.attendanceForm';
   static const dashboardCalendar = 'student.dashboard.calendar';
   static const boardNotices = 'student.board.notices';

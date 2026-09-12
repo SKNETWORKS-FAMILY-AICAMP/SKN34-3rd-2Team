@@ -55,7 +55,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 
 from job_matching_bot.crawling.http_session import (
     LIST_PAGE_URL,
@@ -104,6 +104,88 @@ def _guard_allowed(url: str) -> None:
 
 
 
+# 글자를 이어 읽어야 하는 태그. 화면에서 줄을 나누지 않는 것들이다.
+INLINE_TAGS = (
+    "span", "b", "i", "em", "strong", "u", "font", "small", "big",
+    "sub", "sup", "mark", "code", "abbr", "s", "strike", "ins", "del",
+    "label", "time", "q", "cite", "var", "kbd", "samp", "a", "nobr", "wbr",
+)
+
+
+def _unfold_header_tables(soup: BeautifulSoup, node: Any) -> Any:
+    """머리글 행이 따로 있는 표를 `머리글 → 그 칸 내용` 순서로 편다.
+
+    사람인 공고 상당수가 표로 되어 있다.
+
+        <tr><th>근무부서</th><th>담당업무</th><th>자격요건</th><th>우대사항</th></tr>
+        <tr><td>웹</td><td>ㆍ웹 개발</td><td>ㆍ기본지식</td><td>ㆍWordpress</td></tr>
+
+    글로 죽 읽으면 머리글 넷이 먼저 붙어 나오고 내용이 뒤에 몰린다. 그래서 `자격요건`
+    다음 줄이 곧바로 `우대사항`이 되어 자격요건이 빈 것으로 읽혔고, 본문 전체가
+    우대사항으로 들어갔다.
+
+    보기 나쁜 것으로 끝나지 않는다. 하드 필터가 거는 요구 전공·자격증·최소 연차는
+    **자격요건 구간에서만** 뽑는다(`ingestion/saramin.py`). 그 구간이 비면 그 공고는
+    아무 조건도 안 건 채로 지나간다. 표본 4,000건 중 57건이 이 상태였다.
+
+    머리글 칸의 글자를 해당 내용 칸 맨 앞에 옮겨 넣고 머리글 행을 지운다. 칸 수가
+    맞지 않으면(rowspan 등) 건드리지 않는다 — 잘못 붙이느니 그대로 두는 것이 낫다.
+    """
+    for head in list(node.find_all("tr")):
+        if head.parent is None:
+            continue
+        labels = head.find_all(["th", "td"], recursive=False)
+        if not labels or any(cell.name != "th" for cell in labels):
+            continue
+        # 형제가 아니라 **문서 순서로 다음 행**을 찾는다. 머리글이 `<thead>`, 내용이
+        # `<tbody>`에 나뉘어 있으면 둘은 형제가 아니라서 `find_next_sibling`이 못 찾는다.
+        # 실제 공고 상당수가 그 모양이고, 그래서 표 펴기가 조용히 건너뛰고 있었다.
+        body = head.find_next("tr")
+        if body is None:
+            continue
+        values = body.find_all(["th", "td"], recursive=False)
+        if len(values) != len(labels):
+            continue
+        for label, cell in zip(labels, values):
+            text = label.get_text(" ", strip=True)
+            if not text:
+                continue
+            marker = soup.new_tag("p")
+            marker.string = text
+            cell.insert(0, marker)
+        head.decompose()
+    return node
+
+
+def _drop_comments(node: Any) -> Any:
+    """HTML 주석을 지우고 갈라진 글자를 다시 붙인다.
+
+    사람인은 본문에 들어온 `script` 라는 글자를 XSS 방지로 주석을 끼워 끊어 놓는다.
+
+        ja<!--x-->vasc<!--x-->ript, Typesc<!--x-->ript
+
+    주석이 텍스트 조각을 가르기 때문에 줄바꿈 구분자가 그 자리마다 줄을 나눠
+    `ja` / `vasc` / `ript,` 세 줄이 됐다. 화면에서 깨져 보이는 것보다, 기술 이름이
+    사라지는 것이 더 문제다. `JavaScript`를 뽑지 못하면 기술 겹침 점수에서 빠진다.
+
+    `smooth()`가 주석을 뺀 뒤 남은 이웃한 글자 조각을 하나로 합쳐 준다.
+    """
+    for comment in node.find_all(string=lambda t: isinstance(t, Comment)):
+        comment.extract()
+    # 주석을 지워도 글자 조각이 **서로 다른 태그 안**에 있으면 아직 갈라져 있다.
+    # 실제 공고에 이런 모양이 있다.
+    #
+    #     PHP(Laravel), ja</span><!--x--><span>vasc</span><!--x--><span>ript(Vue.js)
+    #
+    # `smooth()`는 같은 부모 안의 이웃한 글자만 합치므로 태그 경계를 못 넘는다.
+    # 줄을 나누지 않는 인라인 태그를 벗겨 한 부모 밑으로 모은 뒤 합친다.
+    # `<p>`·`<br>`·`<li>` 같은 진짜 줄바꿈은 그대로 둔다.
+    for tag in node.find_all(INLINE_TAGS):
+        tag.unwrap()
+    node.smooth()
+    return node
+
+
 def _section_name(section: Any) -> str:
     heading = section.select_one("h2")
     return heading.get_text(" ", strip=True) if heading else ""
@@ -122,6 +204,36 @@ def _dl_pairs(section: Any) -> dict[str, str]:
     return pairs
 
 
+CLOSED_MARKERS = (
+    "채용정보는 마감",     # 본 채용정보는 마감 되었습니다
+    "마감되었습니다",
+    "마감 되었습니다",
+    "마감되어 작성할 수 없습니다",
+    # 페이지 자체가 사라진 경우. 예전부터 있던 것을 남긴다.
+    "삭제된 공고",
+    "존재하지 않는 공고",
+)
+
+
+def _closed_in_soup(soup: BeautifulSoup) -> bool:
+    """마감 문구는 **원본 HTML이 아니라 뽑아낸 글에서** 찾는다.
+
+    화면의 "본 채용정보는 마감되었습니다."는 실제 HTML에서 `채용정보는 <span>마감</span>
+    되었습니다` 처럼 태그로 끊겨 있다. 원본 문자열에서 찾으면 글자가 이어지지 않아
+    하나도 걸리지 않는다. 실제로 마감된 공고 4건에서 0건이 걸렸다.
+    """
+    text = soup.get_text(" ", strip=True)
+    if any(marker in text for marker in CLOSED_MARKERS):
+        return True
+    # 본문 섹션(.jv_cont)이 하나도 없으면 공고 페이지가 아니다.
+    return not soup.select(".jv_cont")
+
+
+def is_closed_page(html: str) -> bool:
+    """이미 뽑아 둔 soup이 없을 때 쓰는 통로. 링크 확인이 이걸 부른다."""
+    return _closed_in_soup(BeautifulSoup(html, "html.parser"))
+
+
 def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
     sections: dict[str, dict[str, str]] = {}
@@ -136,7 +248,7 @@ def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
         if pairs:
             sections[name] = pairs
         if "상세" in name:
-            body_text = section.get_text("\n", strip=True)
+            body_text = _drop_comments(_unfold_header_tables(soup, section)).get_text("\n", strip=True)
             body_images = [
                 img.get("src", "")
                 for img in section.find_all("img")
@@ -180,6 +292,8 @@ def parse_detail(html: str, rec_idx: str, url: str) -> dict[str, Any]:
         "tags": tags,
         # 본문이 이미지에만 있으면 요구역량을 텍스트로 확보하지 못한 상태다.
         "needs_human_review": bool(image_records) and not has_text_body,
+        # 이미 만든 soup으로 판정한다. 요청도 파싱도 더 하지 않는다.
+        "closed": _closed_in_soup(soup),
         "parser_version": "saramin-detail-poc-0.3.0",
     }
 
@@ -285,7 +399,7 @@ def crawl_details(
     max_minutes: float | None = None,
 ) -> dict[str, int]:
     """대상을 순서대로 받아 `output`(.jsonl)에 한 건씩 붙인다."""
-    counts = {"saved": 0, "failed": 0, "skipped": 0, "image_body": 0}
+    counts = {"saved": 0, "failed": 0, "skipped": 0, "image_body": 0, "closed": 0}
     if not targets:
         return counts
     # 사람처럼 목록 페이지를 먼저 열어 쿠키를 받은 세션으로 시작한다.
@@ -316,6 +430,16 @@ def crawl_details(
             counts["failed"] += 1
             print(f"  [{index}/{total}] 실패 {rec_idx}: {error}")
             polite_delay(min_delay, max_delay)
+            continue
+
+        # 마감된 공고는 저장하지 않는다. 본문이 비어 있어 요건을 못 뽑고,
+        # 추천 후보도 되지 못한 채 저장소만 차지한다. 이미 받아 온 페이지로
+        # 판정하므로 요청이 더 들지 않는다.
+        if detail.get("closed"):
+            counts["closed"] += 1
+            print(f"  [{index}/{total}] 마감 — {rec_idx}")
+            if index < total:
+                polite_delay(min_delay, max_delay)
             continue
 
         # 목록에서 이미 받은 값을 합쳐 하나의 레코드로 만든다.

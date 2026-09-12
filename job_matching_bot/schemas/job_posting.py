@@ -40,7 +40,19 @@ class Job:
     required_majors: list[str] = field(default_factory=list)
     required_major_terms: list[str] = field(default_factory=list)
     required_certifications: list[str] = field(default_factory=list)
+    # 자격증 묶음. 각 묶음에서 **하나만** 맞으면 충족이다. 공고 대부분이
+    # "A 또는 B", "A, B 등"처럼 대안을 나열하기 때문이다.
+    required_certification_groups: list[list[str]] = field(default_factory=list)
+    # 어학 성적. 이력서에 대응하는 칸이 없고 점수 문턱도 비교할 수 없어 조건으로
+    # 걸지 않는다. 보여 주기만 한다.
+    required_language_tests: list[str] = field(default_factory=list)
     military_required: bool = False
+    # 우대사항 구간에서 뽑은 전공·자격증. 없어도 지원에 지장이 없으므로 조건으로 걸지
+    # 않는다. 지금은 화면과 채점에 보여 쓸모가 있는지 재는 용도다.
+    preferred_majors: list[str] = field(default_factory=list)
+    preferred_major_terms: list[str] = field(default_factory=list)
+    preferred_certifications: list[str] = field(default_factory=list)
+    preferred_language_tests: list[str] = field(default_factory=list)
 
     def matching_text(self) -> str:
         return " ".join(

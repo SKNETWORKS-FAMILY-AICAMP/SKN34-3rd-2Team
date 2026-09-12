@@ -28,11 +28,17 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
     counts_jobs = kwargs.pop("counts_jobs", True)
     requirement_query = kwargs.pop("requirement_query", "")
     unavailable = kwargs.pop("unavailable", "")
+    job_refs = kwargs.pop("job_refs", [])
+    topic = kwargs.pop("topic", "채용")
+    refers_to_last_answer = kwargs.pop("refers_to_last_answer", False)
     return schemas.ChatTurnOut(
         intent=intent,
+        topic=topic,
+        refers_to_last_answer=refers_to_last_answer,
         counts_jobs=counts_jobs,
         requirement_query=requirement_query,
         unavailable=unavailable,
+        job_refs=job_refs,
         filters=schemas.ChatFilters(**kwargs),
         understood=understood,
     )
@@ -86,6 +92,7 @@ class ChatTestCase(unittest.TestCase):
         self.seen = {}
         self.advised = {}
         self.asked = {}
+        self.compared = {}
         self.found = {}
         self.calls = 0
         self.by_meaning = getattr(self, "by_meaning", [])
@@ -103,20 +110,26 @@ class ChatTestCase(unittest.TestCase):
             self.asked.update(values)
             return answered or answer()
 
+        def comparer(values):
+            self.compared.update(values)
+            return answered or answer()
+
         def finder(query, top_k, filter=None):
             self.found.update({"query": query, "top_k": top_k, "filter": filter})
             return [FakeHit(job_id) for job_id in self.by_meaning]
 
         return ChatService(
             generator=generator, store_path=self.path, adviser=adviser,
-            job_asker=job_asker, finder=finder,
+            job_asker=job_asker, finder=finder, comparer=comparer,
         )
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
-            job_id=None, answered=None, resume_text=None):
+            job_id=None, answered=None, resume_text=None, last_job_ids=None,
+            last_answer_job_ids=None):
         request = schemas.JobChatRequest(
             message=message, filters=filters, top_k=top_k, job_id=job_id,
-            resume_text=resume_text,
+            resume_text=resume_text, last_job_ids=last_job_ids or [],
+            last_answer_job_ids=last_answer_job_ids or [],
         )
         return self.service(out, answered=answered).chat(request)
 
@@ -186,6 +199,139 @@ class SearchTest(ChatTestCase):
         self.assertTrue(job.job_id and job.company and job.title)
         self.assertEqual("신입", job.career)
         self.assertEqual("정규직", job.employment_type)
+
+
+class BlockedBeforeTheModelTest(ChatTestCase):
+    """목록에 적어 둔 말은 모델을 부르기 전에 막는다.
+
+    무엇에 대한 말인지는 모델이 짚는다. 그 판단은 흔들릴 수 있고 호출 비용도 든다.
+    적어 둔 말만큼은 그 앞에서 끊는다. 무엇을 적었는지는 `test_abuse.py`가 본다.
+    """
+
+    def test_no_call_goes_out_at_all(self):
+        response = self.ask(turn(roles=["백엔드"]), message="바보")
+        self.assertEqual(0, self.calls, "가르기 호출도 나가지 않는다")
+        self.assertEqual("안내", response.mode)
+        self.assertIn("채용과 취업 준비", response.reply)
+
+    def test_it_blocks_even_when_a_job_is_picked(self):
+        """공고를 골라 놓고 욕을 보내도 그 공고 프롬프트로 가지 않는다."""
+        self.ask(turn(), message="멍청이", job_id="J1")
+        self.assertEqual({}, self.asked)
+        self.assertEqual(0, self.calls)
+
+    def test_previous_conditions_survive(self):
+        previous = schemas.ChatFilters(roles=["백엔드"], regions=["서울"])
+        response = self.ask(turn(), message="바보", filters=previous)
+        self.assertEqual(["백엔드"], response.filters.roles)
+        self.assertEqual(["서울"], response.filters.regions)
+
+    def test_a_sentence_flows_as_usual(self):
+        """말 속에 들어 있을 뿐이면 평소 경로다. 여기서 막으면 하소연이 걸린다."""
+        response = self.ask(turn(roles=["백엔드"]), message="미친 듯이 준비했는데 안 되네요")
+        self.assertEqual(1, self.calls, "평소대로 한 번 부른다")
+        self.assertEqual("검색", response.mode)
+
+
+class OffTopicTest(ChatTestCase):
+    """채용 밖의 일을 시킨 말. **답을 쓰는 단계로 보내지 않는다.**
+
+    "호구"라고만 보냈더니 그 말의 뜻을 풀이하고 "이 말을 부드럽게 바꿔 말해줘"라는
+    제안까지 붙여 내보냈다. 답을 쓰는 단계로 넘어가면 모델은 무엇이든 답한다.
+    말투로 타이르는 것과 그 단계로 못 가게 막는 것은 다르다. 여기서는 막는다.
+    """
+
+    def test_the_answer_is_ours_not_the_models(self):
+        """모델이 뜻풀이를 적어 보내도 그 문장은 나가지 않는다."""
+        response = self.ask(
+            turn(intent="질문", topic="그 밖", understood="'호구'는 이용당하기 쉬운 사람이라는 뜻입니다."),
+            message="호구",
+        )
+        self.assertEqual("안내", response.mode)
+        self.assertNotIn("이용당하기", response.reply)
+        self.assertIn("채용과 취업 준비", response.reply)
+
+    def test_no_one_is_asked_to_write_an_answer(self):
+        self.ask(turn(intent="질문", topic="그 밖"), message="파이썬 코드 짜줘")
+        self.assertEqual({}, self.advised, "답을 쓰는 단계를 부르지 않는다")
+        self.assertEqual({}, self.asked)
+        self.assertEqual({}, self.compared)
+
+    def test_it_does_not_search_either(self):
+        """조건이 뽑혀 있어도 목록을 내지 않는다. 물어본 것이 공고가 아니다."""
+        response = self.ask(
+            turn(intent="검색", topic="그 밖", roles=["백엔드"]), message="바보"
+        )
+        self.assertEqual([], response.jobs)
+        self.assertEqual(0, response.total)
+        self.assertEqual({}, self.found)
+
+    def test_the_suggestions_point_back_to_what_we_do(self):
+        response = self.ask(turn(topic="그 밖"), message="호구")
+        self.assertTrue(response.suggestions)
+        self.assertIn("서울 백엔드 신입", response.suggestions)
+
+    def test_previous_conditions_survive(self):
+        """상관없는 말 한마디에 앞 대화를 잃으면 다시 처음부터 말해야 한다."""
+        previous = schemas.ChatFilters(roles=["백엔드"], regions=["서울"])
+        response = self.ask(turn(topic="그 밖"), message="호구", filters=previous)
+        self.assertEqual(["백엔드"], response.filters.roles)
+        self.assertEqual(["서울"], response.filters.regions)
+
+    def test_a_pointed_number_does_not_open_the_door(self):
+        """"2번"을 붙여도 채용 밖이면 막힌다. 문이 번호보다 앞에 있다."""
+        result = self.ask(
+            turn(intent="질문", topic="그 밖", job_refs=[2]),
+            message="2번 내용 영어로 번역해줘",
+            last_job_ids=["J1", "J2"],
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("채용과 취업 준비", result.reply)
+        self.assertEqual({}, self.asked, "공고 묻기로 새지 않는다")
+
+    def test_only_a_recruiting_turn_reaches_the_search(self):
+        """문을 통과하는 것은 채용이라고 짚은 말뿐이다."""
+        response = self.ask(turn(topic="채용", roles=["백엔드"]))
+        self.assertEqual("검색", response.mode)
+        self.assertEqual(8, response.total)
+
+    def test_a_greeting_still_gets_through(self):
+        """인사까지 막으면 처음 화면으로 돌아간다. 막을 것은 시키는 말이다."""
+        response = self.ask(
+            turn(intent="잡담", topic="인사", understood="안녕하세요!"), message="안녕"
+        )
+        self.assertEqual("안녕하세요!", response.reply)
+
+
+class SmallTalkTest(ChatTestCase):
+    """채용과 상관없는 말. **그래도 사람이 말을 건 것이다.**
+
+    "안녕"에 사용법 안내가 돌아오면 대화가 아니라 자판기다. 잡담에는 답을 쓰는 다음
+    단계가 없으므로, 갈래를 가르며 이미 받아 둔 `understood`를 그대로 내보낸다.
+    답을 부르려고 모델을 한 번 더 쓰지 않는다.
+    """
+
+    def test_a_greeting_gets_a_greeting(self):
+        response = self.ask(turn(intent="잡담", understood="안녕하세요!"), message="안녕")
+        self.assertEqual("안내", response.mode)
+        self.assertEqual("안녕하세요!", response.reply)
+
+    def test_the_reply_costs_no_extra_call(self):
+        """인사 한 번에 모델을 두 번 부를 이유가 없다."""
+        self.ask(turn(intent="잡담", understood="안녕하세요!"), message="안녕")
+        self.assertEqual(1, self.calls, "갈래를 가른 한 번이 전부다")
+        self.assertEqual({}, self.advised)
+
+    def test_an_empty_line_falls_back_to_the_guide(self):
+        """모델이 빈손으로 오면 빈 말풍선이 뜬다. 그럴 바에는 사용법이라도 보여 준다."""
+        response = self.ask(turn(intent="잡담", understood="   "), message="안녕")
+        self.assertIn("공고를 찾으시려면", response.reply)
+
+    def test_it_still_does_not_look_for_jobs(self):
+        response = self.ask(turn(intent="잡담", understood="안녕하세요!"), message="안녕")
+        self.assertEqual([], response.jobs)
+        self.assertEqual(0, response.total)
+        self.assertEqual({}, self.found)
 
 
 class ConfusableTermTest(unittest.TestCase):
@@ -564,5 +710,340 @@ class JobQuestionTest(ChatTestCase):
         self.assertEqual({}, self.asked, "없는 공고로 LLM을 부르지 않는다")
 
 
+class JobReferenceTest(ChatTestCase):
+    """"2번 자세히 봐줘" — 직전 목록에서 자리를 가리킨 말.
+
+    서버는 대화를 저장하지 않는다. 직전에 무엇을 보여 줬는지는 앱이 `last_job_ids`로
+    되돌려 줘야 안다. 이게 없던 때는 사용자가 공고 카드를 눌러 `job_id`를 보내야만
+    그 공고를 놓고 물을 수 있었다.
+    """
+
+    def test_the_second_one_becomes_that_job(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[2]),
+            message="2번 자세히 봐줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("2회사", self.asked["job"])
+
+    def test_the_first_one_too(self):
+        self.ask(
+            turn(intent="질문", job_refs=[1]),
+            message="첫 번째 거 자격요건 알려줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertIn("1회사", self.asked["job"])
+
+    def test_a_number_past_the_end_is_not_guessed(self):
+        """세 건을 보여 줬는데 "5번"이라고 하면 엉뚱한 공고를 집지 않는다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[5]),
+            message="5번 알려줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertNotEqual("공고", result.mode)
+        self.assertEqual({}, self.asked)
+
+    def test_without_a_previous_list_it_says_so(self):
+        """앞에 보여 준 것이 없으면 조건 검색으로 내려보내지 않고 그렇다고 말한다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[2]), message="2번 알려줘", last_job_ids=[]
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("앞에 보여 드린 공고가 없어요", result.reply)
+
+    def test_no_reference_still_searches(self):
+        """번호를 안 가리킨 말은 예전 그대로 흐른다."""
+        result = self.ask(turn(roles=["백엔드"]), last_job_ids=["J1", "J2"])
+        self.assertEqual("검색", result.mode)
+        self.assertEqual({}, self.asked)
+
+    def test_the_tapped_card_still_wins(self):
+        """카드를 눌러 물으면 그 공고다. 말 속의 번호를 따지지 않는다."""
+        self.ask(
+            turn(intent="질문", job_refs=[2]),
+            message="여기 2번 항목이 뭐야?",
+            job_id="J7",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertIn("7회사", self.asked["job"])
+
+
+class LastAnswerTest(ChatTestCase):
+    """"두 공고의 자격요건만 간단히 비교해줘" — 번호 없이 방금 그거를 가리킨 말.
+
+    비교 답을 받은 직후 챗봇이 스스로 내놓은 제안이 이 꼴이다. 그런데 번호가 없어
+    가리킨 자리가 없고, 서버는 대화를 저장하지 않아 방금 무엇을 견줬는지 모른다.
+    그래서 자기가 권한 말을 눌렀는데 **"두 공고의 자격요건 내용이 보이지 않아 비교할
+    수 없습니다"**라고 답했다.
+
+    `last_job_ids`로는 안 된다. 그건 번호가 가리킬 *목록*이고, 여기서 필요한 것은
+    직전 답이 다룬 *대상*이다. 둘은 다르다 — 비교하고 나서도 목록은 찾아 준 다섯 건
+    그대로여야 "아까 1번 3번"이 걸린다.
+    """
+
+    def test_two_discussed_jobs_are_compared_again(self):
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="두 공고의 자격요건만 간단히 비교해줘",
+            last_job_ids=["J1", "J2", "J3", "J4", "J5"],
+            last_answer_job_ids=["J2", "J5"],
+        )
+        self.assertEqual("비교", result.mode)
+        self.assertIn("2회사", self.compared["job_a"])
+        self.assertIn("5회사", self.compared["job_b"])
+
+    def test_one_discussed_job_is_asked_about(self):
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="이 공고 마감일이 언제야?",
+            last_job_ids=["J1", "J2", "J3"],
+            last_answer_job_ids=["J3"],
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("3회사", self.asked["job"])
+
+    def test_the_numbering_list_is_not_used_for_this(self):
+        """목록의 앞 두 건을 집으면 안 된다. 사용자가 말한 것은 방금 견준 두 건이다."""
+        self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="둘 다 신입 지원 가능해?",
+            last_job_ids=["J1", "J2", "J3", "J4", "J5"],
+            last_answer_job_ids=["J4", "J5"],
+        )
+        self.assertIn("4회사", self.compared["job_a"])
+        self.assertIn("5회사", self.compared["job_b"])
+
+    def test_too_many_to_pick_asks_back(self):
+        """직전 답이 다섯 건을 보여 줬는데 "두 공고"라고 하면 어느 둘인지 모른다.
+
+        앞의 둘을 집으면 사용자가 생각한 공고가 아닐 수 있고, 답은 그럴듯해서 틀린
+        줄도 모른다. 되묻는 편이 낫다.
+        """
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True),
+            message="두 공고 비교해줘",
+            last_job_ids=["J1", "J2", "J3", "J4", "J5"],
+            last_answer_job_ids=["J1", "J2", "J3", "J4", "J5"],
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("번호로 알려 주세요", result.reply)
+        self.assertEqual({}, self.compared)
+        self.assertEqual({}, self.asked)
+
+    def test_nothing_discussed_yet_says_so(self):
+        result = self.ask(
+            turn(intent="질문", refers_to_last_answer=True), message="두 공고 비교해줘"
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("앞에 보여 드린 공고가 없어요", result.reply)
+
+    def test_a_number_still_wins(self):
+        """번호를 댔으면 그 번호다. 목록에서 고른다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 3], refers_to_last_answer=False),
+            message="1번하고 3번 비교해줘",
+            last_job_ids=["J1", "J2", "J3"],
+            last_answer_job_ids=["J4", "J5"],
+        )
+        self.assertEqual("비교", result.mode)
+        self.assertIn("1회사", self.compared["job_a"])
+        self.assertIn("3회사", self.compared["job_b"])
+
+    def test_a_new_search_is_not_a_reference(self):
+        response = self.ask(
+            turn(roles=["백엔드"], refers_to_last_answer=False),
+            message="다른 공고도 보여줘",
+            last_answer_job_ids=["J1", "J2"],
+        )
+        self.assertEqual("검색", response.mode)
+
+
+class JobCompareTest(ChatTestCase):
+    """"1번하고 3번 비교해줘" — 자리를 둘 가리키면 비교다.
+
+    따로 의도를 두지 않는다. 개수가 곧 신호이고, LLM이 한 번 더 가를 일을 만들지
+    않는 편이 틀릴 여지가 적다.
+    """
+
+    def test_two_references_compare_both(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 3]),
+            message="1번하고 3번 비교해줘",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertEqual("비교", result.mode)
+        self.assertIn("1회사", self.compared["job_a"])
+        self.assertIn("3회사", self.compared["job_b"])
+        self.assertEqual({}, self.asked, "하나 묻기로 새면 안 된다")
+
+    def test_the_spoken_order_is_kept(self):
+        self.ask(
+            turn(intent="질문", job_refs=[3, 1]),
+            message="3번이랑 1번 중 뭐가 나아?",
+            last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertIn("3회사", self.compared["job_a"])
+        self.assertIn("1회사", self.compared["job_b"])
+
+    def test_both_jobs_come_back_for_the_screen(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 2]), last_job_ids=["J1", "J2", "J3"]
+        )
+        self.assertEqual(["J1", "J2"], [job.job_id for job in result.jobs])
+        self.assertEqual(2, result.total)
+
+    def test_the_same_number_twice_is_not_a_comparison(self):
+        """"1번하고 1번"은 비교가 아니다. 하나 묻기로 내려간다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[1, 1]), last_job_ids=["J1", "J2"]
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertEqual({}, self.compared)
+
+    def test_a_number_past_the_end_is_dropped(self):
+        """세 건을 보여 줬는데 "2번하고 9번"이면 남는 것이 하나뿐이라 비교가 아니다."""
+        result = self.ask(
+            turn(intent="질문", job_refs=[2, 9]), last_job_ids=["J1", "J2", "J3"]
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("2회사", self.asked["job"])
+
+    def test_the_resume_is_passed_through(self):
+        self.ask(
+            turn(intent="질문", job_refs=[1, 2]),
+            message="둘 중 나한테 맞는 건?",
+            last_job_ids=["J1", "J2"],
+            resume_text="FastAPI로 추천 API를 개발했습니다.",
+        )
+        self.assertIn("FastAPI", self.compared["resume"])
+
+    def test_without_a_resume_it_says_none(self):
+        self.ask(turn(intent="질문", job_refs=[1, 2]), last_job_ids=["J1", "J2"])
+        self.assertEqual("(없음)", self.compared["resume"])
+
+    def test_a_closed_job_is_not_compared(self):
+        """비교하는 사이에 한쪽이 마감됐을 수 있다. 없는 공고를 상대로 견주지 않는다."""
+        service = self.service(turn(intent="질문", job_refs=[1, 2]))
+        service.drop_dead = lambda ids: {i for i in ids if i != "J2"}
+        result = service.chat(
+            schemas.JobChatRequest(
+                message="1번하고 2번 비교해줘", last_job_ids=["J1", "J2"]
+            )
+        )
+        self.assertEqual("공고", result.mode)
+        self.assertIn("1회사", self.asked["job"])
+        self.assertEqual({}, self.compared)
+
+    def test_both_closed_says_so(self):
+        service = self.service(turn(intent="질문", job_refs=[1, 2]))
+        service.drop_dead = lambda ids: set()
+        result = service.chat(
+            schemas.JobChatRequest(
+                message="1번하고 2번 비교해줘", last_job_ids=["J1", "J2"]
+            )
+        )
+        self.assertEqual("안내", result.mode)
+        self.assertIn("비교할 공고를 찾지 못했어요", result.reply)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class AskJobLivenessTest(ChatTestCase):
+    """공고 하나를 놓고 물을 때도 마감을 확인한다.
+
+    마감일이 남아 있어도 회사가 채용을 마치면 먼저 닫는다. 검색·질문·비교는 이미
+    확인하는데 여기만 안 했다. 어제 띄워 둔 화면을 오늘 다시 눌러 "이 공고 자격요건
+    뭐야?"라고 물으면 마감된 공고를 열려 있는 것처럼 답했다.
+
+    같은 대화 안에서 방금 본 공고면 24시간 캐시가 있어 요청이 안 나간다.
+    """
+
+    def test_a_closed_job_is_not_answered(self):
+        service = self.service(turn(intent="질문"))
+        service.drop_dead = lambda ids: set()
+        result = service.chat(schemas.JobChatRequest(message="자격요건 알려줘", job_id="J1"))
+        self.assertEqual("안내", result.mode)
+        self.assertIn("접수가 마감됐어요", result.reply)
+        self.assertEqual({}, self.asked, "마감된 공고를 LLM에 넘기지 않는다")
+
+    def test_a_live_job_is_answered_as_before(self):
+        service = self.service(turn(intent="질문"))
+        service.drop_dead = lambda ids: set(ids)
+        result = service.chat(schemas.JobChatRequest(message="자격요건 알려줘", job_id="J1"))
+        self.assertEqual("공고", result.mode)
+        self.assertIn("1회사", self.asked["job"])
+
+    def test_the_check_runs_for_a_numbered_reference_too(self):
+        """"2번 자세히 봐줘"도 같은 길로 내려간다."""
+        service = self.service(turn(intent="질문", job_refs=[2]))
+        service.drop_dead = lambda ids: set()
+        result = service.chat(schemas.JobChatRequest(
+            message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"]))
+        self.assertEqual("안내", result.mode)
+        self.assertIn("접수가 마감됐어요", result.reply)
+
+
+class OrdinalStrippedTest(unittest.TestCase):
+    """"2번"은 서버가 이미 풀었다. 그 말을 LLM에 그대로 넘기면 안 된다.
+
+    공고 원문 하나만 보고 있는 모델은 "2번"을 본문 속 항목 번호로 읽는다. 실제로
+    이렇게 답했다.
+
+        이 공고에는 번호가 매겨진 항목이 없어 '2번'이 무엇을 뜻하는지 확인하기
+        어렵습니다. 자세히 보고 싶은 항목을 말씀해 주세요.
+
+    사용자는 목록에서 2번을 가리킨 것이고 서버는 그 공고를 이미 찾아 놨다.
+    """
+
+    def strip(self, message):
+        from job_matching_bot.api.service import _without_ordinal
+        return _without_ordinal(message)
+
+    def test_the_number_goes_and_the_question_stays(self):
+        self.assertEqual("자세히 봐줘", self.strip("2번 자세히 봐줘"))
+        self.assertEqual("자격요건 알려줘", self.strip("첫 번째 거 자격요건 알려줘"))
+
+    def test_the_particle_goes_with_it(self):
+        """`3번 공고는` 에서 `는`만 남으면 물음이 깨진다."""
+        self.assertEqual("어디야?", self.strip("3번 공고는 어디야?"))
+        self.assertEqual("비슷한 거 더 있어?", self.strip("2번이랑 비슷한 거 더 있어?"))
+
+    def test_a_bare_number_becomes_a_real_question(self):
+        """그냥 "2번"이면 무엇을 묻는지 모른다. 빈 물음을 넘기지 않는다."""
+        asked = self.strip("2번")
+        self.assertNotEqual("", asked)
+        self.assertNotIn("2번", asked)
+
+    def test_a_question_without_an_ordinal_is_untouched(self):
+        for message in ("이 공고 자격요건 뭐야?", "나한테 맞아?", "연봉 나와 있어?"):
+            self.assertEqual(message, self.strip(message), message)
+
+
+class AskJobEchoesTheJobTest(ChatTestCase):
+    """어느 공고를 두고 답했는지 함께 보낸다.
+
+    없으면 화면이 답만 띄우고, 사용자는 그게 자기가 가리킨 공고인지 확인할 길이 없다.
+    """
+
+    def test_the_answered_job_comes_back(self):
+        result = self.ask(turn(intent="질문"), message="자격요건 알려줘", job_id="J3")
+        self.assertEqual("공고", result.mode)
+        self.assertEqual(["J3"], [j.job_id for j in result.jobs])
+        self.assertEqual(1, result.total)
+
+    def test_a_numbered_reference_echoes_the_right_one(self):
+        result = self.ask(
+            turn(intent="질문", job_refs=[2]),
+            message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"],
+        )
+        self.assertEqual(["J2"], [j.job_id for j in result.jobs])
+
+    def test_the_ordinal_is_not_sent_to_the_model(self):
+        self.ask(turn(intent="질문", job_refs=[2]),
+                 message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"])
+        self.assertNotIn("2번", self.asked["question"])
+        self.assertIn("자세히", self.asked["question"])

@@ -10,6 +10,12 @@
 2. 같은 등급 안에서는 대분류 내 지원순 순위(`list_rank`)가 앞선 것
 3. 그다음 마감이 늦은 것 — 받아 두면 오래 쓸 수 있다
 
+**다섯 자리 중 한 자리는 가장 오래 기다린 공고에 준다.** 큐는 밤마다 처음부터 다시
+만들어지므로, 인기 순위만으로 세우면 뒤쪽 공고는 어제도 뒤였고 오늘도 뒤다. 밤에
+받는 양은 한정돼 있어 순위가 밀린 공고는 영영 차례가 오지 않는다. 실제로 목록에서
+본 4만 건 중 1만 5천 건이 제목만 있는 채로 남았다. 한 자리를 떼어 두면 인기 공고를
+거의 그대로 지키면서도 밀린 것이 매일 조금씩 줄어든다.
+
 한 공고가 여러 대분류에 걸리면(통합 채용) 가장 앞선 순위 하나만 남긴다.
 상세를 이미 태그까지 받은 공고(`tags` 필드 있음)는 큐에서 뺀다. 상세 크롤러의
 `--refetch-without tags` 와 같은 기준이라, 예전 파서로 받은 것은 다시 받는다.
@@ -26,7 +32,7 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from job_matching_bot.ingestion.excluded_roles import is_excluded
 
@@ -49,23 +55,89 @@ def deadline_key(support_text: str, now: datetime) -> str:
 
 def priority(record: dict[str, Any], now: datetime) -> tuple[int, int, str]:
     top = 0 if "TOP100" in (record.get("badge") or "") else 1
-    rank = int(record.get("list_rank") or 10**9)
+    # `or`로 기본값을 주면 순위 0이 거짓으로 걸려 맨 뒤로 밀린다. 없을 때만 밀어낸다.
+    raw_rank = record.get("list_rank")
+    rank = 10**9 if raw_rank is None else int(raw_rank)
     # 마감이 늦을수록 앞에: 문자열 역순을 위해 음수 대신 뒤집힌 키를 쓴다.
     deadline = deadline_key(record.get("support_text", ""), now)
     return (top, rank, "".join(chr(0x10FFFF - ord(c)) for c in deadline))
+
+
+OLDEST_EVERY = 5
+"""몇 자리마다 한 번씩 '가장 오래 기다린 공고'를 끼워 넣나."""
+
+
+def _interleave(
+    ranked: list[dict[str, Any]],
+    waiting_since: dict[str, str],
+    every: int,
+) -> list[dict[str, Any]]:
+    """인기순 줄에 오래 기다린 공고를 [every]자리마다 하나씩 끼워 넣는다.
+
+    처음 본 시각을 모르는 공고(그 값이 생기기 전에 쌓인 것)는 가장 오래 기다린
+    것으로 본다. 실제로 그렇다 — 오래됐으니 기록이 없다.
+    """
+    if every <= 1 or not ranked:
+        return ranked
+    oldest = sorted(
+        ranked,
+        key=lambda r: waiting_since.get(str(r.get("source_job_id") or ""), ""),
+    )
+    picked: set[int] = set()
+    out: list[dict[str, Any]] = []
+    rank_i = old_i = 0
+    while len(out) < len(ranked):
+        take_old = len(out) % every == every - 1
+        source = oldest if take_old else ranked
+        i = old_i if take_old else rank_i
+        while i < len(source) and id(source[i]) in picked:
+            i += 1
+        if i >= len(source):
+            # 한쪽이 바닥나면 남은 쪽으로 채운다.
+            source, i = (ranked, rank_i) if take_old else (oldest, old_i)
+            while i < len(source) and id(source[i]) in picked:
+                i += 1
+            if i >= len(source):
+                break
+        out.append(source[i])
+        picked.add(id(source[i]))
+        if source is oldest:
+            old_i = i + 1
+        else:
+            rank_i = i + 1
+    return out
 
 
 def build_queue(
     list_records: list[dict[str, Any]],
     detailed_ids: set[str],
     now: datetime,
+    waiting_since: dict[str, str] | None = None,
+    detail_categories: Sequence[str] | None = None,
 ) -> tuple[list[dict[str, Any]], Counter]:
+    """목록에서 본 공고 중 상세를 받을 것을 골라 순서대로 세운다.
+
+    `detail_categories`를 주면 **그 대분류만** 큐에 담는다. 목록은 전부 훑되 상세는
+    일부만 받기 위한 것이다.
+
+    일요일 전체 훑기가 14개 대분류를 훑는데, IT 밖 대분류의 상세를 다 받으려면
+    13만 건에 38일이 걸린다. 하룻밤에 4,500건씩 받으니 다음 일요일 전에 못 끝내고,
+    그러면 큐 숫자가 "밀린 양"이라는 뜻을 잃는다.
+
+    목록만 훑어도 **사라짐 판정은 그대로 된다.** 그게 일요일 훑기의 다른 역할이고,
+    거기에는 상세가 필요 없다. 상세를 넓히고 싶으면 대분류를 매일 훑는 목록에
+    하나씩 추가한다. 그러면 며칠 걸리는지 미리 알고 시작할 수 있다.
+    """
+    allowed = set(detail_categories) if detail_categories is not None else None
     best: dict[str, dict[str, Any]] = {}
     stats: Counter = Counter()
     for record in list_records:
         job_id = str(record.get("source_job_id") or "")
         if not job_id:
             stats["id 없음"] += 1
+            continue
+        if allowed is not None and str(record.get("cat_mcls") or "") not in allowed:
+            stats["상세 대상 아닌 대분류"] += 1
             continue
         if job_id in detailed_ids:
             stats["이미 상세 있음"] += 1
@@ -81,6 +153,8 @@ def build_queue(
         else:
             stats["대분류 중복"] += 1
     queue = sorted(best.values(), key=lambda r: priority(r, now))
+    if waiting_since is not None:
+        queue = _interleave(queue, waiting_since, OLDEST_EVERY)
     stats["큐에 담김"] = len(queue)
     stats["TOP100"] = sum(1 for r in queue if "TOP100" in (r.get("badge") or ""))
     return queue, stats

@@ -151,6 +151,18 @@ def mutate(gateway, uid, request, undo=False):
             if digest(before) != request.expected_input_hash or digest(before) != source.get('after_hash'):
                 raise ReviewConflict('resume_changed_after_application')
             after, changed = source['before'], source['response']['changed_fields']
+            review_id = source.get('source_id')
+            if not review_id:
+                raise ReviewConflict('application_source_review_missing')
+            review_ref = gateway._review_ref(
+                request.cohort_id,
+                request.resume_id,
+                review_id,
+                request.tailored_resume_id,
+            )
+            review_source = review_ref.get(transaction=transaction).to_dict() or {}
+            if review_source.get('userId') != uid:
+                raise ResumeNotFoundError()
         else:
             after, changed = build_application(before, source.get('response') or {}, request)
         result = ApplyResponse(operation_id=request.request_id, input_hash=digest(after), changed_fields=changed)
@@ -166,6 +178,13 @@ def mutate(gateway, uid, request, undo=False):
             transaction.update(source_ref, {'response': rebase_review_response(source['response'], after)})
         if undo:
             transaction.update(source_ref, {'undoneBy': request.request_id})
+            # Undo restores the resume snapshot, so restore the chat review's
+            # snapshot as well. Otherwise the next answer compares the restored
+            # resume with the post-apply hash and rejects the conversation as stale.
+            transaction.update(
+                review_ref,
+                {'response': rebase_review_response(review_source['response'], after)},
+            )
         return result
 
     return execute(gateway._db.transaction())

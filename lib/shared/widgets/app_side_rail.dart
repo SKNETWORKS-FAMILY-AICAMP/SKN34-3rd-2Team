@@ -64,8 +64,7 @@ class SideRailStyle extends InheritedWidget {
   final Color avatarFg;
 
   static SideRailStyle of(BuildContext context) {
-    final style =
-        context.dependOnInheritedWidgetOfExactType<SideRailStyle>();
+    final style = context.dependOnInheritedWidgetOfExactType<SideRailStyle>();
     assert(style != null, 'SideRailStyle not found above this widget');
     return style!;
   }
@@ -189,9 +188,8 @@ class AppSideRail extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                     child: _RailThemeToggle(
                       isDark: isDark,
-                      onToggle: () => ref
-                          .read(sideRailDarkModeProvider.notifier)
-                          .toggle(),
+                      onToggle: () =>
+                          ref.read(sideRailDarkModeProvider.notifier).toggle(),
                     ),
                   ),
                   if (isDark)
@@ -258,6 +256,12 @@ class _SideRailSectionList extends StatefulWidget {
 class _SideRailSectionListState extends State<_SideRailSectionList> {
   late Set<String> _expanded;
 
+  /// 내가 펼친 섹션. 온보딩이 "다 펼쳐라"라고 해서 펼친 것들이다.
+  ///
+  /// 따로 세어 두어야 지시가 풀렸을 때 이것만 되접는다. 그러지 않으면 사용자가
+  /// 직접 펼쳐 둔 섹션까지 같이 접혀, 투어 한 번에 사이드바가 흐트러진다.
+  final _autoExpanded = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -270,6 +274,28 @@ class _SideRailSectionListState extends State<_SideRailSectionList> {
   @override
   void didUpdateWidget(covariant _SideRailSectionList oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // 펼치라는 지시는 나중에도 올 수 있다. 온보딩은 첫 프레임 다음에 시작하므로
+    // 이 목록이 만들어질 때는 아직 투어 중이 아니다. initState에서 한 번 읽고
+    // 마는 동안에는, 접힌 섹션 안의 메뉴를 온보딩이 찾지 못해 그냥 건너뛰었다.
+    final before = {
+      for (final s in oldWidget.sections) s.id: s.initiallyExpanded,
+    };
+    for (final s in widget.sections) {
+      if (!s.isGroup || before[s.id] == null) continue;
+      if (!before[s.id]! && s.initiallyExpanded) {
+        if (!_expanded.contains(s.id)) {
+          _expanded = {..._expanded, s.id};
+          _autoExpanded.add(s.id);
+        }
+      } else if (before[s.id]! &&
+          !s.initiallyExpanded &&
+          _autoExpanded.remove(s.id) &&
+          !_sectionHasSelected(s)) {
+        // 투어가 끝났다. 보고 있는 메뉴가 든 섹션은 접지 않는다.
+        _expanded = {..._expanded}..remove(s.id);
+      }
+    }
+
     if (oldWidget.location != widget.location) {
       for (final s in widget.sections) {
         if (s.isGroup && _sectionHasSelected(s) && !_expanded.contains(s.id)) {
@@ -289,34 +315,43 @@ class _SideRailSectionListState extends State<_SideRailSectionList> {
       } else {
         _expanded = {..._expanded, id};
       }
+      // 손을 댄 순간부터 이 섹션은 사용자 것이다. 투어가 끝나도 건드리지 않는다.
+      _autoExpanded.remove(id);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    // 메뉴를 한 줄도 빠짐없이 만든다. ListView는 화면에 걸치는 것만 만들어
+    // 두는데, 그러면 아래로 밀려난 메뉴는 아예 없는 것이 된다. 온보딩이 그
+    // 메뉴를 가리키려고 자리를 물어도 답이 없어 그냥 건너뛴다. 메뉴는 많아야
+    // 스무 줄이라 다 만들어도 값이 싸다.
+    return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-      children: [
-        for (final section in widget.sections) ...[
-          if (section.isGroup)
-            _RailSectionHeader(
-              title: section.title!,
-              expanded: _expanded.contains(section.id),
-              hasSelected: _sectionHasSelected(section),
-              onTap: () => _toggle(section.id),
-            ),
-          if (!section.isGroup || _expanded.contains(section.id))
-            for (final item in section.items)
-              _RailNavTile(
-                key: item.itemKey,
-                icon: item.icon,
-                label: item.label,
-                selected: widget.isPathSelected(item.path),
-                onTap: () => widget.onNavigate(item.path),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final section in widget.sections) ...[
+            if (section.isGroup)
+              _RailSectionHeader(
+                title: section.title!,
+                expanded: _expanded.contains(section.id),
+                hasSelected: _sectionHasSelected(section),
+                onTap: () => _toggle(section.id),
               ),
-          if (section.isGroup) const SizedBox(height: 4),
+            if (!section.isGroup || _expanded.contains(section.id))
+              for (final item in section.items)
+                _RailNavTile(
+                  key: item.itemKey,
+                  icon: item.icon,
+                  label: item.label,
+                  selected: widget.isPathSelected(item.path),
+                  onTap: () => widget.onNavigate(item.path),
+                ),
+            if (section.isGroup) const SizedBox(height: 4),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

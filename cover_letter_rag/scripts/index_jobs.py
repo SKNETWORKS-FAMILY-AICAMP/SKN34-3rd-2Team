@@ -163,7 +163,7 @@ def _index_chroma(
 
 def _prepare_pinecone_index(settings: Settings) -> Any:
     if not settings.pinecone_api_key:
-        raise ValueError("PINECONE_API_KEY is required for Pinecone indexing")
+        raise ValueError("PINECONE_API_KEY1 is required for Pinecone indexing")
     client = Pinecone(api_key=settings.pinecone_api_key)
     names = set(client.list_indexes().names())
     if settings.pinecone_index_name not in names:

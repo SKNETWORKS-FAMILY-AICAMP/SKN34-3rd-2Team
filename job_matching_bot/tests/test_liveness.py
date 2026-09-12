@@ -152,3 +152,55 @@ class LivenessTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ListingOnlyLivenessTest(unittest.TestCase):
+    """목록에서만 본 공고에도 마감 확인이 돈다.
+
+    목록에 `~09.30` 이라고 적혀 있어도 회사가 채용을 마치면 그 전에 닫는다. 날짜
+    거르기로는 조기마감을 못 잡는다. 열어 봐야 안다.
+
+    `alive()`는 `job_id`에서 번호만 떼어 페이지를 연다. 저장소를 뒤지지 않으므로
+    `jobs`에 없는 목록 공고도 똑같이 확인된다. 이게 깨지면 마감된 공고가 검색에
+    계속 나온다.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "store.sqlite"
+        self.now = T0
+        store = SqliteJobStore(self.path)
+        store.record_list_jobs([
+            {"source_job_id": "777", "company": "가", "title": "영업관리",
+             "job_sectors": ["영업관리"], "source_url": "https://x/777",
+             "condition_text": "서울 마포구 신입 · 정규직 고졸↑",
+             "support_text": "입사지원 ~12.31"},
+        ], self.now)
+        store.close()
+        self.opened: list[str] = []
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def live(self, closed: set[str]) -> Liveness:
+        def checker(session, rec_idx):
+            self.opened.append(rec_idx)
+            return rec_idx not in closed
+
+        return Liveness(
+            self.path, source="SARAMIN", checker=checker,
+            session_factory=lambda: object(), index_factory=lambda: FakeIndex(),
+            namespace_factory=lambda: "jobs", clock=lambda: self.now,
+        )
+
+    def test_a_listing_only_posting_is_opened(self):
+        self.live(set()).alive(["SARAMIN-777"])
+        self.assertEqual(["777"], self.opened)
+
+    def test_an_early_closed_listing_is_dropped(self):
+        """마감일이 남았는데 회사가 먼저 닫은 경우. 날짜로는 못 잡는다."""
+        alive = self.live({"777"}).alive(["SARAMIN-777"])
+        self.assertEqual([], alive)
+
+    def test_a_live_listing_stays(self):
+        self.assertEqual(["SARAMIN-777"], self.live(set()).alive(["SARAMIN-777"]))

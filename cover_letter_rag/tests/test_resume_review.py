@@ -121,7 +121,7 @@ def test_review_reads_owned_resume_and_saves_separate_review() -> None:
     assert response.input_fields['projects[0].description'] == SAMPLE_CONTENT['projects'][0]['description']
     assert 'basicInfo' in response.excluded_fields
     assert firebase.saved is not None
-    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v7-focused-followup'
+    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v9-gap-audit'
     assert "content" not in firebase.saved
 
 
@@ -147,6 +147,152 @@ def test_confirmed_answer_allows_grounded_revision():
     ])
     assert ground_sentences({answer.field_path: 'QA 개선'}, [answer], generated) == []
     assert generated.sentence_reviews[0].suggested_revision == answer.answer
+
+
+def test_confirmed_answer_allows_grounded_paraphrase_without_verbatim_evidence():
+    from app.models import ConfirmationAnswer, SentenceReview
+    from app.resume_review import ground_sentences, require_answer_reflection
+
+    path = 'selfIntroduction.challenge.body'
+    original = '추천 목록을 불러올 때 응답이 느려지는 문제가 있었습니다.'
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='직접 수행한 행동과 결과를 알려 주세요.',
+        answer=(
+            '구간별 서버 응답 시간을 측정해 병목을 찾고 캐시를 적용했으며, '
+            '응답 시간을 약 220ms까지 줄였습니다.'
+        ),
+    )
+    revision = (
+        '구간별 응답 시간을 측정해 병목 지점을 확인하고 캐시를 적용하여 '
+        '응답 시간을 약 220ms까지 단축했습니다.'
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[
+        SentenceReview(
+            field_path=path,
+            original_quote=original,
+            reason='행동과 결과 구체화',
+            suggested_revision=revision,
+            evidence_quotes=[original],
+        ),
+    ])
+
+    assert ground_sentences({path: original}, [answer], generated) == []
+    assert require_answer_reflection(generated, [answer]) == []
+    assert generated.sentence_reviews[0].suggested_revision == revision
+    assert 'answer:0' in generated.sentence_reviews[0].evidence_sources
+
+
+def test_follow_up_revision_that_ignores_confirmed_answer_is_removed():
+    from app.models import ConfirmationAnswer, SentenceReview
+    from app.resume_review import ground_sentences, require_answer_reflection
+
+    path = 'selfIntroduction.challenge.body'
+    original = '추천 목록을 불러올 때 응답이 느려지는 문제가 있었습니다.'
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='직접 수행한 행동과 결과를 알려 주세요.',
+        answer='캐시를 적용해 응답 시간을 약 220ms까지 줄였습니다.',
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[
+        SentenceReview(
+            field_path=path,
+            original_quote=original,
+            reason='표현 정리',
+            suggested_revision='추천 목록 조회 시 응답이 지연되는 문제가 있었습니다.',
+            evidence_quotes=[original],
+        ),
+    ])
+
+    assert ground_sentences({path: original}, [answer], generated) == []
+    warnings = require_answer_reflection(generated, [answer])
+    assert generated.sentence_reviews[0].suggested_revision is None
+    assert 'answer_not_reflected' in generated.sentence_reviews[0].validation_issues
+    assert warnings
+
+
+def test_substantive_support_motivation_answer_gets_safe_fallback():
+    from app.models import ConfirmationAnswer
+    from app.resume_review import add_substantive_answer_fallback
+
+    path = 'selfIntroduction.motivation.body'
+    original = '데이터를 활용해 사용자 문제를 해결하는 백엔드 개발자가 되고 싶습니다.'
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='본인이 직접 한 행동이나 경험을 구체적으로 알려 주세요.',
+        answer=(
+            '프로젝트에서 사용자 요구사항과 데이터를 바탕으로 기능을 설계하고, '
+            'Django REST API를 직접 구현했습니다. 익숙한 기술에 머무르지 않고 '
+            '새로운 기술을 작은 기능에 적용하며 문제 해결 방법을 넓혔습니다.'
+        ),
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+
+    add_substantive_answer_fallback(generated, {path: original}, [answer])
+
+    assert len(generated.sentence_reviews) == 1
+    suggestion = generated.sentence_reviews[0]
+    assert suggestion.original_quote == original
+    assert suggestion.suggested_revision == answer.answer
+    assert suggestion.evidence_sources == [path, 'answer:0']
+
+
+def test_fallback_merges_answer_without_repeating_original_story():
+    from app.models import ConfirmationAnswer
+    from app.resume_review import add_substantive_answer_fallback
+
+    path = 'selfIntroduction.challenge.body'
+    original = (
+        '팀 프로젝트에서 추천 목록이 느리다는 피드백을 받았습니다. '
+        '처음엔 벡터 검색이 문제라고 짐작했는데, 구간별로 시간을 재 보니 '
+        '실제 병목은 후보마다 공고를 한 건씩 조회하는 부분이었습니다. '
+        '한 번에 가져오도록 바꾸고 자주 쓰는 결과를 캐시해 220ms까지 줄였습니다. '
+        '짐작으로 고치지 않고 먼저 재는 습관이 여기서 생겼습니다.'
+    )
+    confirmed = (
+        '추천 목록이 느리다는 피드백을 받고 제가 직접 어디서 시간이 오래 걸리는지 '
+        '확인했습니다. 처음에는 코드를 바로 수정하기보다 처리 단계별로 시간을 측정했고, '
+        '구간별로 서버 요청을 여러 번 보내는 부분이 가장 오래 걸린다는 걸 찾았습니다. '
+        '그래서 데이터를 한 번에 가져오도록 수정하고 자주 사용하는 결과는 캐시하도록 '
+        '바꿨습니다. 수정 후에는 응답 시간이 220ms 정도까지 줄었습니다. 이 경험을 통해 '
+        '문제가 생겼을 때 바로 이것저것 고치기보다는 원인을 먼저 확인하고 하나씩 해결하는 '
+        '습관이 생겼습니다.'
+    )
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='직접 수행한 행동과 결과를 알려 주세요.',
+        answer=confirmed,
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+
+    add_substantive_answer_fallback(generated, {path: original}, [answer])
+
+    revision = generated.sentence_reviews[0].suggested_revision
+    assert revision == confirmed
+    assert revision.count('220ms') == 1
+    assert '팀 프로젝트에서 추천 목록이 느리다는 피드백을 받았습니다.' not in revision
+
+
+def test_fallback_does_not_offer_answer_already_present_in_resume():
+    from app.models import ConfirmationAnswer
+    from app.resume_review import add_substantive_answer_fallback
+
+    path = 'selfIntroduction.challenge.body'
+    content = (
+        '처리 단계별로 시간을 측정해 반복되는 서버 요청을 병목으로 확인했습니다. '
+        '데이터를 한 번에 가져오고 결과를 캐시하도록 수정해 응답 시간을 '
+        '220ms 정도까지 줄였습니다.'
+    )
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='직접 수행한 행동과 결과를 알려 주세요.',
+        answer=content,
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+
+    add_substantive_answer_fallback(generated, {path: content}, [answer])
+
+    assert generated.sentence_reviews == []
 
 
 def test_appended_paragraph_that_repeats_existing_content_is_removed():
@@ -202,7 +348,7 @@ def test_korean_section_label_is_normalized_and_questions_are_limited() -> None:
                 confirmation_questions=[f"질문 {index}" for index in range(5)],
             )
         ],
-        confirmation_questions=[f"전체 질문 {index}" for index in range(12)],
+        confirmation_questions=[f"전체 질문 {index}" for index in range(35)],
     )
 
     grounded, warnings = enforce_resume_review_grounding(resume_text, generated)
@@ -210,7 +356,7 @@ def test_korean_section_label_is_normalized_and_questions_are_limited() -> None:
     assert warnings == []
     assert grounded.section_reviews[0].section_key == "projects"
     assert len(grounded.section_reviews[0].confirmation_questions) == 3
-    assert len(grounded.confirmation_questions) == 10
+    assert len(grounded.confirmation_questions) == 30
 
 
 class EndpointService:

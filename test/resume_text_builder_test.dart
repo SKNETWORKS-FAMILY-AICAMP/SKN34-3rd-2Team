@@ -47,4 +47,33 @@ void main() {
       expect(text, '[기술스택]\nDart');
     });
   });
+
+  /// 이력서를 언제 실어 보낼지.
+  ///
+  /// "나한테 맞아?"는 이력서를 봐야 답이 된다. 그런데 이번 말이 공고를 놓고 묻는
+  /// 말인지는 서버가 가른다. 앱은 **가리킬 것이 있는지**만 보고 정한다.
+  group('이력서를 함께 보낼 때', () {
+    test('카드를 눌러 물으면 보낸다', () {
+      expect(
+        shouldSendResume(askingAboutJob: true, hasShownJobs: false),
+        isTrue,
+      );
+    });
+
+    test('직전에 목록을 보여 줬으면 보낸다', () {
+      // "1번하고 3번 중 나한테 맞는 건?"이 여기서 걸린다. 카드를 누르지 않았다.
+      expect(
+        shouldSendResume(askingAboutJob: false, hasShownJobs: true),
+        isTrue,
+      );
+    });
+
+    test('가리킬 것이 없으면 보내지 않는다', () {
+      // 첫 질문과 잡담. 서버가 쓰지 않으므로 보낼 이유가 없다.
+      expect(
+        shouldSendResume(askingAboutJob: false, hasShownJobs: false),
+        isFalse,
+      );
+    });
+  });
 }

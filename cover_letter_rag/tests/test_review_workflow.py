@@ -7,7 +7,10 @@ from app.resume_review import ResumeReviewService, ground_sentences
 from app.review_workflow import (ReviewConflict, ReviewInputError, redact, prepare_answers,
                                  normalize_diagnostics, normalize_questions, item_references, digest,
                                  focused_followup_context, focused_time_context,
-                                 add_short_self_introduction_questions)
+                                 add_thin_self_introduction_questions,
+                                 prefer_project_evidence_over_surface_edit,
+                                 add_missing_job_technology_question,
+                                 carry_forward_unanswered_questions)
 from test_resume_review import FakeFirebase, SAMPLE_CONTENT
 
 
@@ -46,6 +49,73 @@ def test_followup_is_bound_to_question_and_version():
         service.review('valid-token', request.model_copy(update={'expected_input_hash': 'old'}))
     with pytest.raises(ReviewInputError):
         prepare_answers(request.model_copy(update={'answers': [answer.model_copy(update={'question_id': 'fake'})]}), first.model_dump(), first.input_hash, first.item_refs)
+
+
+def test_gap_audit_allows_questions_but_never_rewrites_resume():
+    calls = []
+
+    def generate(data):
+        calls.append(data)
+        if len(calls) == 1:
+            return ResumeReviewGeneration(summary='첫 검토', section_reviews=[])
+        return ResumeReviewGeneration(
+            summary='누락 점검',
+            section_reviews=[],
+            sentence_reviews=[SentenceReview(
+                field_path='projects[0].description',
+                original_quote='API 응답 시간을 20% 개선했습니다.',
+                reason='다른 표현 제안',
+                suggested_revision='API 응답 성능을 20% 개선했습니다.',
+                evidence_quotes=['API 응답 시간을 20% 개선했습니다.'],
+            )],
+            questions=[ReviewQuestion(
+                field_path='projects[0].description',
+                topic='scope',
+                question='본인이 직접 담당한 API 범위는 어디까지인가요?',
+                reason='담당 범위가 아직 확인되지 않았습니다.',
+                priority=1,
+            )],
+        )
+
+    service = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generate,
+    )
+    first = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1', resume_id='resume-1', request_id='initial-audit-test',
+        ),
+    )
+    audited = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1',
+            resume_id='resume-1',
+            request_id='gap-audit-test',
+            previous_review_id=first.review_id,
+            expected_input_hash=first.input_hash,
+            review_phase='gap_audit',
+        ),
+    )
+
+    assert '누락 점검 단계' in calls[1]['review_scope']
+    assert audited.sentence_reviews == []
+    assert [question.topic for question in audited.questions] == ['scope']
+
+
+def test_gap_audit_requires_previous_review_and_no_answers():
+    service = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generation,
+    )
+    with pytest.raises(ReviewInputError):
+        service.review(
+            'valid-token',
+            FirestoreResumeReviewRequest(
+                cohort_id='cohort-1',
+                resume_id='resume-1',
+                review_phase='gap_audit',
+            ),
+        )
 
 
 def test_followup_prompt_is_limited_to_the_answered_resume_item():
@@ -112,20 +182,100 @@ def test_fixed_diagnostics_and_priority_questions():
     assert len(result.questions) == 1
 
 
-def test_short_self_introduction_sections_receive_followup_questions():
+def test_thin_self_introduction_sections_receive_followup_questions():
     result = ResumeReviewGeneration(summary='검토', section_reviews=[])
     fields = {
         'selfIntroduction.intro.body': '데이터를 다루는 일이 좋습니다.',
         'selfIntroduction.motivation.body': 'AI 엔지니어로 성장하고 싶습니다.',
-        'selfIntroduction.growth.body': '프로젝트를 통해 배웠습니다.' * 30,
+        'selfIntroduction.growth.body': '프로젝트를 통해 배웠습니다.' * 14,
     }
 
-    add_short_self_introduction_questions(result, fields)
+    add_thin_self_introduction_questions(result, fields)
 
     assert [question.field_path for question in result.questions] == [
         'selfIntroduction.intro.body',
         'selfIntroduction.motivation.body',
+        'selfIntroduction.growth.body',
     ]
+
+
+def test_short_project_description_prefers_evidence_question_to_surface_edit():
+    result = ResumeReviewGeneration(
+        summary='검토',
+        section_reviews=[],
+        sentence_reviews=[
+            SentenceReview(
+                field_path='projects[0].description',
+                original_quote='공고 크롤 결과를 정규화·중복 제거해 일 단위로 적재.',
+                suggested_revision='공고 크롤 결과를 정규화하고 중복 제거한 뒤 일 단위로 적재했습니다.',
+                reason='문장 종결을 정리했습니다.',
+                edit_type='clarity',
+            ),
+        ],
+    )
+
+    prefer_project_evidence_over_surface_edit(
+        result,
+        {'projects[0].description': '공고 크롤 결과를 정규화·중복 제거해 일 단위로 적재.'},
+        [],
+    )
+
+    review = result.sentence_reviews[0]
+    assert review.suggested_revision is None
+    assert review.confirmation_question is not None
+
+
+def test_missing_job_technology_becomes_a_confirmation_question():
+    result = ResumeReviewGeneration(summary='검토', section_reviews=[])
+    fields = {
+        'projects[0].description': 'Python으로 데이터 처리 API를 구현했습니다.',
+    }
+
+    add_missing_job_technology_question(
+        result,
+        fields,
+        '필수 요건: Python과 FastAPI 기반의 API 개발 경험',
+    )
+
+    assert result.questions[0].field_path == 'projects[0].description'
+    assert 'FastAPI' in result.questions[0].question
+
+
+def test_followup_reissues_unanswered_questions_on_its_latest_snapshot():
+    result = ResumeReviewGeneration(summary='후속', section_reviews=[])
+    previous = {
+        'questions': [
+            {
+                'question_id': 'answered',
+                'field_path': 'projects[0].description',
+                'topic': 'action',
+                'question': '어떤 구현을 했나요?',
+                'reason': '행동 확인',
+                'priority': 1,
+            },
+            {
+                'question_id': 'queued',
+                'field_path': 'selfIntroduction.motivation.body',
+                'topic': 'scope',
+                'question': '직무와 연결되는 경험이 있나요?',
+                'reason': '직무 연결 확인',
+                'priority': 1,
+            },
+        ],
+    }
+    answered = [
+        ConfirmationAnswer(
+            question_id='answered',
+            field_path='projects[0].description',
+            question='어떤 구현을 했나요?',
+            answer='API를 구현했습니다.',
+        ),
+    ]
+
+    carry_forward_unanswered_questions(result, previous, answered)
+
+    assert [question.question_id for question in result.questions] == ['']
+    assert result.questions[0].field_path == 'selfIntroduction.motivation.body'
 
 
 def test_general_review_sends_no_job_and_keeps_content_questions():
