@@ -121,7 +121,7 @@ def test_review_reads_owned_resume_and_saves_separate_review() -> None:
     assert response.input_fields['projects[0].description'] == SAMPLE_CONTENT['projects'][0]['description']
     assert 'basicInfo' in response.excluded_fields
     assert firebase.saved is not None
-    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v9-gap-audit'
+    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v11-role-linked-motivation'
     assert "content" not in firebase.saved
 
 
@@ -271,6 +271,101 @@ def test_fallback_merges_answer_without_repeating_original_story():
     assert revision == confirmed
     assert revision.count('220ms') == 1
     assert '팀 프로젝트에서 추천 목록이 느리다는 피드백을 받았습니다.' not in revision
+
+
+def test_fallback_edits_only_relevant_paragraph_and_preserves_other_paragraphs():
+    from app.models import ConfirmationAnswer
+    from app.resume_apply import ApplyRequest, build_application
+    from app.resume_review import add_substantive_answer_fallback
+    from app.review_workflow import digest
+
+    path = 'projects[0].description'
+    first = 'Pinecone 벡터 검색으로 채용공고 후보를 찾고 원문 DB와 대조했습니다.'
+    second = '사용자 답변을 근거로 자기소개서 수정안을 생성하고 검증했습니다.'
+    original = f'{first}\n\n{second}'
+    confirmed = (
+        '개발 환경을 통일하기 위해 Docker로 애플리케이션을 컨테이너화했고 '
+        'Dockerfile을 작성해 이미지를 빌드하고 실행했습니다. 팀원도 같은 '
+        '환경에서 애플리케이션을 실행할 수 있도록 사용 방법을 정리했습니다.'
+    )
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='Docker를 실제로 어떻게 사용했나요?',
+        answer=confirmed,
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+
+    add_substantive_answer_fallback(generated, {path: original}, [answer])
+
+    suggestion = generated.sentence_reviews[0]
+    assert suggestion.original_quote == second
+    assert suggestion.suggested_revision == f'{second}\n\n{confirmed}'
+
+    content = {'projects': [{'description': original}]}
+    review = {
+        'input_hash': digest(content),
+        'sentence_reviews': [suggestion.model_dump()],
+    }
+    request = ApplyRequest(
+        cohort_id='c', resume_id='r', request_id='apply-paragraph',
+        review_id='review-paragraph', expected_input_hash=digest(content),
+        selected_indices=[0],
+    )
+    updated, _ = build_application(content, review, request)
+    assert updated['projects'][0]['description'] == f'{first}\n\n{second}\n\n{confirmed}'
+    assert updated['projects'][0]['description'].count('\n\n') == 2
+
+
+def test_fallback_skips_ambiguous_duplicate_paragraph_scope():
+    from app.models import ConfirmationAnswer
+    from app.resume_review import add_substantive_answer_fallback
+
+    path = 'projects[0].description'
+    repeated = 'API를 구현하고 테스트했습니다.'
+    original = f'{repeated}\n\n{repeated}'
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='직접 수행한 행동을 알려 주세요.',
+        answer=(
+            'Dockerfile을 작성해 애플리케이션 이미지를 빌드하고 실행하여 '
+            '팀의 개발 환경을 동일하게 구성했습니다. 팀원이 같은 환경에서 '
+            '실행할 수 있도록 필요한 명령과 사용 방법도 함께 정리했습니다.'
+        ),
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+
+    warnings = add_substantive_answer_fallback(generated, {path: original}, [answer])
+
+    assert generated.sentence_reviews == []
+    assert warnings == [f'ambiguous_fallback_scope:{path}']
+
+
+def test_company_fit_fallback_keeps_company_duty_and_one_evidence_sentence():
+    from app.models import ConfirmationAnswer
+    from app.resume_review import add_substantive_answer_fallback
+
+    path = 'selfIntroduction.motivation.body'
+    original = (
+        '데이터에서 의미를 찾는 일에 흥미를 느꼈습니다.\n\n'
+        'AI 기술로 사용자의 문제를 해결하는 엔지니어로 성장하고 싶습니다.'
+    )
+    answer = ConfirmationAnswer(
+        field_path=path,
+        question='(주)토마토에이아이의 주요업무 중 실제 경험과 연결되는 업무는 무엇인가요?',
+        answer=(
+            '주요 업무 중 AI 서비스 개발과 데이터 처리 업무가 제 경험과 가장 연결됩니다. '
+            '프로젝트에서 Python과 FastAPI로 채용공고 데이터를 처리하는 API를 구현했습니다. '
+            '또한 여러 화면을 설계하고 테스트했으며 이 과정에서 많은 것을 배웠습니다.'
+        ),
+    )
+    generated = ResumeReviewGeneration(summary='', section_reviews=[])
+
+    add_substantive_answer_fallback(generated, {path: original}, [answer])
+
+    revision = generated.sentence_reviews[0].suggested_revision
+    assert '(주)토마토에이아이의 주요 업무 중 AI 서비스 개발' in revision
+    assert 'Python과 FastAPI로 채용공고 데이터를 처리하는 API를 구현했습니다.' in revision
+    assert '여러 화면을 설계하고 테스트' not in revision
 
 
 def test_fallback_does_not_offer_answer_already_present_in_resume():

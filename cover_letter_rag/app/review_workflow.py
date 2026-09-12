@@ -7,8 +7,9 @@ import time
 from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion, SentenceReview
 from app.technology import technology_mentions
 
-PROMPT_VERSION = 'resume-v9-gap-audit'
+PROMPT_VERSION = 'resume-v11-role-linked-motivation'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
+MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 
 
 class ReviewConflict(Exception):
@@ -359,9 +360,11 @@ def followup_job_prompt_text(job_text, job_source):
         f'회사명: {company}\n'
         f'직무명: {role_title}\n'
         f'공고 제목: {title}\n\n'
+        '[후속 첨삭용 공고 근거]\n'
+        f'{job_text[:2500]}\n\n'
         '[후속 첨삭 범위]\n'
-        '공고 원문은 첫 검토에서 비교했습니다. 이번 턴에서는 위 공고 식별 정보와 '
-        '사용자가 답한 이력서 항목만 사용해 수정안을 만드세요.'
+        '위 공고 내용은 회사·직무 맥락에만 사용하고 지원자의 경험으로 쓰지 마세요. '
+        '지원자의 경험 근거는 이력서 원문과 이번 사용자 답변에서만 가져오세요.'
     )
 
 
@@ -382,7 +385,43 @@ def item_references(content, fields):
     return refs
 
 
-def prepare_answers(request, previous, snapshot_hash, refs):
+def _project_description_targets(fields):
+    targets = []
+    indices = sorted({
+        int(match.group(1))
+        for path in fields
+        if (match := re.fullmatch(r'projects\[(\d+)\]\.description', path))
+    })
+    for index in indices:
+        path = f'projects[{index}].description'
+        name = str(fields.get(f'projects[{index}].name') or '').strip()
+        targets.append((path, name or f'프로젝트 {index + 1}'))
+    return targets
+
+
+def resolve_missing_technology_project(answer_text, fields):
+    """Resolve an explicitly selected project without guessing its ownership."""
+    targets = _project_description_targets(fields)
+    if not targets:
+        return None
+    numbered = {
+        int(number) - 1
+        for number in re.findall(r'(?<!\d)(\d+)\s*번(?:\s*프로젝트)?', answer_text)
+    }
+    numbered_matches = [target for index, target in enumerate(targets) if index in numbered]
+    if len(numbered_matches) == 1:
+        return numbered_matches[0][0]
+
+    compact_answer = re.sub(r'\s+', '', answer_text).casefold()
+    named_matches = [
+        path for path, name in targets
+        if len(re.sub(r'\s+', '', name)) >= 2
+        and re.sub(r'\s+', '', name).casefold() in compact_answer
+    ]
+    return named_matches[0] if len(named_matches) == 1 else None
+
+
+def prepare_answers(request, previous, snapshot_hash, refs, fields=None):
     if not request.answers:
         from app.models import ConfirmationAnswer
         if previous and previous.get('input_hash') == snapshot_hash:
@@ -404,7 +443,24 @@ def prepare_answers(request, previous, snapshot_hash, refs):
         if not answer.answer.strip():
             raise ReviewInputError('answer is blank')
         seen.add(answer.question_id)
+        field_path = answer.field_path
+        if question.get('reason') == MISSING_JOB_TECH_REASON:
+            has_no_experience = bool(re.search(
+                r'(사용\s*경험(?:은|이)?\s*없|경험(?:은|이)?\s*없|해본\s*적\s*없|사용하지\s*않)',
+                answer.answer,
+            ))
+            if not has_no_experience:
+                field_path = resolve_missing_technology_project(answer.answer, fields or {})
+                if field_path is None:
+                    raise ReviewInputError(
+                        '사용한 프로젝트를 확인할 수 없습니다. 질문에 표시된 번호 또는 프로젝트명을 포함해 주세요.'
+                    )
+                if refs.get(field_path, 'legacy:').startswith('legacy:'):
+                    raise ReviewConflict('stable_item_id_required')
+                if previous.get('item_refs', {}).get(field_path) != refs[field_path]:
+                    raise ReviewConflict('resume_item_changed')
         answers.append(answer.model_copy(update={
+            'field_path': field_path,
             'question': question['question'],
             'answer': normalize_confirmed_answer(answer.answer),
         }))
@@ -539,30 +595,23 @@ def add_missing_job_technology_question(generation, fields, job_text):
         return
     if any(question.reason.startswith('공고에 언급된 기술') for question in generation.questions):
         return
-    target_path = next(
-        (
-            path for path in fields
-            if re.fullmatch(r'projects\[\d+\]\.description', path)
-        ),
-        next(
-            (
-                path for path in fields
-                if path == 'selfIntroduction.motivation.body'
-            ),
-            next(iter(fields), None),
-        ),
-    )
-    if target_path is None:
+    targets = _project_description_targets(fields)
+    if not targets:
         return
+    target_path = targets[0][0]  # Transport path only; the answer reroutes it.
     named_terms = ', '.join(missing_terms[:3])
+    project_options = ', '.join(
+        f'{index + 1}번 {name}' for index, (_, name) in enumerate(targets)
+    )
     generation.questions.insert(0, ReviewQuestion(
         field_path=target_path,
         topic='scope',
         question=(
-            f'선택 공고에 언급된 {named_terms} 관련하여, 이력서에 적지 않은 '
-            '실제 사용 경험이나 본인 담당 작업이 있나요?'
+            f'선택 공고에 언급된 {named_terms}을(를) 실제로 사용했다면 어느 '
+            f'프로젝트에서 사용했나요? 프로젝트 번호 또는 이름({project_options})과 '
+            '본인이 직접 수행한 작업을 함께 알려 주세요. 사용 경험이 없다면 없다고 답해 주세요.'
         ),
-        reason='공고에 언급된 기술과 연결되는 이력서 직접 근거를 확인합니다.',
+        reason=MISSING_JOB_TECH_REASON,
         priority=1,
     ))
 
@@ -676,7 +725,7 @@ def run_review(service, id_token, request):
             raise ReviewConflict('tailored_resume_job_changed')
     elif request.tailored_resume_id:
         raise ReviewInputError('tailored_resume_requires_selected_job')
-    answers = prepare_answers(request, previous, snapshot_hash, refs)
+    answers = prepare_answers(request, previous, snapshot_hash, refs, fields)
     if len(answers) > 30:
         raise ReviewInputError('too many accumulated answers')
     current_answer_ids = {answer.question_id for answer in request.answers}
@@ -762,9 +811,15 @@ def run_review(service, id_token, request):
         warnings.extend(ground_sentences(fields, answers, grounded))
         warnings.extend(require_answer_reflection(grounded, current_answers))
         if not is_gap_audit:
+            review_count_before_fallback = len(grounded.sentence_reviews)
             warnings.extend(
                 add_substantive_answer_fallback(grounded, fields, current_answers)
             )
+            if len(grounded.sentence_reviews) > review_count_before_fallback:
+                # The deterministic fallback must pass the same provenance,
+                # uniqueness and overlap checks as a model-generated edit.
+                warnings.extend(ground_sentences(fields, answers, grounded))
+                warnings.extend(require_answer_reflection(grounded, current_answers))
         if request.review_mode == 'job':
             prefer_project_evidence_over_surface_edit(grounded, fields, answers)
         if not is_gap_audit:
