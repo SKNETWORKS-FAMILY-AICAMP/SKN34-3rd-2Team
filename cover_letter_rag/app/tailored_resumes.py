@@ -12,6 +12,7 @@ def _summary(data: dict) -> TailoredResumeSummary:
         job_id=data['jobId'],
         company_name=data.get('companyName', ''),
         job_title=data.get('jobTitle', ''),
+        title=data.get('title', ''),
         source_resume_hash=data['sourceResumeHash'],
         job_snapshot_hash=data['jobSnapshotHash'],
         status=data.get('status', 'draft'),

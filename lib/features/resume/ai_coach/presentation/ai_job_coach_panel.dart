@@ -1126,7 +1126,6 @@ class _RecommendationCardState extends State<_RecommendationCard> {
       child: FilledButton.icon(
         onPressed: unavailable ? null : () => widget.onReview!(item),
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.success,
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 32),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),

@@ -17,23 +17,23 @@ import '../../shell/widgets/app_shell_header.dart';
 import '../../../core/theme/shell_chrome.dart';
 
 String? _adminTargetIdForPath(String path) => switch (path) {
-      RoutePaths.admin => AdminOnboardingTargets.navDashboard,
-      RoutePaths.adminCohorts => AdminOnboardingTargets.navCohorts,
-      RoutePaths.adminStudents => AdminOnboardingTargets.navStudents,
-      RoutePaths.adminInstructors => AdminOnboardingTargets.navInstructors,
-      RoutePaths.adminAttendance => AdminOnboardingTargets.navAttendance,
-      RoutePaths.adminSeatPresence => AdminOnboardingTargets.navSeatPresence,
-      RoutePaths.adminSeating => AdminOnboardingTargets.navSeating,
-      RoutePaths.adminAssessments => AdminOnboardingTargets.navAssessments,
-      RoutePaths.adminRecords => AdminOnboardingTargets.navRecords,
-      RoutePaths.adminResumes => AdminOnboardingTargets.navResumes,
-      RoutePaths.adminFormTasks => AdminOnboardingTargets.navFormTasks,
-      RoutePaths.adminStudyRoom => AdminOnboardingTargets.navStudyRoom,
-      RoutePaths.adminBoard => AdminOnboardingTargets.navBoard,
-      RoutePaths.adminMileage => AdminOnboardingTargets.navMileage,
-      RoutePaths.adminAiQuality => AdminOnboardingTargets.navAiQuality,
-      _ => null,
-    };
+  RoutePaths.admin => AdminOnboardingTargets.navDashboard,
+  RoutePaths.adminCohorts => AdminOnboardingTargets.navCohorts,
+  RoutePaths.adminStudents => AdminOnboardingTargets.navStudents,
+  RoutePaths.adminInstructors => AdminOnboardingTargets.navInstructors,
+  RoutePaths.adminAttendance => AdminOnboardingTargets.navAttendance,
+  RoutePaths.adminSeatPresence => AdminOnboardingTargets.navSeatPresence,
+  RoutePaths.adminSeating => AdminOnboardingTargets.navSeating,
+  RoutePaths.adminAssessments => AdminOnboardingTargets.navAssessments,
+  RoutePaths.adminRecords => AdminOnboardingTargets.navRecords,
+  RoutePaths.adminResumes => AdminOnboardingTargets.navResumes,
+  RoutePaths.adminFormTasks => AdminOnboardingTargets.navFormTasks,
+  RoutePaths.adminStudyRoom => AdminOnboardingTargets.navStudyRoom,
+  RoutePaths.adminBoard => AdminOnboardingTargets.navBoard,
+  RoutePaths.adminMileage => AdminOnboardingTargets.navMileage,
+  RoutePaths.adminAiQuality => AdminOnboardingTargets.navAiQuality,
+  _ => null,
+};
 
 List<AppSideRailSection> _adminSections({required bool expandAll}) {
   Key? keyFor(String path) {
@@ -195,9 +195,11 @@ class AdminShellScreen extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider);
     final user = currentUser.value;
     final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
-    final tourActive = ref.watch(onboardingTourProvider)?.active == true &&
+    final tourActive =
+        ref.watch(onboardingTourProvider)?.active == true &&
         ref.watch(onboardingTourProvider)?.tourId == 'admin';
     final railDark = ref.watch(sideRailDarkModeProvider);
+    final railPalette = ref.watch(sideRailDarkPaletteProvider);
 
     final sections = _adminSections(expandAll: tourActive || !wide);
 
@@ -210,7 +212,7 @@ class AdminShellScreen extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
-          backgroundColor: ShellChrome.appBarBackground(railDark),
+          backgroundColor: ShellChrome.appBarBackground(railDark, railPalette),
           foregroundColor: ShellChrome.appBarForeground(railDark),
           surfaceTintColor: Colors.transparent,
           elevation: 0,
@@ -400,7 +402,8 @@ class _AdminDrawerState extends ConsumerState<_AdminDrawer> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: section.items.any(
+                          color:
+                              section.items.any(
                                 (i) => _isAdminNavSelected(
                                   widget.currentLocation,
                                   i.path,

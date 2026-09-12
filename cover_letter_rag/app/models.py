@@ -312,6 +312,7 @@ class TailoredResumeSummary(StrictModel):
     job_id: str
     company_name: str
     job_title: str
+    title: str = ''
     source_resume_hash: str
     job_snapshot_hash: str
     status: Literal['draft', 'ready', 'archived']

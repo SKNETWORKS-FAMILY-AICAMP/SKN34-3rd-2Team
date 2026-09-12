@@ -6,17 +6,22 @@ import '../widgets/app_dropdown.dart';
 abstract final class AppTheme {
   /// 삭제·위험 액션용 FilledButton 스타일
   static ButtonStyle get destructiveFilled => FilledButton.styleFrom(
-        backgroundColor: AppColors.error,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: AppColors.error.withValues(alpha: 0.45),
-        disabledForegroundColor: Colors.white,
-      );
+    backgroundColor: AppColors.error,
+    foregroundColor: Colors.white,
+    disabledBackgroundColor: AppColors.error.withValues(alpha: 0.45),
+    disabledForegroundColor: Colors.white,
+  );
 
-  static ThemeData get light {
-    const colorScheme = ColorScheme(
+  static ThemeData light({
+    Color primary = AppColors.primary,
+    Color primaryLight = AppColors.primaryLight,
+  }) {
+    final colorScheme = ColorScheme(
       brightness: Brightness.light,
-      primary: AppColors.primary,
+      primary: primary,
       onPrimary: Colors.white,
+      primaryContainer: primaryLight,
+      onPrimaryContainer: primary,
       secondary: AppColors.secondary,
       onSecondary: Colors.white,
       surface: AppColors.surface,
@@ -52,8 +57,10 @@ abstract final class AppTheme {
         filled: true,
         fillColor: AppColors.surface,
         hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
-        labelStyle:
-            const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 13,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.border),
@@ -64,7 +71,7 @@ abstract final class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: BorderSide(color: primary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -73,9 +80,9 @@ abstract final class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.45),
+          disabledBackgroundColor: primary.withValues(alpha: 0.45),
           disabledForegroundColor: Colors.white,
           minimumSize: const Size(64, 40),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -91,9 +98,9 @@ abstract final class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.45),
+          disabledBackgroundColor: primary.withValues(alpha: 0.45),
           disabledForegroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 50),
           shape: RoundedRectangleBorder(
@@ -117,18 +124,18 @@ abstract final class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: primary,
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        indicatorColor: AppColors.primaryLight,
+        indicatorColor: primaryLight,
         elevation: 0,
         height: 64,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(
-              color: AppColors.primary,
+            return TextStyle(
+              color: primary,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             );
@@ -136,27 +143,27 @@ abstract final class AppTheme {
           return const TextStyle(color: AppColors.textSecondary, fontSize: 12);
         }),
       ),
-      navigationRailTheme: const NavigationRailThemeData(
+      navigationRailTheme: NavigationRailThemeData(
         backgroundColor: AppColors.surface,
-        selectedIconTheme: IconThemeData(color: AppColors.primary, size: 24),
-        unselectedIconTheme: IconThemeData(
+        selectedIconTheme: IconThemeData(color: primary, size: 24),
+        unselectedIconTheme: const IconThemeData(
           color: AppColors.textSecondary,
           size: 24,
         ),
-        indicatorColor: AppColors.primaryLight,
+        indicatorColor: primaryLight,
       ),
       drawerTheme: const DrawerThemeData(
         backgroundColor: AppColors.surface,
       ),
-      tabBarTheme: const TabBarThemeData(
-        labelColor: AppColors.primary,
+      tabBarTheme: TabBarThemeData(
+        labelColor: primary,
         unselectedLabelColor: AppColors.textSecondary,
-        indicatorColor: AppColors.primary,
+        indicatorColor: primary,
         dividerColor: AppColors.border,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.primaryLight,
-        labelStyle: const TextStyle(color: AppColors.primary, fontSize: 12),
+        backgroundColor: primaryLight,
+        labelStyle: TextStyle(color: primary, fontSize: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: AppColors.border),
@@ -168,13 +175,13 @@ abstract final class AppTheme {
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primary;
+            return primary;
           }
           return null;
         }),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AppColors.primary,
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: primary,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,

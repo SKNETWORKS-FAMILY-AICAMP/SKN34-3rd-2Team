@@ -19,6 +19,7 @@ import '../ai_coach/presentation/ai_job_coach_panel.dart';
 import '../ai_coach/presentation/resume_mock_menu.dart';
 import '../services/resume_pdf_exporter.dart';
 import 'widgets/feedback_bell.dart';
+import 'widgets/resume_edit_feedback_panel.dart';
 import 'widgets/section_feedback_thread.dart';
 import 'widgets/resume_section_nav.dart';
 import 'widgets/tech_stack_editor.dart';
@@ -102,6 +103,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// 최소값은 첨삭 브랜치 쪽을 따른다 — 패널이 280이면 첨삭 대화가 접힌다.
   static const double _panelMinWidth = 360;
   static const double _panelDefaultWidth = 420;
+  static const double _reviewPanelMinWidth = 500;
+  static const double _reviewPanelDefaultWidth = 560;
 
   /// 이력서 본문에 남겨 둘 최소 폭. 이보다 좁아지면 입력칸이 읽기 어려워진다.
   static const double _minResumeWidth = 560;
@@ -153,6 +156,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _initialized = false;
   bool _pendingInitialScroll = false;
   bool _profilePrefillTried = false;
+  bool _reviewPanelWidthInitialized = false;
+  bool _programmaticSectionScroll = false;
+  bool _sectionSyncScheduled = false;
 
   late final ScrollController _scrollController;
   late final Map<String, GlobalKey> _sectionKeys;
@@ -168,6 +174,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _scrollController.addListener(_syncReviewerSectionFromScroll);
     _sectionKeys = {
       for (final k in AppConstants.resumeSections) k: GlobalKey(),
     };
@@ -183,6 +190,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   @override
   void dispose() {
     _derivedRefresh?.cancel();
+    _scrollController.removeListener(_syncReviewerSectionFromScroll);
     _scrollController.dispose();
     _panelWidth.dispose();
     _panelHeight.dispose();
@@ -312,8 +320,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   void _markDirty() {
     final resume = _resume;
-    if (resume == null || _isReadOnly(isReviewer: _isReviewer, resume: resume))
+    if (resume == null ||
+        _isReadOnly(isReviewer: _isReviewer, resume: resume)) {
       return;
+    }
     // 이미 고쳐진 상태면 다시 그릴 이유가 없다. 처음 한 번만 화면이 바뀐다.
     if (_dirty) return;
     setState(() => _dirty = true);
@@ -394,16 +404,60 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     );
   }
 
-  void _scrollToSection(String key) {
+  void _syncReviewerSectionFromScroll() {
+    if (!_isReviewer ||
+        _programmaticSectionScroll ||
+        !_scrollController.hasClients ||
+        _sectionSyncScheduled) {
+      return;
+    }
+    _sectionSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sectionSyncScheduled = false;
+      if (!mounted || !_isReviewer || _programmaticSectionScroll) return;
+
+      const probeY = 180.0;
+      String? visibleSection;
+      var visibleTop = double.negativeInfinity;
+      String? nearestSection;
+      var nearestDistance = double.infinity;
+      for (final key in AppConstants.resumeSections) {
+        final renderObject = _sectionKeys[key]?.currentContext
+            ?.findRenderObject();
+        if (renderObject is! RenderBox || !renderObject.attached) continue;
+        final top = renderObject.localToGlobal(Offset.zero).dy;
+        final distance = (top - probeY).abs();
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestSection = key;
+        }
+        if (top <= probeY && top > visibleTop) {
+          visibleTop = top;
+          visibleSection = key;
+        }
+      }
+      final next = visibleSection ?? nearestSection;
+      if (next != null && next != _selectedSection) {
+        setState(() => _selectedSection = next);
+      }
+    });
+  }
+
+  Future<void> _scrollToSection(String key) async {
     setState(() => _selectedSection = key);
     final ctx = _sectionKeys[key]?.currentContext;
     if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.08,
-      );
+      _programmaticSectionScroll = true;
+      try {
+        await Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.08,
+        );
+      } finally {
+        _programmaticSectionScroll = false;
+      }
     }
   }
 
@@ -414,16 +468,17 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         child,
-        SectionFeedbackThread(
-          resume: resume,
-          sectionKey: key,
-          expanded: _openThreads.contains(key),
-          onToggle: () => setState(() {
-            _openThreads.contains(key)
-                ? _openThreads.remove(key)
-                : _openThreads.add(key);
-          }),
-        ),
+        if (!_isReviewer)
+          SectionFeedbackThread(
+            resume: resume,
+            sectionKey: key,
+            expanded: _openThreads.contains(key),
+            onToggle: () => setState(() {
+              _openThreads.contains(key)
+                  ? _openThreads.remove(key)
+                  : _openThreads.add(key);
+            }),
+          ),
       ],
     ),
   );
@@ -444,8 +499,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     bool incrementRevision = true,
   }) async {
     final isReviewer = ref.read(canReviewResumesProvider);
-    if (_isReadOnly(isReviewer: isReviewer, resume: resume) && status == null)
+    if (_isReadOnly(isReviewer: isReviewer, resume: resume) && status == null) {
       return;
+    }
     setState(() => _isSaving = true);
     try {
       final cohortId = ref.read(effectiveCohortIdProvider)!;
@@ -590,6 +646,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
         }
         _isReviewer = isReviewer;
         _resume = resume;
+        if (isReviewer && !_reviewPanelWidthInitialized) {
+          _reviewPanelWidthInitialized = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _panelWidth.value == _panelDefaultWidth) {
+              _panelWidth.value = _reviewPanelDefaultWidth;
+            }
+          });
+        }
         final readOnly = _isReadOnly(isReviewer: isReviewer, resume: resume);
         final liveSections = _content.computeSections();
         final completed = liveSections.values.where((v) => v).length;
@@ -640,21 +704,26 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                   ),
                 if (MediaQuery.sizeOf(context).width < 1000)
                   IconButton(
-                    tooltip: _showAiCoach ? 'AI 코치 접기' : 'AI 코치 열기',
+                    tooltip: _showAiCoach
+                        ? (isReviewer ? '피드백 접기' : 'AI 코치 접기')
+                        : (isReviewer ? '피드백 열기' : 'AI 코치 열기'),
                     onPressed: () => _setCoachVisible(!_showAiCoach),
                     icon: Icon(
                       _showAiCoach
                           ? Icons.keyboard_arrow_down
-                          : Icons.auto_awesome,
+                          : (isReviewer
+                                ? Icons.chat_bubble_outline
+                                : Icons.auto_awesome),
                     ),
                   ),
                 // 종. 누르면 아래로 말풍선이 내려온다. 오른쪽 패널을 쓰지 않으므로
                 // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
-                FeedbackBell(
-                  resume: resume,
-                  onGoToSection: _openThread,
-                  openOnStart: widget.openFeedback,
-                ),
+                if (!isReviewer)
+                  FeedbackBell(
+                    resume: resume,
+                    onGoToSection: _openThread,
+                    openOnStart: widget.openFeedback,
+                  ),
                 const SizedBox(width: 8),
                 if (!resume.isApproved || isReviewer)
                   _ModeToggle(
@@ -750,16 +819,18 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       style: TextStyle(fontSize: 12, color: AppColors.success),
                     ),
                   ),
-                ResumeSectionNav(
-                  sections: AppConstants.resumeSections,
-                  completedSections: liveSections,
-                  selectedKey: _selectedSection,
-                  onSelected: _scrollToSection,
-                ),
+                if (!isReviewer)
+                  ResumeSectionNav(
+                    sections: AppConstants.resumeSections,
+                    completedSections: liveSections,
+                    selectedKey: _selectedSection,
+                    onSelected: _scrollToSection,
+                  ),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 1000;
+                      final wide =
+                          constraints.maxWidth >= (isReviewer ? 1120 : 1000);
 
                       final resumeScroll = SingleChildScrollView(
                         controller: _scrollController,
@@ -993,7 +1064,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       // `Offstage`는 배치·그리기만 건너뛸 뿐 자식을 만들기는 한다.
                       // 그래서 숨어 있어도 키 입력마다 코치 화면이 다시 만들어졌다.
                       // 같은 위젯 객체를 넘기면 Flutter가 그 아래를 통째로 건너뛴다.
-                      if (_showAiCoach || _coachPanel == null) {
+                      if (!isReviewer &&
+                          (_showAiCoach || _coachPanel == null)) {
                         _coachPanel = AiJobCoachPanel(
                           key: _coachKey,
                           resumeId: widget.resumeId,
@@ -1015,12 +1087,26 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                           onClose: () => _setCoachVisible(false),
                         );
                       }
-                      final rightPanel = Stack(
-                        fit: StackFit.passthrough,
-                        children: [
-                          Offstage(offstage: !_showAiCoach, child: _coachPanel),
-                        ],
-                      );
+                      final rightPanel = isReviewer
+                          ? ResumeEditFeedbackPanel(
+                              key: ValueKey('review-feedback-${resume.id}'),
+                              resumeId: resume.id,
+                              isAdmin: true,
+                              selectedSectionKey: _selectedSection,
+                              completedSections: liveSections,
+                              isSidebar: true,
+                              showSectionSidebar: wide,
+                              onSectionChanged: _scrollToSection,
+                            )
+                          : Stack(
+                              fit: StackFit.passthrough,
+                              children: [
+                                Offstage(
+                                  offstage: !_showAiCoach,
+                                  child: _coachPanel,
+                                ),
+                              ],
+                            );
 
                       // 둘 다 닫혔으면 오른쪽 자리를 통째로 비운다. 이력서가 넓어진다.
                       // 오른쪽은 이제 AI 코치만 쓴다. 피드백은 항목 아래 댓글로 옮겼다.
@@ -1082,11 +1168,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
                       // 이력서 본문을 최소 560px 남기고, 오른쪽 패널은 최소 360px을 지킨다.
                       // 화면 크기가 달라져도 조절해 둔 폭을 안전한 범위 안에서만 쓴다.
+                      final panelMinWidth = isReviewer
+                          ? _reviewPanelMinWidth
+                          : _panelMinWidth;
                       final panelMaxWidth =
                           (constraints.maxWidth -
                                   _minResumeWidth -
                                   _handleWidth)
-                              .clamp(_panelMinWidth, 900)
+                              .clamp(panelMinWidth, 900)
                               .toDouble();
 
                       return Row(
@@ -1102,7 +1191,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                             child: rightPanel,
                             builder: (context, raw, panel) {
                               final width = raw.clamp(
-                                _panelMinWidth,
+                                panelMinWidth,
                                 panelMaxWidth,
                               );
                               return Row(
@@ -1117,12 +1206,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                         _panelWidth.value =
                                             ((_dragStartWidth ?? width) - dx)
                                                 .clamp(
-                                                  _panelMinWidth,
+                                                  panelMinWidth,
                                                   panelMaxWidth,
                                                 );
                                       },
-                                      onReset: () => _panelWidth.value =
-                                          _panelDefaultWidth,
+                                      onReset: () =>
+                                          _panelWidth.value = isReviewer
+                                          ? _reviewPanelDefaultWidth
+                                          : _panelDefaultWidth,
                                       onToggle: () => _setCoachVisible(false),
                                     )
                                   else

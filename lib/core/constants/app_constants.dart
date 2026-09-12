@@ -6,13 +6,13 @@ abstract final class AppConstants {
   static const resumeSections = [
     'basicInfo',
     'coreCompetencies',
-    'education',
     'experience',
+    'education',
+    'techStack',
     'certifications',
     'awards',
     'trainingExperience',
     'otherActivities',
-    'techStack',
     'projects',
     'selfIntroduction',
   ];

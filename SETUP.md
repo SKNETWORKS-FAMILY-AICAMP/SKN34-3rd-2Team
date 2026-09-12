@@ -449,6 +449,11 @@ python -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1
 `http://127.0.0.1:8000/health` 가 `{"status":"ok", ...}` 를 주면 됩니다. Pinecone·OpenAI 키는
 루트 `.env`에서 읽습니다. Functions 배포 전에는 `scripts/sync-functions-env.ps1`로 생성된 `functions/.env`가 사용됩니다.
 
+공부방(수업 노트 생성)도 이 통합 서버가 담당합니다. 관리자가 기수별 GitHub 주소를 등록하면
+서버가 `git clone`으로 자료를 읽고 AI 노트를 만듭니다. GitHub 토큰은 공개 저장소에 필요 없습니다.
+PC에 Git이 설치되어 있어야 하고, 노트를 **새로 만들 때** 이 서버가 켜져 있어야 합니다. 이미 만든
+노트는 Firestore에 있어서 서버가 꺼져 있어도 볼 수 있습니다.
+
 ### 2. 앱 실행
 
 앱의 기본 서버 주소가 `http://127.0.0.1:8000` 이라 별도 설정이 없습니다.

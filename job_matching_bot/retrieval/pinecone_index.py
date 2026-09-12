@@ -25,7 +25,10 @@ REGION = "us-east-1"
 
 def api_key() -> str:
     ensure_loaded()
-    key = os.environ.get("PINECONE_API_KEY1", "").strip()
+    key = (
+        os.environ.get("PINECONE_API_KEY1", "").strip()
+        or os.environ.get("PINECONE_API_KEY", "").strip()
+    )
     if not key:
         raise RuntimeError("PINECONE_API_KEY1이 없습니다. 저장소 루트 .env를 확인하세요.")
     return key

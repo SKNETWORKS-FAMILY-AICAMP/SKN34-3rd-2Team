@@ -508,7 +508,7 @@ class _ChatPanel extends StatelessWidget {
             Positioned.fill(
               child: Column(
                 children: [
-                  _header(),
+                  _header(context),
                   if (searching)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -592,10 +592,10 @@ class _ChatPanel extends StatelessWidget {
     );
   }
 
-  Widget _header() => Container(
+  Widget _header(BuildContext context) => Container(
     height: 58,
     padding: const EdgeInsets.symmetric(horizontal: 14),
-    color: AppColors.primary,
+    color: Theme.of(context).colorScheme.primary,
     child: Row(
       children: [
         const SizedBox.square(

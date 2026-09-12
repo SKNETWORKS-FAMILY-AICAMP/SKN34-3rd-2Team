@@ -433,7 +433,10 @@ class RecommendService(_LivenessMixin):
                 ),
             )
         except Exception as error:
-            raise SearchUnavailable(f"공고 검색에 실패했습니다: {type(error).__name__}") from error
+            reason = str(error).strip()
+            if not reason or len(reason) > 180:
+                reason = type(error).__name__
+            raise SearchUnavailable(f"공고 검색에 실패했습니다: {reason}") from error
         say("search", f"열린 공고에서 {len(hits)}건을 추렸어요")
         if not hits:
             return schemas.RecommendResponse(

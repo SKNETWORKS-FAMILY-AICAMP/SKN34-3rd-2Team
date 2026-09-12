@@ -13,6 +13,24 @@ from app.review_workflow import ReviewConflict
 from app.config import Settings
 
 
+def tailored_resume_title(base: dict[str, Any], company: str) -> str:
+    """Name only a company-specific copy; never synthesize missing identity."""
+    company = str(company or '').strip()
+    base_title = str(base.get('title') or '').strip()
+    if not company:
+        return base_title
+    content = base.get('content') or {}
+    basic_info = content.get('basicInfo') if isinstance(content, dict) else {}
+    student_name = str(
+        basic_info.get('name') if isinstance(basic_info, dict) else ''
+    ).strip()
+    return (
+        f'{student_name} · {company} 맞춤 이력서'
+        if student_name
+        else f'{company} 맞춤 이력서'
+    )
+
+
 class FirebaseAuthenticationError(Exception):
     pass
 
@@ -84,6 +102,8 @@ class FirebaseGateway:
         job_id = str(job_source.get('job_id') or '')
         if not job_id or not snapshot_hash:
             raise ValueError('job_source_is_incomplete')
+        company_name = str(job_source.get('company') or '').strip()
+        title = tailored_resume_title(base, company_name)
         tailored_id = 'tailored_' + hashlib.sha256(
             f'{resume_id}:{job_id}:{snapshot_hash}'.encode()
         ).hexdigest()[:24]
@@ -92,11 +112,12 @@ class FirebaseGateway:
             'userId': uid,
             'baseResumeId': resume_id,
             'jobId': job_id,
-            'companyName': str(job_source.get('company') or ''),
+            'companyName': company_name,
             'jobTitle': str(job_source.get('title') or ''),
             'jobSnapshotHash': snapshot_hash,
             'sourceResumeHash': source_hash,
             'status': 'draft',
+            'title': title,
             'content': deepcopy(base.get('content') or {}),
             'createdAt': firestore.SERVER_TIMESTAMP,
             'updatedAt': firestore.SERVER_TIMESTAMP,
@@ -108,6 +129,9 @@ class FirebaseGateway:
             existing = ref.get().to_dict() or {}
             if existing.get('userId') != uid or existing.get('jobSnapshotHash') != snapshot_hash:
                 raise ResumeNotFoundError('tailored resume not found')
+            if title and existing.get('title') != title:
+                ref.update({'title': title, 'updatedAt': firestore.SERVER_TIMESTAMP})
+                existing['title'] = title
             return {'tailored_resume_id': tailored_id, **existing}
 
     def list_tailored_resumes(self, cohort_id: str, resume_id: str, uid: str) -> list[dict[str, Any]]:

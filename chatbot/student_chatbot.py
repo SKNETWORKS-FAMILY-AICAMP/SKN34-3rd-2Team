@@ -22,6 +22,15 @@ from vectordb.policy_ingestion import load_env
 
 load_env()
 
+
+def _student_pinecone_api_key() -> str:
+    """공지·정책 인덱스 키. 로컬 `.env`가 예전 이름(`PINECONE_API_KEY`)만 있어도 동작한다."""
+    return (
+        os.getenv("PINECONE_API_KEY2", "").strip()
+        or os.getenv("PINECONE_API_KEY", "").strip()
+    )
+
+
 Namespace = Literal["policy", "notice", "project_reference"]
 StudentDataScope = Literal[
     "student_private",
@@ -262,7 +271,9 @@ class LmsStudentChatbot:
         k: int = 4,
         student_context_loader: StudentContextLoader | None = None,
     ) -> None:
-        missing = [name for name in ("OPENAI_API_KEY", "PINECONE_API_KEY2") if not os.getenv(name)]
+        missing = [name for name in ("OPENAI_API_KEY",) if not os.getenv(name)]
+        if not _student_pinecone_api_key():
+            missing.append("PINECONE_API_KEY2")
         if missing:
             raise RuntimeError(f"필수 환경변수가 없습니다: {', '.join(missing)}")
         if not 1 <= k <= 8:
@@ -283,7 +294,7 @@ class LmsStudentChatbot:
         # 공지·정책 인덱스는 채용공고 인덱스와 이름이 다르다. `PINECONE_INDEX_NAME`을
         # 그대로 쓰면 채용공고 쪽 설정(`job-posting`)을 물려받아 엉뚱한 인덱스를 뒤진다.
         # 키를 KEY1/KEY2로 나눈 것과 같은 이유로 인덱스 이름도 따로 받는다.
-        self.index = Pinecone(api_key=os.environ["PINECONE_API_KEY2"]).Index(
+        self.index = Pinecone(api_key=_student_pinecone_api_key()).Index(
             os.getenv("PINECONE_STUDENT_INDEX_NAME", "student"),
         )
         self.supervisor_chain = (

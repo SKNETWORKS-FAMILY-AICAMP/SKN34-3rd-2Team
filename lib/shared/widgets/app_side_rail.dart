@@ -93,17 +93,18 @@ class SideRailStyle extends InheritedWidget {
         child: child,
       );
     }
+    final light = darkPalette ?? kSideRailDarkPalettes.first;
     return SideRailStyle(
       isDark: false,
       background: AppColors.surface,
       border: AppColors.border,
       textPrimary: AppColors.textPrimary,
       textSecondary: AppColors.textSecondary,
-      selectedBg: AppColors.primaryLight,
-      selectedFg: AppColors.primary,
+      selectedBg: light.actionLight,
+      selectedFg: light.action,
       danger: AppColors.error,
-      avatarBg: AppColors.primaryLight,
-      avatarFg: AppColors.primary,
+      avatarBg: light.actionLight,
+      avatarFg: light.action,
       child: child,
     );
   }

@@ -1698,7 +1698,6 @@ class _ReviewChatPane extends StatelessWidget {
                           )
                         : _ReviewInlineProgress(
                             kind: busyKind ?? _ReviewBusyKind.answer,
-                            currentStage: busyStage,
                           ),
                   ),
                 if (error != null)
@@ -1857,102 +1856,100 @@ class _InitialReviewProgress extends StatelessWidget {
 }
 
 class _ReviewInlineProgress extends StatelessWidget {
-  const _ReviewInlineProgress({required this.kind, required this.currentStage});
+  const _ReviewInlineProgress({required this.kind});
 
   final _ReviewBusyKind kind;
-  final int currentStage;
 
   @override
   Widget build(BuildContext context) {
-    if (kind != _ReviewBusyKind.apply) {
-      final label = switch (kind) {
-        _ReviewBusyKind.answer => '답변을 검토하고 다음 보완 항목을 준비하고 있어요',
-        _ReviewBusyKind.undo => '변경 내용을 되돌리고 있어요',
-        _ReviewBusyKind.review => '이력서를 분석하고 있어요',
-        _ReviewBusyKind.apply => '',
-      };
-      return _CompactBusyCard(label: label);
-    }
-
-    const steps = ['수정안 저장', '변경 내용 확인', '다음 보완 항목 준비'];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
-        border: Border.all(color: const Color(0xFFBBF7D0)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  '수정안 반영 중',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF166534),
-                  ),
-                ),
-              ),
-              Text(
-                '${(currentStage + 1).clamp(1, steps.length)} / ${steps.length} 단계',
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFF65A30D),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          for (var index = 0; index < steps.length; index++)
-            _ReviewProgressRow(
-              label: steps[index],
-              state: index < currentStage
-                  ? _ReviewStepState.done
-                  : index == currentStage
-                  ? _ReviewStepState.running
-                  : _ReviewStepState.waiting,
-              last: index == steps.length - 1,
-              compact: true,
-            ),
-        ],
-      ),
-    );
+    final label = switch (kind) {
+      _ReviewBusyKind.answer => '답변을 검토하고 다음 보완 항목을 준비하고 있어요',
+      _ReviewBusyKind.undo => '변경 내용을 되돌리고 있어요',
+      _ReviewBusyKind.review => '이력서를 분석하고 있어요',
+      _ReviewBusyKind.apply => '수정안을 반영하고 있어요',
+    };
+    return _CompactBusyCard(label: label);
   }
 }
 
-class _CompactBusyCard extends StatelessWidget {
+class _CompactBusyCard extends StatefulWidget {
   const _CompactBusyCard({required this.label});
   final String label;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    decoration: BoxDecoration(
-      color: const Color(0xFFEFF6FF),
-      border: Border.all(color: const Color(0xFFBFDBFE)),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      children: [
-        const SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+  State<_CompactBusyCard> createState() => _CompactBusyCardState();
+}
+
+class _CompactBusyCardState extends State<_CompactBusyCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Semantics(
+            label: '처리 중',
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(3, (index) {
+                  final wave = sin(
+                    (_controller.value * pi * 2) - (index * 0.8),
+                  );
+                  return Transform.translate(
+                    offset: Offset(0, -3 * wave),
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              widget.label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 enum _ReviewStepState { done, running, waiting }
@@ -1962,13 +1959,11 @@ class _ReviewProgressRow extends StatelessWidget {
     required this.label,
     required this.state,
     required this.last,
-    this.compact = false,
   });
 
   final String label;
   final _ReviewStepState state;
   final bool last;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2005,7 +2000,7 @@ class _ReviewProgressRow extends StatelessWidget {
             if (!last)
               Container(
                 width: 1.5,
-                height: compact ? 10 : 14,
+                height: 14,
                 margin: const EdgeInsets.symmetric(vertical: 2),
                 color: state == _ReviewStepState.done
                     ? const Color(0xFF86EFAC)
@@ -2016,7 +2011,7 @@ class _ReviewProgressRow extends StatelessWidget {
         const SizedBox(width: 11),
         Expanded(
           child: Padding(
-            padding: EdgeInsets.only(bottom: last ? 0 : (compact ? 4 : 8)),
+            padding: EdgeInsets.only(bottom: last ? 0 : 8),
             child: Row(
               children: [
                 Flexible(
@@ -2137,7 +2132,11 @@ class _ChatIntro extends StatelessWidget {
       padding: const EdgeInsets.only(top: 72),
       child: Column(
         children: [
-          const Icon(Icons.auto_awesome, size: 34, color: Color(0xFF16A34A)),
+          Icon(
+            Icons.auto_awesome,
+            size: 34,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(height: 12),
           Text(
             generalReview ? '이력서 문장과 경험 근거를 확인합니다.' : '선택 공고 기준으로 이력서를 확인합니다.',
@@ -2154,10 +2153,6 @@ class _ChatIntro extends StatelessWidget {
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: () => onStart(),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-            ),
             icon: const Icon(Icons.play_arrow, size: 18),
             label: const Text('첨삭 시작'),
           ),

@@ -22,7 +22,8 @@
 - 첨삭 문맥: `GET /resume-review/api/v1/resumes/review-context`
 - 첨삭: `POST /resume-review/api/v1/resumes/reviews`
 - 적용/복원: 위 첨삭 경로 뒤에 `/apply`, `/undo`
-- 학생 챗봇: `POST /api/v1/student-chatbot/init`, `POST /api/v1/student-chatbot/stream` (`chatbot/api.py` 라우터를 그대로 포함)
+- 학생 챗봇: `POST /api/v1/student-chatbot/init`, `POST /api/v1/student-chatbot/stream` (`chatbot/api.py`)
+- 공부방 노트: `POST /api/v1/study-notes/tree`, `/generate`, `/get` (`study_notes/api.py`). GitHub REST API가 아니라 `git clone`으로 관리자가 등록한 공개 저장소를 읽는다. 서버 PC에 Git이 설치되어 있어야 한다.
 
 두 모듈의 기존 `/api/v1/jobs/recommend`는 서로 다른 스키마이므로 그대로 한 라우터에 합치지 않는다. 통합 진입점만 별도로 두어 기존 단독 실행 방식도 유지한다.
 
