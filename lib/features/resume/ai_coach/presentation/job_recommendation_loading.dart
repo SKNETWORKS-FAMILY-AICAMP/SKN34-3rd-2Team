@@ -120,10 +120,10 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
         : '${_steps[index].$2} 진행 중';
 
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: Alignment.center,
       heightFactor: 1,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 342),
+        constraints: const BoxConstraints(maxWidth: 385),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -135,7 +135,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                     padding: const EdgeInsets.fromLTRB(
                       48,
                       22,
-                      5,
+                      48,
                       16,
                     ),
                     child: Stack(
@@ -279,7 +279,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 43),
+              padding: EdgeInsets.zero,
               child: Semantics(
                 liveRegion: true,
                 child: Text(
