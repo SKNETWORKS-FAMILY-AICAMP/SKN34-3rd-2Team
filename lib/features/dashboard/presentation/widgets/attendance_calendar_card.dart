@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../../core/constants/attendance_status.dart';
+import '../../../../core/constants/korean_holidays.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../core/widgets/app_dropdown.dart';
@@ -26,7 +27,8 @@ class AttendanceCalendarCard extends ConsumerStatefulWidget {
       _AttendanceCalendarCardState();
 }
 
-class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard> {
+class _AttendanceCalendarCardState
+    extends ConsumerState<AttendanceCalendarCard> {
   DateTime _focusedDay = DateTime.now();
   CalendarFormat _format = CalendarFormat.month;
 
@@ -93,13 +95,17 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
 
     try {
       if (picked == '__clear__') {
-        await ref.read(lmsRepositoryProvider).clearAttendanceStatus(
+        await ref
+            .read(lmsRepositoryProvider)
+            .clearAttendanceStatus(
               cohortId: cohortId,
               userId: _targetUserId,
               dateKey: AppDateUtils.toDateKey(day),
             );
       } else {
-        await ref.read(lmsRepositoryProvider).upsertAttendanceStatus(
+        await ref
+            .read(lmsRepositoryProvider)
+            .upsertAttendanceStatus(
               cohortId: cohortId,
               userId: _targetUserId,
               userDisplayName: _targetDisplayName,
@@ -124,7 +130,9 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
-    final statusMapAsync = ref.watch(attendanceStatusMapProvider(_targetUserId));
+    final statusMapAsync = ref.watch(
+      attendanceStatusMapProvider(_targetUserId),
+    );
     final statusMap = statusMapAsync.asData?.value ?? {};
     final monthLabel =
         '${_focusedDay.year}.${_focusedDay.month.toString().padLeft(2, '0')}';
@@ -155,7 +163,9 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                 ),
                 const Spacer(),
                 if (isAdmin && !compact)
-                  ref.watch(cohortStudentsProvider).when(
+                  ref
+                      .watch(cohortStudentsProvider)
+                      .when(
                         loading: () => const SizedBox(
                           width: 16,
                           height: 16,
@@ -179,8 +189,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                             onChanged: (uid) {
                               if (uid != null) {
                                 ref
-                                    .read(adminAttendanceTargetUserIdProvider
-                                        .notifier)
+                                    .read(
+                                      adminAttendanceTargetUserIdProvider
+                                          .notifier,
+                                    )
                                     .select(uid);
                               }
                             },
@@ -191,7 +203,9 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
             ),
             if (isAdmin && compact) ...[
               const SizedBox(height: 6),
-              ref.watch(cohortStudentsProvider).when(
+              ref
+                  .watch(cohortStudentsProvider)
+                  .when(
                     loading: () => const SizedBox(
                       width: 16,
                       height: 16,
@@ -239,7 +253,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                 IconButton(
                   icon: const Icon(Icons.chevron_left, size: 20),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   onPressed: () => setState(() {
                     _focusedDay = DateTime(
                       _focusedDay.year,
@@ -277,7 +294,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                 IconButton(
                   icon: const Icon(Icons.chevron_right, size: 20),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   onPressed: () => setState(() {
                     _focusedDay = DateTime(
                       _focusedDay.year,
@@ -320,6 +340,19 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                   }
                 }
               },
+              // 요일을 지정하지 않으면 기기 언어를 따라 영어로 나온다. 그마저
+              // 폭에 따라 Mo·We처럼 두 글자로 잘려 들쭉날쭉했다. 한 글자로 못박는다.
+              daysOfWeekStyle: DaysOfWeekStyle(
+                dowTextFormatter: (date, locale) => _dayNames[date.weekday % 7],
+                weekdayStyle: TextStyle(
+                  fontSize: compact ? 11 : 12,
+                  color: AppColors.textSecondary,
+                ),
+                weekendStyle: TextStyle(
+                  fontSize: compact ? 11 : 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               calendarStyle: CalendarStyle(
                 outsideDaysVisible: !compact,
                 defaultTextStyle: TextStyle(fontSize: compact ? 11 : 12),
@@ -351,11 +384,70 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                     compact: compact,
                   );
                 },
+                defaultBuilder: (context, day, focusedDay) =>
+                    _plainDayCell(day, compact: compact, outside: false),
+                outsideBuilder: (context, day, focusedDay) =>
+                    _plainDayCell(day, compact: compact, outside: true),
+                todayBuilder: (context, day, focusedDay) =>
+                    _todayCell(day, compact: compact),
               ),
             ),
             SizedBox(height: compact ? 4 : 6),
             _AttendanceStatusLegend(compact: compact),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 일요일부터. `DateTime.weekday`는 월요일이 1, 일요일이 7이라 7로 나눈 나머지를 쓴다.
+  static const _dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+  /// 종이 달력을 따른다. 공휴일과 일요일은 빨강, 토요일은 파랑.
+  static Color _dayColor(DateTime day, {required bool outside}) {
+    if (outside) return AppColors.textHint;
+    if (koreanHolidays.containsKey(_dateKeyOf(day))) return AppColors.error;
+    if (day.weekday == DateTime.sunday) return AppColors.error;
+    if (day.weekday == DateTime.saturday) return AppColors.primary;
+    return AppColors.textPrimary;
+  }
+
+  static Widget _plainDayCell(
+    DateTime day, {
+    required bool compact,
+    required bool outside,
+  }) => Center(
+    child: Text(
+      '${day.day}',
+      style: TextStyle(
+        fontSize: compact ? 11 : 12,
+        color: _dayColor(day, outside: outside),
+      ),
+    ),
+  );
+
+  /// 오늘 표시. 동그라미 지름을 줄 높이 안으로 못박는다.
+  ///
+  /// 예전에는 칸 전체를 채우는 장식을 썼는데, 줄 높이가 26~34밖에 안 되어 원이
+  /// 칸 밖으로 밀려났다. 달의 첫 칸에서는 왼쪽이 잘려 숫자까지 가렸다.
+  static Widget _todayCell(DateTime day, {required bool compact}) {
+    final diameter = compact ? 20.0 : 26.0;
+    return Center(
+      child: Container(
+        width: diameter,
+        height: diameter,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.textPrimary, width: 1.5),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '${day.day}',
+          style: TextStyle(
+            fontSize: compact ? 10 : 12,
+            fontWeight: FontWeight.bold,
+            color: _dayColor(day, outside: false),
+          ),
         ),
       ),
     );
