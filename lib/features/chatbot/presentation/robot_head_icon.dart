@@ -2,8 +2,6 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
-
 /// The default robot head briefly stretches wide whenever [bounce] changes.
 class RobotHeadIcon extends StatefulWidget {
   const RobotHeadIcon({super.key, this.size = 40, this.bounce = 0});
@@ -44,21 +42,34 @@ class _RobotHeadIconState extends State<RobotHeadIcon>
   }
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) => CustomPaint(
-        size: Size.square(widget.size),
-        painter: _RobotHeadPainter(progress: _controller.value),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => CustomPaint(
+          size: Size.square(widget.size),
+          painter: _RobotHeadPainter(
+            progress: _controller.value,
+            primary: scheme.primary,
+            primaryLight: scheme.primaryContainer,
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _RobotHeadPainter extends CustomPainter {
-  const _RobotHeadPainter({required this.progress});
+  const _RobotHeadPainter({
+    required this.progress,
+    required this.primary,
+    required this.primaryLight,
+  });
 
   final double progress;
+  final Color primary;
+  final Color primaryLight;
 
   double get _stretch {
     const stops = [0.0, .28, .45, .70, .86, 1.0];
@@ -91,7 +102,7 @@ class _RobotHeadPainter extends CustomPainter {
       morph(55, 48),
     );
     final stroke = Paint()
-      ..color = AppColors.primary
+      ..color = primary
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.2
       ..strokeCap = StrokeCap.round;
@@ -111,7 +122,7 @@ class _RobotHeadPainter extends CustomPainter {
           7 * earVisibility,
           18,
         );
-        shape(ear, 4, AppColors.primaryLight);
+        shape(ear, 4, primaryLight);
       }
     }
     final antennaTop = head.top - morph(14, 10);
@@ -119,16 +130,16 @@ class _RobotHeadPainter extends CustomPainter {
     canvas.drawCircle(
       Offset(52, antennaTop - 2),
       4,
-      Paint()..color = AppColors.primary,
+      Paint()..color = primary,
     );
-    shape(head, morph(20, 17), AppColors.surface);
+    shape(head, morph(20, 17), Colors.white);
     final mask = Rect.fromLTRB(
       head.left + 9,
       head.top + morph(10, 9),
       head.right - 9,
       head.bottom - morph(10, 9),
     );
-    shape(mask, morph(13, 11), AppColors.sidebar, outline: false);
+    shape(mask, morph(13, 11), const Color(0xFF0B2A6F), outline: false);
     for (final right in [false, true]) {
       final x = right
           ? mask.right - morph(12, 17) - 6
@@ -136,7 +147,7 @@ class _RobotHeadPainter extends CustomPainter {
       shape(
         Rect.fromLTWH(x, mask.top + morph(10, 8), 6, morph(8, 7)),
         3,
-        AppColors.surface,
+        Colors.white,
         outline: false,
       );
     }
@@ -152,7 +163,7 @@ class _RobotHeadPainter extends CustomPainter {
       3.141592653589793,
       false,
       Paint()
-        ..color = AppColors.surface
+        ..color = Colors.white
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
         ..strokeCap = StrokeCap.round,
@@ -162,5 +173,7 @@ class _RobotHeadPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RobotHeadPainter oldDelegate) =>
-      progress != oldDelegate.progress;
+      progress != oldDelegate.progress ||
+      primary != oldDelegate.primary ||
+      primaryLight != oldDelegate.primaryLight;
 }
