@@ -14,6 +14,9 @@ class SideRailDarkPalette {
     required this.border,
     required this.accent,
     required this.muted,
+    required this.action,
+    required this.actionDark,
+    required this.actionLight,
   });
 
   final String id;
@@ -22,6 +25,11 @@ class SideRailDarkPalette {
   final Color border;
   final Color accent;
   final Color muted;
+
+  /// 밝은 본문에서 버튼·링크에 쓰는 접근성 대비가 확보된 대표색.
+  final Color action;
+  final Color actionDark;
+  final Color actionLight;
 }
 
 const kSideRailDarkPalettes = <SideRailDarkPalette>[
@@ -32,6 +40,9 @@ const kSideRailDarkPalettes = <SideRailDarkPalette>[
     border: Color(0xFF1E293B),
     accent: Color(0xFF38BDF8),
     muted: Color(0xFF94A3B8),
+    action: Color(0xFF0284C7),
+    actionDark: Color(0xFF0369A1),
+    actionLight: Color(0xFFE0F2FE),
   ),
   SideRailDarkPalette(
     id: 'charcoal',
@@ -40,6 +51,9 @@ const kSideRailDarkPalettes = <SideRailDarkPalette>[
     border: Color(0xFF1F2937),
     accent: Color(0xFF00C2D4),
     muted: Color(0xFF94A3B8),
+    action: Color(0xFF0891B2),
+    actionDark: Color(0xFF0E7490),
+    actionLight: Color(0xFFCFFAFE),
   ),
   SideRailDarkPalette(
     id: 'brand_navy',
@@ -48,6 +62,9 @@ const kSideRailDarkPalettes = <SideRailDarkPalette>[
     border: Color(0xFF1E3A8A),
     accent: Color(0xFF60A5FA),
     muted: Color(0xFF94A3B8),
+    action: Color(0xFF2563EB),
+    actionDark: Color(0xFF1D4ED8),
+    actionLight: Color(0xFFDBEAFE),
   ),
   SideRailDarkPalette(
     id: 'soft_cinematic',
@@ -56,6 +73,9 @@ const kSideRailDarkPalettes = <SideRailDarkPalette>[
     border: Color(0xFF1E2538),
     accent: Color(0xFF00C2D4),
     muted: Color(0xFF94A3B8),
+    action: Color(0xFF7C3AED),
+    actionDark: Color(0xFF6D28D9),
+    actionLight: Color(0xFFEDE9FE),
   ),
   SideRailDarkPalette(
     id: 'mid_slate',
@@ -64,6 +84,9 @@ const kSideRailDarkPalettes = <SideRailDarkPalette>[
     border: Color(0xFF334155),
     accent: Color(0xFF00C2D4),
     muted: Color(0xFFCBD5E1),
+    action: Color(0xFF0F766E),
+    actionDark: Color(0xFF115E59),
+    actionLight: Color(0xFFCCFBF1),
   ),
 ];
 
@@ -74,7 +97,8 @@ class SideRailDarkMode extends Notifier<bool> {
     Future<void>(() async {
       final prefs = await SharedPreferences.getInstance();
       if (!ref.mounted) return;
-      state = prefs.getBool(_kSidebarDarkModeKey) ??
+      state =
+          prefs.getBool(_kSidebarDarkModeKey) ??
           prefs.getBool('app_dark_mode') ??
           false;
     });
@@ -95,8 +119,9 @@ class SideRailDarkMode extends Notifier<bool> {
   }
 }
 
-final sideRailDarkModeProvider =
-    NotifierProvider<SideRailDarkMode, bool>(SideRailDarkMode.new);
+final sideRailDarkModeProvider = NotifierProvider<SideRailDarkMode, bool>(
+  SideRailDarkMode.new,
+);
 
 /// 다크 팔레트 인덱스 (테스트용, 로컬 저장)
 class SideRailDarkPaletteIndex extends Notifier<int> {
@@ -128,8 +153,8 @@ class SideRailDarkPaletteIndex extends Notifier<int> {
 
 final sideRailDarkPaletteIndexProvider =
     NotifierProvider<SideRailDarkPaletteIndex, int>(
-  SideRailDarkPaletteIndex.new,
-);
+      SideRailDarkPaletteIndex.new,
+    );
 
 final sideRailDarkPaletteProvider = Provider<SideRailDarkPalette>((ref) {
   final index = ref.watch(sideRailDarkPaletteIndexProvider);

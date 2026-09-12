@@ -12,10 +12,15 @@ abstract final class ShellChrome {
     border: Color(0xFF334155),
     accent: Color(0xFF00C2D4),
     muted: Color(0xFFCBD5E1),
+    action: Color(0xFF0F766E),
+    actionDark: Color(0xFF115E59),
+    actionLight: Color(0xFFCCFBF1),
   );
 
-  static Color appBarBackground(bool isDark) =>
-      isDark ? midSlate.background : AppColors.surface;
+  static Color appBarBackground(
+    bool isDark, [
+    SideRailDarkPalette? palette,
+  ]) => isDark ? (palette ?? midSlate).background : AppColors.surface;
 
   static Color appBarForeground(bool isDark) =>
       isDark ? Colors.white : AppColors.textPrimary;
@@ -33,6 +38,10 @@ abstract final class ShellChrome {
   static Color chipBorder(bool isDark) =>
       isDark ? Colors.white.withValues(alpha: 0.16) : AppColors.border;
 
-  static Color actionForeground(bool isDark) =>
-      isDark ? midSlate.accent : AppColors.primary;
+  static Color actionForeground(
+    bool isDark, [
+    SideRailDarkPalette? palette,
+  ]) => isDark
+      ? (palette ?? midSlate).accent
+      : (palette?.action ?? AppColors.primary);
 }

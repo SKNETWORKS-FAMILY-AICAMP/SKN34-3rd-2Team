@@ -85,6 +85,7 @@ class InstructorShellScreen extends ConsumerWidget {
     final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
     final tourActive = ref.watch(onboardingTourProvider)?.active == true;
     final railDark = ref.watch(sideRailDarkModeProvider);
+    final railPalette = ref.watch(sideRailDarkPaletteProvider);
 
     final railItems = [
       for (final item in _kInstructorNavItems)
@@ -92,9 +93,7 @@ class InstructorShellScreen extends ConsumerWidget {
           icon: item.icon,
           label: item.label,
           path: item.path,
-          itemKey: wide
-              ? OnboardingTargetRegistry.keyOf(item.targetId)
-              : null,
+          itemKey: wide ? OnboardingTargetRegistry.keyOf(item.targetId) : null,
         ),
     ];
 
@@ -108,7 +107,7 @@ class InstructorShellScreen extends ConsumerWidget {
         backgroundColor: AppColors.background,
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: ShellChrome.appBarBackground(railDark),
+          backgroundColor: ShellChrome.appBarBackground(railDark, railPalette),
           foregroundColor: ShellChrome.appBarForeground(railDark),
           surfaceTintColor: Colors.transparent,
           elevation: 0,
@@ -225,9 +224,7 @@ class _InstructorTopNav extends StatelessWidget {
                         label: item.label,
                         selected: _isNavSelected(currentLocation, item.path),
                         compact: compact,
-                        onTap: tourActive
-                            ? () {}
-                            : () => context.go(item.path),
+                        onTap: tourActive ? () {} : () => context.go(item.path),
                       ),
                     ),
                   ],

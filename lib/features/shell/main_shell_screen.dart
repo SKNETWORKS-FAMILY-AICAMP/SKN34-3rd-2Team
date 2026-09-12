@@ -112,6 +112,7 @@ class MainShellScreen extends ConsumerWidget {
         ref.watch(onboardingTourProvider)?.active == true &&
         ref.watch(onboardingTourProvider)?.tourId == 'student';
     final railDark = ref.watch(sideRailDarkModeProvider);
+    final railPalette = ref.watch(sideRailDarkPaletteProvider);
 
     final railItems = [
       for (final item in _kStudentNavItems)
@@ -132,7 +133,7 @@ class MainShellScreen extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
-          backgroundColor: ShellChrome.appBarBackground(railDark),
+          backgroundColor: ShellChrome.appBarBackground(railDark, railPalette),
           foregroundColor: ShellChrome.appBarForeground(railDark),
           surfaceTintColor: Colors.transparent,
           elevation: 0,
@@ -155,7 +156,10 @@ class MainShellScreen extends ConsumerWidget {
                         mode: LaunchMode.externalApplication,
                       ),
                 style: TextButton.styleFrom(
-                  foregroundColor: ShellChrome.actionForeground(railDark),
+                  foregroundColor: ShellChrome.actionForeground(
+                    railDark,
+                    railPalette,
+                  ),
                 ),
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: const Text('출결 폼'),
