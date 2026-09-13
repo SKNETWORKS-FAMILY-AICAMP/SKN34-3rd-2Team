@@ -223,6 +223,28 @@ def _to_hit(row, relevance: int, has_detail: bool = True) -> JobHit:
     )
 
 
+def deadline_passed(deadline: str | None, now: datetime | None = None) -> bool:
+    """마감 시각이 지났나. **보내기 직전에** 본다.
+
+    조회 조건은 날짜만 견준다(`substr(deadline, 1, 10) >= 오늘`). 그래서 밤 11시에 받은
+    "오늘 23:59 마감" 공고를 자정이 지나 눌러 보면 이미 닫혀 있었다. 시각이 적힌 마감은
+    시각까지 보고, 날짜만 적힌 마감은 그날 끝까지 열린 것으로 본다. 못 읽으면 지나지
+    않은 것으로 둔다 — 잘못 빼는 것보다 낫다.
+    """
+    if not deadline:
+        return False
+    now = now or datetime.now(KST)
+    try:
+        when = datetime.fromisoformat(deadline)
+    except ValueError:
+        return False
+    if when.tzinfo is None:
+        if len(deadline) <= 10:
+            return when.date() < now.date()
+        when = when.replace(tzinfo=KST)
+    return when <= now
+
+
 def _career_label(career_type: str, min_years: int | None) -> str:
     if career_type == "ENTRY":
         return "신입"
@@ -233,14 +255,23 @@ def _career_label(career_type: str, min_years: int | None) -> str:
     return "미기재"
 
 
-def _terms(filters: JobFilters) -> list[str]:
-    """공고 글에서 찾을 말. 직무·기술·자유 키워드를 합친다."""
+def _dedupe(terms: list[str]) -> list[str]:
     seen: list[str] = []
-    for term in [*filters.roles, *filters.skills, *filters.keywords]:
+    for term in terms:
         term = term.strip()
         if term and term not in seen:
             seen.append(term)
     return seen
+
+
+def _role_terms(filters: JobFilters) -> list[str]:
+    """직무·기술 말. 이 중 하나만 맞아도 된다."""
+    return _dedupe([*filters.roles, *filters.skills])
+
+
+def _terms(filters: JobFilters) -> list[str]:
+    """공고 글에서 찾을 말 전부. 관련도(어디서 걸렸나)를 셀 때 쓴다."""
+    return _dedupe([*filters.roles, *filters.skills, *filters.keywords])
 
 
 def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[object]]:
@@ -248,6 +279,11 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
 
     조건이 여럿이면 **모두 만족**해야 한다. 직무·기술 말은 그중 하나만 맞아도 된다 —
     "백엔드 파이썬"이라고 하면 둘 다 적힌 공고만 남기는 것보다 하나라도 걸리는 편이 낫다.
+
+    **키워드(재택·공기업·비전공자 …)는 직무·기술과 따로 묶어 함께 만족해야 한다.** 예전에는
+    한 묶음으로 OR였다. "재택 가능한 QA"가 QA 공고 전부에 "재택"이 스친 공고까지 3,000건
+    넘게 걸렸고, "공기업 IT"에 일반 기업 IT 공고가 나갔다. 키워드는 좁히는 말이다.
+    키워드끼리는 하나만 맞아도 된다("공기업이나 공공기관").
 
     두 곳이 같은 함수를 쓰는 것이 중요하다. "412건 중 Spring 61%"라고 말해 놓고 목록에는
     다른 모수의 공고가 나오면 답이 거짓말이 된다.
@@ -288,10 +324,12 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
         params.append(until)
 
     # 직무·기술은 제목·분류 태그·기술 태그·본문 어디에 있어도 맞은 것으로 본다.
-    terms = _terms(filters)
-    if terms:
+    # 직무·기술 묶음과 키워드 묶음을 따로 걸어 둘 다 만족하게 한다(위 설명).
+    for group in (_role_terms(filters), _dedupe(filters.keywords)):
+        if not group:
+            continue
         clauses = []
-        for term in terms:
+        for term in group:
             parts = []
             for column in ("title", "keywords", "tech_stack", "description"):
                 sql, values = _match(column, term)

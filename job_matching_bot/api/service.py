@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from datetime import datetime
 from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -165,7 +166,6 @@ CHAT_STAGE_LABELS = {
     "stats": "집계",
     "liveness": "마감 확인",
     "answer": "답 쓰기",
-    "peek": "근거 공고",
     "total": "합계",
 }
 
@@ -539,7 +539,11 @@ class RecommendService(_LivenessMixin):
         # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없다. 자르기는 그
         # 다음이다 — 먼저 잘라 버리면 마감된 만큼 자리가 비고 뒤 후보가 올라오지
         # 못한다. 확인 대상이 늘지만(최대 25건) 한 번에 여는 요청이라 시간은 같다.
-        alive = self.drop_dead([hit.job_id for hit, _, _ in candidates])
+        # 마감 시각이 이미 지난 공고는 열어 볼 것 없이 뺀다(검색은 날짜만 견준다).
+        alive = self.drop_dead([
+            hit.job_id for hit, job, _ in candidates
+            if not store_search.deadline_passed(job.deadline)
+        ])
         if len(alive) < len(candidates):
             warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
             candidates = [c for c in candidates if c[0].job_id in alive]
@@ -928,18 +932,27 @@ class ChatService(_LivenessMixin):
 
         # 보여 주기 직전에 내려간 공고를 뺀다. 저장소가 OPEN이라고 해도 사이트에서
         # 이미 마감됐을 수 있다 — 그건 열어 봐야만 안다.
+        #
+        # 보내기 직전에 두 가지를 본다. 마감 **시각**이 지났나(조회는 날짜만 견준다), 그리고
+        # 사이트에서 조기 마감됐나. 시각이 지난 공고는 페이지를 열 것도 없이 뺀다.
         shown = result.jobs
         if shown:
-            alive = self.drop_dead([hit.job_id for hit in shown])
-            if len(alive) < len(shown):
-                shown = [hit for hit in shown if hit.job_id in alive]
+            now = datetime.now(store_search.KST)
+            open_now = [hit for hit in shown if not store_search.deadline_passed(hit.deadline, now)]
+            alive = set(self.drop_dead([hit.job_id for hit in open_now]))
+            kept = [hit for hit in open_now if hit.job_id in alive]
+            if len(kept) < len(shown):
+                gone = [hit for hit in shown if hit.job_id not in alive]
                 result = store_search.SearchResult(
-                    jobs=shown,
-                    total=max(result.total - (len(result.jobs) - len(shown)), len(shown)),
+                    jobs=kept,
+                    total=max(result.total - len(gone), len(kept)),
                     scanned_cap=result.scanned_cap,
-                    strong=min(result.strong, len(shown)),
+                    # 빠진 것 중 직접 맞은 공고만큼 뺀다. 예전에는 보여 줄 수로 잘라
+                    # "247건"이 "4건"으로 줄어 답에 나갈 뻔했다.
+                    strong=max(result.strong - sum(1 for hit in gone if hit.relevance >= 2), 0),
                     skipped=result.skipped,
                 )
+                shown = kept
             clock.lap("liveness")
 
         return schemas.JobChatResponse(
@@ -1014,7 +1027,9 @@ class ChatService(_LivenessMixin):
 
         try:
             condition = retrieval.build_filter(
-                regions=filters.regions,
+                # 인덱스 메타의 지역은 시·도다. "분당구"처럼 좁게 말한 지역은 여기서 못 걸고
+                # 아래에서 주소 글자로 거른다.
+                regions=[region for region in filters.regions if region in market_stats.SIDO],
                 employment_types=filters.employment_types,
                 # 신입이라고 했을 때만 경력 하한을 건다. 나머지는 걸지 않는다.
                 career_years=0 if filters.career == "신입" else 5,
@@ -1028,6 +1043,13 @@ class ChatService(_LivenessMixin):
         found = store_search.by_ids(
             self.store_path, [hit.job_id for hit in hits if hit.job_id not in skip]
         )
+        if filters.regions:
+            # 조건 조회와 같은 잣대로 본다(`region LIKE %지역%`). 시·도만 걸린 벡터 검색이
+            # 판교를 물었는데 용인 공고를 가져와도 여기서 빠진다.
+            found = [
+                hit for hit in found
+                if "전국" in (hit.region or "") or any(r in (hit.region or "") for r in filters.regions)
+            ]
         return found[:top_k]
 
     def _advise(self, request, turn, filters, clock: StageClock) -> schemas.JobChatResponse:
@@ -1056,16 +1078,15 @@ class ChatService(_LivenessMixin):
             }
         )
         clock.lap("answer")
-        # 답의 근거가 된 공고를 몇 건 붙인다. 숫자만 있으면 확인할 길이 없다.
-        peeked = self._peek(filters, request.top_k) if grounded else []
-        if grounded:
-            clock.lap("peek")
+        # 근거 공고를 붙이지 않는다. 예전에는 숫자를 확인하라고 3건을 붙였는데, 사람이
+        # 답을 매겨 보니 "요즘 AI 공고는 뭘 요구해?" 같은 답에는 공고가 필요 없었다.
+        # 그 3건을 찾고 마감을 확인하느라 쓰던 시간도 줄어든다. 공고를 보고 싶으면
+        # 답의 이어 물을 말("이 조건으로 공고 보여줘")로 검색하면 된다.
         return schemas.JobChatResponse(
             mode="질문",
             reply=answer.answer,
             filters=turn.filters,
             total=stats.total if grounded else 0,
-            jobs=peeked,
             suggestions=answer.followups[:3],
         )
 
@@ -1089,11 +1110,11 @@ class ChatService(_LivenessMixin):
                 total=0,
             )
 
-        # 마감됐는지 확인한다. 마감일이 남아 있어도 회사가 채용을 마치면 먼저 닫는다.
-        # 검색·질문·비교는 이미 확인하는데 여기만 안 했다. 대화 안에서 방금 본 공고면
-        # 24시간 캐시가 있어 요청이 안 나가고, 어제 띄워 둔 화면을 오늘 다시 눌렀을 때만
-        # 실제로 열어 본다.
-        alive = self.drop_dead([request.job_id])
+        # 마감됐는지 확인한다. 마감 시각이 지났으면 열어 볼 것도 없다. 시각이 남아 있어도
+        # 회사가 채용을 마치면 먼저 닫으므로 페이지를 본다. 방금 확인한 공고면 캐시가 있어
+        # 요청이 안 나간다(`liveness.TTL_HOURS`).
+        passed = store_search.deadline_passed(record.job.deadline)
+        alive = [] if passed else self.drop_dead([request.job_id])
         clock.lap("liveness")
         if not alive:
             return schemas.JobChatResponse(
@@ -1140,7 +1161,10 @@ class ChatService(_LivenessMixin):
         with SqliteJobStore(self.store_path) as store:
             records = [store.get(job_id) for job_id in job_ids]
         clock.lap("store")
-        alive = self.drop_dead([r.job.job_id for r in records if r is not None])
+        alive = self.drop_dead([
+            r.job.job_id for r in records
+            if r is not None and not store_search.deadline_passed(r.job.deadline)
+        ])
         clock.lap("liveness")
         live = [r for r in records if r is not None and r.job.job_id in alive]
 
@@ -1206,18 +1230,6 @@ class ChatService(_LivenessMixin):
             ],
             total=1,
         )
-
-    def _peek(self, filters, top_k: int) -> list[schemas.JobChatJob]:
-        """센 조건에 맞는 공고 몇 건. 답에 붙여 숫자를 눈으로 확인하게 한다.
-
-        여기도 내려간 공고를 뺀다. 저장소가 OPEN이라고 해도 사이트에서는 이미
-        접수마감일 수 있고, 근거로 붙인 공고가 마감이면 답의 숫자까지 못 믿게 된다.
-        빠진 자리를 채우려고 보여 줄 것보다 넉넉히 가져온 뒤 자른다.
-        """
-        want = min(top_k, 3)
-        result = store_search.search(self.store_path, filters, limit=want * 2)
-        alive = self.drop_dead([hit.job_id for hit in result.jobs])
-        return [_to_chat_job(hit) for hit in result.jobs if hit.job_id in alive][:want]
 
     @staticmethod
     def _reply(understood: str, filters, result, by_meaning: bool = False, more: bool = False) -> str:

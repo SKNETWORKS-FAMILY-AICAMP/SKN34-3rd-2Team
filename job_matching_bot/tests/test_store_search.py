@@ -14,7 +14,7 @@ from pathlib import Path
 
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
-from job_matching_bot.retrieval.store_search import KST, JobFilters, search
+from job_matching_bot.retrieval.store_search import KST, JobFilters, deadline_passed, search
 
 NOW = datetime(2026, 9, 7, 12, tzinfo=KST)
 
@@ -203,6 +203,32 @@ class StoreSearchTest(unittest.TestCase):
         result = self.find(roles=["백엔드"])
         self.assertEqual(2, result.total)
         self.assertEqual(1, result.strong, "본문에만 스친 것은 빼고 센다")
+
+    def test_a_keyword_narrows_instead_of_widening(self):
+        """"재택 가능한 QA"에 QA 공고 전부가 걸렸다. 키워드는 직무와 함께 맞아야 한다."""
+        with SqliteJobStore(self.path) as store:
+            store.upsert([replace(self.jobs[0], job_id="R", source_job_id="R",
+                                  title="백엔드 개발자 (재택 가능)")], source="MOCK")
+        both = self.find(roles=["백엔드"], keywords=["재택"])
+        self.assertEqual(["R"], [job.job_id for job in both.jobs])
+        self.assertGreater(self.find(roles=["백엔드"]).total, both.total)
+
+    def test_keywords_of_the_same_meaning_are_either_or(self):
+        """"공기업이나 공공기관"은 둘 중 하나만 적혀 있어도 된다."""
+        with SqliteJobStore(self.path) as store:
+            store.upsert([replace(self.jobs[0], job_id="P", source_job_id="P",
+                                  title="백엔드 개발자 (공공기관)")], source="MOCK")
+        found = self.find(roles=["백엔드"], keywords=["공기업", "공공기관"])
+        self.assertEqual(["P"], [job.job_id for job in found.jobs])
+
+    def test_deadline_time_is_checked_not_only_the_date(self):
+        now = datetime(2026, 9, 14, 0, 23, tzinfo=KST)
+        self.assertTrue(deadline_passed("2026-09-13T23:59:59+09:00", now), "자정이 지났다")
+        self.assertFalse(deadline_passed("2026-09-14T23:59:59+09:00", now))
+        self.assertFalse(deadline_passed("2026-09-14", now), "날짜만 있으면 그날 끝까지 열림")
+        self.assertTrue(deadline_passed("2026-09-13", now))
+        self.assertFalse(deadline_passed(None, now))
+        self.assertFalse(deadline_passed("상시채용", now), "못 읽으면 빼지 않는다")
 
     def test_excluded_ids_give_the_next_ones(self):
         """이미 보여 준 공고를 빼고 다음을 준다. 전체 건수는 그대로다."""

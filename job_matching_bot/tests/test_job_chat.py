@@ -13,11 +13,13 @@ from __future__ import annotations
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from job_matching_bot.api import schemas
 from job_matching_bot.api.service import ChatService, StoreUnavailable
 from job_matching_bot.retrieval import store_search
+from job_matching_bot.retrieval.store_search import KST
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
 
@@ -195,6 +197,20 @@ class SearchTest(ChatTestCase):
         response = self.ask(turn(roles=["백엔드"]))
         self.assertEqual(8, response.total)
         self.assertEqual({}, self.found, "인덱스를 부르지 않는다")
+
+    def test_a_posting_whose_deadline_time_passed_is_not_sent(self):
+        """조회는 날짜만 견준다. 밤 11시에 받은 "오늘 23:59 마감"을 자정 넘어 보면 닫혀
+        있었다. 보내기 직전에 시각까지 본다."""
+        passed = (datetime.now(KST) - timedelta(minutes=1)).isoformat(timespec="seconds")
+        with SqliteJobStore(self.path) as store:
+            store.upsert([replace(mock_jobs()[0], job_id="J1", source_job_id="J1",
+                                  company="1회사", title="백엔드 개발자", tech_stack=["Python"],
+                                  keywords=["IT개발·데이터"], region="서울 강남구",
+                                  career_type="ENTRY", min_career_years=None,
+                                  employment_type="정규직", deadline=passed, status="OPEN")],
+                         source="MOCK")
+        response = self.ask(turn(roles=["백엔드"]), top_k=8)
+        self.assertNotIn("J1", [job.job_id for job in response.jobs])
 
     def test_reply_does_not_use_inner_words(self):
         """"직무가 맞는 건", "관련도"는 사용자가 알 필요 없는 구분이다."""
@@ -513,6 +529,18 @@ class MeaningSearchTest(ChatTestCase):
         )
         self.assertIsNotNone(self.found["filter"])
 
+    def test_a_narrow_region_is_kept_after_the_index(self):
+        """인덱스의 지역은 시·도라 "강남구"를 못 건다. 가져온 뒤 주소 글자로 거른다.
+
+        "판교"를 경기로 넓혀 찾았더니 용인·수원 공고가 나갔다.
+        """
+        self.by_meaning = ["J1", "J2", "J3"]  # J2는 부산이다
+        response = self.ask(
+            turn(keywords=["돈 다루는 일"], regions=["강남구"], requirement_query="[주요업무] 전표 처리"),
+        )
+        self.assertEqual(["J1", "J3"], [job.job_id for job in response.jobs])
+        self.assertNotIn("강남구", str(self.found["filter"]), "인덱스에는 시·도만 건다")
+
     def test_closed_jobs_from_the_index_are_dropped(self):
         """인덱스는 밤에 한 번 갱신된다. 낮에 마감된 공고가 남아 있을 수 있다."""
         self.by_meaning = ["J1", "없는공고", "J2"]
@@ -633,11 +661,13 @@ class AdviceTest(ChatTestCase):
         self.assertIn("Python", self.advised["stats"])
         self.assertEqual("백엔드 신입은 뭘 준비해야 해?", self.advised["question"])
 
-    def test_answer_carries_the_jobs_it_counted(self):
-        """숫자만 주면 확인할 길이 없다. 근거가 된 공고를 몇 건 붙인다."""
+    def test_answer_does_not_attach_jobs(self):
+        """사람이 답을 매겨 보니 질문 답에는 공고가 필요 없었다. 센 건수만 남긴다.
+
+        예전에는 근거로 3건을 붙였고, 그걸 찾고 마감을 확인하느라 시간이 들었다.
+        """
         response = self.ask(turn(intent="질문", roles=["백엔드"]), message="뭐가 필요해?")
-        self.assertTrue(response.jobs)
-        self.assertLessEqual(len(response.jobs), 3)
+        self.assertEqual([], response.jobs)
         self.assertEqual(8, response.total)
 
     def test_a_countable_question_with_no_conditions_counts_everything(self):
@@ -653,7 +683,6 @@ class AdviceTest(ChatTestCase):
         self.assertIn("전체", self.advised["stats"])
         self.assertIn("Python", self.advised["stats"])
         self.assertEqual(8, response.total)
-        self.assertTrue(response.jobs)
 
     def test_the_table_says_what_it_counted(self):
         """모수를 밝히지 않으면 모델이 표를 믿지 못해 "알 수 없다"고 물러선다.
@@ -688,38 +717,6 @@ class AdviceTest(ChatTestCase):
         )
         self.assertEqual(3, len(response.suggestions), "세 개까지만")
         self.assertIn("서울은 몇 건이야?", response.suggestions)
-
-
-class AdviceEvidenceTest(ChatTestCase):
-    """질문 답에 붙는 근거 공고. 여기도 내려간 공고는 빼야 한다.
-
-    검색 답에서는 빼면서 질문 답의 근거에서는 빼지 않아, 저장소가 아직 OPEN으로
-    아는 접수마감 공고가 그대로 화면에 붙어 나갔다.
-    """
-
-    class _Liveness:
-        """맨 앞 공고 하나만 내려간 것으로 본다."""
-
-        def __init__(self) -> None:
-            self.asked: list[str] = []
-
-        def alive(self, job_ids: list[str]) -> list[str]:
-            self.asked = list(job_ids)
-            return list(job_ids[1:])
-
-    def test_closed_jobs_do_not_become_evidence(self):
-        service = self.service(turn(intent="질문", roles=["백엔드"]))
-        liveness = self._Liveness()
-        service._liveness = liveness
-
-        response = service.chat(
-            schemas.JobChatRequest(message="요즘 뭘 많이 뽑아?", top_k=5)
-        )
-
-        self.assertTrue(liveness.asked, "근거로 붙일 공고도 열어 본다")
-        shown = [job.job_id for job in response.jobs]
-        self.assertNotIn(liveness.asked[0], shown, "내려간 공고는 근거가 될 수 없다")
-        self.assertEqual(3, len(shown), "빠진 자리는 다음 공고가 채운다")
 
 
 class JobQuestionTest(ChatTestCase):
