@@ -14,6 +14,7 @@ import '../theme/mileage_theme.dart';
 import 'mileage_cart_actions.dart';
 import 'widgets/mileage_product_dialogs.dart';
 import 'widgets/mileage_widgets.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 마일리지 교환소
 class MileageShopScreen extends ConsumerStatefulWidget {
@@ -62,7 +63,7 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
           ? FloatingActionButton.extended(
               backgroundColor: MileageColors.primary,
               elevation: 2,
-              extendedPadding: const EdgeInsets.symmetric(horizontal: 12),
+              extendedPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
               onPressed: () => context.push(RoutePaths.mileageCart),
               icon: Badge(
                 label: Text('$cartCount', style: const TextStyle(fontSize: 10)),
@@ -99,8 +100,8 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                   ),
                   const SizedBox(height: MileageLayout.sectionGap),
                   usageAsync.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(24),
+                    loading: () => Padding(
+                      padding: EdgeInsets.all(AppSpace.s(24)),
                       child: Center(child: CircularProgressIndicator()),
                     ),
                     error: (e, _) => ErrorView(message: e.toString()),
@@ -117,7 +118,9 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                                   .map(
                                     (u) => Expanded(
                                       child: Padding(
-                                        padding: const EdgeInsets.only(right: 8),
+                                        padding: EdgeInsets.only(
+                                          right: AppSpace.s(8),
+                                        ),
                                         child: _CategoryLimitCard(usage: u),
                                       ),
                                     ),
@@ -129,7 +132,7 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                             children: usages
                                 .map(
                                   (u) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
+                                    padding: EdgeInsets.only(bottom: AppSpace.s(8)),
                                     child: _CategoryLimitCard(usage: u),
                                   ),
                                 )
@@ -155,7 +158,7 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: MileageLayout.pagePaddingH,
@@ -173,17 +176,17 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                             ('low', '낮은 순'),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: AppSpace.s(8)),
                         TextField(
                           controller: _searchController,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: '상품 검색',
                             isDense: true,
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.search, size: 18),
                             contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
+                              horizontal: AppSpace.s(12),
+                              vertical: AppSpace.s(10),
                             ),
                           ),
                           style: const TextStyle(fontSize: 13),
@@ -194,8 +197,8 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                   ),
                   const SizedBox(height: MileageLayout.sectionGap),
                   productsAsync.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(40),
+                    loading: () => Padding(
+                      padding: EdgeInsets.all(AppSpace.s(40)),
                       child: Center(child: CircularProgressIndicator()),
                     ),
                     error: (e, _) => ErrorView(message: e.toString()),
@@ -204,8 +207,8 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                       list = _sortProducts(list);
 
                       if (list.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.all(40),
+                        return Padding(
+                          padding: EdgeInsets.all(AppSpace.s(40)),
                           child: Center(
                             child: Text('등록된 상품이 없습니다.\n관리자에게 문의해 주세요.'),
                           ),
@@ -221,18 +224,18 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
                             final crossCount = constraints.maxWidth > 900
                                 ? 4
                                 : constraints.maxWidth > 600
-                                    ? 3
-                                    : 2;
+                                ? 3
+                                : 2;
                             return GridView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
                               gridDelegate:
                                   SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: crossCount,
-                                mainAxisSpacing: 10,
-                                crossAxisSpacing: 10,
-                                childAspectRatio: 0.78,
-                              ),
+                                    crossAxisCount: crossCount,
+                                    mainAxisSpacing: 10,
+                                    crossAxisSpacing: 10,
+                                    childAspectRatio: 0.78,
+                                  ),
                               itemCount: list.length,
                               itemBuilder: (_, i) => _ProductCard(
                                 product: list[i],
@@ -263,7 +266,9 @@ class _MileageShopScreenState extends ConsumerState<MileageShopScreen> {
     );
   }
 
-  List<MileageProductModel> _filterProducts(List<MileageProductModel> products) {
+  List<MileageProductModel> _filterProducts(
+    List<MileageProductModel> products,
+  ) {
     return products.where((p) {
       if (_categoryFilter != 'all' && p.category != _categoryFilter) {
         return false;
@@ -361,7 +366,7 @@ class _CategoryLimitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(AppSpace.s(12)),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(10),
@@ -376,10 +381,13 @@ class _CategoryLimitCard extends StatelessWidget {
                 size: 16,
                 color: MileageColors.categoryTagColor(usage.category),
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: AppSpace.s(4)),
               Text(
                 usage.categoryLabel,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
               const Spacer(),
               Text(
@@ -391,7 +399,7 @@ class _CategoryLimitCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
           Text(
             formatMileageM(usage.remaining),
             style: const TextStyle(
@@ -403,7 +411,7 @@ class _CategoryLimitCard extends StatelessWidget {
             '추가 신청 가능',
             style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           Text(
             '승인 ${formatMileageM(usage.approved)} · '
             '대기 ${formatMileageM(usage.pending)} · '
@@ -416,11 +424,11 @@ class _CategoryLimitCard extends StatelessWidget {
   }
 
   IconData _iconFor(String category) => switch (category) {
-        MileageCategories.gifticon => Icons.card_giftcard,
-        MileageCategories.book => Icons.menu_book_outlined,
-        MileageCategories.onlineCourse => Icons.play_circle_outline,
-        _ => Icons.shopping_bag_outlined,
-      };
+    MileageCategories.gifticon => Icons.card_giftcard,
+    MileageCategories.book => Icons.menu_book_outlined,
+    MileageCategories.onlineCourse => Icons.play_circle_outline,
+    _ => Icons.shopping_bag_outlined,
+  };
 }
 
 class _ProductCard extends StatelessWidget {
@@ -451,7 +459,7 @@ class _ProductCard extends StatelessWidget {
             border: Border.all(color: AppColors.border),
             borderRadius: BorderRadius.circular(12),
           ),
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(AppSpace.s(10)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -459,13 +467,14 @@ class _ProductCard extends StatelessWidget {
                 label: product.categoryLabel,
                 color: tagColor,
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               Expanded(
                 child: Center(
-                  child: product.imageUrl != null && product.imageUrl!.isNotEmpty
+                  child:
+                      product.imageUrl != null && product.imageUrl!.isNotEmpty
                       ? Image.network(
                           product.imageUrl!,
-                          height: 44,
+                          height: AppSpace.row(44),
                           errorBuilder: (_, _, _) => _placeholderIcon(),
                         )
                       : _placeholderIcon(),
@@ -480,9 +489,9 @@ class _ProductCard extends StatelessWidget {
                   fontSize: 12,
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               if (product.isCustomPrice)
-                const Text(
+                Text(
                   '가격 직접 입력',
                   style: TextStyle(
                     color: MileageColors.primary,
@@ -493,12 +502,15 @@ class _ProductCard extends StatelessWidget {
               else
                 Row(
                   children: [
-                    const Icon(Icons.monetization_on_outlined,
-                        size: 16, color: MileageColors.primary),
-                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.monetization_on_outlined,
+                      size: 16,
+                      color: MileageColors.primary,
+                    ),
+                    SizedBox(width: AppSpace.s(4)),
                     Text(
                       formatMileageM(product.fixedPrice ?? 0),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: MileageColors.primary,
                       ),
@@ -506,7 +518,7 @@ class _ProductCard extends StatelessWidget {
                   ],
                 ),
               if (usage != null) ...[
-                const SizedBox(height: 6),
+                SizedBox(height: AppSpace.s(6)),
                 Text(
                   '잔여 ${formatMileageM(usage!.remaining)}',
                   style: TextStyle(
@@ -527,8 +539,8 @@ class _ProductCard extends StatelessWidget {
       product.category == MileageCategories.onlineCourse
           ? Icons.play_circle_outline
           : product.category == MileageCategories.book
-              ? Icons.menu_book_outlined
-              : Icons.card_giftcard,
+          ? Icons.menu_book_outlined
+          : Icons.card_giftcard,
       size: 36,
       color: AppColors.textHint,
     );

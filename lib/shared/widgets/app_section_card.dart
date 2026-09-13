@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_space.dart';
 
 /// 화이트 서피스 카드 — border + soft shadow
 class AppSectionCard extends StatelessWidget {
   const AppSectionCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    EdgeInsetsGeometry? padding,
     this.margin = EdgeInsets.zero,
     this.onTap,
-  });
+  }) : _padding = padding;
 
   final Widget child;
-  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry? _padding;
+
+  /// 비워 두면 기본 여백. 밀도 설정에 따라 줄어든다.
+  EdgeInsetsGeometry get padding => _padding ?? EdgeInsets.all(AppSpace.s(16));
   final EdgeInsetsGeometry margin;
   final VoidCallback? onTap;
 
@@ -62,7 +66,7 @@ class AppSectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: AppSpace.s(10)),
       child: Row(
         children: [
           Expanded(

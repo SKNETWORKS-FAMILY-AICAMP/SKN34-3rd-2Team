@@ -29,13 +29,14 @@ abstract final class AttendanceStatus {
     outing: '외출',
   };
 
-  static const colors = {
+  /// 어두운 화면에서는 같은 이름이 다른 색을 준다. 표를 미리 굳히지 않는다.
+  static Map<String, Color> get colors => {
     present: AppColors.success,
     late: AppColors.warning,
     absent: AppColors.error,
     officialLeave: AppColors.info,
     earlyLeave: AppColors.primary,
-    outing: Color(0xFF0F766E),
+    outing: const Color(0xFF0F766E),
   };
 
   static String labelOf(String? status) => labels[status] ?? status ?? '-';

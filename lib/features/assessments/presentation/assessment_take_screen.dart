@@ -12,6 +12,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../data/assessment_functions_service.dart';
 import 'widgets/assessment_question_view.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 학생 응시 화면
 class AssessmentTakeScreen extends ConsumerStatefulWidget {
@@ -112,8 +113,9 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
         final questions = await repo
             .watchAssessmentQuestions(cohortId, widget.assessmentId)
             .first;
-        final assessment =
-            await repo.watchAssessment(cohortId, widget.assessmentId).first;
+        final assessment = await repo
+            .watchAssessment(cohortId, widget.assessmentId)
+            .first;
         setState(() {
           _title = assessment?.title ?? '';
           _questions
@@ -215,7 +217,9 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
           answers: Map<String, dynamic>.from(_answers),
         );
       } else {
-        await ref.read(assessmentFunctionsServiceProvider).submitAssessment(
+        await ref
+            .read(assessmentFunctionsServiceProvider)
+            .submitAssessment(
               cohortId: cohortId,
               assessmentId: widget.assessmentId,
               answers: Map<String, dynamic>.from(_answers),
@@ -248,89 +252,88 @@ class _AssessmentTakeScreenState extends ConsumerState<AssessmentTakeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_error!, textAlign: TextAlign.center),
+          ? Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpace.s(24)),
+                child: Text(_error!, textAlign: TextAlign.center),
+              ),
+            )
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView.separated(
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(16), AppSpace.s(16), AppSpace.s(24)),
+                    itemCount: _questions.length,
+                    separatorBuilder: (_, __) => SizedBox(height: AppSpace.s(20)),
+                    itemBuilder: (context, i) {
+                      final q = _questions[i];
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        heightFactor: 1,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: AppLayout.reading,
+                          ),
+                          child: AssessmentQuestionView(
+                            number: i + 1,
+                            prompt: q.prompt,
+                            points: q.points,
+                            type: q.type,
+                            choices: q.choices,
+                            selectedIndex: q.type == 'mc'
+                                ? _asInt(_answers[q.id])
+                                : null,
+                            shortAnswer: q.type != 'mc'
+                                ? '${_answers[q.id] ?? ''}'
+                                : null,
+                            mode: AssessmentQuestionViewMode.take,
+                            onSelectChoice: (ci) =>
+                                setState(() => _answers[q.id] = ci),
+                            onShortAnswerChanged: (v) => _answers[q.id] = v,
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                        itemCount: _questions.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 20),
-                        itemBuilder: (context, i) {
-                          final q = _questions[i];
-                          return Align(
-                            alignment: Alignment.topCenter,
-                            heightFactor: 1,
-                            child: ConstrainedBox(
-                              constraints:
-                                  const BoxConstraints(maxWidth: AppLayout.reading),
-                              child: AssessmentQuestionView(
-                                number: i + 1,
-                                prompt: q.prompt,
-                                points: q.points,
-                                type: q.type,
-                                choices: q.choices,
-                                selectedIndex: q.type == 'mc'
-                                    ? _asInt(_answers[q.id])
-                                    : null,
-                                shortAnswer: q.type != 'mc'
-                                    ? '${_answers[q.id] ?? ''}'
-                                    : null,
-                                mode: AssessmentQuestionViewMode.take,
-                                onSelectChoice: (ci) =>
-                                    setState(() => _answers[q.id] = ci),
-                                onShortAnswerChanged: (v) =>
-                                    _answers[q.id] = v,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Material(
-                      color: Colors.white,
-                      elevation: 6,
-                      child: SafeArea(
-                        top: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                          child: Align(
-                            alignment: Alignment.center,
-                            heightFactor: 1,
-                            child: ConstrainedBox(
-                              constraints:
-                                  const BoxConstraints(maxWidth: AppLayout.reading),
-                              child: SizedBox(
-                                width: double.infinity,
-                                height: 48,
-                                child: FilledButton(
-                                  onPressed:
-                                      _submitting ? null : _submit,
-                                  child: _submitting
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : const Text('제출하기'),
-                                ),
-                              ),
+                ),
+                Material(
+                  color: AppColors.surface,
+                  elevation: 6,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(10), AppSpace.s(16), AppSpace.s(12)),
+                      child: Align(
+                        alignment: Alignment.center,
+                        heightFactor: 1,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: AppLayout.reading,
+                          ),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: AppSpace.row(48),
+                            child: FilledButton(
+                              onPressed: _submitting ? null : _submit,
+                              child: _submitting
+                                  ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text('제출하기'),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
     );
   }
 }

@@ -12,12 +12,21 @@ abstract final class AppTheme {
     disabledForegroundColor: Colors.white,
   );
 
+  /// [dark]는 `AppColors`가 이미 어두운 값을 돌려주고 있다는 뜻이다.
+  /// 여기서는 밝기만 알려 주면 나머지 색은 저절로 따라온다.
+  /// [dense]면 버튼·입력칸의 높이와 안쪽 여백을 줄인다. [visualDensity]는
+  /// 목록 줄·체크박스처럼 Material이 알아서 줄이는 부품에 쓰인다.
   static ThemeData light({
-    Color primary = AppColors.primary,
-    Color primaryLight = AppColors.primaryLight,
+    Color? primary,
+    Color? primaryLight,
+    bool dark = false,
+    bool dense = false,
+    VisualDensity? visualDensity,
   }) {
+    primary ??= AppColors.primary;
+    primaryLight ??= AppColors.primaryLight;
     final colorScheme = ColorScheme(
-      brightness: Brightness.light,
+      brightness: dark ? Brightness.dark : Brightness.light,
       primary: primary,
       onPrimary: Colors.white,
       primaryContainer: primaryLight,
@@ -32,11 +41,13 @@ abstract final class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      brightness: dark ? Brightness.dark : Brightness.light,
+      visualDensity: visualDensity,
       fontFamily: 'Paperlogy',
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
       dividerColor: AppColors.divider,
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
@@ -50,32 +61,32 @@ abstract final class AppTheme {
         shadowColor: AppColors.shadow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
-        hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
-        labelStyle: const TextStyle(
+        hintStyle: TextStyle(color: AppColors.textHint, fontSize: 14),
+        labelStyle: TextStyle(
           color: AppColors.textSecondary,
           fontSize: 13,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: primary, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: dense ? 12 : 16,
+          vertical: dense ? 10 : 14,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -84,8 +95,11 @@ abstract final class AppTheme {
           foregroundColor: Colors.white,
           disabledBackgroundColor: primary.withValues(alpha: 0.45),
           disabledForegroundColor: Colors.white,
-          minimumSize: const Size(64, 40),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          minimumSize: Size(64, dense ? 34 : 40),
+          padding: EdgeInsets.symmetric(
+            horizontal: dense ? 12 : 16,
+            vertical: dense ? 8 : 12,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -102,7 +116,7 @@ abstract final class AppTheme {
           foregroundColor: Colors.white,
           disabledBackgroundColor: primary.withValues(alpha: 0.45),
           disabledForegroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 50),
+          minimumSize: Size(double.infinity, dense ? 42 : 50),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -116,7 +130,7 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -140,19 +154,19 @@ abstract final class AppTheme {
               fontSize: 12,
             );
           }
-          return const TextStyle(color: AppColors.textSecondary, fontSize: 12);
+          return TextStyle(color: AppColors.textSecondary, fontSize: 12);
         }),
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: AppColors.surface,
         selectedIconTheme: IconThemeData(color: primary, size: 24),
-        unselectedIconTheme: const IconThemeData(
+        unselectedIconTheme: IconThemeData(
           color: AppColors.textSecondary,
           size: 24,
         ),
         indicatorColor: primaryLight,
       ),
-      drawerTheme: const DrawerThemeData(
+      drawerTheme: DrawerThemeData(
         backgroundColor: AppColors.surface,
       ),
       tabBarTheme: TabBarThemeData(
@@ -166,7 +180,7 @@ abstract final class AppTheme {
         labelStyle: TextStyle(color: primary, fontSize: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
         ),
         side: BorderSide.none,
       ),
@@ -190,7 +204,7 @@ abstract final class AppTheme {
         width: 420,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        contentTextStyle: const TextStyle(
+        contentTextStyle: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
           color: Colors.white,

@@ -13,6 +13,7 @@ import '../data/student_admin_service.dart';
 import '../providers/student_admin_providers.dart';
 import 'widgets/admin_page_layout.dart';
 import 'widgets/credential_dialog.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 상담 정보 입력 + 계정 생성 (한 화면)
 class AdminStudentCreateScreen extends ConsumerStatefulWidget {
@@ -171,7 +172,7 @@ class _AdminStudentCreateScreenState
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: AppSpace.s(6)),
                 Text(
                   cohortName != null
                       ? '기수: $cohortName · 상담 내용 입력 후 계정을 생성합니다.'
@@ -181,7 +182,7 @@ class _AdminStudentCreateScreenState
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 AdminFormSection(
                   title: '기본 정보',
                   children: [
@@ -194,7 +195,7 @@ class _AdminStudentCreateScreenState
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? '이름을 입력하세요' : null,
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppSpace.s(12)),
                     TextFormField(
                       controller: _personalEmail,
                       keyboardType: TextInputType.emailAddress,
@@ -205,7 +206,7 @@ class _AdminStudentCreateScreenState
                       ),
                       validator: Validators.email,
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppSpace.s(12)),
                     TextFormField(
                       controller: _seatNumber,
                       keyboardType: TextInputType.number,
@@ -262,7 +263,7 @@ class _AdminStudentCreateScreenState
                     _field(_slumpOvercome, '슬럼프 극복 경험 *', maxLines: 3),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 if (_isSubmitting)
                   const Center(child: CircularProgressIndicator())
                 else
@@ -274,7 +275,7 @@ class _AdminStudentCreateScreenState
                       minimumSize: const Size.fromHeight(48),
                     ),
                   ),
-                const SizedBox(height: 24),
+                SizedBox(height: AppSpace.s(24)),
               ],
             ),
           ),
@@ -290,7 +291,7 @@ class _AdminStudentCreateScreenState
     int maxLines = 1,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: AppSpace.s(12)),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,

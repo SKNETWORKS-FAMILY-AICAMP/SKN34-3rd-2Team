@@ -13,6 +13,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
 import '../../mileage/theme/mileage_theme.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 마일리지 수동 지급/차감
 class AdminMileageAdjustScreen extends ConsumerStatefulWidget {
@@ -123,7 +124,7 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             AdminFormSection(
               title: '학생 선택',
               children: [
@@ -136,7 +137,7 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v.trim()),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 studentsAsync.when(
                   loading: () => const LinearProgressIndicator(),
                   error: (e, _) => Text(e.toString()),
@@ -197,7 +198,7 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                   onSelectionChanged: (s) =>
                       setState(() => _isGrant = s.first),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
@@ -206,7 +207,7 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextField(
                   controller: _reasonController,
                   decoration: const InputDecoration(
@@ -215,9 +216,9 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                   ),
                   maxLines: 2,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 FilledButton(
-                  style: mileagePrimaryButtonStyle(minHeight: 40),
+                  style: mileagePrimaryButtonStyle(minHeight: AppSpace.row(40)),
                   onPressed: _submitting ? null : _submit,
                   child: _submitting
                       ? const SizedBox(
@@ -229,12 +230,12 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             const Text(
               '최근 마일리지 내역',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             transactionsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => ErrorView(message: e.toString()),

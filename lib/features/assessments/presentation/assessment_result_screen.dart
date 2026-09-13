@@ -13,6 +13,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../data/assessment_functions_service.dart';
 import 'widgets/assessment_question_view.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 학생 — 결과 화면 (문항별 정답 리뷰)
 class AssessmentResultScreen extends ConsumerStatefulWidget {
@@ -129,7 +130,8 @@ class _AssessmentResultScreenState
         _loading = false;
         if (e is FirebaseFunctionsException) {
           final msg = e.message?.trim();
-          _error = (msg != null &&
+          _error =
+              (msg != null &&
                   msg.isNotEmpty &&
                   msg.toUpperCase() != 'INTERNAL' &&
                   !msg.toUpperCase().startsWith('INTERNAL '))
@@ -161,152 +163,147 @@ class _AssessmentResultScreenState
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                        children: [
-                          Align(
-                            alignment: Alignment.topCenter,
-                            heightFactor: 1,
-                            child: ConstrainedBox(
-                              constraints:
-                                  const BoxConstraints(maxWidth: AppLayout.reading),
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.stretch,
-                                children: [
-                                  Card(
-                                    elevation: 0,
-                                    color: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(12),
-                                      side: BorderSide(
-                                        color: AppColors.border,
-                                      ),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(20),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            assessment.asData?.value
-                                                    ?.title ??
-                                                '성취도평가',
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            user?.displayName ?? '',
-                                            style: TextStyle(
-                                              color:
-                                                  AppColors.textSecondary,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Text(
-                                            '$_totalScore / ${assessment.asData?.value?.maxScore ?? '-'}',
-                                            style: const TextStyle(
-                                              fontSize: 36,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '자동채점 $_autoTotal점'
-                                            '${_totalScore != _autoTotal ? ' · 조정 반영' : ''}',
-                                            style: TextStyle(
-                                              color:
-                                                  AppColors.textSecondary,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  const Text(
-                                    '문항별 결과',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ..._questions.asMap().entries.map((e) {
-                                    final q = e.value;
-                                    final ans = _answers[q.id];
-                                    final selected = _asInt(ans?.value);
-                                    return Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 20,
-                                      ),
-                                      child: AssessmentQuestionView(
-                                        number: e.key + 1,
-                                        prompt: q.prompt,
-                                        points: q.points,
-                                        type: q.type.value,
-                                        choices: q.choices,
-                                        correctIndex: q.correctIndex,
-                                        acceptedAnswers: q.acceptedAnswers,
-                                        explanation: q.explanation,
-                                        selectedIndex: selected,
-                                        shortAnswer: q.type ==
-                                                AssessmentQuestionType
-                                                    .shortAnswer
-                                            ? '${ans?.value ?? ''}'
-                                            : null,
-                                        mode: AssessmentQuestionViewMode
-                                            .review,
-                                        earnedScore: ans?.finalScore,
-                                        isCorrect: ans?.isCorrect,
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ),
-                            ),
+          ? Center(child: Text(_error!))
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(16), AppSpace.s(16), AppSpace.s(24)),
+                    children: [
+                      Align(
+                        alignment: Alignment.topCenter,
+                        heightFactor: 1,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: AppLayout.reading,
                           ),
-                        ],
-                      ),
-                    ),
-                    Material(
-                      color: Colors.white,
-                      elevation: 6,
-                      child: SafeArea(
-                        top: false,
-                        child: Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                          child: Align(
-                            alignment: Alignment.center,
-                            heightFactor: 1,
-                            child: ConstrainedBox(
-                              constraints:
-                                  const BoxConstraints(maxWidth: AppLayout.reading),
-                              child: SizedBox(
-                                width: double.infinity,
-                                height: 48,
-                                child: FilledButton(
-                                  onPressed: _leave,
-                                  child: const Text('확인 · 나가기'),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Card(
+                                elevation: 0,
+                                color: AppColors.surface,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: AppColors.border,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: EdgeInsets.all(AppSpace.s(20)),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        assessment.asData?.value?.title ??
+                                            '성취도평가',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      SizedBox(height: AppSpace.s(8)),
+                                      Text(
+                                        user?.displayName ?? '',
+                                        style: TextStyle(
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                      SizedBox(height: AppSpace.s(16)),
+                                      Text(
+                                        '$_totalScore / ${assessment.asData?.value?.maxScore ?? '-'}',
+                                        style: const TextStyle(
+                                          fontSize: 36,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      SizedBox(height: AppSpace.s(4)),
+                                      Text(
+                                        '자동채점 $_autoTotal점'
+                                        '${_totalScore != _autoTotal ? ' · 조정 반영' : ''}',
+                                        style: TextStyle(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
+                              SizedBox(height: AppSpace.s(20)),
+                              const Text(
+                                '문항별 결과',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              SizedBox(height: AppSpace.s(12)),
+                              ..._questions.asMap().entries.map((e) {
+                                final q = e.value;
+                                final ans = _answers[q.id];
+                                final selected = _asInt(ans?.value);
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: AppSpace.s(20),
+                                  ),
+                                  child: AssessmentQuestionView(
+                                    number: e.key + 1,
+                                    prompt: q.prompt,
+                                    points: q.points,
+                                    type: q.type.value,
+                                    choices: q.choices,
+                                    correctIndex: q.correctIndex,
+                                    acceptedAnswers: q.acceptedAnswers,
+                                    explanation: q.explanation,
+                                    selectedIndex: selected,
+                                    shortAnswer:
+                                        q.type ==
+                                            AssessmentQuestionType.shortAnswer
+                                        ? '${ans?.value ?? ''}'
+                                        : null,
+                                    mode: AssessmentQuestionViewMode.review,
+                                    earnedScore: ans?.finalScore,
+                                    isCorrect: ans?.isCorrect,
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Material(
+                  color: AppColors.surface,
+                  elevation: 6,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(10), AppSpace.s(16), AppSpace.s(12)),
+                      child: Align(
+                        alignment: Alignment.center,
+                        heightFactor: 1,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: AppLayout.reading,
+                          ),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: AppSpace.row(48),
+                            child: FilledButton(
+                              onPressed: _leave,
+                              child: const Text('확인 · 나가기'),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
     );
   }
 }

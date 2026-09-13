@@ -11,6 +11,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../data/record_submission_helper.dart';
 import 'widgets/record_file_upload.dart';
 import 'widgets/record_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 class RecordStudyFormScreen extends ConsumerStatefulWidget {
   const RecordStudyFormScreen({super.key});
@@ -132,7 +133,7 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
       user: user,
       cohortName: cohortName,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: EdgeInsets.only(bottom: AppSpace.s(24)),
         child: RecordFormPanel(
           title: '스터디 제출',
           child: Column(
@@ -141,7 +142,7 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
               RecordInfoBanner(
                 message: RecordTypes.descriptions[RecordTypes.study]!,
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('팀 스터디입니다'),
@@ -149,13 +150,13 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
                 value: _isTeamStudy,
                 onChanged: (v) => setState(() => _isTeamStudy = v),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               const RecordFieldLabel('스터디 제목'),
               TextField(
                 controller: _titleCtrl,
                 decoration: recordInputDecoration(hint: '예: 알고리즘 스터디'),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('기간'),
               Row(
                 children: [
@@ -169,8 +170,8 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
                       ),
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
                     child: Text('~'),
                   ),
                   Expanded(
@@ -185,7 +186,7 @@ class _RecordStudyFormScreenState extends ConsumerState<RecordStudyFormScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('증빙 이미지'),
               RecordFileUpload(
                 files: _files,

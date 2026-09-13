@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'widgets/record_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// Record type selection
 class RecordTypeSelectScreen extends ConsumerWidget {
@@ -26,7 +27,7 @@ class RecordTypeSelectScreen extends ConsumerWidget {
       user: user,
       cohortName: cohortName,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: EdgeInsets.only(bottom: AppSpace.s(24)),
         child: RecordFormPanel(
           title: '새로운 기록 추가',
           child: Column(
@@ -37,7 +38,7 @@ class RecordTypeSelectScreen extends ConsumerWidget {
                 description: RecordTypes.descriptions[RecordTypes.studyCert]!,
                 onTap: () => context.push(RoutePaths.recordsCreateStudyCert),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               _TypeCard(
                 icon: Icons.quiz_outlined,
                 title: RecordTypes.labels[RecordTypes.precourseQuiz]!,
@@ -46,7 +47,7 @@ class RecordTypeSelectScreen extends ConsumerWidget {
                 onTap: () =>
                     context.push(RoutePaths.recordsCreatePrecourseQuiz),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               _TypeCard(
                 icon: Icons.workspace_premium_outlined,
                 title: RecordTypes.labels[RecordTypes.certification]!,
@@ -54,14 +55,14 @@ class RecordTypeSelectScreen extends ConsumerWidget {
                     RecordTypes.descriptions[RecordTypes.certification]!,
                 onTap: () => context.push(RoutePaths.recordsCreateCert),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               _TypeCard(
                 icon: Icons.groups_outlined,
                 title: RecordTypes.labels[RecordTypes.study]!,
                 description: RecordTypes.descriptions[RecordTypes.study]!,
                 onTap: () => context.push(RoutePaths.recordsCreateStudy),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               _TypeCard(
                 icon: Icons.article_outlined,
                 title: RecordTypes.labels[RecordTypes.blog]!,
@@ -104,19 +105,19 @@ class _TypeCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(AppSpace.s(16)),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(AppSpace.s(10)),
                 decoration: BoxDecoration(
                   color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: AppColors.primary, size: 22),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: AppSpace.s(14)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,7 +129,7 @@ class _TypeCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: AppSpace.s(6)),
                     Text(
                       description,
                       style: TextStyle(

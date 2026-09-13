@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/youtube_recommendation_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 관리자 — YouTube 추천 영상 목록 + 등록/수정
 class AdminYoutubeRecommendationPanel extends ConsumerWidget {
@@ -51,7 +52,9 @@ class AdminYoutubeRecommendationPanel extends ConsumerWidget {
     if (cohortId == null) return;
 
     try {
-      await ref.read(lmsRepositoryProvider).deleteYoutubeRecommendation(
+      await ref
+          .read(lmsRepositoryProvider)
+          .deleteYoutubeRecommendation(
             cohortId: cohortId,
             videoId: video.id,
           );
@@ -94,22 +97,22 @@ class AdminYoutubeRecommendationPanel extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpace.s(8)),
         Text(
           '선택적 수동 큐레이션입니다. 학생 학습실 추천은 커리큘럼 주차 + YouTube API로 자동 표시됩니다.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         videos.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.all(24),
+          loading: () => Padding(
+            padding: EdgeInsets.all(AppSpace.s(24)),
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ),
           error: (e, _) => Text('오류: $e'),
           data: (list) {
             if (list.isEmpty) {
               return Container(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(AppSpace.s(20)),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(14),
@@ -140,7 +143,7 @@ class AdminYoutubeRecommendationPanel extends ConsumerWidget {
                           );
                     },
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                 ],
               ],
             );
@@ -174,26 +177,26 @@ class _AdminVideoTile extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        contentPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(6)),
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: thumb.isEmpty
               ? Container(
                   width: 64,
-                  height: 40,
+                  height: AppSpace.row(40),
                   color: AppColors.primaryLight,
-                  child: const Icon(Icons.videocam, color: AppColors.primary),
+                  child: Icon(Icons.videocam, color: AppColors.primary),
                 )
               : Image.network(
                   thumb,
                   width: 64,
-                  height: 40,
+                  height: AppSpace.row(40),
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => Container(
                     width: 64,
-                    height: 40,
+                    height: AppSpace.row(40),
                     color: AppColors.primaryLight,
-                    child: const Icon(Icons.videocam, color: AppColors.primary),
+                    child: Icon(Icons.videocam, color: AppColors.primary),
                   ),
                 ),
         ),
@@ -236,7 +239,11 @@ class _AdminVideoTile extends StatelessWidget {
             IconButton(
               tooltip: '삭제',
               onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.error),
+              icon: Icon(
+                Icons.delete_outline,
+                size: 20,
+                color: AppColors.error,
+              ),
             ),
           ],
         ),
@@ -323,12 +330,16 @@ class _YoutubeRecommendationEditorDialogState
       );
 
       if (widget.existing == null) {
-        await ref.read(lmsRepositoryProvider).createYoutubeRecommendation(
+        await ref
+            .read(lmsRepositoryProvider)
+            .createYoutubeRecommendation(
               cohortId: cohortId,
               video: model,
             );
       } else {
-        await ref.read(lmsRepositoryProvider).updateYoutubeRecommendation(
+        await ref
+            .read(lmsRepositoryProvider)
+            .updateYoutubeRecommendation(
               cohortId: cohortId,
               videoId: widget.existing!.id,
               updates: model.toFirestore(),
@@ -372,7 +383,7 @@ class _YoutubeRecommendationEditorDialogState
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? '제목을 입력하세요' : null,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _url,
                   decoration: const InputDecoration(
@@ -382,31 +393,31 @@ class _YoutubeRecommendationEditorDialogState
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? 'URL을 입력하세요' : null,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _description,
                   decoration: const InputDecoration(labelText: '설명 (선택)'),
                   maxLines: 2,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _sortOrder,
                   decoration: const InputDecoration(labelText: '정렬 순서'),
                   keyboardType: TextInputType.number,
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('공개'),
                   value: _isPublished,
                   onChanged: (v) => setState(() => _isPublished = v),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 const Text(
                   '태그 (학생 관심사와 매칭)',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 if (_tags.isNotEmpty)
                   Wrap(
                     spacing: 6,
@@ -420,7 +431,7 @@ class _YoutubeRecommendationEditorDialogState
                         )
                         .toList(),
                   ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 TextField(
                   controller: _tagSearch,
                   decoration: const InputDecoration(
@@ -430,7 +441,7 @@ class _YoutubeRecommendationEditorDialogState
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,

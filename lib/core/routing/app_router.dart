@@ -69,6 +69,7 @@ import '../../features/study_room/presentation/study_room_notes_screen.dart';
 import '../../features/study_room/presentation/study_room_screen.dart';
 import 'fade_page.dart';
 import 'route_paths.dart';
+import '../../features/settings/presentation/appearance_settings_screen.dart';
 
 /// Auth 상태 변화 시 go_router redirect 재실행용
 class _RouterRefresh extends ChangeNotifier {
@@ -92,11 +93,13 @@ String? _adminRedirectForStudentRoute(String location) {
   }
   return switch (location) {
     RoutePaths.dashboard => RoutePaths.admin,
-    RoutePaths.records || RoutePaths.recordsCreate ||
-    RoutePaths.recordsCreateCert || RoutePaths.recordsCreateStudy ||
-    RoutePaths.recordsCreateBlog || RoutePaths.recordsCreateStudyCert ||
-    RoutePaths.recordsCreatePrecourseQuiz =>
-      RoutePaths.adminRecords,
+    RoutePaths.records ||
+    RoutePaths.recordsCreate ||
+    RoutePaths.recordsCreateCert ||
+    RoutePaths.recordsCreateStudy ||
+    RoutePaths.recordsCreateBlog ||
+    RoutePaths.recordsCreateStudyCert ||
+    RoutePaths.recordsCreatePrecourseQuiz => RoutePaths.adminRecords,
     RoutePaths.resume => RoutePaths.adminResumes,
     RoutePaths.board => RoutePaths.adminBoard,
     RoutePaths.studyRoom => RoutePaths.adminStudyRoom,
@@ -144,8 +147,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final location = state.matchedLocation;
       final isAdminRoute = _isAdminRoute(location);
       final isInstructorRoute = _isInstructorRoute(location);
-      final isResumeEdit = location.startsWith('/resume/') &&
-          location.endsWith('/edit');
+      final isResumeEdit =
+          location.startsWith('/resume/') && location.endsWith('/edit');
 
       if (sessionUid.isLoading) return null;
 
@@ -185,8 +188,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         } else if (user.isInstructor) {
           if (isAdminRoute) return RoutePaths.instructor;
           if (!isInstructorRoute && !isChangingPassword && !isResumeEdit) {
-            final instructorPath =
-                _instructorRedirectForStudentRoute(location);
+            final instructorPath = _instructorRedirectForStudentRoute(location);
             if (instructorPath != null) return instructorPath;
             return RoutePaths.instructor;
           }
@@ -354,6 +356,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: RoutePaths.myPage,
             pageBuilder: (_, _) => const NoTransitionPage(
               child: MyPageScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RoutePaths.settings,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AppearanceSettingsScreen(),
             ),
           ),
         ],
@@ -545,6 +553,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: RoutePaths.adminSettings,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AppearanceSettingsScreen(),
+            ),
+          ),
+          GoRoute(
             path: RoutePaths.adminMileage,
             pageBuilder: (_, _) => const NoTransitionPage(
               child: AdminMileageHubScreen(),
@@ -602,8 +616,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'submissions/:submissionId',
-                    builder: (_, state) =>
-                        InstructorAssessmentSubmissionScreen(
+                    builder: (_, state) => InstructorAssessmentSubmissionScreen(
                       assessmentId: state.pathParameters['assessmentId']!,
                       submissionId: state.pathParameters['submissionId']!,
                       canEditScores: false,
@@ -681,8 +694,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   ),
                   GoRoute(
                     path: 'submissions/:submissionId',
-                    builder: (_, state) =>
-                        InstructorAssessmentSubmissionScreen(
+                    builder: (_, state) => InstructorAssessmentSubmissionScreen(
                       assessmentId: state.pathParameters['assessmentId']!,
                       submissionId: state.pathParameters['submissionId']!,
                     ),
@@ -701,6 +713,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: RoutePaths.instructorMyPage,
             pageBuilder: (_, _) => const NoTransitionPage(
               child: MyPageScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RoutePaths.instructorSettings,
+            pageBuilder: (_, _) => const NoTransitionPage(
+              child: AppearanceSettingsScreen(),
             ),
           ),
         ],

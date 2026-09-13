@@ -10,6 +10,7 @@ import '../../../../core/widgets/app_dropdown.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 출석 캘린더 — 상태 색상 (외출 포함)
 class AttendanceCalendarCard extends ConsumerStatefulWidget {
@@ -147,10 +148,10 @@ class _AttendanceCalendarCardState
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-          compact ? 10 : 14,
-          compact ? 10 : 14,
-          compact ? 10 : 14,
-          compact ? 8 : 10,
+          compact ? AppSpace.s(10) : AppSpace.s(14),
+          compact ? AppSpace.s(10) : AppSpace.s(14),
+          compact ? AppSpace.s(10) : AppSpace.s(14),
+          compact ? AppSpace.s(8) : AppSpace.s(10),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -202,7 +203,7 @@ class _AttendanceCalendarCardState
               ],
             ),
             if (isAdmin && compact) ...[
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               ref
                   .watch(cohortStudentsProvider)
                   .when(
@@ -241,10 +242,10 @@ class _AttendanceCalendarCardState
                   ),
             ],
             if (statusMapAsync.hasError) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               Text(
                 '출석 불러오기 실패: ${statusMapAsync.error}',
-                style: const TextStyle(fontSize: 11, color: AppColors.error),
+                style: TextStyle(fontSize: 11, color: AppColors.error),
               ),
             ],
             SizedBox(height: compact ? 4 : 8),
@@ -282,12 +283,12 @@ class _AttendanceCalendarCardState
                           : CalendarFormat.month;
                     }),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: Text(
-                      _format == CalendarFormat.month ? 'Month' : '2 weeks',
+                      _format == CalendarFormat.month ? '한 달' : '2주',
                       style: const TextStyle(fontSize: 11),
                     ),
                   ),
@@ -313,8 +314,8 @@ class _AttendanceCalendarCardState
               focusedDay: _focusedDay,
               calendarFormat: _format,
               availableCalendarFormats: const {
-                CalendarFormat.month: 'Month',
-                CalendarFormat.twoWeeks: '2 weeks',
+                CalendarFormat.month: '한 달',
+                CalendarFormat.twoWeeks: '2주',
               },
               onFormatChanged: (f) => setState(() => _format = f),
               headerVisible: false,
@@ -369,7 +370,7 @@ class _AttendanceCalendarCardState
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
-                selectedDecoration: const BoxDecoration(
+                selectedDecoration: BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
@@ -393,7 +394,7 @@ class _AttendanceCalendarCardState
               ),
             ),
             SizedBox(height: compact ? 4 : 6),
-            _AttendanceStatusLegend(compact: compact),
+            AttendanceStatusLegend(compact: compact),
           ],
         ),
       ),
@@ -468,7 +469,7 @@ class _AttendanceCalendarCardState
     final color = AttendanceStatus.colorOf(status);
     final isToday = isSameDay(day, DateTime.now());
     return Container(
-      margin: EdgeInsets.all(compact ? 2 : 4),
+      margin: EdgeInsets.all(compact ? AppSpace.s(2) : AppSpace.s(4)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.2),
         shape: BoxShape.circle,
@@ -490,39 +491,52 @@ class _AttendanceCalendarCardState
   }
 }
 
-class _AttendanceStatusLegend extends StatelessWidget {
-  const _AttendanceStatusLegend({required this.compact});
+/// 출결 색 설명. 달력 아래에 한 줄로 놓인다.
+class AttendanceStatusLegend extends StatelessWidget {
+  const AttendanceStatusLegend({super.key, required this.compact});
 
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: compact ? 6 : 10,
-      runSpacing: compact ? 4 : 4,
-      children: AttendanceStatus.all.map((s) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: compact ? 7 : 8,
-              height: compact ? 7 : 8,
-              decoration: BoxDecoration(
-                color: AttendanceStatus.colorOf(s),
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              AttendanceStatus.labelOf(s),
-              style: TextStyle(
-                fontSize: compact ? 9 : 10,
-                color: AppColors.textSecondary,
-              ),
-            ),
+    // 범례는 한 줄이어야 한다. 여섯 가지가 두 줄로 갈라지면 어느 색이 어느 줄의
+    // 설명인지 눈이 한 번 더 헤맨다. 칸이 좁으면 줄바꿈 대신 통째로 줄인다.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (i, s) in AttendanceStatus.all.indexed) ...[
+            if (i > 0) SizedBox(width: compact ? 6 : 10),
+            _legendItem(s),
           ],
-        );
-      }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendItem(String s) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: compact ? 7 : 8,
+          height: compact ? 7 : 8,
+          decoration: BoxDecoration(
+            color: AttendanceStatus.colorOf(s),
+            shape: BoxShape.circle,
+          ),
+        ),
+        SizedBox(width: AppSpace.s(4)),
+        Text(
+          AttendanceStatus.labelOf(s),
+          style: TextStyle(
+            fontSize: compact ? 9 : 10,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

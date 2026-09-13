@@ -7,6 +7,7 @@ import '../../../shared/models/alert_popup_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../hub/presentation/widgets/board_ui.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 알림 팝업 작성/수정
 class AdminAlertPopupFormScreen extends ConsumerStatefulWidget {
@@ -167,7 +168,7 @@ class _AdminAlertPopupFormScreenState
         title: Text(_isEdit ? '알림 팝업 수정' : '알림 팝업 등록'),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 8),
+            padding: EdgeInsets.only(right: AppSpace.s(8)),
             child: FilledButton(
               onPressed: _loading ? null : _save,
               style: BoardUi.primaryButtonStyle(),
@@ -183,13 +184,13 @@ class _AdminAlertPopupFormScreenState
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(AppSpace.s(24)),
         children: [
           Text(
             '활성 팝업은 학생 대시보드에 바로 뜹니다. 시간 구간을 끄면 하루 종일 표시됩니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: AppSpace.s(20)),
           TextField(
             controller: _titleController,
             decoration: const InputDecoration(
@@ -197,7 +198,7 @@ class _AdminAlertPopupFormScreenState
               hintText: '예: 오늘 예외 출결 제출',
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpace.s(16)),
           TextField(
             controller: _contentController,
             minLines: 5,
@@ -208,7 +209,7 @@ class _AdminAlertPopupFormScreenState
               alignLabelWithHint: true,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpace.s(16)),
           TextField(
             controller: _linkController,
             decoration: const InputDecoration(
@@ -217,7 +218,7 @@ class _AdminAlertPopupFormScreenState
             ),
             keyboardType: TextInputType.url,
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: AppSpace.s(20)),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('표시 시간 설정'),
@@ -231,7 +232,7 @@ class _AdminAlertPopupFormScreenState
             onChanged: (v) => setState(() => _useTimeWindow = v),
           ),
           if (_useTimeWindow) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             Row(
               children: [
                 Expanded(
@@ -241,7 +242,7 @@ class _AdminAlertPopupFormScreenState
                     label: Text('시작 ${_formatTime(_startTime)}'),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: AppSpace.s(12)),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _pickEnd,
@@ -251,7 +252,7 @@ class _AdminAlertPopupFormScreenState
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             Builder(
               builder: (context) {
                 final preview = AlertPopupModel(
@@ -279,7 +280,7 @@ class _AdminAlertPopupFormScreenState
               },
             ),
           ],
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpace.s(16)),
           Row(
             children: [
               Expanded(
@@ -291,7 +292,7 @@ class _AdminAlertPopupFormScreenState
                   keyboardType: TextInputType.number,
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: AppSpace.s(16)),
               const Text('활성'),
               Switch(
                 value: _isActive,

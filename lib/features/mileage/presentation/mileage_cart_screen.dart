@@ -12,6 +12,7 @@ import '../../../shared/models/mileage_models.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
 import '../theme/mileage_theme.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 마일리지 장바구니 → 구매 요청
 class MileageCartScreen extends ConsumerStatefulWidget {
@@ -59,7 +60,9 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref.read(mileageFunctionsServiceProvider).submitPurchaseRequest(
+      await ref
+          .read(mileageFunctionsServiceProvider)
+          .submitPurchaseRequest(
             cohortId: cohortId,
           );
 
@@ -90,7 +93,9 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
     if (cart == null) return;
 
     final items = [...cart.items]..removeAt(index);
-    await ref.read(mileageRepositoryProvider).saveMileageCart(
+    await ref
+        .read(mileageRepositoryProvider)
+        .saveMileageCart(
           cohortId: cohortId,
           userId: user.uid,
           items: items,
@@ -100,8 +105,7 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
   @override
   Widget build(BuildContext context) {
     final cartAsync = ref.watch(mileageCartProvider);
-    final balance =
-        ref.watch(currentUserSyncProvider)?.mileageBalance ?? 0;
+    final balance = ref.watch(currentUserSyncProvider)?.mileageBalance ?? 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -122,7 +126,7 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpace.s(24)),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -131,7 +135,7 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
                         size: 40,
                         color: AppColors.textHint.withValues(alpha: 0.7),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppSpace.s(12)),
                       Text(
                         '장바구니가 비어 있습니다.',
                         style: TextStyle(
@@ -139,7 +143,7 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
                           fontSize: 14,
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: AppSpace.s(20)),
                       FilledButton(
                         style: mileagePrimaryButtonStyle(),
                         onPressed: () => context.pop(),
@@ -162,9 +166,9 @@ class _MileageCartScreenState extends ConsumerState<MileageCartScreen> {
                 children: [
                   Expanded(
                     child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(8), AppSpace.s(20), AppSpace.s(16)),
                       itemCount: cart.items.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      separatorBuilder: (_, _) => SizedBox(height: AppSpace.s(8)),
                       itemBuilder: (_, i) => _CartItemRow(
                         item: cart.items[i],
                         onRemove: () => _removeItem(i),
@@ -202,7 +206,7 @@ class _CartItemRow extends StatelessWidget {
     final tagColor = MileageColors.categoryTagColor(item.category);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(6), AppSpace.s(12)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -224,13 +228,13 @@ class _CartItemRow extends StatelessWidget {
                     height: 1.3,
                   ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: AppSpace.s(6)),
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpace.s(7),
+                        vertical: AppSpace.s(2),
                       ),
                       decoration: BoxDecoration(
                         color: tagColor.withValues(alpha: 0.12),
@@ -245,7 +249,7 @@ class _CartItemRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: AppSpace.s(8)),
                     Text(
                       '수량 ${item.quantity}',
                       style: TextStyle(
@@ -257,7 +261,7 @@ class _CartItemRow extends StatelessWidget {
                 ),
                 if (item.purchaseLink != null &&
                     item.purchaseLink!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                  SizedBox(height: AppSpace.s(6)),
                   Text(
                     item.purchaseLink!,
                     maxLines: 1,
@@ -271,12 +275,12 @@ class _CartItemRow extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: AppSpace.s(8)),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Padding(
-                padding: const EdgeInsets.only(right: 6, top: 2),
+                padding: EdgeInsets.only(right: AppSpace.s(6), top: AppSpace.s(2)),
                 child: Text(
                   formatMileageM(item.subtotal),
                   style: TextStyle(
@@ -290,7 +294,7 @@ class _CartItemRow extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 tooltip: '삭제',
                 onPressed: onRemove,
-                icon: const Icon(
+                icon: Icon(
                   Icons.delete_outline,
                   size: 18,
                   color: AppColors.error,
@@ -323,7 +327,7 @@ class _CartCheckoutBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(14), AppSpace.s(20), AppSpace.s(20)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
@@ -342,23 +346,23 @@ class _CartCheckoutBar extends StatelessWidget {
             label: '내 잔액',
             value: formatMileageM(balance),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: AppSpace.s(6)),
           _SummaryLine(
             label: '합계',
             value: formatMileageM(total),
             emphasize: true,
           ),
           if (insufficient) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: AppSpace.s(10)),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(8)),
               decoration: BoxDecoration(
                 color: AppColors.error.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '잔액이 ${formatMileageM(total - balance)} 부족합니다.',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.error,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -366,12 +370,12 @@ class _CartCheckoutBar extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           FilledButton(
-            style: mileagePrimaryButtonStyle(minHeight: 42),
+            style: mileagePrimaryButtonStyle(minHeight: AppSpace.row(42)),
             onPressed: (submitting || insufficient) ? null : onSubmit,
             child: submitting
-                ? const SizedBox(
+                ? SizedBox(
                     height: 18,
                     width: 18,
                     child: CircularProgressIndicator(

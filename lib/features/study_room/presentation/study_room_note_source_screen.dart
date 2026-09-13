@@ -12,6 +12,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../data/study_note_service.dart';
 import 'widgets/study_note_markdown.dart';
 import 'widgets/study_room_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 class StudyRoomNoteSourceScreen extends ConsumerStatefulWidget {
   const StudyRoomNoteSourceScreen({super.key, required this.sourceId});
@@ -53,7 +54,9 @@ class _StudyRoomNoteSourceScreenState
       _treeError = null;
     });
     try {
-      final tree = await ref.read(studyNoteServiceProvider).listTree(
+      final tree = await ref
+          .read(studyNoteServiceProvider)
+          .listTree(
             cohortId: cohortId,
             sourceId: widget.sourceId,
           );
@@ -79,7 +82,9 @@ class _StudyRoomNoteSourceScreenState
       _actionError = null;
     });
     try {
-      final note = await ref.read(studyNoteServiceProvider).getNote(
+      final note = await ref
+          .read(studyNoteServiceProvider)
+          .getNote(
             cohortId: cohortId,
             noteId: noteId,
           );
@@ -105,7 +110,9 @@ class _StudyRoomNoteSourceScreenState
       _actionError = null;
     });
     try {
-      final note = await ref.read(studyNoteServiceProvider).generate(
+      final note = await ref
+          .read(studyNoteServiceProvider)
+          .generate(
             cohortId: cohortId,
             sourceId: widget.sourceId,
             scopeType: scopeType,
@@ -200,7 +207,7 @@ class _StudyRoomNoteSourceScreenState
                       ? '날짜·폴더·파일을 고르면 복습 노트를 만들어 줍니다.'
                       : '${source.repoLabel} 수업에서 필요한 범위만 정리하세요.',
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 notes.when(
                   loading: () => const SizedBox.shrink(),
                   error: (_, _) => const SizedBox.shrink(),
@@ -219,7 +226,7 @@ class _StudyRoomNoteSourceScreenState
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppSpace.s(10)),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -230,8 +237,8 @@ class _StudyRoomNoteSourceScreenState
                                   note.scopeType == 'date'
                                       ? Icons.calendar_today_outlined
                                       : note.scopeType == 'prefix'
-                                          ? Icons.folder_outlined
-                                          : Icons.description_outlined,
+                                      ? Icons.folder_outlined
+                                      : Icons.description_outlined,
                                   size: 16,
                                   color: AppColors.primary,
                                 ),
@@ -242,7 +249,7 @@ class _StudyRoomNoteSourceScreenState
                               ),
                           ],
                         ),
-                        const SizedBox(height: 20),
+                        SizedBox(height: AppSpace.s(20)),
                       ],
                     );
                   },
@@ -251,7 +258,7 @@ class _StudyRoomNoteSourceScreenState
                   const _GeneratingCard()
                 else
                   Container(
-                    padding: const EdgeInsets.all(18),
+                    padding: EdgeInsets.all(AppSpace.s(18)),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
                       borderRadius: BorderRadius.circular(16),
@@ -267,20 +274,23 @@ class _StudyRoomNoteSourceScreenState
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
+                        SizedBox(height: AppSpace.s(4)),
+                        Text(
                           '최근 수업일, 폴더, 파일 중에서 하나만 고르면 됩니다.',
                           style: TextStyle(
                             fontSize: 13,
                             color: AppColors.textSecondary,
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        SizedBox(height: AppSpace.s(14)),
                         SegmentedButton<String>(
                           segments: const [
                             ButtonSegment(
                               value: 'date',
-                              icon: Icon(Icons.calendar_today_outlined, size: 16),
+                              icon: Icon(
+                                Icons.calendar_today_outlined,
+                                size: 16,
+                              ),
                               label: Text('날짜'),
                             ),
                             ButtonSegment(
@@ -301,10 +311,10 @@ class _StudyRoomNoteSourceScreenState
                             _actionError = null;
                           }),
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: AppSpace.s(16)),
                         if (_loadingTree)
-                          const Padding(
-                            padding: EdgeInsets.all(32),
+                          Padding(
+                            padding: EdgeInsets.all(AppSpace.s(32)),
                             child: Center(child: CircularProgressIndicator()),
                           )
                         else if (_treeError != null)
@@ -341,24 +351,24 @@ class _StudyRoomNoteSourceScreenState
                     ),
                   ),
                 if (_actionError != null) ...[
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(AppSpace.s(12)),
                     decoration: BoxDecoration(
                       color: AppColors.error.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       _actionError!,
-                      style: const TextStyle(color: AppColors.error),
+                      style: TextStyle(color: AppColors.error),
                     ),
                   ),
                 ],
                 if (_note?.isFailed == true) ...[
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   Text(
                     _note?.errorMessage ?? '노트 생성에 실패했습니다.',
-                    style: const TextStyle(color: AppColors.error),
+                    style: TextStyle(color: AppColors.error),
                   ),
                 ],
               ],
@@ -412,21 +422,21 @@ class _GeneratingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(24), vertical: AppSpace.s(36)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Column(
+      child: Column(
         children: [
           CircularProgressIndicator(),
-          SizedBox(height: 20),
+          SizedBox(height: AppSpace.s(20)),
           Text(
             '수업 노트를 만드는 중',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
           ),
-          SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
           Text(
             '자료를 읽고 핵심만 정리하고 있어요.\n1~2분 정도 걸릴 수 있습니다.',
             textAlign: TextAlign.center,
@@ -482,8 +492,8 @@ class _ScopePanel extends StatelessWidget {
     final children = <Widget>[];
     if (truncated) {
       children.add(
-        const Padding(
-          padding: EdgeInsets.only(bottom: 12),
+        Padding(
+          padding: EdgeInsets.only(bottom: AppSpace.s(12)),
           child: Text(
             '파일이 많아 일부만 표시합니다. 폴더를 더 좁혀 주세요.',
             style: TextStyle(color: AppColors.textSecondary),
@@ -494,7 +504,7 @@ class _ScopePanel extends StatelessWidget {
     if (mode == 'date') {
       if (dates.isEmpty) {
         children.add(
-          const Text(
+          Text(
             '최근 30일 수업일이 없습니다. 폴더나 파일로 골라 보세요.',
             style: TextStyle(color: AppColors.textSecondary),
           ),
@@ -515,7 +525,7 @@ class _ScopePanel extends StatelessWidget {
           ),
         );
       }
-      children.add(const SizedBox(height: 16));
+      children.add(SizedBox(height: AppSpace.s(16)));
       children.add(
         SizedBox(
           width: double.infinity,
@@ -529,7 +539,7 @@ class _ScopePanel extends StatelessWidget {
     } else if (mode == 'folder') {
       if (folders.isEmpty) {
         children.add(
-          const Text(
+          Text(
             '선택할 폴더가 없습니다.',
             style: TextStyle(color: AppColors.textSecondary),
           ),
@@ -550,7 +560,7 @@ class _ScopePanel extends StatelessWidget {
           ),
         );
       }
-      children.add(const SizedBox(height: 16));
+      children.add(SizedBox(height: AppSpace.s(16)));
       children.add(
         SizedBox(
           width: double.infinity,
@@ -565,13 +575,13 @@ class _ScopePanel extends StatelessWidget {
       children.add(
         Text(
           '${checked.length}/$maxFiles개 선택',
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: AppColors.textSecondary),
         ),
       );
-      children.add(const SizedBox(height: 8));
+      children.add(SizedBox(height: AppSpace.s(8)));
       if (files.isEmpty) {
         children.add(
-          const Text(
+          Text(
             '선택할 파일이 없습니다.',
             style: TextStyle(color: AppColors.textSecondary),
           ),
@@ -593,11 +603,14 @@ class _ScopePanel extends StatelessWidget {
                       : (value) => onToggleFile(path, value == true),
                   title: Text(
                     StudyNoteModel.fileNameOf(path),
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   subtitle: Text(
                     path,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: AppColors.textHint,
                     ),
@@ -610,7 +623,7 @@ class _ScopePanel extends StatelessWidget {
           ),
         );
       }
-      children.add(const SizedBox(height: 12));
+      children.add(SizedBox(height: AppSpace.s(12)));
       children.add(
         SizedBox(
           width: double.infinity,

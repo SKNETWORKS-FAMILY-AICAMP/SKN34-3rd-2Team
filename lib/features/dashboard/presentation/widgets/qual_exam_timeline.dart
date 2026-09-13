@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/models/qual_exam_schedule_model.dart';
 import '../../utils/qual_exam_utils.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 타임라인 — D-day + 세로 연결선
 class QualExamTimeline extends StatelessWidget {
@@ -66,7 +67,7 @@ class _TimelineEntry extends StatelessWidget {
               _DdayBadge(ymd: item.nextExamDate, days: days),
               if (!isLast)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: EdgeInsets.symmetric(vertical: AppSpace.s(4)),
                   child: Center(
                     child: Container(
                       width: 2,
@@ -80,7 +81,7 @@ class _TimelineEntry extends StatelessWidget {
         ),
         Expanded(
           child: Padding(
-            padding: EdgeInsets.only(bottom: isLast ? 0 : (compact ? 12 : 16)),
+            padding: EdgeInsets.only(bottom: isLast ? AppSpace.s(0) : (compact ? AppSpace.s(12) : AppSpace.s(16))),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,7 +96,7 @@ class _TimelineEntry extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: AppSpace.s(4)),
                   Text(
                     '${item.nextExamLabel} · $dateLabel',
                     style: TextStyle(
@@ -104,7 +105,7 @@ class _TimelineEntry extends StatelessWidget {
                     ),
                   ),
                   if (!compact && item.docRegStartDt != null) ...[
-                    const SizedBox(height: 2),
+                    SizedBox(height: AppSpace.s(2)),
                     Text(
                       '필기 접수 ${AppDateUtils.formatYmd(item.docRegStartDt)}'
                       '${item.docRegEndDt != null ? ' ~ ${AppDateUtils.formatYmd(item.docRegEndDt)}' : ''}',
@@ -117,7 +118,7 @@ class _TimelineEntry extends StatelessWidget {
                   if (!compact &&
                       item.docRegStartDt == null &&
                       item.pracRegStartDt != null) ...[
-                    const SizedBox(height: 2),
+                    SizedBox(height: AppSpace.s(2)),
                     Text(
                       '실기 접수 ${AppDateUtils.formatYmd(item.pracRegStartDt)}'
                       '${item.pracRegEndDt != null ? ' ~ ${AppDateUtils.formatYmd(item.pracRegEndDt)}' : ''}',
@@ -160,7 +161,7 @@ class _DdayBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 44,
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: EdgeInsets.symmetric(vertical: AppSpace.s(6)),
       decoration: BoxDecoration(
         color: _background,
         borderRadius: BorderRadius.circular(8),

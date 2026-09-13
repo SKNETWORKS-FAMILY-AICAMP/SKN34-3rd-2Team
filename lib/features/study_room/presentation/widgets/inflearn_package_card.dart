@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/inflearn_package_model.dart';
+import '../../../../core/theme/app_space.dart';
 
 Color inflearnTypeBadgeColor(InflearnPackageType type) {
   return switch (type) {
@@ -62,13 +63,13 @@ class InflearnPackageCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(AppSpace.s(20)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(package: package, showDraft: showDraft),
               if (package.summary != null && package.summary!.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 Text(
                   package.summary!,
                   style: TextStyle(
@@ -78,7 +79,7 @@ class InflearnPackageCard extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 16),
+              SizedBox(height: AppSpace.s(16)),
               if (package.hasUnits)
                 ...package.units.map((unit) => _UnitSection(unit: unit))
               else
@@ -126,7 +127,7 @@ class _Header extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: AppSpace.s(10)),
         Text(
           package.title,
           style: TextStyle(
@@ -135,7 +136,7 @@ class _Header extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: AppSpace.s(4)),
         Text(
           '총 ${package.totalCourseCount}개 강의',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
@@ -154,7 +155,7 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(4)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
@@ -185,10 +186,10 @@ class _UnitSection extends StatelessWidget {
         childrenPadding: EdgeInsets.zero,
         title: Text(
           unit.name,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF374151),
+            color: AppColors.textSecondary,
           ),
         ),
         subtitle: Text(
@@ -234,23 +235,23 @@ class _CourseTile extends StatelessWidget {
         onTap: () => openInflearnCourse(context, course.url),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(10)),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.play_circle_outline,
                 size: 18,
-                color: Color(0xFF2563EB),
+                color: AppColors.primary,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: AppSpace.s(10)),
               Expanded(
                 child: Text(
                   course.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF1E40AF),
+                    color: AppColors.primaryDark,
                     decoration: TextDecoration.underline,
-                    decorationColor: Color(0xFF93C5FD),
+                    decorationColor: AppColors.primary.withValues(alpha: 0.35),
                   ),
                 ),
               ),
@@ -284,7 +285,7 @@ class InflearnPackageListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: AppSpace.s(12)),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(color: AppColors.border),
@@ -301,7 +302,7 @@ class InflearnPackageListTile extends StatelessWidget {
         ),
         trailing: onDelete != null
             ? IconButton(
-                icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                icon: Icon(Icons.delete_outline, color: AppColors.error),
                 onPressed: onDelete,
               )
             : const Icon(Icons.chevron_right),

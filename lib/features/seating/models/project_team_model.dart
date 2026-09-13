@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/date_utils.dart';
+import '../../../core/theme/app_colors.dart';
 
 /// 프로젝트 팀 (기수별). 인원 권장 4~5명.
 class ProjectTeamModel {
@@ -28,8 +29,7 @@ class ProjectTeamModel {
 
   int get memberCount => memberIds.length;
 
-  bool get isComplete =>
-      memberCount >= minMembers && memberCount <= maxMembers;
+  bool get isComplete => memberCount >= minMembers && memberCount <= maxMembers;
 
   bool get isOverfull => memberCount > maxMembers;
 
@@ -61,16 +61,15 @@ class ProjectTeamModel {
   Map<String, dynamic> toFirestore({
     required String updatedBy,
     bool isCreate = false,
-  }) =>
-      {
-        'name': name,
-        'memberIds': memberIds,
-        'sortOrder': sortOrder,
-        'colorIndex': colorIndex,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'updatedBy': updatedBy,
-        if (isCreate) 'createdAt': FieldValue.serverTimestamp(),
-      };
+  }) => {
+    'name': name,
+    'memberIds': memberIds,
+    'sortOrder': sortOrder,
+    'colorIndex': colorIndex,
+    'updatedAt': FieldValue.serverTimestamp(),
+    'updatedBy': updatedBy,
+    if (isCreate) 'createdAt': FieldValue.serverTimestamp(),
+  };
 
   ProjectTeamModel copyWith({
     String? name,
@@ -92,20 +91,19 @@ class ProjectTeamModel {
 
 /// 팀 카드 악센트 팔레트
 abstract final class ProjectTeamColors {
-  static const _accents = <(Color, Color)>[
-    (Color(0xFF0055FF), Color(0xFFE8F0FF)),
-    (Color(0xFF0D9488), Color(0xFFCCFBF1)),
-    (Color(0xFF7C3AED), Color(0xFFEDE9FE)),
-    (Color(0xFFDB2777), Color(0xFFFCE7F3)),
-    (Color(0xFFEA580C), Color(0xFFFFEDD5)),
-    (Color(0xFF2563EB), Color(0xFFDBEAFE)),
-    (Color(0xFF059669), Color(0xFFD1FAE5)),
-    (Color(0xFFCA8A04), Color(0xFFFEF9C3)),
+  static List<(Color, Color)> get _accents => <(Color, Color)>[
+    (Color(0xFF0055FF), AppColors.tint(const Color(0xFFE8F0FF))),
+    (Color(0xFF0D9488), AppColors.tint(const Color(0xFFCCFBF1))),
+    (Color(0xFF7C3AED), AppColors.tint(const Color(0xFFEDE9FE))),
+    (Color(0xFFDB2777), AppColors.tint(const Color(0xFFFCE7F3))),
+    (Color(0xFFEA580C), AppColors.tint(const Color(0xFFFFEDD5))),
+    (Color(0xFF2563EB), AppColors.tint(const Color(0xFFDBEAFE))),
+    (Color(0xFF059669), AppColors.tint(const Color(0xFFD1FAE5))),
+    (Color(0xFFCA8A04), AppColors.tint(const Color(0xFFFEF9C3))),
   ];
 
   static Color accentOf(int index) =>
       _accents[index.abs() % _accents.length].$1;
 
-  static Color softOf(int index) =>
-      _accents[index.abs() % _accents.length].$2;
+  static Color softOf(int index) => _accents[index.abs() % _accents.length].$2;
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 enum AssessmentQuestionViewMode {
   /// 응시 — 선택 가능
@@ -69,16 +70,17 @@ class AssessmentQuestionView extends StatelessWidget {
           isCorrect: isCorrect,
           mode: mode,
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: AppSpace.s(10)),
         if (_isMc)
           ...List.generate(choices.length, (i) {
             return Padding(
-              padding: EdgeInsets.only(bottom: i == choices.length - 1 ? 0 : 8),
+              padding: EdgeInsets.only(bottom: i == choices.length - AppSpace.s(1) ? AppSpace.s(0) : AppSpace.s(8)),
               child: _ChoiceCard(
                 letter: String.fromCharCode(65 + i),
                 text: choices[i],
                 state: _choiceState(i),
-                onTap: mode == AssessmentQuestionViewMode.take &&
+                onTap:
+                    mode == AssessmentQuestionViewMode.take &&
                         onSelectChoice != null
                     ? () => onSelectChoice!(i)
                     : null,
@@ -96,20 +98,23 @@ class AssessmentQuestionView extends StatelessWidget {
         if (explanation != null &&
             explanation!.trim().isNotEmpty &&
             mode != AssessmentQuestionViewMode.take) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: AppSpace.s(10)),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(AppSpace.s(12)),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: AppColors.tint(const Color(0xFFF8FAFC)),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppColors.border),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.lightbulb_outline,
-                    size: 16, color: Color(0xFFCA8A04)),
-                const SizedBox(width: 8),
+                const Icon(
+                  Icons.lightbulb_outline,
+                  size: 16,
+                  color: Color(0xFFCA8A04),
+                ),
+                SizedBox(width: AppSpace.s(8)),
                 Expanded(
                   child: Text(
                     explanation!,
@@ -125,7 +130,7 @@ class AssessmentQuestionView extends StatelessWidget {
           ),
         ],
         if (footer != null) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: AppSpace.s(10)),
           footer!,
         ],
       ],
@@ -176,9 +181,9 @@ class _PromptCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpace.s(16)),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
@@ -188,22 +193,24 @@ class _PromptCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpace.s(10),
+                  vertical: AppSpace.s(5),
+                ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6),
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   'Q$number',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               Text(
                 '$typeLabel · $points점',
                 style: TextStyle(
@@ -216,12 +223,14 @@ class _PromptCard extends StatelessWidget {
               if (mode == AssessmentQuestionViewMode.review &&
                   earnedScore != null)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(10),
+                    vertical: AppSpace.s(4),
+                  ),
                   decoration: BoxDecoration(
                     color: (isCorrect ?? earnedScore! > 0)
-                        ? const Color(0xFFDCFCE7)
-                        : const Color(0xFFFEE2E2),
+                        ? AppColors.tint(const Color(0xFFDCFCE7))
+                        : AppColors.tint(const Color(0xFFFEE2E2)),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -237,7 +246,7 @@ class _PromptCard extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           Text(
             prompt,
             style: TextStyle(
@@ -270,37 +279,37 @@ class _ChoiceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (bg, border, letterBg, letterFg, trailing) = switch (state) {
       _ChoiceVisualState.idle => (
-          const Color(0xFFF9FAFB),
-          AppColors.border,
-          const Color(0xFFE5E7EB),
-          AppColors.textSecondary,
-          null as Widget?,
-        ),
+        AppColors.tint(const Color(0xFFF9FAFB)),
+        AppColors.border,
+        AppColors.tint(const Color(0xFFE5E7EB)),
+        AppColors.textSecondary,
+        null as Widget?,
+      ),
       _ChoiceVisualState.selected => (
-          const Color(0xFFF0FDF4),
-          const Color(0xFF22C55E),
-          const Color(0xFF16A34A),
-          Colors.white,
-          const Icon(Icons.check, size: 20, color: Color(0xFF16A34A)),
-        ),
+        AppColors.tint(const Color(0xFFF0FDF4)),
+        const Color(0xFF22C55E),
+        const Color(0xFF16A34A),
+        Colors.white,
+        const Icon(Icons.check, size: 20, color: Color(0xFF16A34A)),
+      ),
       _ChoiceVisualState.correct => (
-          const Color(0xFFF0FDF4),
-          const Color(0xFF22C55E),
-          const Color(0xFF16A34A),
-          Colors.white,
-          const Icon(Icons.check, size: 20, color: Color(0xFF16A34A)),
-        ),
+        AppColors.tint(const Color(0xFFF0FDF4)),
+        const Color(0xFF22C55E),
+        const Color(0xFF16A34A),
+        Colors.white,
+        const Icon(Icons.check, size: 20, color: Color(0xFF16A34A)),
+      ),
       _ChoiceVisualState.wrong => (
-          const Color(0xFFFEF2F2),
-          const Color(0xFFEF4444),
-          const Color(0xFFDC2626),
-          Colors.white,
-          const Icon(Icons.close, size: 20, color: Color(0xFFDC2626)),
-        ),
+        AppColors.tint(const Color(0xFFFEF2F2)),
+        const Color(0xFFEF4444),
+        const Color(0xFFDC2626),
+        Colors.white,
+        const Icon(Icons.close, size: 20, color: Color(0xFFDC2626)),
+      ),
     };
 
     final child = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(12)),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
@@ -325,7 +334,7 @@ class _ChoiceCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: AppSpace.s(12)),
           Expanded(
             child: Text(
               text,
@@ -373,14 +382,14 @@ class _ShortAnswerBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final reviewBorder = mode == AssessmentQuestionViewMode.review
         ? (isCorrect == true
-            ? const Color(0xFF22C55E)
-            : const Color(0xFFEF4444))
+              ? const Color(0xFF22C55E)
+              : const Color(0xFFEF4444))
         : AppColors.border;
     final reviewBg = mode == AssessmentQuestionViewMode.review
         ? (isCorrect == true
-            ? const Color(0xFFF0FDF4)
-            : const Color(0xFFFEF2F2))
-        : const Color(0xFFF9FAFB);
+              ? AppColors.tint(const Color(0xFFF0FDF4))
+              : AppColors.tint(const Color(0xFFFEF2F2)))
+        : AppColors.tint(const Color(0xFFF9FAFB));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -391,7 +400,7 @@ class _ShortAnswerBlock extends StatelessWidget {
             decoration: InputDecoration(
               hintText: '답을 입력하세요',
               filled: true,
-              fillColor: const Color(0xFFF9FAFB),
+              fillColor: AppColors.tint(const Color(0xFFF9FAFB)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: AppColors.border),
@@ -402,13 +411,16 @@ class _ShortAnswerBlock extends StatelessWidget {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+                borderSide: BorderSide(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
               ),
             ),
           )
         else
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(AppSpace.s(14)),
             decoration: BoxDecoration(
               color: reviewBg,
               borderRadius: BorderRadius.circular(12),
@@ -418,21 +430,19 @@ class _ShortAnswerBlock extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  mode == AssessmentQuestionViewMode.preview
-                      ? '정답 후보'
-                      : '내 답',
+                  mode == AssessmentQuestionViewMode.preview ? '정답 후보' : '내 답',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   mode == AssessmentQuestionViewMode.preview
                       ? (acceptedAnswers.isEmpty
-                          ? '-'
-                          : acceptedAnswers.join(', '))
+                            ? '-'
+                            : acceptedAnswers.join(', '))
                       : (value.trim().isEmpty ? '(미응답)' : value),
                   style: const TextStyle(
                     fontSize: 14,
@@ -441,7 +451,7 @@ class _ShortAnswerBlock extends StatelessWidget {
                 ),
                 if (mode == AssessmentQuestionViewMode.review &&
                     acceptedAnswers.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  SizedBox(height: AppSpace.s(10)),
                   Text(
                     '정답: ${acceptedAnswers.join(', ')}',
                     style: const TextStyle(

@@ -24,14 +24,14 @@ import 'widgets/project_teams_panel.dart';
 import 'widgets/seat_grid.dart';
 import 'widgets/unassigned_student_list.dart';
 import '../utils/team_seating_assigner.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 좌석 틀 설정(강의실 생성) + 배치 편집(학생 배치)
 class AdminSeatingScreen extends ConsumerStatefulWidget {
   const AdminSeatingScreen({super.key});
 
   @override
-  ConsumerState<AdminSeatingScreen> createState() =>
-      _AdminSeatingScreenState();
+  ConsumerState<AdminSeatingScreen> createState() => _AdminSeatingScreenState();
 }
 
 class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
@@ -245,8 +245,12 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
 
     setState(() => _isSaving = true);
     try {
-      final layout = SeatingLayoutModel.defaultGrid().copyWith(roomNumber: name);
-      final roomId = await ref.read(seatingRepositoryProvider).createRoom(
+      final layout = SeatingLayoutModel.defaultGrid().copyWith(
+        roomNumber: name,
+      );
+      final roomId = await ref
+          .read(seatingRepositoryProvider)
+          .createRoom(
             cohortId: cohortId,
             layout: layout,
             updatedBy: uid,
@@ -279,8 +283,14 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
         title: const Text('강의실 삭제'),
         content: const Text('이 강의실과 저장된 배치 데이터가 모두 삭제됩니다. 계속할까요?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('삭제')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('삭제'),
+          ),
         ],
       ),
     );
@@ -288,7 +298,9 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
 
     setState(() => _isSaving = true);
     try {
-      await ref.read(seatingRepositoryProvider).deleteRoom(
+      await ref
+          .read(seatingRepositoryProvider)
+          .deleteRoom(
             cohortId: cohortId,
             roomId: roomId,
           );
@@ -335,8 +347,10 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           updatedBy: uid,
         );
 
-        final assignment =
-            ref.read(seatingRoomAssignmentProvider(roomId)).asData?.value;
+        final assignment = ref
+            .read(seatingRoomAssignmentProvider(roomId))
+            .asData
+            ?.value;
         if (assignment != null &&
             oldRoom != null &&
             assignment.assignments.isNotEmpty) {
@@ -603,8 +617,10 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
 
     // 배치 편집: 선택 강의실 layout/assignment 동기화
     if (_assignmentRoomId != null) {
-      final room =
-          ref.watch(seatingRoomProvider(_assignmentRoomId!)).asData?.value;
+      final room = ref
+          .watch(seatingRoomProvider(_assignmentRoomId!))
+          .asData
+          ?.value;
       final assignment = ref
           .watch(seatingRoomAssignmentProvider(_assignmentRoomId!))
           .asData
@@ -703,8 +719,10 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
       decoration: InputDecoration(
         labelText: hint,
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: AppSpace.s(12),
+          vertical: AppSpace.s(10),
+        ),
       ),
       items: [
         for (final room in rooms)
@@ -725,7 +743,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
   Widget _buildLayoutToolbar(List<SeatingRoomModel> rooms) {
     if (rooms.isEmpty) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(12)),
         decoration: BoxDecoration(
           color: AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
@@ -733,9 +751,12 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
         ),
         child: Row(
           children: [
-            Icon(Icons.meeting_room_outlined,
-                size: 20, color: AppColors.textSecondary),
-            const SizedBox(width: 10),
+            Icon(
+              Icons.meeting_room_outlined,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+            SizedBox(width: AppSpace.s(10)),
             Expanded(
               child: Text(
                 '아직 강의실이 없습니다. 먼저 만들어 주세요.',
@@ -765,7 +786,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                 onChanged: _selectLayoutRoom,
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: AppSpace.s(8)),
             FilledButton.tonalIcon(
               onPressed: _isSaving ? null : () => _createRoom(rooms),
               icon: const Icon(Icons.add, size: 18),
@@ -774,36 +795,38 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           ],
         ),
         if (_layoutRoomId != null) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: AppSpace.s(10)),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: TextField(
                   controller: _roomNumberController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: '표시 이름',
                     hintText: '예: 401호',
                     helperText: '드롭다운·상단에 보이는 이름입니다',
                     border: OutlineInputBorder(),
                     isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(12),
+                      vertical: AppSpace.s(10),
+                    ),
                   ),
                   onChanged: _updateRoomNumber,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               IconButton(
                 onPressed: _isSaving ? null : _deleteLayoutRoom,
                 icon: const Icon(Icons.delete_outline),
                 tooltip: '이 강의실 삭제',
                 color: AppColors.error,
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: AppSpace.s(4)),
               if (_isSaving)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(10)),
                   child: SizedBox(
                     width: 18,
                     height: 18,
@@ -815,9 +838,9 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                   onPressed: _saveLayout,
                   style: FilledButton.styleFrom(
                     visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(14),
+                      vertical: AppSpace.s(10),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 13,
@@ -839,7 +862,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
     final hasRoom = rooms.isNotEmpty && _layoutRoomId != null;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpace.s(16)),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppLayout.seating),
@@ -850,10 +873,10 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                 '위에서 편집할 강의실을 고른 뒤, 8×10 그리드에 강사석·출입문·테이블을 배치하세요. 학생 배치는 「배치 편집」에서 합니다.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               _buildLayoutToolbar(rooms),
               if (hasRoom) ...[
-                const SizedBox(height: 10),
+                SizedBox(height: AppSpace.s(10)),
                 Text(
                   '좌석 ${draft.seatCount}석 · 재원 학생 최대 $kMaxCohortStudents명'
                   '${_layoutDraftDirty ? ' · 저장되지 않은 변경' : ''}',
@@ -864,7 +887,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                         : AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppSpace.s(16)),
                 LayoutEditorGrid(
                   layout: draft,
                   onLayoutChanged: _onLayoutChanged,
@@ -903,7 +926,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
     final inactiveSeats = _inactiveSeatIds(students);
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpace.s(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -918,7 +941,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
             ),
           ),
           if (_assignmentRoomId == null) ...[
-            const SizedBox(height: 24),
+            SizedBox(height: AppSpace.s(24)),
             Center(
               child: Text(
                 '배치할 강의실을 선택해주세요.',
@@ -926,24 +949,24 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
               ),
             ),
           ] else if (layout == null) ...[
-            const SizedBox(height: 24),
+            SizedBox(height: AppSpace.s(24)),
             const Center(child: CircularProgressIndicator()),
           ] else ...[
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (isPublished)
-                  const Chip(
+                  Chip(
                     label: Text('확정됨', style: TextStyle(fontSize: 11)),
-                    backgroundColor: Color(0xFFD1FAE5),
+                    backgroundColor: AppColors.tint(const Color(0xFFD1FAE5)),
                   )
                 else
-                  const Chip(
+                  Chip(
                     label: Text('작성 중', style: TextStyle(fontSize: 11)),
-                    backgroundColor: Color(0xFFFEF3C7),
+                    backgroundColor: AppColors.tint(const Color(0xFFFEF3C7)),
                   ),
                 OutlinedButton.icon(
                   onPressed: _randomAssign,
@@ -966,21 +989,22 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                   label: const Text('임시 저장'),
                 ),
                 FilledButton.icon(
-                  onPressed:
-                      _isSaving ? null : () => _saveAssignments(publish: true),
+                  onPressed: _isSaving
+                      ? null
+                      : () => _saveAssignments(publish: true),
                   icon: const Icon(Icons.check_circle_outline, size: 18),
                   label: Text(isPublished ? '재확정' : '확정'),
                 ),
               ],
             ),
             if (inactiveSeats.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               Text(
                 '⚠ 퇴소 학생이 배정된 좌석이 ${inactiveSeats.length}개 있습니다.',
-                style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                style: TextStyle(fontSize: 12, color: AppColors.warning),
               ),
             ],
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -1009,7 +1033,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SizedBox(width: 280, child: list),
-                        const SizedBox(width: 16),
+                        SizedBox(width: AppSpace.s(16)),
                         Expanded(child: grid),
                       ],
                     );
@@ -1017,7 +1041,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
                   return Column(
                     children: [
                       SizedBox(height: 200, child: list),
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppSpace.s(12)),
                       Expanded(child: grid),
                     ],
                   );

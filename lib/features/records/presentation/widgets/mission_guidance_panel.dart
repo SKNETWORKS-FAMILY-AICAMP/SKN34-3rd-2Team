@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/mission_models.dart';
 import '../../../../shared/providers/mission_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 기록실 — 미션 진행 / 다음 목표 안내 (접기·펼치기)
 class MissionGuidancePanel extends ConsumerStatefulWidget {
@@ -23,7 +24,7 @@ class _MissionGuidancePanelState extends ConsumerState<MissionGuidancePanel> {
     final items = ref.watch(missionGuidanceProvider);
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 16, right: 2),
+      margin: EdgeInsets.only(bottom: AppSpace.s(16), right: AppSpace.s(2)),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -31,11 +32,11 @@ class _MissionGuidancePanelState extends ConsumerState<MissionGuidancePanel> {
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(8), AppSpace.s(12)),
               child: Row(
                 children: [
                   const Icon(Icons.emoji_events_outlined, size: 20),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   const Expanded(
                     child: Text(
                       '마일리지 미션',
@@ -60,7 +61,7 @@ class _MissionGuidancePanelState extends ConsumerState<MissionGuidancePanel> {
           AnimatedCrossFade(
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(0), AppSpace.s(14), AppSpace.s(12)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -71,10 +72,10 @@ class _MissionGuidancePanelState extends ConsumerState<MissionGuidancePanel> {
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: AppSpace.s(10)),
                   if (async.isLoading)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: AppSpace.s(12)),
                       child: Center(
                         child: SizedBox(
                           width: 18,
@@ -108,9 +109,9 @@ class _MissionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: AppSpace.s(10)),
       child: Container(
-        padding: const EdgeInsets.all(10),
+        padding: EdgeInsets.all(AppSpace.s(10)),
         decoration: BoxDecoration(
           color: AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
@@ -123,7 +124,7 @@ class _MissionTile extends StatelessWidget {
               item.title,
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: AppSpace.s(2)),
             Text(
               item.progressLabel,
               style: TextStyle(
@@ -131,16 +132,16 @@ class _MissionTile extends StatelessWidget {
                 color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: AppSpace.s(2)),
             Text(
               item.statusText,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppColors.primary,
               ),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: AppSpace.s(4)),
             Text(
               item.hint,
               style: const TextStyle(fontSize: 12, height: 1.35),
