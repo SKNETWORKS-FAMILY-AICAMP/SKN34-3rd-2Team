@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from typing import Sequence, TypeVar
 
 from job_matching_bot.ingestion.qualifications import normalize_term
+from job_matching_bot.ingestion.requirement_sections import split_sections
+from job_matching_bot.ingestion.saramin_tech_vocab import find_tech_in_text
 from job_matching_bot.matching.skill_normalize import canonical_set
 from job_matching_bot.schemas.job_posting import Job
 
@@ -53,6 +55,8 @@ class SkillMatch:
 
     matched: tuple[str, ...]
     pool_size: int
+    # 태그가 없어 요건 구간 글에서 찾은 기술로 쟀는가.
+    from_body: bool = False
 
     @property
     def coverage(self) -> float | None:
@@ -68,10 +72,19 @@ def skill_match(job: Job, resume_skills: Sequence[str]) -> SkillMatch:
     `required_skills`와 `tech_stack`을 합쳐서 본다. 전자는 본문에서 뽑은 요건이고
     후자는 기업이 등록한 태그인데, 저장소에서 각각 26%·35%만 채워져 있어 한쪽만
     보면 볼 수 있는 공고가 절반으로 줄어든다.
+
+    둘 다 비었으면 요건 구간(자격요건·우대사항·주요업무) 글에서 태그와 같은 어휘로
+    찾는다. 기술 정보가 없는 OPEN 공고 22,383건 중 5,276건이 이렇게 채워지고, 공고당
+    0.5ms라 요청 시간에는 티가 안 난다. 글에도 없으면 그대로 "정보 없음"이다 — 제자리에 둔다.
     """
     pool = canonical_set(list(job.required_skills)) | canonical_set(list(job.tech_stack))
+    from_body = False
+    if not pool and job.description:
+        sections = split_sections(job.description)
+        pool = set(find_tech_in_text("\n".join(sections.required + sections.preferred + sections.duties)))
+        from_body = bool(pool)
     mine = canonical_set(list(resume_skills))
-    return SkillMatch(matched=tuple(sorted(pool & mine)), pool_size=len(pool))
+    return SkillMatch(matched=tuple(sorted(pool & mine)), pool_size=len(pool), from_body=from_body)
 
 
 @dataclass(frozen=True)

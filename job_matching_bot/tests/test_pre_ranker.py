@@ -28,7 +28,13 @@ from job_matching_bot.matching.pre_ranker import (
 MINE = ["React", "TypeScript", "Next.js"]
 
 
-def _job(job_id: str, *, required: list[str] | None = None, stack: list[str] | None = None):
+def _job(
+    job_id: str,
+    *,
+    required: list[str] | None = None,
+    stack: list[str] | None = None,
+    description: str = "",
+):
     return replace(
         mock_jobs()[0],
         job_id=job_id,
@@ -36,6 +42,7 @@ def _job(job_id: str, *, required: list[str] | None = None, stack: list[str] | N
         required_skills=required or [],
         preferred_skills=[],
         tech_stack=stack or [],
+        description=description,
     )
 
 
@@ -56,6 +63,25 @@ class SkillMatchTest(unittest.TestCase):
         match = skill_match(_job("j3"), MINE)
         self.assertEqual(0, match.pool_size)
         self.assertIsNone(match.coverage, "정보 없음은 0%가 아니다")
+
+    def test_untagged_job_is_read_from_its_requirement_sections(self):
+        """태그가 없는 공고가 70%다. 요건 구간에 글로 적은 기술을 태그 대신 쓴다."""
+        body = "회사 소개\nReact를 쓰는 회사입니다\n자격요건\n- TypeScript, Spring Boot 경험\n- AWS 클라우드를 운영해 본 분\n복리후생\n- Python 교육비 지원"
+        match = skill_match(_job("j4", description=body), MINE)
+        self.assertTrue(match.from_body)
+        self.assertEqual(("typescript",), match.matched)
+        self.assertEqual(4, match.pool_size, "TypeScript·Spring Boot·AWS·클라우드. 구간 밖의 React·Python은 안 센다")
+
+    def test_tags_win_over_body_text(self):
+        """기업이 고른 태그가 있으면 글은 보지 않는다."""
+        match = skill_match(_job("j5", stack=["Java"], description="자격요건\n- React 경험"), MINE)
+        self.assertFalse(match.from_body)
+        self.assertEqual((), match.matched)
+
+    def test_body_without_tech_is_still_unknown(self):
+        match = skill_match(_job("j6", description="자격요건\n- 성실하고 책임감 있는 분"), MINE)
+        self.assertIsNone(match.coverage)
+        self.assertFalse(match.from_body)
 
 
 class PreRankTest(unittest.TestCase):

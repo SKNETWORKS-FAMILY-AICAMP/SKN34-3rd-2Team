@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -108,6 +109,49 @@ def split_tags(tags: list[str]) -> tuple[list[str], list[str]]:
         elif tag not in other:
             other.append(tag)
     return list(tech.values()), other
+
+
+# 글에서 찾을 때 뺄 키. 한두 글자라 다른 말에 섞여 잡힌다(`C`, `R`은 이미 한 글자라 빠진다).
+_AMBIGUOUS_IN_TEXT = frozenset({"go", "3d", "dw", "xd"})
+_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]*|[가-힣]+")
+
+
+@lru_cache(maxsize=1)
+def _korean_keys() -> tuple[str, ...]:
+    return tuple(sorted((k for k in _tech_keys() if re.match(r"[가-힣]", k)), key=len, reverse=True))
+
+
+def find_tech_in_text(text: str) -> list[str]:
+    """글에 적힌 기술을 코드표 어휘로 찾는다. 표준 키를 나온 순서대로 돌려준다.
+
+    태그를 안 단 공고가 많다(기술 정보가 없는 OPEN 공고 22,383건). 그중 요건 구간에
+    기술을 글로 적어 둔 것이 5,276건이다. 태그와 같은 어휘로 찾으므로 태그가 있는
+    공고와 같은 기준으로 겹침을 잴 수 있다.
+
+    낱말 단위로 맞춘다. 영문은 한 낱말이나 두 낱말(`Spring Boot`)을, 한글은 조사가
+    붙어도(`클라우드를`) 앞부분이 어휘와 같으면 잡는다.
+    """
+    tokens = _TOKEN.findall(text or "")
+    keys = _tech_keys()
+    found: list[str] = []
+
+    def add(key: str) -> None:
+        if len(key) >= 2 and key not in _AMBIGUOUS_IN_TEXT and key not in found:
+            found.append(key)
+
+    for i, token in enumerate(tokens):
+        if "가" <= token[0] <= "힣":
+            prefix = next((k for k in _korean_keys() if token.startswith(k)), None)
+            if prefix:
+                add(prefix)
+            continue
+        pair = f"{token} {tokens[i + 1]}" if i + 1 < len(tokens) else ""
+        for candidate in (pair, token, token.rstrip(".-")):
+            key = canonical_skill(candidate) if candidate else ""
+            if key in keys:
+                add(key)
+                break
+    return found
 
 
 def tech_stack_codes() -> dict[str, int]:
