@@ -900,10 +900,17 @@ class ChatService(_LivenessMixin):
                 total=0,
             )
 
+        # "이거 말고" — 같은 조건에서 앱이 지금까지 보여 준 공고를 빼고 다음 것을 준다.
+        # 직전 한 쪽만 빼면 두 번째 "이거 말고"에 첫 목록이 다시 나오므로 전부 받는다.
+        more = turn.show_more and bool(request.seen_job_ids)
+        seen = request.seen_job_ids if more else []
+
         result = (
             store_search.SearchResult(jobs=[], total=0, scanned_cap=False, strong=0)
             if filters.is_empty
-            else store_search.search(self.store_path, filters, limit=request.top_k)
+            else store_search.search(
+                self.store_path, filters, limit=request.top_k, exclude_ids=seen
+            )
         )
         clock.lap("search")
 
@@ -911,7 +918,7 @@ class ChatService(_LivenessMixin):
         # 적히는 말이 아닐 때(예: "돈 다루는 일") 여기서만 답이 나온다.
         by_meaning = False
         if turn.requirement_query and self._needs_meaning(filters, result):
-            found = self._by_meaning(turn.requirement_query, filters, request.top_k)
+            found = self._by_meaning(turn.requirement_query, filters, request.top_k, seen)
             if found:
                 result = store_search.SearchResult(
                     jobs=found, total=len(found), scanned_cap=False, strong=0
@@ -931,14 +938,16 @@ class ChatService(_LivenessMixin):
                     total=max(result.total - (len(result.jobs) - len(shown)), len(shown)),
                     scanned_cap=result.scanned_cap,
                     strong=min(result.strong, len(shown)),
+                    skipped=result.skipped,
                 )
             clock.lap("liveness")
 
         return schemas.JobChatResponse(
-            reply=self._reply(turn.understood, filters, result, by_meaning),
+            reply=self._reply(turn.understood, filters, result, by_meaning, more=more),
             filters=turn.filters,
             jobs=[_to_chat_job(hit) for hit in shown],
-            total=result.total,
+            # 답이 말한 건수와 같게 둔다. 제목·태그에 직접 맞은 공고가 있으면 그 수다.
+            total=result.total if by_meaning else (result.strong or result.total),
             suggestions=_suggestions(filters, result),
         )
 
@@ -993,11 +1002,13 @@ class ChatService(_LivenessMixin):
             return False
         return result.total == 0 or result.strong == 0
 
-    def _by_meaning(self, query: str, filters, top_k: int) -> list:
+    def _by_meaning(self, query: str, filters, top_k: int, seen: list[str] = ()) -> list:
         """뜻이 가까운 공고. 인덱스에서 찾아 저장소에서 다시 읽는다.
 
         여기서 실패해도 대화를 끊지 않는다. 조건 검색 결과가 이미 있고, 없으면 없다고
         답하면 된다. 인덱스가 안 붙었다고 챗봇 전체가 멈출 이유가 없다.
+
+        `seen`은 "이거 말고"로 넘겨 보는 중에 이미 보여 준 공고다. 그만큼 더 가져와 뺀다.
         """
         from job_matching_bot.retrieval import search as retrieval
 
@@ -1009,11 +1020,14 @@ class ChatService(_LivenessMixin):
                 career_years=0 if filters.career == "신입" else 5,
             )
             # 마감된 것이 걸러져 줄어드므로 넉넉히 가져온다.
-            hits = self.finder(query, top_k=top_k * 3, filter=condition)
+            hits = self.finder(query, top_k=min(top_k * 3 + len(seen), 100), filter=condition)
         except Exception as error:
             print(f"[챗봇] 의미 검색 실패, 조건 결과로 답한다: {type(error).__name__}: {error}")
             return []
-        found = store_search.by_ids(self.store_path, [hit.job_id for hit in hits])
+        skip = set(seen)
+        found = store_search.by_ids(
+            self.store_path, [hit.job_id for hit in hits if hit.job_id not in skip]
+        )
         return found[:top_k]
 
     def _advise(self, request, turn, filters, clock: StageClock) -> schemas.JobChatResponse:
@@ -1206,9 +1220,15 @@ class ChatService(_LivenessMixin):
         return [_to_chat_job(hit) for hit in result.jobs if hit.job_id in alive][:want]
 
     @staticmethod
-    def _reply(understood: str, filters, result, by_meaning: bool = False) -> str:
-        """실제 결과로 답을 만든다. 건수를 모르는 채로 LLM이 쓰면 틀린 말을 하게 된다."""
+    def _reply(understood: str, filters, result, by_meaning: bool = False, more: bool = False) -> str:
+        """실제 결과로 답을 만든다. 건수를 모르는 채로 LLM이 쓰면 틀린 말을 하게 된다.
+
+        **넘겨 보는 중(`more`)이면 모델이 쓴 한 줄을 붙이지 않는다.** 같은 목록을 다시
+        찾아 놓고도 "기존 공고는 제외하고 다른 공고를 찾아보겠습니다"라고 쓴 적이 있다.
+        몇 번째 공고인지는 서버만 알므로 서버가 쓴다.
+        """
         condition = filters.summary()
+        shown = len(result.jobs)
         if result.total == 0:
             return (
                 f"{condition} 조건으로는 열려 있는 공고를 찾지 못했어요. "
@@ -1216,21 +1236,50 @@ class ChatService(_LivenessMixin):
             )
         if by_meaning:
             # 어떻게 찾았는지 밝힌다. 조건에 맞는 공고를 센 것처럼 보이면 안 된다.
+            if more:
+                return f"앞에서 보여드린 공고 말고, 뜻이 가까운 공고를 {shown}건 더 찾았어요."
             head = understood.strip() or "찾아볼게요."
-            found = f"뜻이 가까운 공고를 {len(result.jobs)}건 찾았어요."
+            found = f"뜻이 가까운 공고를 {shown}건 찾았어요."
             if filters.is_empty:
                 return f"{head}\n말씀하신 말이 공고에 그대로 적히는 말은 아니라서, {found}"
             return f"{head}\n{condition} 조건 그대로는 걸리는 공고가 없어서, {found}"
+
+        # 말하는 건수는 제목·태그에 직접 맞은 공고다. 본문에 말이 스친 범용 공고까지
+        # 세면 실제보다 훨씬 많아 보인다. 직접 맞은 것이 없을 때만 전체를 말한다.
+        # "직무가 맞는 건", "관련도" 같은 말은 쓰지 않는다 — 사용자가 알 필요 없는 구분이다.
+        count = result.strong or result.total
+        capped = result.scanned_cap and not result.strong
+        found = (
+            f"{condition} 공고가 {count:,}건이 넘어요." if capped
+            else f"{condition} 공고 {count:,}건을 찾았어요."
+        )
+
+        if more:
+            if not shown:
+                return (
+                    f"{condition} 공고는 앞에서 보여드린 {result.skipped:,}건이 전부예요. "
+                    "조건을 바꿔서 찾아볼까요?"
+                )
+            start, end = result.skipped + 1, result.skipped + shown
+            strong = result.strong
+            if not strong or end <= strong:
+                return f"{condition} 공고 {count:,}건 중 {start:,}~{end:,}번째예요."
+            # 직접 맞은 공고를 다 보고 본문에만 스친 공고로 넘어가는 자리. 정렬이 직접
+            # 맞은 것을 먼저 세우므로 몇 번째부터인지 셀 수 있다.
+            if result.skipped < strong:
+                return (
+                    f"{condition} 공고 {strong:,}건 중 {start:,}~{strong:,}번째이고, "
+                    "그 뒤는 본문에만 언급된 공고예요."
+                )
+            return (
+                f"{condition} 공고 {strong:,}건은 다 보여드렸어요. "
+                f"본문에만 언급된 공고 {result.total - strong:,}건 중 "
+                f"{start - strong:,}~{end - strong:,}번째예요."
+            )
+
         head = understood.strip() or f"{condition} 조건으로 찾았어요."
-        # 제목·태그에 직접 맞은 건수를 따로 말한다. 본문에 말이 스친 범용 공고까지
-        # 뭉뚱그려 세면 실제보다 훨씬 많아 보인다.
-        if result.strong and result.strong < result.total:
-            counted = f"{result.total}건 중 {_matched_what(filters)} 맞는 건 {result.strong}건이에요"
-        else:
-            counted = f"{result.total}건" + ("이 넘어요" if result.scanned_cap else "이에요")
-        shown = len(result.jobs)
-        tail = f" 관련도 순으로 {shown}건 보여드릴게요." if result.total > shown else ""
-        return f"{head}" + "\n" + f"{condition} · {counted}.{tail}"
+        tail = f" 가까운 순으로 {shown}건 보여드릴게요." if count > shown else ""
+        return f"{head}\n{found}{tail}"
 
 
 # 모으지 않는 것들. 왜 못 하는지까지 말한다. 실측에 근거한 숫자를 그대로 쓴다.
@@ -1261,20 +1310,6 @@ _UNAVAILABLE_NEXT = {
     "합격 가능성": ["내 이력서로 추천해줘", "신입도 되는 공고"],
     "회사 평판": ["대기업 공고만", "서울 공고 보여줘"],
 }
-
-
-def _matched_what(filters) -> str:
-    """무엇이 맞았다고 말할지. 찾은 것이 직무냐 기술이냐에 따라 다르다.
-
-    늘 "직무가 맞는 건"이라고 썼다. "Spring Boot 쓰는 회사 있어?"에도 그랬는데
-    Spring Boot는 직무가 아니라 기술이다. 조건을 둘 다 걸었거나 자유 키워드로 찾았으면
-    무엇이라 부를지 정할 수 없으니 걸린 자리를 그대로 말한다.
-    """
-    if filters.roles and not filters.skills:
-        return "직무가"
-    if filters.skills and not filters.roles:
-        return "기술이"
-    return "제목·태그에"
 
 
 def _to_chat_job(hit) -> schemas.JobChatJob:

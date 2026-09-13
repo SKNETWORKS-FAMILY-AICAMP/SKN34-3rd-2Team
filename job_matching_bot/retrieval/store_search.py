@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
+from typing import Collection
 
 from job_matching_bot.matching.hard_filter import ENTRY_ONLY_MAX_YEARS
 from job_matching_bot.matching.skill_normalize import canonical_skill
@@ -196,6 +197,7 @@ class SearchResult:
     total: int          # 조건에 맞는 전체 건수 (보여 준 것보다 많을 수 있다)
     scanned_cap: bool   # 상한에 걸려 세다 만 경우
     strong: int         # 그중 제목·태그에 직접 맞은 건수
+    skipped: int = 0    # 이미 보여 줘서 뺀 건수. "이거 말고"로 넘겨 보는 중이면 0보다 크다
 
 
 # 공고 한 건을 만드는 데 필요한 컬럼. 조건 검색과 의미 검색이 같은 것을 읽는다.
@@ -302,9 +304,18 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
 
 
 def search(
-    store_path: Path, filters: JobFilters, limit: int = 5, as_of: datetime | None = None
+    store_path: Path,
+    filters: JobFilters,
+    limit: int = 5,
+    as_of: datetime | None = None,
+    exclude_ids: Collection[str] = (),
 ) -> SearchResult:
-    """조건에 맞는 공고를 관련도 순으로. (보여 줄 것, 전체 건수)."""
+    """조건에 맞는 공고를 관련도 순으로. (보여 줄 것, 전체 건수).
+
+    `exclude_ids`는 **이미 보여 준 공고**다. "이거 말고"를 거듭하면 앱이 본 것을 모아
+    보내고, 여기서 빼고 다음 공고를 준다. 서버는 대화를 저장하지 않으므로 몇 쪽째인지
+    대신 무엇을 봤는지를 받는다. 전체 건수(`total`)는 빼기 전 그대로다.
+    """
     as_of = as_of or datetime.now(KST)
     where, params = conditions(filters, as_of)
 
@@ -354,9 +365,13 @@ def search(
     )
     sql = (
         f"SELECT * FROM ({body}) "
+        # 제목·태그에 직접 맞은 공고(관련도 2 이상)를 먼저 전부 세운다. 답이 말하는 건수가
+        # 이 묶음이라, 넘겨 보다 보면 그 건수만큼 본 뒤에 본문에만 스친 공고로 넘어가야
+        # 말과 목록이 맞는다. 묶음 안에서는 본문이 있는 공고가 먼저다.
         # 관련도가 같으면 태그를 적게 단 공고를 먼저. 직무 태그를 열 개씩 달아 둔
         # "전 직군 공개채용"은 무엇을 물어도 걸리므로, 그 일에 특화된 공고에 자리를 내준다.
-        " ORDER BY has_detail DESC, relevance DESC, LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
+        " ORDER BY (relevance >= 2) DESC, has_detail DESC, relevance DESC,"
+        " LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
     )
 
     # 값은 UNION 두 쪽에 똑같이 들어간다. 순서는 SELECT → WHERE 를 두 번, 그다음 LIMIT.
@@ -367,13 +382,16 @@ def search(
     finally:
         connection.close()
 
+    seen = set(exclude_ids)
+    remaining = [row for row in rows if row["job_id"] not in seen]
     jobs = [_to_hit(row, int(row["relevance"] or 0), bool(row["has_detail"]))
-            for row in rows[:limit]]
+            for row in remaining[:limit]]
     return SearchResult(
         jobs=jobs,
         total=len(rows),
         scanned_cap=len(rows) >= SCAN_LIMIT,
         strong=sum(1 for row in rows if int(row["relevance"] or 0) >= 2),
+        skipped=len(rows) - len(remaining),
     )
 
 

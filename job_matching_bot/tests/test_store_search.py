@@ -204,6 +204,16 @@ class StoreSearchTest(unittest.TestCase):
         self.assertEqual(2, result.total)
         self.assertEqual(1, result.strong, "본문에만 스친 것은 빼고 센다")
 
+    def test_excluded_ids_give_the_next_ones(self):
+        """이미 보여 준 공고를 빼고 다음을 준다. 전체 건수는 그대로다."""
+        first = self.find(roles=["백엔드"])
+        shown = [job.job_id for job in first.jobs]
+        again = search(self.path, JobFilters(roles=["백엔드"]), limit=5, as_of=NOW,
+                       exclude_ids=shown[:1])
+        self.assertNotIn(shown[0], [job.job_id for job in again.jobs])
+        self.assertEqual(first.total, again.total)
+        self.assertEqual(1, again.skipped)
+
     def test_tag_match_ranks_between_title_and_body(self):
         jobs = self.find(skills=["Python"]).jobs
         self.assertEqual("A", jobs[0].job_id)
@@ -284,6 +294,21 @@ class ListingOnlySearchTest(unittest.TestCase):
         hits = self.find(roles=["백엔드", "영업"]).jobs
         self.assertTrue(hits[0].has_detail)
         self.assertFalse(hits[-1].has_detail)
+
+    def test_title_matches_come_before_body_only_mentions(self):
+        """답이 말하는 건수는 제목·태그에 맞은 공고다. 넘겨 보다가 그 건수만큼 본 뒤에
+        본문에만 스친 공고가 나와야 말과 목록이 맞는다. 본문이 있다는 이유로 본문에만
+        '영업'이 스친 공고가 목록의 '영업관리' 공고보다 앞서면 안 된다."""
+        with SqliteJobStore(self.path) as store:
+            store.upsert([replace(
+                mock_jobs()[0], job_id="SARAMIN-9", source_job_id="9", company="본문회사",
+                title="사무 보조", description="영업 부서 지원 업무", keywords=["사무보조"],
+                tech_stack=[], region="서울 중구", career_type="ANY", employment_type="정규직",
+                status="OPEN", deadline=None,
+            )], source="SARAMIN_POC", as_of=NOW)
+        hits = self.find(roles=["영업"]).jobs
+        self.assertEqual("사무 보조", hits[-1].title, "본문에만 스친 공고는 맨 뒤")
+        self.assertEqual(1, hits[-1].relevance)
 
     def test_a_listing_only_hit_is_marked(self):
         """챗봇이 이걸 보고 '상세 내용이 없어요, 링크를 확인해 주세요'로 답한다."""

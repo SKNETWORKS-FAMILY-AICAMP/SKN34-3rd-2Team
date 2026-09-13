@@ -31,10 +31,12 @@ def turn(**kwargs) -> schemas.ChatTurnOut:
     job_refs = kwargs.pop("job_refs", [])
     topic = kwargs.pop("topic", "채용")
     refers_to_last_answer = kwargs.pop("refers_to_last_answer", False)
+    show_more = kwargs.pop("show_more", False)
     return schemas.ChatTurnOut(
         intent=intent,
         topic=topic,
         refers_to_last_answer=refers_to_last_answer,
+        show_more=show_more,
         counts_jobs=counts_jobs,
         requirement_query=requirement_query,
         unavailable=unavailable,
@@ -125,11 +127,12 @@ class ChatTestCase(unittest.TestCase):
 
     def ask(self, out, message="백엔드 찾아줘", filters=None, top_k=5,
             job_id=None, answered=None, resume_text=None, last_job_ids=None,
-            last_answer_job_ids=None):
+            last_answer_job_ids=None, seen_job_ids=None):
         request = schemas.JobChatRequest(
             message=message, filters=filters, top_k=top_k, job_id=job_id,
             resume_text=resume_text, last_job_ids=last_job_ids or [],
             last_answer_job_ids=last_answer_job_ids or [],
+            seen_job_ids=seen_job_ids or [],
         )
         return self.service(out, answered=answered).chat(request)
 
@@ -193,12 +196,72 @@ class SearchTest(ChatTestCase):
         self.assertEqual(8, response.total)
         self.assertEqual({}, self.found, "인덱스를 부르지 않는다")
 
+    def test_reply_does_not_use_inner_words(self):
+        """"직무가 맞는 건", "관련도"는 사용자가 알 필요 없는 구분이다."""
+        response = self.ask(turn(roles=["백엔드"], understood=""))
+        self.assertNotIn("관련도", response.reply)
+        self.assertNotIn("맞는 건", response.reply)
+        self.assertIn("공고 8건을 찾았어요", response.reply)
+
     def test_job_fields_are_ready_to_show(self):
         response = self.ask(turn(roles=["백엔드"]), top_k=1)
         job = response.jobs[0]
         self.assertTrue(job.job_id and job.company and job.title)
         self.assertEqual("신입", job.career)
         self.assertEqual("정규직", job.employment_type)
+
+
+class ShowMoreTest(ChatTestCase):
+    """"이거 말고"를 거듭하면 같은 조건에서 안 본 공고가 차례로 나온다.
+
+    예전에는 같은 5건을 다시 보여 주면서 "기존 공고는 제외하고 다른 공고를
+    찾아보겠습니다"라고 답했다. 목록을 끝까지 넘겨 볼 방법도 없었다.
+    """
+
+    def more(self, seen, understood="기존 공고는 제외하고 다른 공고를 찾아보겠습니다."):
+        return self.ask(
+            turn(roles=["백엔드"], show_more=True, understood=understood),
+            message="이거 말고 다른 거", top_k=3,
+            filters=schemas.ChatFilters(roles=["백엔드"]), seen_job_ids=seen,
+        )
+
+    def test_pages_do_not_overlap_and_accumulate(self):
+        first = self.ask(turn(roles=["백엔드"]), top_k=3)
+        page1 = [j.job_id for j in first.jobs]
+        second = self.more(page1)
+        page2 = [j.job_id for j in second.jobs]
+        third = self.more(page1 + page2)
+        page3 = [j.job_id for j in third.jobs]
+        self.assertEqual(3, len(page2))
+        self.assertFalse(set(page1) & set(page2), "첫 목록이 다시 나오면 안 된다")
+        self.assertFalse(set(page1 + page2) & set(page3), "세 번째에도 앞 목록이 안 나온다")
+        self.assertEqual(8, len(set(page1 + page2 + page3)), "끝까지 넘기면 전부 본다")
+
+    def test_the_reply_says_which_ones_they_are(self):
+        response = self.more(["J1", "J2", "J3"])
+        self.assertIn("8건 중 4~6번째", response.reply)
+        self.assertNotIn("제외하고", response.reply, "모델이 쓴 한 줄은 붙이지 않는다")
+        self.assertEqual(8, response.total, "전체 건수는 뺀 뒤가 아니다")
+
+    def test_when_everything_was_shown_it_says_so(self):
+        response = self.more([f"J{i}" for i in range(1, 9)])
+        self.assertEqual([], response.jobs)
+        self.assertIn("8건이 전부예요", response.reply)
+
+    def test_without_seen_ids_it_is_a_normal_search(self):
+        """앱이 본 것을 안 보냈으면 뺄 것이 없다. 처음 찾는 것처럼 답한다."""
+        response = self.more([], understood="찾아볼게요.")
+        self.assertEqual(3, len(response.jobs))
+        self.assertIn("공고 8건을 찾았어요", response.reply)
+
+    def test_meaning_search_skips_what_was_shown(self):
+        self.by_meaning = ["J1", "J2", "J3", "J4"]
+        response = self.ask(
+            turn(show_more=True, requirement_query="서버를 만드는 일"),
+            message="이거 말고", top_k=2, seen_job_ids=["J1", "J2"],
+        )
+        self.assertEqual(["J3", "J4"], [j.job_id for j in response.jobs])
+        self.assertIn("더 찾았어요", response.reply)
 
 
 class BlockedBeforeTheModelTest(ChatTestCase):
