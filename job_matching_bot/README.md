@@ -15,6 +15,7 @@
 |---|---|
 | [docs/data_preprocessing.md](docs/data_preprocessing.md) | 수집 데이터 규모·구조, 전처리 단계별 건수와 판단 근거 |
 | [docs/architecture.md](docs/architecture.md) | 시스템 구조, 인덱싱·추천·챗봇 흐름, 프롬프트, RAG 가이드 대응 |
+| [docs/chatbot.md](docs/chatbot.md) | 공고 찾기 챗봇 — 갈래, 막는 것, 맥락 잇기, 조건 조회, 단계별 시간, 라우터 흔들림 |
 | [docs/test_report.md](docs/test_report.md) | 테스트 계획, 사람 채점·챗봇 평가 결과, 트러블슈팅 |
 | [crawling/README.md](crawling/README.md) | 수집 규칙과 야간 배치 |
 
