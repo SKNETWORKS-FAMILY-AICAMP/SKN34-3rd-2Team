@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -114,6 +115,45 @@ def _progress_reporter(
             pass
 
     return say
+
+
+class StageClock:
+    """단계마다 걸린 시간을 잰다.
+
+    요청 전체 시간만 로그에 남아서 "추천이 10초대"라는 말이 어느 단계 탓인지 가릴 수
+    없었다. `lap(이름)`은 직전 `lap`부터 지금까지를 그 이름으로 적는다.
+    """
+
+    def __init__(self, now: Callable[[], float] = time.perf_counter) -> None:
+        self._now = now
+        self._started = self._last = now()
+        self.laps: dict[str, int] = {}
+
+    def lap(self, name: str) -> None:
+        current = self._now()
+        self.laps[name] = self.laps.get(name, 0) + round((current - self._last) * 1000)
+        self._last = current
+
+    def timings(self) -> dict[str, int]:
+        return {**self.laps, "total": round((self._now() - self._started) * 1000)}
+
+
+# 로그에 찍을 단계 이름. 응답의 `timings_ms` 열쇠와 같다.
+STAGE_LABELS = {
+    "profile": "구조화",
+    "search": "검색",
+    "filter": "필터",
+    "liveness": "마감 확인",
+    "pre_rank": "사전 순위",
+    "rerank": "재정렬",
+    "verify": "근거 검증",
+    "total": "합계",
+}
+
+
+def format_timings(timings: dict[str, int], profile_source: str) -> str:
+    parts = [f"{STAGE_LABELS.get(k, k)} {v / 1000:.1f}" for k, v in timings.items()]
+    return f"[추천 시간] 구조화 출처={profile_source} · " + " · ".join(parts) + "초"
 
 
 class StoreUnavailable(RuntimeError):
@@ -416,9 +456,25 @@ class RecommendService(_LivenessMixin):
         """
         say = _progress_reporter(progress)
         warnings: list[str] = []
+        clock = StageClock()
+        # 구조화가 0초면 앱이 보냈거나 캐시에서 꺼낸 것이다. 시간만 보고는 모르므로 같이 적는다.
+        if request.profile is not None:
+            profile_source = "앱"
+        elif request.resume_text in self._profiles:
+            profile_source = "캐시"
+        else:
+            profile_source = "LLM"
+
+        def finish(response: schemas.RecommendResponse) -> schemas.RecommendResponse:
+            timings = clock.timings()
+            print(format_timings(timings, profile_source))
+            return response.model_copy(
+                update={"timings_ms": timings, "profile_source": profile_source}
+            )
 
         say("resume")
         profile = self.build_profile(request, warnings)
+        clock.lap("profile")
         say("resume", f"기술 {len(profile.skills)}개 · 직무 {len(profile.target_roles)}개를 뽑았어요")
 
         say("search")
@@ -437,15 +493,16 @@ class RecommendService(_LivenessMixin):
             if not reason or len(reason) > 180:
                 reason = type(error).__name__
             raise SearchUnavailable(f"공고 검색에 실패했습니다: {reason}") from error
+        clock.lap("search")
         say("search", f"열린 공고에서 {len(hits)}건을 추렸어요")
         if not hits:
-            return schemas.RecommendResponse(
+            return finish(schemas.RecommendResponse(
                 recommendations=[],
                 search_query=profile.search_query,
                 profile_summary=profile.summary,
                 reranked=False,
                 warnings=[*warnings, "조건에 맞는 공고를 찾지 못했습니다."],
-            )
+            ))
 
         say("filter")
         resume_profile = self.to_resume_profile(request, profile)
@@ -458,6 +515,7 @@ class RecommendService(_LivenessMixin):
                 candidates.append((hit, job, result))
         except Exception as error:
             raise SearchUnavailable(f"조건 판정에 실패했습니다: {type(error).__name__}") from error
+        clock.lap("filter")
 
         # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없다. 자르기는 그
         # 다음이다 — 먼저 잘라 버리면 마감된 만큼 자리가 비고 뒤 후보가 올라오지
@@ -466,6 +524,7 @@ class RecommendService(_LivenessMixin):
         if len(alive) < len(candidates):
             warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
             candidates = [c for c in candidates if c[0].job_id in alive]
+        clock.lap("liveness")
         # 벡터 순위와 기술 겹침을 섞어 다시 세운다. 벡터 유사도는 후보 안에서 거의
         # 평평해서(실측 폭 0.042~0.140) 그 순서만으로는 누구를 LLM에 보낼지 가리기
         # 어렵다. 기술 정보가 없는 공고는 제자리에 남는다 — `pre_ranker` 참고.
@@ -480,10 +539,12 @@ class RecommendService(_LivenessMixin):
             candidates, [hit.score for hit, _, _ in candidates], matches, preferred
         )
         candidates = candidates[:RERANK_TOP_K]
+        clock.lap("pre_rank")
         say("filter", f"조건을 통과한 {len(candidates)}건이 남았어요")
 
         say("judge")
         fits, reranked = self.rerank(request.resume_text, candidates, warnings)
+        clock.lap("rerank")
 
         # 같은 적합도 안에서는 다시 세운 순서를 쓴다. 예전에는 벡터 순위였는데,
         # 판정을 예측하는 힘이 더 약한 신호였다(+0.26 대 +0.42).
@@ -525,13 +586,14 @@ class RecommendService(_LivenessMixin):
         say("judge", f"{len(rows)}건의 근거를 맞대어 봤어요")
         rows.sort(key=lambda r: (r[0], r[1]))
         limited = _limit_per_company(row[2] for row in rows)
-        return schemas.RecommendResponse(
+        clock.lap("verify")
+        return finish(schemas.RecommendResponse(
             recommendations=limited[: request.top_k],
             search_query=profile.search_query,
             profile_summary=profile.summary,
             reranked=reranked,
             warnings=_deduplicate(warnings),
-        )
+        ))
 
 
 _WHITESPACE = re.compile(r"\s+")

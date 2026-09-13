@@ -171,6 +171,10 @@ class RecommendResponse(StrictModel):
     prompt_version: str = ""
     model: str = ""
     reasoning_effort: str = ""
+    # 단계별 걸린 시간(ms). 열쇠는 profile·search·filter·liveness·pre_rank·rerank·verify·total.
+    # 검색 결과가 없으면 search까지만 있다.
+    timings_ms: dict[str, int] = Field(default_factory=dict)
+    profile_source: str = Field(default="", description="구조화를 어디서 얻었나. 앱·캐시·LLM")
 
 
 # ── 공고 찾아보기 챗봇 ──────────────────────────────────
