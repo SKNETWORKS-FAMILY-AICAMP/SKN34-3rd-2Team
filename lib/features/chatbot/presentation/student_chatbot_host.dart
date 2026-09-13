@@ -10,6 +10,7 @@ import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/firebase_providers.dart';
 import '../data/student_chatbot_api_client.dart';
 import 'robot_head_icon.dart';
+import '../../../core/theme/app_space.dart';
 
 class StudentChatbotHost extends ConsumerStatefulWidget {
   const StudentChatbotHost({
@@ -511,7 +512,7 @@ class _ChatPanel extends StatelessWidget {
                   _header(context),
                   if (searching)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(0)),
                       child: TextField(
                         controller: searchController,
                         autofocus: true,
@@ -525,8 +526,8 @@ class _ChatPanel extends StatelessWidget {
                     ),
                   Expanded(child: _body()),
                   _input(),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 9),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: AppSpace.s(9)),
                     child: Text(
                       '챗봇은 실수할 수 있습니다',
                       style: TextStyle(
@@ -593,8 +594,8 @@ class _ChatPanel extends StatelessWidget {
   }
 
   Widget _header(BuildContext context) => Container(
-    height: 58,
-    padding: const EdgeInsets.symmetric(horizontal: 14),
+    height: AppSpace.row(58),
+    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14)),
     color: Theme.of(context).colorScheme.primary,
     child: Row(
       children: [
@@ -602,8 +603,8 @@ class _ChatPanel extends StatelessWidget {
           dimension: 44,
           child: Center(child: RobotHeadIcon(size: 44)),
         ),
-        const SizedBox(width: 9),
-        const Expanded(
+        SizedBox(width: AppSpace.s(9)),
+        Expanded(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -660,18 +661,18 @@ class _ChatPanel extends StatelessWidget {
     if (error != null && !ready) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(AppSpace.s(24)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.error_outline_rounded,
                 color: AppColors.error,
                 size: 32,
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               Text(error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               OutlinedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
@@ -686,7 +687,7 @@ class _ChatPanel extends StatelessWidget {
       children: [
         Expanded(
           child: messages.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     '검색 결과가 없습니다.',
                     style: TextStyle(color: AppColors.textSecondary),
@@ -694,9 +695,9 @@ class _ChatPanel extends StatelessWidget {
                 )
               : ListView.separated(
                   controller: scrollController,
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(AppSpace.s(12)),
                   itemCount: messages.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  separatorBuilder: (_, _) => SizedBox(height: AppSpace.s(10)),
                   itemBuilder: (context, index) {
                     final message = messages[index];
                     if (answering &&
@@ -734,11 +735,11 @@ class _ChatPanel extends StatelessWidget {
   }
 
   Widget _faqButtons() => Padding(
-    padding: const EdgeInsets.only(left: 35, top: 8),
+    padding: EdgeInsets.only(left: AppSpace.s(35), top: AppSpace.s(8)),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '자주 묻는 질문',
           style: TextStyle(
             color: AppColors.textSecondary,
@@ -746,7 +747,7 @@ class _ChatPanel extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 5),
+        SizedBox(height: AppSpace.s(5)),
         Wrap(
           spacing: 5,
           runSpacing: 5,
@@ -768,7 +769,7 @@ class _ChatPanel extends StatelessWidget {
   );
 
   Widget _input() => Padding(
-    padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+    padding: EdgeInsets.fromLTRB(AppSpace.s(10), AppSpace.s(8), AppSpace.s(10), AppSpace.s(6)),
     child: TextField(
       controller: questionController,
       enabled: ready && !answering,
@@ -850,8 +851,8 @@ class _ChatLoadingState extends State<_ChatLoading>
                   child: Container(
                     width: 7,
                     height: 7,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: const BoxDecoration(
+                    margin: EdgeInsets.symmetric(horizontal: AppSpace.s(3)),
+                    decoration: BoxDecoration(
                       color: AppColors.primary,
                       shape: BoxShape.circle,
                     ),
@@ -861,13 +862,13 @@ class _ChatLoadingState extends State<_ChatLoading>
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 220),
           child: Text(
             _showNextLabel ? widget.nextLabel! : widget.initialLabel,
             key: ValueKey(_showNextLabel),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
             ),
@@ -914,9 +915,9 @@ class _LauncherGreeting extends StatelessWidget {
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 208),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(14),
+                    vertical: AppSpace.s(10),
                   ),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
@@ -932,7 +933,7 @@ class _LauncherGreeting extends StatelessWidget {
                   ),
                   child: Text(
                     text,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       height: 1.35,
                       color: AppColors.textPrimary,
@@ -995,11 +996,11 @@ class _MessageBubble extends StatelessWidget {
           dimension: 40,
           child: Center(child: RobotHeadIcon(size: 36)),
         ),
-        const SizedBox(width: 7),
+        SizedBox(width: AppSpace.s(7)),
       ],
       Flexible(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(9)),
           decoration: BoxDecoration(
             color: message.fromUser
                 ? AppColors.primary
@@ -1027,20 +1028,20 @@ class _MessageBubble extends StatelessWidget {
                   selectable: true,
                   softLineBreak: true,
                   styleSheet: MarkdownStyleSheet(
-                    p: const TextStyle(
+                    p: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 13,
                       height: 1.4,
                     ),
-                    listBullet: const TextStyle(
+                    listBullet: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 13,
                     ),
-                    strong: const TextStyle(
+                    strong: TextStyle(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w800,
                     ),
-                    code: const TextStyle(
+                    code: TextStyle(
                       color: AppColors.textPrimary,
                       backgroundColor: AppColors.surfaceVariant,
                       fontSize: 12,

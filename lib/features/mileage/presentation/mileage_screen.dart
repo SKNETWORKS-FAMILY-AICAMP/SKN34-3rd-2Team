@@ -15,6 +15,7 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../theme/mileage_theme.dart';
 import 'widgets/mileage_widgets.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 마일리지 메인 — 카드 + 내역/구매요청 탭
 class MileageScreen extends ConsumerStatefulWidget {
@@ -87,7 +88,7 @@ class _MileageScreenState extends ConsumerState<MileageScreen> {
                 holderName: user.displayName,
                 validThru: cohortEnd?.add(const Duration(days: 14)),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: MileageLayout.pagePaddingH,
@@ -193,11 +194,11 @@ class _HistoryTab extends ConsumerWidget {
           presetMonthSelected: presetMonthSelected,
           presetAllSelected: presetAllSelected,
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpace.s(8)),
         const Divider(height: 1),
         transactionsAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.all(24),
+          loading: () => Padding(
+            padding: EdgeInsets.all(AppSpace.s(24)),
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (e, _) => ErrorView(message: e.toString()),
@@ -224,8 +225,8 @@ class _HistoryTab extends ConsumerWidget {
             }).toList();
 
             if (filtered.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(32),
+              return Padding(
+                padding: EdgeInsets.all(AppSpace.s(32)),
                 child: Center(child: Text('거래 내역이 없습니다')),
               );
             }
@@ -336,7 +337,7 @@ class _PurchaseRequestsTabState extends ConsumerState<_PurchaseRequestsTab> {
                   _SummaryCard(label: '수정/반려/취소', count: other),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               MileageFilterChipRow(
                 label: '상태',
                 selected: _statusFilter,
@@ -350,7 +351,7 @@ class _PurchaseRequestsTabState extends ConsumerState<_PurchaseRequestsTab> {
                   ('cancelled', '취소'),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               MileageFilterChipRow(
                 label: '상품 타입',
                 selected: _categoryFilter,
@@ -362,16 +363,16 @@ class _PurchaseRequestsTabState extends ConsumerState<_PurchaseRequestsTab> {
                   ('onlineCourse', '인터넷 강의'),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               if (filtered.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(24),
+                Padding(
+                  padding: EdgeInsets.all(AppSpace.s(24)),
                   child: Center(child: Text('구매 요청이 없습니다')),
                 )
               else
                 ...filtered.map(
                   (req) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.only(bottom: AppSpace.s(8)),
                     child: _PurchaseRequestCard(request: req),
                   ),
                 ),
@@ -393,7 +394,7 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 92,
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      padding: EdgeInsets.symmetric(vertical: AppSpace.s(6), horizontal: AppSpace.s(8)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border.all(color: AppColors.border),
@@ -406,7 +407,7 @@ class _SummaryCard extends StatelessWidget {
             style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: AppSpace.s(2)),
           Text(
             '$count건',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -454,7 +455,7 @@ class _PurchaseRequestCard extends ConsumerWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(10)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border.all(color: AppColors.border),
@@ -469,7 +470,7 @@ class _PurchaseRequestCard extends ConsumerWidget {
                 label: request.statusLabel,
                 color: MileageColors.statusColor(request.status),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: AppSpace.s(6)),
               MileageTagChip(
                 label: MileageCategories.labelOf(category),
                 color: MileageColors.categoryTagColor(category),
@@ -485,7 +486,7 @@ class _PurchaseRequestCard extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -500,14 +501,14 @@ class _PurchaseRequestCard extends ConsumerWidget {
                 ),
               ),
               if (canCancel) ...[
-                const SizedBox(width: 8),
+                SizedBox(width: AppSpace.s(8)),
                 SizedBox(
                   height: 28,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: MileageColors.primary,
                       minimumSize: const Size(0, 28),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10)),
                       visualDensity: VisualDensity.compact,
                       textStyle: const TextStyle(
                         fontSize: 12,
@@ -524,7 +525,7 @@ class _PurchaseRequestCard extends ConsumerWidget {
               ],
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
           _DetailMeta(items: details),
         ],
       ),

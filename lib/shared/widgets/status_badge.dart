@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_space.dart';
 
 /// 상태 pill 뱃지 — 대시보드/목록/기록/평가 공통
 class StatusBadge extends StatelessWidget {
@@ -34,8 +35,8 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: icon != null ? 8 : 8,
-        vertical: icon != null ? 4 : 3,
+        horizontal: icon != null ? AppSpace.s(8) : AppSpace.s(8),
+        vertical: icon != null ? AppSpace.s(4) : AppSpace.s(3),
       ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -46,7 +47,7 @@ class StatusBadge extends StatelessWidget {
         children: [
           if (icon != null) ...[
             Icon(icon, size: 13, color: color),
-            const SizedBox(width: 3),
+            SizedBox(width: AppSpace.s(3)),
           ],
           Flexible(
             child: Text(

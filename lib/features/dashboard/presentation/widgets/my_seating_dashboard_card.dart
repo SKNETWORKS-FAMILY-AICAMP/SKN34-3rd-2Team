@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../seating/presentation/widgets/seat_grid.dart';
 import '../../../seating/providers/seating_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 — 확정 후 3일간만 표시되는 미니 좌석 배치 섹션
 class MySeatingDashboardSection extends ConsumerWidget {
@@ -17,18 +18,18 @@ class MySeatingDashboardSection extends ConsumerWidget {
     final visible = ref.watch(showSeatingDashboardPreviewProvider);
     if (!visible) return const SizedBox.shrink();
 
-    return const Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: EdgeInsets.only(bottom: 8),
+          padding: EdgeInsets.only(bottom: AppSpace.s(8)),
           child: Text(
             '내 자리 배치',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ),
         MySeatingDashboardCard(),
-        SizedBox(height: 16),
+        SizedBox(height: AppSpace.s(16)),
       ],
     );
   }
@@ -124,7 +125,7 @@ class MySeatingDashboardCard extends ConsumerWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: AppSpace.s(6)),
                   Text(
                     '탭하여 크게 보기',
                     textAlign: TextAlign.center,
@@ -157,7 +158,7 @@ class _SeatingCardShell extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(10), AppSpace.s(10), AppSpace.s(10), AppSpace.s(8)),
           child: child,
         ),
       ),

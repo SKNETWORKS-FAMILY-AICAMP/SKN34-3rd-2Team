@@ -11,6 +11,7 @@ import '../../../../shared/widgets/status_badge.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../data/curriculum_youtube_models.dart';
 import '../../providers/curriculum_youtube_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 학습실 — 이번 주 커리큘럼 기반 YouTube 추천
 class YoutubeRecommendationSection extends ConsumerStatefulWidget {
@@ -72,7 +73,7 @@ class _YoutubeRecommendationSectionState
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: AppSpace.s(4)),
         Text(
           sheetAsync.maybeWhen(
             data: (sheet) => sheet == null
@@ -82,10 +83,10 @@ class _YoutubeRecommendationSectionState
           ),
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         async.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
+          loading: () => Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.s(32)),
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ),
           error: (e, _) => _ErrorCard(
@@ -96,8 +97,7 @@ class _YoutubeRecommendationSectionState
           data: (data) {
             if (data.videos.isEmpty) {
               return _EmptyCard(
-                message: data.message ??
-                    '이번 주 커리큘럼에 해당하는 추천 영상이 없습니다.',
+                message: data.message ?? '이번 주 커리큘럼에 해당하는 추천 영상이 없습니다.',
               );
             }
             return Column(
@@ -117,7 +117,9 @@ class _YoutubeRecommendationSectionState
                         label: '${data.videos.length}개 추천',
                         color: AppColors.badgeOpen,
                       ),
-                      ...data.topics.take(8).map(
+                      ...data.topics
+                          .take(8)
+                          .map(
                             (t) => StatusBadge(
                               label: t,
                               color: AppColors.badgeClosed,
@@ -125,7 +127,7 @@ class _YoutubeRecommendationSectionState
                           ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                 ],
                 Row(
                   children: [
@@ -151,7 +153,7 @@ class _YoutubeRecommendationSectionState
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 SizedBox(
                   height: 268,
                   child: ScrollConfiguration(
@@ -174,9 +176,9 @@ class _YoutubeRecommendationSectionState
                         physics: const BouncingScrollPhysics(
                           parent: AlwaysScrollableScrollPhysics(),
                         ),
-                        padding: const EdgeInsets.only(bottom: 8, right: 4),
+                        padding: EdgeInsets.only(bottom: AppSpace.s(8), right: AppSpace.s(4)),
                         itemCount: data.videos.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 12),
+                        separatorBuilder: (_, _) => SizedBox(width: AppSpace.s(12)),
                         itemBuilder: (context, i) {
                           return _CurriculumYoutubeCard(
                             video: data.videos[i],
@@ -196,7 +198,8 @@ class _YoutubeRecommendationSectionState
 
   String _friendlyError(Object e) {
     final raw = e.toString();
-    if (raw.contains('YOUTUBE_API_KEY') || raw.contains('failed-precondition')) {
+    if (raw.contains('YOUTUBE_API_KEY') ||
+        raw.contains('failed-precondition')) {
       return 'YouTube API 키가 설정되지 않았습니다. 관리자에게 문의하세요.';
     }
     if (raw.contains('permission-denied')) {
@@ -218,7 +221,7 @@ class _EmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      padding: EdgeInsets.symmetric(vertical: AppSpace.s(28), horizontal: AppSpace.s(16)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -243,7 +246,7 @@ class _ErrorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(AppSpace.s(20)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -256,7 +259,7 @@ class _ErrorCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           TextButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh, size: 18),
@@ -286,7 +289,9 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
     final user = ref.read(currentUserProvider).value;
     if (cohortId != null && user != null) {
       try {
-        await ref.read(lmsRepositoryProvider).logRecommendationEvent(
+        await ref
+            .read(lmsRepositoryProvider)
+            .logRecommendationEvent(
               cohortId: cohortId,
               userId: user.uid,
               videoDocId: video.videoId,
@@ -344,7 +349,7 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => Container(
                             color: AppColors.primaryLight,
-                            child: const Icon(
+                            child: Icon(
                               Icons.play_circle_outline,
                               size: 40,
                               color: AppColors.primary,
@@ -354,13 +359,13 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
                       else
                         Container(
                           color: AppColors.primaryLight,
-                          child: const Icon(
+                          child: Icon(
                             Icons.play_circle_outline,
                             size: 40,
                             color: AppColors.primary,
                           ),
                         ),
-                      const Center(
+                      Center(
                         child: Icon(
                           Icons.play_circle_filled,
                           size: 44,
@@ -372,7 +377,7 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(8), AppSpace.s(12), AppSpace.s(8)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -386,7 +391,7 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
                             height: 1.25,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        SizedBox(height: AppSpace.s(2)),
                         Text(
                           video.channelTitle,
                           maxLines: 1,
@@ -396,7 +401,7 @@ class _CurriculumYoutubeCard extends ConsumerWidget {
                             color: AppColors.textSecondary,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        SizedBox(height: AppSpace.s(6)),
                         if (video.topicLabel.isNotEmpty)
                           StatusBadge(
                             label: video.topicLabel,

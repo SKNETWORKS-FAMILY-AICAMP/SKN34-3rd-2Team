@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _kSidebarDarkModeKey = 'sidebar_dark_mode';
+import 'app_appearance_provider.dart';
+
 const _kSidebarDarkPaletteKey = 'sidebar_dark_palette_v1';
 
-/// 밝은 본문(#F8F9FB)과 맞춰볼 다크 사이드바 후보 (임시 테스트용)
+/// 어두운 사이드바 색 후보. 설정 탭에서 고른다.
 class SideRailDarkPalette {
   const SideRailDarkPalette({
     required this.id,
@@ -90,40 +91,15 @@ const kSideRailDarkPalettes = <SideRailDarkPalette>[
   ),
 ];
 
-/// 사이드바만 다크/라이트 (앱 전체 테마와 무관)
-class SideRailDarkMode extends Notifier<bool> {
-  @override
-  bool build() {
-    Future<void>(() async {
-      final prefs = await SharedPreferences.getInstance();
-      if (!ref.mounted) return;
-      state =
-          prefs.getBool(_kSidebarDarkModeKey) ??
-          prefs.getBool('app_dark_mode') ??
-          false;
-    });
-    return false;
-  }
-
-  Future<void> toggle() async {
-    state = !state;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kSidebarDarkModeKey, state);
-  }
-
-  Future<void> setDark(bool value) async {
-    if (state == value) return;
-    state = value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kSidebarDarkModeKey, state);
-  }
-}
-
-final sideRailDarkModeProvider = NotifierProvider<SideRailDarkMode, bool>(
-  SideRailDarkMode.new,
+/// 사이드바가 어두운가. 화면 테마 설정에서 끌어온다.
+///
+/// 예전에는 여기에 스위치가 따로 있었다. 이제 설정 탭 한 곳에서 정하고,
+/// 사이드바만 어둡게도 전체를 어둡게도 그 한 곳에서 고른다.
+final sideRailDarkModeProvider = Provider<bool>(
+  (ref) => ref.watch(appThemeModeProvider).isRailDark,
 );
 
-/// 다크 팔레트 인덱스 (테스트용, 로컬 저장)
+/// 사이드바 색 팔레트. 설정 탭에서 고른다.
 class SideRailDarkPaletteIndex extends Notifier<int> {
   @override
   int build() {

@@ -11,6 +11,7 @@ import '../../../shared/models/form_task_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 구글폼 설문 목록
 class AdminFormTasksScreen extends ConsumerWidget {
@@ -25,7 +26,7 @@ class AdminFormTasksScreen extends ConsumerWidget {
         title: const Text('설문 · 제출 관리'),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 8),
+            padding: EdgeInsets.only(right: AppSpace.s(8)),
             child: FilledButton.icon(
               onPressed: () => context.push(RoutePaths.adminFormTasksCreate),
               icon: const Icon(Icons.add, size: 18),
@@ -46,7 +47,7 @@ class AdminFormTasksScreen extends ConsumerWidget {
                 children: [
                   adminPageWrapper(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 64),
+                      padding: EdgeInsets.symmetric(vertical: AppSpace.s(64)),
                       child: Column(
                         children: [
                           Icon(
@@ -54,12 +55,12 @@ class AdminFormTasksScreen extends ConsumerWidget {
                             size: 48,
                             color: AppColors.textHint.withValues(alpha: 0.6),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: AppSpace.s(12)),
                           Text(
                             '등록된 설문이 없습니다',
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: AppSpace.s(16)),
                           OutlinedButton.icon(
                             onPressed: () =>
                                 context.push(RoutePaths.adminFormTasksCreate),
@@ -80,12 +81,12 @@ class AdminFormTasksScreen extends ConsumerWidget {
                 constraints: const BoxConstraints(maxWidth: 860),
                 child: ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(AppSpace.s(16)),
                   itemCount: list.length,
                   itemBuilder: (_, i) {
                     final task = list[i];
                     return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
+                      margin: EdgeInsets.only(bottom: AppSpace.s(10)),
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: AppColors.primaryLight,
@@ -136,7 +137,8 @@ class AdminFormTaskFormScreen extends ConsumerStatefulWidget {
       _AdminFormTaskFormScreenState();
 }
 
-class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScreen> {
+class _AdminFormTaskFormScreenState
+    extends ConsumerState<AdminFormTaskFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
@@ -178,7 +180,9 @@ class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScree
     if (!mounted) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_dueAt ?? picked.add(const Duration(hours: 18))),
+      initialTime: TimeOfDay.fromDateTime(
+        _dueAt ?? picked.add(const Duration(hours: 18)),
+      ),
     );
     if (time == null) return;
     setState(() {
@@ -220,14 +224,18 @@ class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScree
       );
 
       if (widget.isEditing) {
-        await ref.read(lmsRepositoryProvider).updateFormTask(
+        await ref
+            .read(lmsRepositoryProvider)
+            .updateFormTask(
               cohortId: cohortId,
               taskId: widget.taskId!,
               task: task,
               authorId: user.uid,
             );
       } else {
-        final id = await ref.read(lmsRepositoryProvider).createFormTask(
+        final id = await ref
+            .read(lmsRepositoryProvider)
+            .createFormTask(
               cohortId: cohortId,
               task: task,
               authorId: user.uid,
@@ -286,7 +294,7 @@ class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScree
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(AppSpace.s(16)),
             child: Form(
               key: _formKey,
               child: Column(
@@ -298,13 +306,13 @@ class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScree
                     validator: (v) =>
                         v == null || v.trim().isEmpty ? '제목을 입력하세요' : null,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   TextFormField(
                     controller: _descController,
                     decoration: const InputDecoration(labelText: '설명'),
                     maxLines: 3,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   TextFormField(
                     controller: _formUrlController,
                     decoration: const InputDecoration(
@@ -318,7 +326,7 @@ class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScree
                       return null;
                     },
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   TextFormField(
                     controller: _notionUrlController,
                     decoration: const InputDecoration(
@@ -326,7 +334,7 @@ class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScree
                       hintText: 'https://notion.so/...',
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('마감 일시 *'),
@@ -346,7 +354,7 @@ class _AdminFormTaskFormScreenState extends ConsumerState<AdminFormTaskFormScree
                     value: _published,
                     onChanged: (v) => setState(() => _published = v),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: AppSpace.s(20)),
                   FilledButton(
                     onPressed: _isSaving ? null : _save,
                     child: _isSaving
@@ -410,11 +418,11 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 860),
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(AppSpace.s(16)),
                 children: [
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(AppSpace.s(16)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -426,7 +434,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                             ),
                           ),
                           if (task.description.isNotEmpty) ...[
-                            const SizedBox(height: 8),
+                            SizedBox(height: AppSpace.s(8)),
                             Text(
                               task.description,
                               style: TextStyle(
@@ -434,7 +442,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                               ),
                             ),
                           ],
-                          const SizedBox(height: 12),
+                          SizedBox(height: AppSpace.s(12)),
                           _MetaRow(
                             label: '마감',
                             value: AppDateUtils.formatDateTime(task.dueAt),
@@ -453,10 +461,10 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(AppSpace.s(16)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -467,7 +475,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                               fontSize: 15,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: AppSpace.s(8)),
                           Text(
                             'Google Apps Script에 아래 값을 넣고, '
                             '폼 제출 트리거를 설정하면 LMS에 자동 반영됩니다.',
@@ -476,12 +484,12 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                               color: AppColors.textSecondary,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: AppSpace.s(12)),
                           _CopyField(label: 'Webhook URL', value: webhookUrl),
                           if (cohortId != null)
                             _CopyField(label: 'cohortId', value: cohortId),
                           _CopyField(label: 'taskId', value: taskId),
-                          const SizedBox(height: 8),
+                          SizedBox(height: AppSpace.s(8)),
                           OutlinedButton.icon(
                             onPressed: () {
                               Clipboard.setData(
@@ -498,7 +506,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                             icon: const Icon(Icons.copy, size: 16),
                             label: const Text('Apps Script 코드 복사'),
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: AppSpace.s(8)),
                           Text(
                             'Secret: firebase functions:secrets:set GOOGLE_FORM_WEBHOOK_SECRET',
                             style: TextStyle(
@@ -510,12 +518,12 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   const Text(
                     '제출 현황',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                   responses.when(
                     loading: () => const LinearProgressIndicator(),
                     error: (e, _) => Text('오류: $e'),
@@ -524,8 +532,9 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                         loading: () => const LinearProgressIndicator(),
                         error: (e, _) => Text('오류: $e'),
                         data: (studentList) {
-                          final submittedIds =
-                              submitted.map((r) => r.userId).toSet();
+                          final submittedIds = submitted
+                              .map((r) => r.userId)
+                              .toSet();
                           final done = studentList
                               .where((s) => submittedIds.contains(s.uid))
                               .toList();
@@ -540,13 +549,13 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                                 done: done.length,
                                 total: studentList.length,
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppSpace.s(12)),
                               if (pending.isNotEmpty) ...[
                                 const _SubTitle('미제출'),
                                 ...pending.map(
                                   (s) => ListTile(
                                     dense: true,
-                                    leading: const Icon(
+                                    leading: Icon(
                                       Icons.radio_button_unchecked,
                                       color: AppColors.warning,
                                       size: 18,
@@ -557,7 +566,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                                 ),
                               ],
                               if (done.isNotEmpty) ...[
-                                const SizedBox(height: 8),
+                                SizedBox(height: AppSpace.s(8)),
                                 const _SubTitle('제출 완료'),
                                 ...done.map((s) {
                                   final r = submitted.firstWhere(
@@ -565,7 +574,7 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                                   );
                                   return ListTile(
                                     dense: true,
-                                    leading: const Icon(
+                                    leading: Icon(
                                       Icons.check_circle,
                                       color: AppColors.success,
                                       size: 18,
@@ -666,7 +675,7 @@ class _MetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: AppSpace.s(6)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -697,7 +706,7 @@ class _CopyField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: Row(
         children: [
           SizedBox(
@@ -740,7 +749,7 @@ class _ProgressBar extends StatelessWidget {
           '제출률 ${(ratio * 100).toStringAsFixed(0)}% ($done/$total)',
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: AppSpace.s(6)),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
@@ -762,7 +771,7 @@ class _SubTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4, top: 4),
+      padding: EdgeInsets.only(bottom: AppSpace.s(4), top: AppSpace.s(4)),
       child: Text(
         text,
         style: TextStyle(

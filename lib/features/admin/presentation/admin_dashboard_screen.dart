@@ -13,6 +13,7 @@ import '../../../shared/models/submission_model.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 대시보드 — 승인 대기 요약 + 승인 현황 사이드바
 class AdminDashboardScreen extends ConsumerWidget {
@@ -64,7 +65,7 @@ class _AdminDashboardBody extends ConsumerWidget {
                 '승인 현황',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               submissions.when(
                 loading: () => const _ShimmerCard(),
                 error: (e, _) => InlineErrorCard(
@@ -79,12 +80,12 @@ class _AdminDashboardBody extends ConsumerWidget {
           if (!wide) {
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(AppSpace.s(16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   main,
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpace.s(16)),
                   sidebar,
                 ],
               ),
@@ -93,12 +94,12 @@ class _AdminDashboardBody extends ConsumerWidget {
 
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(AppSpace.s(16)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: main),
-                const SizedBox(width: 16),
+                SizedBox(width: AppSpace.s(16)),
                 SizedBox(width: 320, child: sidebar),
               ],
             ),
@@ -159,12 +160,12 @@ class _PendingSummary extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: AppSpace.s(6)),
         Text(
           '승인 대기 항목을 확인하고 처리하세요.',
           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         Row(
           children: [
             Expanded(
@@ -176,7 +177,7 @@ class _PendingSummary extends StatelessWidget {
                 onTap: () => context.go(RoutePaths.adminRecords),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: AppSpace.s(12)),
             Expanded(
               child: _SummaryCard(
                 icon: Icons.description,
@@ -188,7 +189,7 @@ class _PendingSummary extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         _SummaryCard(
           icon: Icons.calendar_month,
           label: '기수 관리',
@@ -197,7 +198,7 @@ class _PendingSummary extends StatelessWidget {
           onTap: () => context.go(RoutePaths.adminCohorts),
           fullWidth: true,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         _SummaryCard(
           icon: Icons.groups,
           label: '학생 관리 — 상담 등록 / 계정',
@@ -206,7 +207,7 @@ class _PendingSummary extends StatelessWidget {
           onTap: () => context.go(RoutePaths.adminStudents),
           fullWidth: true,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         _SummaryCard(
           icon: Icons.fact_check_outlined,
           label: '출석관리 — 기수별 전원 / 폼 반영',
@@ -215,7 +216,7 @@ class _PendingSummary extends StatelessWidget {
           onTap: () => context.go(RoutePaths.adminAttendance),
           fullWidth: true,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         _SummaryCard(
           icon: Icons.event_seat,
           label: '좌석 배치 — 틀 설정 / 확정',
@@ -224,7 +225,7 @@ class _PendingSummary extends StatelessWidget {
           onTap: () => context.go(RoutePaths.adminSeating),
           fullWidth: true,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         _SummaryCard(
           icon: Icons.card_giftcard_outlined,
           label: '마일리지 관리',
@@ -233,7 +234,7 @@ class _PendingSummary extends StatelessWidget {
           onTap: () => context.go(RoutePaths.adminMileage),
           fullWidth: true,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         _SummaryCard(
           icon: Icons.ballot_outlined,
           label: '설문 · 제출 관리',
@@ -280,19 +281,19 @@ class _SummaryCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(AppSpace.s(16)),
           child: Row(
             children: [
               Container(
                 width: 40,
-                height: 40,
+                height: AppSpace.row(40),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: color, size: 22),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: AppSpace.s(12)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,7 +341,7 @@ class _RecentSubmissions extends StatelessWidget {
       return Card(
         margin: EdgeInsets.zero,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(AppSpace.s(20)),
           child: Center(
             child: Text(
               '승인 대기 항목이 없습니다',
@@ -386,10 +387,10 @@ class _ShimmerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
+    return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: EdgeInsets.all(AppSpace.s(24)),
         child: Center(
           child: SizedBox(
             width: 20,

@@ -14,6 +14,7 @@ import '../data/student_admin_service.dart';
 import '../providers/student_admin_providers.dart';
 import 'widgets/admin_page_layout.dart';
 import 'widgets/credential_dialog.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 학생 상담 상세 + 계정 정보
 class AdminStudentDetailScreen extends ConsumerStatefulWidget {
@@ -40,10 +41,10 @@ class _AdminStudentDetailScreenState
         content: Text(
           active
               ? '${intake.displayName} 학생을 복학 처리하시겠습니까?\n'
-                  '로그인이 다시 가능해집니다.'
+                    '로그인이 다시 가능해집니다.'
               : '${intake.displayName} 학생을 퇴소 처리하시겠습니까?\n'
-                  '로그인이 차단되며 재원 목록에서 숨겨집니다.\n'
-                  '출결·제출 기록은 유지됩니다.',
+                    '로그인이 차단되며 재원 목록에서 숨겨집니다.\n'
+                    '출결·제출 기록은 유지됩니다.',
         ),
         actions: [
           TextButton(
@@ -66,7 +67,9 @@ class _AdminStudentDetailScreenState
 
     setState(() => _isChangingStatus = true);
     try {
-      await ref.read(studentAdminServiceProvider).setStudentActiveStatus(
+      await ref
+          .read(studentAdminServiceProvider)
+          .setStudentActiveStatus(
             uid: widget.studentUid,
             active: active,
           );
@@ -146,8 +149,9 @@ class _AdminStudentDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final intakeAsync =
-        ref.watch(studentIntakeDetailProvider(widget.studentUid));
+    final intakeAsync = ref.watch(
+      studentIntakeDetailProvider(widget.studentUid),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -178,14 +182,14 @@ class _AdminStudentDetailScreenState
                           intake.displayName.isNotEmpty
                               ? intake.displayName[0]
                               : '?',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 22,
                             color: AppColors.primary,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: AppSpace.s(12)),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,13 +234,13 @@ class _AdminStudentDetailScreenState
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: AppSpace.s(20)),
                   _CredentialCard(
                     intake: intake,
                     isResetting: _isResetting,
                     onReset: () => _resetPassword(intake),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpace.s(16)),
                   AdminFormSection(
                     title: '1. 기본 인적 사항',
                     children: [
@@ -327,7 +331,7 @@ class _AdminStudentDetailScreenState
                       ),
                       textAlign: TextAlign.center,
                     ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpace.s(16)),
                   if (_isChangingStatus)
                     const Center(child: CircularProgressIndicator())
                   else if (intake.isActive)
@@ -337,7 +341,7 @@ class _AdminStudentDetailScreenState
                       label: const Text('퇴소 처리'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.error,
-                        side: const BorderSide(color: AppColors.error),
+                        side: BorderSide(color: AppColors.error),
                         minimumSize: const Size.fromHeight(44),
                       ),
                     )
@@ -350,7 +354,7 @@ class _AdminStudentDetailScreenState
                         minimumSize: const Size.fromHeight(44),
                       ),
                     ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: AppSpace.s(24)),
                 ],
               ),
             ),
@@ -375,9 +379,9 @@ class _CredentialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: const Color(0xFFF8FAFC),
+      color: AppColors.tint(const Color(0xFFF8FAFC)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(AppSpace.s(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -385,17 +389,17 @@ class _CredentialCard extends StatelessWidget {
               '로그인 계정',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             _CopyRow(label: '아이디 (이메일)', value: intake.email),
             if (intake.personalEmail != null &&
                 intake.personalEmail!.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               _CopyRow(
                 label: '개인 이메일 (구글폼)',
                 value: intake.personalEmail!,
               ),
             ],
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             _CopyRow(
               label: intake.passwordChanged ? '비밀번호 (학생이 변경함)' : '비밀번호',
               value: intake.passwordChanged
@@ -404,13 +408,13 @@ class _CredentialCard extends StatelessWidget {
               obscured: false,
             ),
             if (intake.passwordChanged) ...[
-              const SizedBox(height: 8),
-              const Text(
+              SizedBox(height: AppSpace.s(8)),
+              Text(
                 '학생이 비밀번호를 변경했습니다. 잊어버린 경우 재발급하세요.',
                 style: TextStyle(fontSize: 11, color: AppColors.warning),
               ),
             ],
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             OutlinedButton.icon(
               onPressed: isResetting ? null : onReset,
               icon: isResetting
@@ -455,7 +459,7 @@ class _CopyRow extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: AppSpace.s(2)),
               SelectableText(
                 value,
                 style: const TextStyle(

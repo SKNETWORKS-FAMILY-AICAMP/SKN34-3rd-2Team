@@ -28,6 +28,8 @@ import 'widgets/mission_progress_dashboard_card.dart';
 import 'widgets/my_seating_dashboard_card.dart';
 import 'widgets/qual_exam_schedule_section.dart';
 import 'widgets/weekly_learning_recommend_section.dart';
+import '../../../shared/providers/app_appearance_provider.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 대시보드 — 프로필, 출석, 게시판, 주간학습, 승인
 class DashboardScreen extends ConsumerWidget {
@@ -75,6 +77,8 @@ class _DashboardBody extends ConsumerWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 960;
+          // 밀도 설정이 '자동'이면 화면 크기를 따르고, 아니면 고른 대로 간다.
+          final dense = ref.watch(appDensityProvider).resolve(byScreen: wide);
           final mainColumn = _DashboardMainColumn(
             user: user,
             notices: notices,
@@ -82,19 +86,19 @@ class _DashboardBody extends ConsumerWidget {
           final sidebar = _DashboardSidebar(
             user: user,
             submissions: submissions,
-            compactCalendar: wide,
+            compactCalendar: dense,
             onRetrySubmissions: () => ref.invalidate(mySubmissionsProvider),
           );
 
           if (!wide) {
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(20), AppSpace.s(20), AppSpace.s(32)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   mainColumn,
-                  const SizedBox(height: 20),
+                  SizedBox(height: AppSpace.s(20)),
                   sidebar,
                 ],
               ),
@@ -103,12 +107,12 @@ class _DashboardBody extends ConsumerWidget {
 
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(24), AppSpace.s(20), AppSpace.s(24), AppSpace.s(32)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: mainColumn),
-                const SizedBox(width: 20),
+                SizedBox(width: AppSpace.s(20)),
                 SizedBox(width: 240, child: sidebar),
               ],
             ),
@@ -134,7 +138,7 @@ class _DashboardMainColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DashboardProfileHeader(user: user),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         _NoticeSectionHeader(
           onViewAll: () => context.go(RoutePaths.board),
         ),
@@ -146,9 +150,9 @@ class _DashboardMainColumn extends StatelessWidget {
             hasMore: list.length > 10,
           ),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         const WeeklyLearningRecommendSection(),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         const FormTasksDashboardSection(),
       ],
     );
@@ -179,14 +183,14 @@ class _DashboardSidebar extends StatelessWidget {
           ),
           child: AttendanceCalendarCard(user: user, compact: compactCalendar),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         const MissionProgressDashboardCard(compact: true),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         const MySeatingDashboardSection(),
         const CurriculumDashboardSection(),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         const QualExamScheduleSection(),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         const _SectionTitle('승인 현황', compact: true),
         submissions.when(
           loading: () => const _ShimmerCard(),
@@ -209,7 +213,7 @@ class _NoticeSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: AppSpace.s(10)),
       child: Row(
         children: [
           Text(
@@ -225,14 +229,17 @@ class _NoticeSectionHeader extends StatelessWidget {
             onPressed: onViewAll,
             style: TextButton.styleFrom(
               foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('더보기', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(
+                  '더보기',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
                 Icon(Icons.chevron_right_rounded, size: 18),
               ],
             ),
@@ -257,7 +264,7 @@ class _NoticesPreview extends StatelessWidget {
     if (notices.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 28),
+        padding: EdgeInsets.symmetric(vertical: AppSpace.s(28)),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
@@ -289,7 +296,7 @@ class _NoticesPreview extends StatelessWidget {
         ),
         if (hasMore)
           Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: EdgeInsets.only(top: AppSpace.s(6)),
             child: Text(
               '이전 공지는 전체 보기에서 확인하세요.',
               textAlign: TextAlign.center,
@@ -317,7 +324,7 @@ class _SubmissionsListState extends State<_SubmissionsList> {
   static const _visibleCount = 3;
 
   /// 항목 1개당 대략 높이 (패딩 + 뱃지 + 제목 + 날짜)
-  static const _itemExtent = 86.0;
+  static double get _itemExtent => AppSpace.row(86);
 
   final _scrollController = ScrollController();
 
@@ -334,7 +341,7 @@ class _SubmissionsListState extends State<_SubmissionsList> {
       return Card(
         margin: EdgeInsets.zero,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(AppSpace.s(20)),
           child: Center(
             child: Text(
               '제출 내역이 없습니다',
@@ -396,7 +403,7 @@ class _SubmissionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = submission;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -404,9 +411,9 @@ class _SubmissionTile extends StatelessWidget {
             children: [
               Flexible(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(7),
+                    vertical: AppSpace.s(3),
                   ),
                   decoration: BoxDecoration(
                     color: AppColors.primaryLight,
@@ -416,7 +423,7 @@ class _SubmissionTile extends StatelessWidget {
                     s.typeLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: AppColors.primary,
                       fontWeight: FontWeight.w600,
@@ -424,18 +431,18 @@ class _SubmissionTile extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: AppSpace.s(6)),
               StatusBadge(
                 label: s.statusLabel,
                 color: s.isApproved
                     ? AppColors.success
                     : s.isPending
-                        ? AppColors.badgeLate
-                        : AppColors.error,
+                    ? AppColors.badgeLate
+                    : AppColors.error,
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: AppSpace.s(6)),
           Text(
             s.title,
             style: const TextStyle(
@@ -446,7 +453,7 @@ class _SubmissionTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           if (s.submittedAt != null) ...[
-            const SizedBox(height: 2),
+            SizedBox(height: AppSpace.s(2)),
             Text(
               AppDateUtils.formatDisplay(s.submittedAt!),
               style: TextStyle(
@@ -470,7 +477,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: AppSpace.s(10)),
       child: Text(
         text,
         style: TextStyle(
@@ -488,9 +495,9 @@ class _ShimmerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
+    return Card(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: EdgeInsets.all(AppSpace.s(24)),
         child: ShimmerBox(height: 60, borderRadius: 12),
       ),
     );

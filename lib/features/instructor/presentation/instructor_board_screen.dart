@@ -12,6 +12,7 @@ import '../../hub/presentation/widgets/board_ui.dart';
 import '../../hub/presentation/widgets/notice_list_widgets.dart';
 import '../../onboarding/domain/onboarding_target_registry.dart';
 import '../../onboarding/instructor/instructor_onboarding_keys.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 강사 — 게시물 작성 (공지 등록·본인 글 수정)
 class InstructorBoardScreen extends ConsumerWidget {
@@ -65,8 +66,8 @@ class InstructorBoardScreen extends ConsumerWidget {
                       if (list.isEmpty) {
                         return ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          children: const [
-                            SizedBox(height: 48),
+                          children: [
+                            SizedBox(height: AppSpace.s(48)),
                             EmptyView(
                               message: '등록된 공지가 없습니다.',
                               icon: Icons.campaign_outlined,
@@ -107,7 +108,7 @@ class InstructorBoardScreen extends ConsumerWidget {
 
                       return ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                        padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(28)),
                         children: [
                           if (favorites.isNotEmpty) ...[
                             const _SectionHeader(
@@ -115,21 +116,21 @@ class InstructorBoardScreen extends ConsumerWidget {
                               iconColor: BoardUi.favorite,
                               title: '중요 공지',
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: AppSpace.s(8)),
                             StudentNoticeRowList(
                               notices: favorites,
                               onTap: (notice) =>
                                   NoticeDetailSheet.show(context, notice),
                               trailingBuilder: editTrailing,
                             ),
-                            const SizedBox(height: 20),
+                            SizedBox(height: AppSpace.s(20)),
                           ],
                           if (regular.isNotEmpty) ...[
                             const _SectionHeader(
                               icon: Icons.campaign_outlined,
                               title: '전체 공지',
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: AppSpace.s(8)),
                             StudentNoticeRowList(
                               notices: regular,
                               onTap: (notice) =>
@@ -167,7 +168,7 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       children: [
         Icon(icon, size: 16, color: iconColor ?? AppColors.textSecondary),
-        const SizedBox(width: 6),
+        SizedBox(width: AppSpace.s(6)),
         Text(
           title,
           style: TextStyle(

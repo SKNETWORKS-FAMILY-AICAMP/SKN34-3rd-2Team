@@ -9,6 +9,7 @@ import '../../../shared/models/scheduled_notice_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../hub/presentation/widgets/board_ui.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 예약 공지 작성/수정
 class AdminScheduledNoticeFormScreen extends ConsumerStatefulWidget {
@@ -82,7 +83,13 @@ class _AdminScheduledNoticeFormScreenState
     );
     if (time == null) return;
     setState(() {
-      _publishAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _publishAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -187,12 +194,12 @@ class _AdminScheduledNoticeFormScreenState
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 16),
+            padding: EdgeInsets.only(right: AppSpace.s(16)),
             child: FilledButton(
               onPressed: _loading ? null : _save,
               style: BoardUi.primaryButtonStyle(),
               child: _loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
@@ -210,7 +217,7 @@ class _AdminScheduledNoticeFormScreenState
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(32), AppSpace.s(24), AppSpace.s(32), AppSpace.s(32)),
             children: [
               TextField(
                 controller: _titleController,
@@ -229,7 +236,7 @@ class _AdminScheduledNoticeFormScreenState
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: AppSpace.s(16)),
               TextField(
                 controller: _contentController,
                 decoration: const InputDecoration(
@@ -240,12 +247,12 @@ class _AdminScheduledNoticeFormScreenState
                 minLines: 6,
                 maxLines: 12,
               ),
-              const SizedBox(height: 28),
+              SizedBox(height: AppSpace.s(28)),
               const Text(
                 '게시 일정',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               SegmentedButton<ScheduleRepeatType>(
                 segments: ScheduleRepeatType.values
                     .map((t) => ButtonSegment(value: t, label: Text(t.label)))
@@ -254,7 +261,7 @@ class _AdminScheduledNoticeFormScreenState
                 onSelectionChanged: (s) =>
                     setState(() => _repeatType = s.first),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: AppSpace.s(16)),
               if (_repeatType == ScheduleRepeatType.once)
                 _SchedulePickerTile(
                   title: '게시 일시',
@@ -270,7 +277,7 @@ class _AdminScheduledNoticeFormScreenState
                   onTap: _pickPublishTime,
                 ),
                 if (_repeatType == ScheduleRepeatType.weekly) ...[
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   AppDropdownField<int>(
                     value: _weekday,
                     decoration: const InputDecoration(
@@ -292,7 +299,7 @@ class _AdminScheduledNoticeFormScreenState
                   ),
                 ],
               ],
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               Container(
                 decoration: BoxDecoration(
                   color: BoardUi.listBackground,
@@ -308,7 +315,10 @@ class _AdminScheduledNoticeFormScreenState
                   ),
                   subtitle: Text(
                     '비활성화하면 자동 게시가 중지됩니다.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               ),
@@ -339,7 +349,7 @@ class _SchedulePickerTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: EdgeInsets.symmetric(vertical: AppSpace.s(8)),
         child: Row(
           children: [
             Expanded(
@@ -353,7 +363,7 @@ class _SchedulePickerTile extends StatelessWidget {
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: AppSpace.s(4)),
                   Text(
                     value,
                     style: const TextStyle(

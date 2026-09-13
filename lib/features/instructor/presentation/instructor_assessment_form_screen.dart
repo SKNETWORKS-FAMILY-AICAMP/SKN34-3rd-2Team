@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +17,7 @@ import '../../assessments/data/assessment_functions_service.dart';
 import '../../assessments/presentation/widgets/assessment_question_view.dart';
 import '../../assessments/presentation/widgets/assessment_thumbnail.dart';
 import 'widgets/assessment_ai_flow_dialogs.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 강사 — 평가 생성/수정 + 문제 편집 + 문제 생성 AI
 class InstructorAssessmentFormScreen extends ConsumerStatefulWidget {
@@ -94,7 +95,13 @@ class _InstructorAssessmentFormScreenState
       initialTime: TimeOfDay.fromDateTime(initial),
     );
     if (time == null) return;
-    final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final dt = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
     setState(() {
       if (isStart) {
         _startAt = dt;
@@ -113,7 +120,9 @@ class _InstructorAssessmentFormScreenState
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
-    return ref.read(lmsRepositoryProvider).createAssessment(
+    return ref
+        .read(lmsRepositoryProvider)
+        .createAssessment(
           cohortId: cohortId,
           assessment: AssessmentModel(
             id: '',
@@ -168,9 +177,11 @@ class _InstructorAssessmentFormScreenState
           final contentType = name.toLowerCase().endsWith('.png')
               ? 'image/png'
               : name.toLowerCase().endsWith('.webp')
-                  ? 'image/webp'
-                  : 'image/jpeg';
-          thumbUrl = await ref.read(storageServiceProvider).uploadAndGetUrl(
+              ? 'image/webp'
+              : 'image/jpeg';
+          thumbUrl = await ref
+              .read(storageServiceProvider)
+              .uploadAndGetUrl(
                 storagePath: path,
                 bytes: _pendingThumbBytes!,
                 contentType: contentType,
@@ -187,7 +198,9 @@ class _InstructorAssessmentFormScreenState
           .where((e) => e.isNotEmpty)
           .toList();
 
-      await ref.read(lmsRepositoryProvider).updateAssessment(
+      await ref
+          .read(lmsRepositoryProvider)
+          .updateAssessment(
             cohortId: cohortId,
             assessmentId: id,
             updates: {
@@ -201,14 +214,18 @@ class _InstructorAssessmentFormScreenState
             },
           );
 
-      await ref.read(lmsRepositoryProvider).replaceAssessmentQuestions(
+      await ref
+          .read(lmsRepositoryProvider)
+          .replaceAssessmentQuestions(
             cohortId: cohortId,
             assessmentId: id,
             questions: _questions,
           );
 
       if (publish) {
-        await ref.read(lmsRepositoryProvider).publishAssessment(
+        await ref
+            .read(lmsRepositoryProvider)
+            .publishAssessment(
               cohortId: cohortId,
               assessmentId: id,
             );
@@ -235,7 +252,10 @@ class _InstructorAssessmentFormScreenState
     }
   }
 
-  Future<void> _editQuestion([AssessmentQuestionModel? existing, int? index]) async {
+  Future<void> _editQuestion([
+    AssessmentQuestionModel? existing,
+    int? index,
+  ]) async {
     final result = await showDialog<AssessmentQuestionModel>(
       context: context,
       builder: (ctx) => _QuestionEditorDialog(initial: existing),
@@ -256,21 +276,24 @@ class _InstructorAssessmentFormScreenState
       final cohortId = ref.read(effectiveCohortIdProvider);
       if (cohortId != null) {
         try {
-          await ref.read(assessmentFunctionsServiceProvider).recordAiQuestionFeedback(
-            cohortId: cohortId,
-            logId: edited.aiLogId!,
-            promptVersion: edited.promptVersion,
-            assessmentId: widget.assessmentId,
-            items: [
-              {
-                'draftId': edited.aiDraftId!,
-                'outcome': 'edited',
-                if (edited.sourceDay != null) 'sourceDay': edited.sourceDay,
-                if (edited.sourceTopic != null) 'sourceTopic': edited.sourceTopic,
-                'questionId': edited.id,
-              },
-            ],
-          );
+          await ref
+              .read(assessmentFunctionsServiceProvider)
+              .recordAiQuestionFeedback(
+                cohortId: cohortId,
+                logId: edited.aiLogId!,
+                promptVersion: edited.promptVersion,
+                assessmentId: widget.assessmentId,
+                items: [
+                  {
+                    'draftId': edited.aiDraftId!,
+                    'outcome': 'edited',
+                    if (edited.sourceDay != null) 'sourceDay': edited.sourceDay,
+                    if (edited.sourceTopic != null)
+                      'sourceTopic': edited.sourceTopic,
+                    'questionId': edited.id,
+                  },
+                ],
+              );
         } catch (_) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -313,7 +336,8 @@ class _InstructorAssessmentFormScreenState
           (prev, next) {
             next.whenData((a) {
               if (a == null || _initialized) return;
-              final qs = ref
+              final qs =
+                  ref
                       .read(assessmentQuestionsProvider(widget.assessmentId!))
                       .asData
                       ?.value ??
@@ -339,7 +363,7 @@ class _InstructorAssessmentFormScreenState
             child: const Text('저장'),
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: EdgeInsets.only(right: AppSpace.s(12)),
             child: FilledButton(
               onPressed: _loading ? null : () => _save(publish: true),
               child: const Text('발행'),
@@ -352,12 +376,12 @@ class _InstructorAssessmentFormScreenState
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 860),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(16), AppSpace.s(16), AppSpace.s(40)),
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(AppSpace.s(16)),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
@@ -371,7 +395,7 @@ class _InstructorAssessmentFormScreenState
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppSpace.s(12)),
                     TextField(
                       controller: _tags,
                       decoration: const InputDecoration(
@@ -379,7 +403,7 @@ class _InstructorAssessmentFormScreenState
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppSpace.s(12)),
                     Row(
                       children: [
                         Expanded(
@@ -391,7 +415,7 @@ class _InstructorAssessmentFormScreenState
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: AppSpace.s(8)),
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => _pickDate(isStart: false),
@@ -403,7 +427,7 @@ class _InstructorAssessmentFormScreenState
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppSpace.s(12)),
                     Row(
                       children: [
                         AssessmentThumbnail(
@@ -414,11 +438,11 @@ class _InstructorAssessmentFormScreenState
                               ? null
                               : _title.text.trim(),
                           width: 96,
-                          height: 54,
+                          height: AppSpace.row(54),
                           placeholderIcon: Icons.image_outlined,
                           placeholderIconSize: 22,
                         ),
-                        const SizedBox(width: 12),
+                        SizedBox(width: AppSpace.s(12)),
                         OutlinedButton.icon(
                           onPressed: _pickThumbnail,
                           icon: const Icon(Icons.upload),
@@ -429,22 +453,22 @@ class _InstructorAssessmentFormScreenState
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const Text(
                 '문제',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               Row(
                 children: [
                   Expanded(
                     flex: 3,
                     child: SizedBox(
-                      height: 48,
+                      height: AppSpace.row(48),
                       child: FilledButton.icon(
                         onPressed: _openCurriculumAi,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
+                          backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                         ),
                         icon: const Icon(Icons.auto_awesome, size: 20),
@@ -455,11 +479,11 @@ class _InstructorAssessmentFormScreenState
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: AppSpace.s(10)),
                   Expanded(
                     flex: 2,
                     child: SizedBox(
-                      height: 48,
+                      height: AppSpace.row(48),
                       child: OutlinedButton.icon(
                         onPressed: () => _editQuestion(),
                         icon: const Icon(Icons.add, size: 20),
@@ -469,16 +493,16 @@ class _InstructorAssessmentFormScreenState
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: AppSpace.s(16)),
               if (_questions.isEmpty)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 36,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(20),
+                    vertical: AppSpace.s(36),
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.border),
                   ),
@@ -489,7 +513,7 @@ class _InstructorAssessmentFormScreenState
                         size: 40,
                         color: Colors.grey.shade400,
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppSpace.s(12)),
                       const Text(
                         '아직 문제가 없습니다',
                         style: TextStyle(
@@ -497,7 +521,7 @@ class _InstructorAssessmentFormScreenState
                           fontSize: 15,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: AppSpace.s(6)),
                       Text(
                         '문제 생성 AI로 초안을 만들거나\n수동으로 추가해 보세요.',
                         textAlign: TextAlign.center,
@@ -513,7 +537,7 @@ class _InstructorAssessmentFormScreenState
                 ..._questions.asMap().entries.map((e) {
                   final q = e.value;
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
+                    padding: EdgeInsets.only(bottom: AppSpace.s(20)),
                     child: AssessmentQuestionView(
                       number: e.key + 1,
                       prompt: q.prompt,
@@ -546,8 +570,8 @@ class _InstructorAssessmentFormScreenState
                   );
                 }),
               if (_loading)
-                const Padding(
-                  padding: EdgeInsets.all(24),
+                Padding(
+                  padding: EdgeInsets.all(AppSpace.s(24)),
                   child: Center(child: CircularProgressIndicator()),
                 ),
             ],
@@ -584,8 +608,9 @@ class _QuestionEditorDialogState extends State<_QuestionEditorDialog> {
     _prompt = TextEditingController(text: i?.prompt ?? '');
     _points = TextEditingController(text: '${i?.points ?? 4}');
     _choices = TextEditingController(text: (i?.choices ?? const []).join('\n'));
-    _accepted =
-        TextEditingController(text: (i?.acceptedAnswers ?? const []).join('\n'));
+    _accepted = TextEditingController(
+      text: (i?.acceptedAnswers ?? const []).join('\n'),
+    );
     _explanation = TextEditingController(text: i?.explanation ?? '');
     _correctIndex = i?.correctIndex ?? 0;
   }
@@ -691,7 +716,8 @@ class _QuestionEditorDialogState extends State<_QuestionEditorDialog> {
             Navigator.pop(
               context,
               AssessmentQuestionModel(
-                id: initial?.id ??
+                id:
+                    initial?.id ??
                     'draft_${DateTime.now().millisecondsSinceEpoch}',
                 order: initial?.order ?? 0,
                 type: _type,

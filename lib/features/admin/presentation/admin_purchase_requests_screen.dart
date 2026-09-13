@@ -14,6 +14,7 @@ import '../../../shared/providers/mileage_providers.dart';
 import '../../mileage/presentation/widgets/mileage_widgets.dart';
 import '../../mileage/theme/mileage_theme.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 구매 요청 처리
 class AdminPurchaseRequestsScreen extends ConsumerStatefulWidget {
@@ -50,8 +51,10 @@ class _AdminPurchaseRequestsScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${request.userDisplayName} · ${formatMileageM(request.totalAmount)}'),
-              const SizedBox(height: 12),
+              Text(
+                '${request.userDisplayName} · ${formatMileageM(request.totalAmount)}',
+              ),
+              SizedBox(height: AppSpace.s(12)),
               TextField(
                 controller: memoController,
                 decoration: const InputDecoration(
@@ -61,7 +64,7 @@ class _AdminPurchaseRequestsScreenState
                 maxLines: 2,
               ),
               if (status == 'approved') ...[
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextField(
                   controller: linkController,
                   decoration: const InputDecoration(
@@ -74,7 +77,10 @@ class _AdminPurchaseRequestsScreenState
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('확인'),
@@ -91,13 +97,16 @@ class _AdminPurchaseRequestsScreenState
     if (ok != true || !mounted) return;
 
     try {
-      await ref.read(mileageFunctionsServiceProvider).reviewPurchaseRequest(
+      await ref
+          .read(mileageFunctionsServiceProvider)
+          .reviewPurchaseRequest(
             cohortId: cohortId,
             requestId: request.id,
             status: status,
             managerMemo: managerMemo.isEmpty ? null : managerMemo,
-            managerPurchaseLink:
-                managerPurchaseLink.isEmpty ? null : managerPurchaseLink,
+            managerPurchaseLink: managerPurchaseLink.isEmpty
+                ? null
+                : managerPurchaseLink,
           );
 
       if (mounted) {
@@ -115,11 +124,11 @@ class _AdminPurchaseRequestsScreenState
   }
 
   String _actionTitle(String status) => switch (status) {
-        'approved' => '승인',
-        'rejected' => '반려',
-        'modify_requested' => '수정 요청',
-        _ => status,
-      };
+    'approved' => '승인',
+    'rejected' => '반려',
+    'modify_requested' => '수정 요청',
+    _ => status,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -130,20 +139,20 @@ class _AdminPurchaseRequestsScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-                Row(
-                  children: [
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => context.go(RoutePaths.adminMileage),
-                      icon: const Icon(Icons.arrow_back, size: 20),
-                    ),
-                    const Text(
-                      '구매 요청 처리',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+            Row(
+              children: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => context.go(RoutePaths.adminMileage),
+                  icon: const Icon(Icons.arrow_back, size: 20),
                 ),
-            const SizedBox(height: 12),
+                const Text(
+                  '구매 요청 처리',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: AppSpace.s(12)),
             MileageFilterChipRow(
               label: '상태',
               selected: _statusFilter,
@@ -157,7 +166,7 @@ class _AdminPurchaseRequestsScreenState
                 ('cancelled', '취소'),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             MileageFilterChipRow(
               label: '상품 타입',
               selected: _categoryFilter,
@@ -169,26 +178,29 @@ class _AdminPurchaseRequestsScreenState
                 ('onlineCourse', '인터넷 강의'),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             requestsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => ErrorView(message: e.toString()),
               data: (requests) {
                 var filtered = requests;
                 if (_statusFilter != 'all') {
-                  filtered =
-                      filtered.where((r) => r.status == _statusFilter).toList();
+                  filtered = filtered
+                      .where((r) => r.status == _statusFilter)
+                      .toList();
                 }
                 if (_categoryFilter != 'all') {
                   filtered = filtered
-                      .where((r) =>
-                          r.items.any((i) => i.category == _categoryFilter))
+                      .where(
+                        (r) =>
+                            r.items.any((i) => i.category == _categoryFilter),
+                      )
                       .toList();
                 }
 
                 if (filtered.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(32),
+                  return Padding(
+                    padding: EdgeInsets.all(AppSpace.s(32)),
                     child: Center(child: Text('구매 요청이 없습니다')),
                   );
                 }
@@ -197,7 +209,7 @@ class _AdminPurchaseRequestsScreenState
                   children: filtered
                       .map(
                         (req) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
+                          padding: EdgeInsets.only(bottom: AppSpace.s(12)),
                           child: _AdminRequestCard(
                             request: req,
                             onReview: _review,
@@ -222,13 +234,17 @@ class _AdminRequestCard extends StatelessWidget {
   });
 
   final PurchaseRequestModel request;
-  final Future<void> Function(PurchaseRequestModel request, {required String status})
-      onReview;
+  final Future<void> Function(
+    PurchaseRequestModel request, {
+    required String status,
+  })
+  onReview;
 
   @override
   Widget build(BuildContext context) {
     final category = request.primaryCategory ?? MileageCategories.gifticon;
-    final canProcess = request.status == PurchaseRequestStatus.pending ||
+    final canProcess =
+        request.status == PurchaseRequestStatus.pending ||
         request.status == PurchaseRequestStatus.modifyRequested;
     final studentLinks = request.items
         .map((e) => e.purchaseLink?.trim())
@@ -239,7 +255,7 @@ class _AdminRequestCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(AppSpace.s(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -249,7 +265,7 @@ class _AdminRequestCard extends StatelessWidget {
                   label: request.statusLabel,
                   color: MileageColors.statusColor(request.status),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: AppSpace.s(6)),
                 MileageTagChip(
                   label: MileageCategories.labelOf(category),
                   color: MileageColors.categoryTagColor(category),
@@ -264,17 +280,17 @@ class _AdminRequestCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: AppSpace.s(6)),
             Text(
               request.primaryProductName,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: AppSpace.s(6)),
             Text(
               '신청 금액: ${formatMileageM(request.totalAmount)}',
               style: const TextStyle(fontSize: 13),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: AppSpace.s(4)),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -287,7 +303,7 @@ class _AdminRequestCard extends StatelessWidget {
                     ),
                   ),
                 if (studentLinks.isNotEmpty) ...[
-                  const SizedBox(width: 12),
+                  SizedBox(width: AppSpace.s(12)),
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerRight,
@@ -309,7 +325,7 @@ class _AdminRequestCard extends StatelessWidget {
             if (request.managerMemo != null && request.managerMemo!.isNotEmpty)
               Text('메모: ${request.managerMemo}'),
             if (canProcess) ...[
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -318,11 +334,13 @@ class _AdminRequestCard extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.success,
                       minimumSize: const Size(0, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
                       textStyle: const TextStyle(fontSize: 12),
                     ),
-                    onPressed: () =>
-                        onReview(request, status: PurchaseRequestStatus.approved),
+                    onPressed: () => onReview(
+                      request,
+                      status: PurchaseRequestStatus.approved,
+                    ),
                     child: const Text('승인'),
                   ),
                   OutlinedButton(
@@ -337,11 +355,13 @@ class _AdminRequestCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
                       minimumSize: const Size(0, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
                       textStyle: const TextStyle(fontSize: 12),
                     ),
-                    onPressed: () =>
-                        onReview(request, status: PurchaseRequestStatus.rejected),
+                    onPressed: () => onReview(
+                      request,
+                      status: PurchaseRequestStatus.rejected,
+                    ),
                     child: const Text('반려'),
                   ),
                 ],
@@ -376,15 +396,15 @@ class _StudentLinkButton extends StatelessWidget {
       onTap: () => _open(context),
       borderRadius: BorderRadius.circular(4),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+        padding: EdgeInsets.symmetric(vertical: AppSpace.s(2)),
         child: Text.rich(
           TextSpan(
-            style: const TextStyle(fontSize: 12, color: AppColors.info),
+            style: TextStyle(fontSize: 12, color: AppColors.info),
             children: [
               const TextSpan(text: '학생 링크: '),
               TextSpan(
                 text: url,
-                style: const TextStyle(
+                style: TextStyle(
                   decoration: TextDecoration.underline,
                   decorationColor: AppColors.info,
                 ),

@@ -18,6 +18,7 @@ import '../../seating/models/seating_assignment_model.dart';
 import '../../seating/models/seating_layout_model.dart';
 import '../../seating/providers/seating_providers.dart';
 import '../../seating/presentation/widgets/seat_grid.dart';
+import '../../../core/theme/app_space.dart';
 
 List<UserModel> _sortByKoreanName(List<UserModel> students) {
   final copy = [...students];
@@ -98,15 +99,16 @@ class _InstructorAttendanceScreenState
 
   String get _dateKey => AppDateUtils.toDateKey(_day);
 
-  String get _scopeKey =>
-      ClassPeriodUtils.providerKey(_dateKey, _period.id);
+  String get _scopeKey => ClassPeriodUtils.providerKey(_dateKey, _period.id);
 
   Future<void> _carryForwardIfNeeded() async {
     final cohortId = ref.read(effectiveCohortIdProvider);
     final user = ref.read(currentUserSyncProvider);
     if (cohortId == null || user == null) return;
     try {
-      await ref.read(lmsRepositoryProvider).ensureRollCallCarriedForward(
+      await ref
+          .read(lmsRepositoryProvider)
+          .ensureRollCallCarriedForward(
             cohortId: cohortId,
             dateKey: _dateKey,
             periodId: _period.id,
@@ -203,7 +205,9 @@ class _InstructorAttendanceScreenState
     final user = ref.read(currentUserSyncProvider);
     if (cohortId == null || user == null) return;
     try {
-      await ref.read(lmsRepositoryProvider).setRollCallConfirmed(
+      await ref
+          .read(lmsRepositoryProvider)
+          .setRollCallConfirmed(
             cohortId: cohortId,
             dateKey: _dateKey,
             periodId: _period.id,
@@ -240,7 +244,9 @@ class _InstructorAttendanceScreenState
     final user = ref.read(currentUserSyncProvider);
     if (cohortId == null || user == null) return;
     try {
-      await ref.read(lmsRepositoryProvider).setRollCallHeld(
+      await ref
+          .read(lmsRepositoryProvider)
+          .setRollCallHeld(
             cohortId: cohortId,
             dateKey: _dateKey,
             periodId: _period.id,
@@ -290,8 +296,9 @@ class _InstructorAttendanceScreenState
           final confirmed = confirmedAsync.asData?.value ?? const <String>{};
           final held = heldAsync.asData?.value ?? const <String>{};
           final currentUid = _resolvedCurrent(students, confirmed);
-          final heldStudents =
-              students.where((s) => held.contains(s.uid)).toList();
+          final heldStudents = students
+              .where((s) => held.contains(s.uid))
+              .toList();
           final assignment = assignmentAsync.asData?.value;
 
           return Column(
@@ -307,7 +314,9 @@ class _InstructorAttendanceScreenState
                       assignment: assignment,
                       assignedNames: {
                         for (final e
-                            in ref.watch(seatingAssignedStudentsProvider).entries)
+                            in ref
+                                .watch(seatingAssignedStudentsProvider)
+                                .entries)
                           e.key: e.value.displayName,
                       },
                       highlightUserId: currentUid,
@@ -365,7 +374,8 @@ class _InstructorAttendanceScreenState
                       cohortName: cohortName,
                       dateKey: _dateKey,
                       period: _period,
-                      statusHint: ClassPeriodUtils.isSameDay(_day, DateTime.now())
+                      statusHint:
+                          ClassPeriodUtils.isSameDay(_day, DateTime.now())
                           ? ClassPeriodUtils.statusHint(DateTime.now())
                           : '',
                       confirmedCount: confirmed.length,
@@ -399,20 +409,20 @@ class _InstructorAttendanceScreenState
                         child: SizedBox(
                           width: contentW,
                           child: ListView(
-                            padding: const EdgeInsets.fromLTRB(0, 8, 0, 20),
+                            padding: EdgeInsets.fromLTRB(AppSpace.s(0), AppSpace.s(8), AppSpace.s(0), AppSpace.s(20)),
                             children: [
                               header,
-                              const SizedBox(height: 8),
+                              SizedBox(height: AppSpace.s(8)),
                               SizedBox(
                                 width: seatSize.width,
                                 height: seatSize.height,
                                 child: chart,
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppSpace.s(12)),
                               SizedBox(height: 300, child: roll),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppSpace.s(12)),
                               SizedBox(height: 160, child: heldPane),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppSpace.s(12)),
                               _AttendanceTable(
                                 students: students,
                                 byUser: byUser,
@@ -431,10 +441,8 @@ class _InstructorAttendanceScreenState
                       constraints.maxWidth - 48,
                     );
                     final sideGap = 12.0;
-                    final seatMaxW = contentW -
-                        _kRollCallWidth -
-                        _kHeldWidth -
-                        sideGap * 2;
+                    final seatMaxW =
+                        contentW - _kRollCallWidth - _kHeldWidth - sideGap * 2;
                     // 출석부는 페이지 스크롤로 펼치므로 좌석에 뷰포트 대부분 할당
                     final seatMaxH = math.max(
                       360.0,
@@ -449,14 +457,14 @@ class _InstructorAttendanceScreenState
 
                     return Center(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                        padding: EdgeInsets.fromLTRB(AppSpace.s(24), AppSpace.s(8), AppSpace.s(24), AppSpace.s(24)),
                         child: SizedBox(
                           width: contentW,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               header,
-                              const SizedBox(height: 8),
+                              SizedBox(height: AppSpace.s(8)),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -479,7 +487,7 @@ class _InstructorAttendanceScreenState
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: AppSpace.s(16)),
                               _AttendanceTable(
                                 students: students,
                                 byUser: byUser,
@@ -533,7 +541,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(4), AppSpace.s(4), AppSpace.s(4), AppSpace.s(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -544,7 +552,7 @@ class _Header extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           Text(
             '${cohortName ?? '담당 기수'} · 교시마다 자리에 있는지 확인합니다. '
             '학생 조작은 없고, 확인·보류만 기록됩니다. (출석 상태는 변경되지 않음)',
@@ -554,17 +562,17 @@ class _Header extends StatelessWidget {
             ),
           ),
           if (statusHint.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            SizedBox(height: AppSpace.s(6)),
             Text(
               statusHint,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppColors.primary,
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           KeyedSubtree(
             key: OnboardingTargetRegistry.keyOf(
               InstructorOnboardingTargets.attendanceSummary,
@@ -594,14 +602,14 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: AppSpace.s(10)),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 for (final p in ClassPeriodUtils.periods) ...[
                   Padding(
-                    padding: const EdgeInsets.only(right: 6),
+                    padding: EdgeInsets.only(right: AppSpace.s(6)),
                     child: ChoiceChip(
                       label: Text(
                         p.label,
@@ -621,7 +629,7 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           Text(
             '선택 교시: ${period.rangeLabel}',
             style: TextStyle(
@@ -656,14 +664,14 @@ class _SeatingPane extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
       child: layout == null || assignment == null || !assignment!.isPublished
           ? Center(
               child: Padding(
-                padding: EdgeInsets.all(20),
+                padding: EdgeInsets.all(AppSpace.s(20)),
                 child: Text(
                   '확정된 좌석 배치가 없습니다.\n관리자가 배치를 확정하면 자리 확인 시 좌석이 표시됩니다.',
                   textAlign: TextAlign.center,
@@ -672,12 +680,12 @@ class _SeatingPane extends StatelessWidget {
               ),
             )
           : Padding(
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(6), AppSpace.s(6), AppSpace.s(6), AppSpace.s(6)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4, bottom: 4),
+                  Padding(
+                    padding: EdgeInsets.only(left: AppSpace.s(4), bottom: AppSpace.s(4)),
                     child: Text(
                       '좌석 배치',
                       style: TextStyle(
@@ -791,15 +799,16 @@ class _RollCallPaneState extends State<_RollCallPane> {
 
   @override
   Widget build(BuildContext context) {
-    final current =
-        widget.students.where((s) => s.uid == widget.currentUid).firstOrNull;
+    final current = widget.students
+        .where((s) => s.uid == widget.currentUid)
+        .firstOrNull;
     final currentConfirmed =
         current != null && widget.confirmed.contains(current.uid);
     final currentHeld = current != null && widget.held.contains(current.uid);
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -807,12 +816,12 @@ class _RollCallPaneState extends State<_RollCallPane> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(4)),
             child: Text(
               current == null
                   ? '호명할 학생이 없습니다'
                   : '${current.displayName}'
-                      '${_seatLabel(current.uid, widget.assignment)}',
+                        '${_seatLabel(current.uid, widget.assignment)}',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -820,13 +829,16 @@ class _RollCallPaneState extends State<_RollCallPane> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(8), AppSpace.s(0), AppSpace.s(8), AppSpace.s(8)),
             child: Row(
               children: [
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 32,
+                  ),
                   onPressed: widget.students.isEmpty ? null : widget.onPrev,
                   icon: const Icon(Icons.chevron_left),
                 ),
@@ -838,22 +850,21 @@ class _RollCallPaneState extends State<_RollCallPane> {
                     child: FilledButton(
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 34),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
                       ),
                       onPressed: current == null
                           ? null
-                          : () =>
-                              widget.onConfirm(current, !currentConfirmed),
+                          : () => widget.onConfirm(current, !currentConfirmed),
                       child: Text(currentConfirmed ? '확인 취소' : '확인'),
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: AppSpace.s(6)),
                 Expanded(
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 34),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
                       foregroundColor: const Color(0xFFC2410C),
                       side: const BorderSide(color: Color(0xFFFDBA74)),
                     ),
@@ -866,7 +877,10 @@ class _RollCallPaneState extends State<_RollCallPane> {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 32,
+                  ),
                   onPressed: widget.students.isEmpty ? null : widget.onNext,
                   icon: const Icon(Icons.chevron_right),
                 ),
@@ -891,16 +905,17 @@ class _RollCallPaneState extends State<_RollCallPane> {
                       final selected = student.uid == widget.currentUid;
                       final done = widget.confirmed.contains(student.uid);
                       final isHeld = widget.held.contains(student.uid);
-                      final seatId =
-                          widget.assignment?.seatIdForUser(student.uid);
+                      final seatId = widget.assignment?.seatIdForUser(
+                        student.uid,
+                      );
                       return Material(
                         color: selected
-                            ? const Color(0xFFFFFBEB)
+                            ? AppColors.tint(const Color(0xFFFFFBEB))
                             : Colors.transparent,
                         child: InkWell(
                           onTap: () => widget.onSelect(student.uid),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10)),
                             child: Row(
                               children: [
                                 Container(
@@ -909,12 +924,18 @@ class _RollCallPaneState extends State<_RollCallPane> {
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
                                     color: done
-                                        ? const Color(0xFFDCFCE7)
+                                        ? AppColors.tint(
+                                            const Color(0xFFDCFCE7),
+                                          )
                                         : isHeld
-                                            ? const Color(0xFFFFEDD5)
-                                            : selected
-                                                ? const Color(0xFFFEF3C7)
-                                                : AppColors.surfaceVariant,
+                                        ? AppColors.tint(
+                                            const Color(0xFFFFEDD5),
+                                          )
+                                        : selected
+                                        ? AppColors.tint(
+                                            const Color(0xFFFEF3C7),
+                                          )
+                                        : AppColors.surfaceVariant,
                                     shape: BoxShape.circle,
                                   ),
                                   child: Text(
@@ -925,12 +946,12 @@ class _RollCallPaneState extends State<_RollCallPane> {
                                       color: done
                                           ? const Color(0xFF15803D)
                                           : isHeld
-                                              ? const Color(0xFFC2410C)
-                                              : AppColors.textPrimary,
+                                          ? const Color(0xFFC2410C)
+                                          : AppColors.textPrimary,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(width: AppSpace.s(8)),
                                 Expanded(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -947,9 +968,7 @@ class _RollCallPaneState extends State<_RollCallPane> {
                                         ),
                                       ),
                                       Text(
-                                        seatId == null
-                                            ? '좌석 없음'
-                                            : '$seatId번',
+                                        seatId == null ? '좌석 없음' : '$seatId번',
                                         style: TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textSecondary,
@@ -1011,7 +1030,7 @@ class _HeldPane extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFDBA74)),
       ),
@@ -1019,7 +1038,7 @@ class _HeldPane extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(8)),
             child: Row(
               children: [
                 const Text(
@@ -1030,7 +1049,7 @@ class _HeldPane extends StatelessWidget {
                     color: Color(0xFFC2410C),
                   ),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: AppSpace.s(6)),
                 Text(
                   '${students.length}명',
                   style: TextStyle(
@@ -1058,18 +1077,17 @@ class _HeldPane extends StatelessWidget {
                     itemBuilder: (_, i) {
                       final student = students[i];
                       final selected = student.uid == currentUid;
-                      final seatId =
-                          assignment?.seatIdForUser(student.uid);
+                      final seatId = assignment?.seatIdForUser(student.uid);
                       return Material(
                         color: selected
-                            ? const Color(0xFFFFF7ED)
+                            ? AppColors.tint(const Color(0xFFFFF7ED))
                             : Colors.transparent,
                         child: InkWell(
                           onTap: () => onSelect(student.uid),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: AppSpace.s(8),
+                              vertical: AppSpace.s(6),
                             ),
                             child: Row(
                               children: [
@@ -1088,9 +1106,7 @@ class _HeldPane extends StatelessWidget {
                                         ),
                                       ),
                                       Text(
-                                        seatId == null
-                                            ? '좌석 없음'
-                                            : '$seatId번',
+                                        seatId == null ? '좌석 없음' : '$seatId번',
                                         style: TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textSecondary,
@@ -1102,8 +1118,8 @@ class _HeldPane extends StatelessWidget {
                                 TextButton(
                                   style: TextButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: AppSpace.s(4),
                                     ),
                                     foregroundColor: AppColors.success,
                                   ),
@@ -1116,8 +1132,8 @@ class _HeldPane extends StatelessWidget {
                                 TextButton(
                                   style: TextButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: AppSpace.s(4),
                                     ),
                                     foregroundColor: const Color(0xFFC2410C),
                                   ),
@@ -1168,7 +1184,7 @@ class _AttendanceTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -1177,14 +1193,14 @@ class _AttendanceTable extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(8)),
             child: Row(
               children: [
                 Text(
                   '당일 출석부',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                 ),
-                SizedBox(width: 8),
+                SizedBox(width: AppSpace.s(8)),
                 Expanded(
                   child: Text(
                     '조회 전용 · 입퇴실·예외는 관리자 출석부와 동일',
@@ -1203,7 +1219,7 @@ class _AttendanceTable extends StatelessWidget {
           const Divider(height: 1),
           if (students.isEmpty)
             Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
+              padding: EdgeInsets.symmetric(vertical: AppSpace.s(24)),
               child: Center(
                 child: Text(
                   '학생이 없습니다.',
@@ -1215,7 +1231,7 @@ class _AttendanceTable extends StatelessWidget {
             for (final student in students)
               ColoredBox(
                 color: student.uid == currentUid
-                    ? const Color(0xFFFFFBEB)
+                    ? AppColors.tint(const Color(0xFFFFFBEB))
                     : Colors.transparent,
                 child: SizedBox(
                   height: _rowH,
@@ -1272,7 +1288,7 @@ class _AttendanceTable extends StatelessWidget {
       return Expanded(
         flex: flex,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
           child: Text(
             text,
             maxLines: 1,
@@ -1305,7 +1321,7 @@ class _CountChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(6)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),

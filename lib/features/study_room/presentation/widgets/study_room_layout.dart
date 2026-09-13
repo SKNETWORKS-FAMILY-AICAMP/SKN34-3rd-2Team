@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_layout.dart';
 import '../../../../shared/models/user_model.dart';
+import '../../../../core/theme/app_space.dart';
 
 class StudyRoomPageHeader extends StatelessWidget {
   const StudyRoomPageHeader({
@@ -39,7 +40,7 @@ class StudyRoomPageHeader extends StatelessWidget {
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               Text(
                 subtitle,
                 style: TextStyle(
@@ -52,7 +53,7 @@ class StudyRoomPageHeader extends StatelessWidget {
         ),
         if (showProfile)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(8)),
             decoration: BoxDecoration(
               color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(10),
@@ -66,14 +67,14 @@ class StudyRoomPageHeader extends StatelessWidget {
                   backgroundColor: AppColors.primaryLight,
                   child: Text(
                     initial,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: AppSpace.s(8)),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -133,7 +134,7 @@ class StudyRoomSearchBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: AppColors.border),
         ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+        contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(0)),
       ),
     );
   }

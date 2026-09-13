@@ -6,6 +6,7 @@ import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/models/resume_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 이력서 항목 아래에 붙는 댓글.
 ///
@@ -78,7 +79,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('삭제', style: TextStyle(color: AppColors.error)),
+            child: Text('삭제', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -88,7 +89,9 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
     try {
-      await ref.read(lmsRepositoryProvider).deleteResumeFeedback(
+      await ref
+          .read(lmsRepositoryProvider)
+          .deleteResumeFeedback(
             cohortId: cohortId,
             resumeId: widget.resume.id,
             feedbackId: item.id,
@@ -114,7 +117,9 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
     if (ids.isEmpty) return;
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
-    await ref.read(lmsRepositoryProvider).markResumeFeedbackRead(
+    await ref
+        .read(lmsRepositoryProvider)
+        .markResumeFeedbackRead(
           cohortId: cohortId,
           resumeId: widget.resume.id,
           feedbackIds: ids,
@@ -131,7 +136,9 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
 
     setState(() => _sending = true);
     try {
-      await ref.read(lmsRepositoryProvider).addResumeFeedback(
+      await ref
+          .read(lmsRepositoryProvider)
+          .addResumeFeedback(
             cohortId: cohortId,
             resumeId: widget.resume.id,
             authorId: user.uid,
@@ -160,7 +167,9 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
 
   @override
   Widget build(BuildContext context) {
-    final all = ref.watch(resumeFeedbackProvider(widget.resume.id)).maybeWhen(
+    final all = ref
+        .watch(resumeFeedbackProvider(widget.resume.id))
+        .maybeWhen(
           data: (list) => list,
           orElse: () => const <ResumeFeedbackModel>[],
         );
@@ -169,10 +178,12 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
         if (f.sectionKey == widget.sectionKey) f,
     ];
     final asReviewer = ref.watch(canReviewResumesProvider);
-    final unread =
-        unreadFeedback(items, widget.resume,
-            asReviewer: asReviewer,
-            viewerId: ref.watch(currentUserSyncProvider)?.uid);
+    final unread = unreadFeedback(
+      items,
+      widget.resume,
+      asReviewer: asReviewer,
+      viewerId: ref.watch(currentUserSyncProvider)?.uid,
+    );
 
     if (widget.expanded && unread.isNotEmpty) {
       // 화면에 보였으니 읽은 것이다. 그리는 중에 쓰지 않도록 프레임 뒤로 미룬다.
@@ -184,7 +195,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpace.s(8)),
         _ThreadChip(
           count: items.length,
           unread: unread.length,
@@ -192,7 +203,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
           onTap: widget.onToggle,
         ),
         if (widget.expanded) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
           _panel(items, unread, asReviewer),
         ],
       ],
@@ -207,9 +218,9 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
     final unreadIds = {for (final f in unread) f.id};
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(14), AppSpace.s(12)),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBFCFE),
+        color: AppColors.tint(const Color(0xFFFBFCFE)),
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -217,7 +228,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (items.isEmpty)
-            const Text(
+            Text(
               '아직 이 항목에 남긴 피드백이 없습니다.',
               style: TextStyle(fontSize: 12.5, color: AppColors.textHint),
             )
@@ -237,7 +248,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
                   ),
                   for (final reply in threadRepliesTo(items, item.id))
                     Padding(
-                      padding: const EdgeInsets.only(left: 22),
+                      padding: EdgeInsets.only(left: AppSpace.s(22)),
                       child: _Comment(
                         item: reply,
                         isNew: unreadIds.contains(reply.id),
@@ -247,7 +258,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
                     ),
                 ],
               ),
-          const SizedBox(height: 10),
+          SizedBox(height: AppSpace.s(10)),
           _composer(asReviewer),
         ],
       ),
@@ -262,26 +273,29 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
         // 누구에게 답하는지 입력칸 위에 밝힌다. 실이 길어지면 쓰는 사람도 헷갈린다.
         if (target != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: EdgeInsets.only(bottom: AppSpace.s(6)),
             child: Row(
               children: [
                 Flexible(
                   child: Text(
                     '${target.authorName}님의 글에 답글',
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.primary,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: AppSpace.s(8)),
                 InkWell(
                   onTap: () => setState(() => _replyTo = null),
-                  child: const Text(
+                  child: Text(
                     '취소',
-                    style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               ],
@@ -307,27 +321,29 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
             decoration: InputDecoration(
               isDense: true,
               filled: true,
-              fillColor: Colors.white,
+              fillColor: AppColors.surface,
               hintText: target != null
                   ? '${target.authorName}님에게 답글을 적어 주세요'
                   : (asReviewer
                         ? '이 항목에 대한 피드백을 적어 주세요'
                         : '이 항목에 대해 남길 말을 적어 주세요'),
-              hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.textHint),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+              hintStyle: TextStyle(fontSize: 12.5, color: AppColors.textHint),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: AppSpace.s(13),
+                vertical: AppSpace.s(10),
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(20),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(20),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: AppSpace.s(8)),
         IconButton.filled(
           tooltip: '등록',
           onPressed: _sending ? null : _send,
@@ -364,17 +380,19 @@ class _ThreadChip extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Material(
-        color: has ? const Color(0xFFF4F8FF) : Colors.white,
+        color: has ? AppColors.tint(const Color(0xFFF4F8FF)) : AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(11), vertical: AppSpace.s(5)),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: has ? const Color(0xFFC9DBFF) : AppColors.border,
+                color: has
+                    ? AppColors.tint(const Color(0xFFC9DBFF))
+                    : AppColors.border,
               ),
             ),
             child: Row(
@@ -384,19 +402,19 @@ class _ThreadChip extends StatelessWidget {
                   Container(
                     width: 6,
                     height: 6,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.error,
                       shape: BoxShape.circle,
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: AppSpace.s(6)),
                 ],
                 Icon(
                   Icons.mode_comment_outlined,
                   size: 14,
                   color: has ? AppColors.primary : AppColors.textSecondary,
                 ),
-                const SizedBox(width: 5),
+                SizedBox(width: AppSpace.s(5)),
                 Text(
                   has ? '피드백 $count' : '피드백',
                   style: TextStyle(
@@ -405,7 +423,7 @@ class _ThreadChip extends StatelessWidget {
                     color: has ? AppColors.primary : AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(width: 3),
+                SizedBox(width: AppSpace.s(3)),
                 Icon(
                   open ? Icons.expand_less : Icons.expand_more,
                   size: 15,
@@ -447,7 +465,7 @@ class _Comment extends StatelessWidget {
         ? '?'
         : item.authorName.characters.last;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: AppSpace.s(10)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -455,7 +473,9 @@ class _Comment extends StatelessWidget {
             width: 26,
             height: 26,
             decoration: BoxDecoration(
-              color: mine ? const Color(0xFFEAF7EE) : AppColors.primaryLight,
+              color: mine
+                  ? AppColors.tint(const Color(0xFFEAF7EE))
+                  : AppColors.primaryLight,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
@@ -468,7 +488,7 @@ class _Comment extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 9),
+          SizedBox(width: AppSpace.s(9)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,27 +505,27 @@ class _Comment extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 7),
+                    SizedBox(width: AppSpace.s(7)),
                     if (item.createdAt != null)
                       Text(
                         AppDateUtils.formatDateTime(item.createdAt!),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10.5,
                           color: AppColors.textHint,
                         ),
                       ),
                     if (isNew) ...[
-                      const SizedBox(width: 7),
+                      SizedBox(width: AppSpace.s(7)),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppSpace.s(5),
+                          vertical: AppSpace.s(1),
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFDECEC),
+                          color: AppColors.tint(const Color(0xFFFDECEC)),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text(
+                        child: Text(
                           '새 글',
                           style: TextStyle(
                             fontSize: 10,
@@ -517,24 +537,24 @@ class _Comment extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: AppSpace.s(2)),
                 Text(
                   item.content,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     height: 1.55,
-                    color: Color(0xFF374151),
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 if (onReply != null || onDelete != null)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    padding: EdgeInsets.symmetric(vertical: AppSpace.s(3)),
                     child: Row(
                       children: [
                         if (onReply != null)
                           InkWell(
                             onTap: onReply,
-                            child: const Text(
+                            child: Text(
                               '답글',
                               style: TextStyle(
                                 fontSize: 11.5,
@@ -544,11 +564,11 @@ class _Comment extends StatelessWidget {
                             ),
                           ),
                         if (onReply != null && onDelete != null)
-                          const SizedBox(width: 12),
+                          SizedBox(width: AppSpace.s(12)),
                         if (onDelete != null)
                           InkWell(
                             onTap: onDelete,
-                            child: const Text(
+                            child: Text(
                               '삭제',
                               style: TextStyle(
                                 fontSize: 11.5,

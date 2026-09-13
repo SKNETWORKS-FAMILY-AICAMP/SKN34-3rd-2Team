@@ -4,6 +4,7 @@ import 'package:printing/printing.dart';
 
 import '../../../shared/models/resume_content.dart';
 import '../../../shared/models/resume_model.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 이력서 Doc 모드 → PDF 미리보기/인쇄
 abstract final class ResumePdfExporter {
@@ -31,13 +32,13 @@ abstract final class ResumePdfExporter {
         pageFormat: PdfPageFormat.a4,
         build: (context) => [
           pw.Text(resume.title, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: AppSpace.s(8)),
           pw.Text('${c.basicInfo.name} · ${c.basicInfo.email} · ${c.basicInfo.phone}'),
-          pw.SizedBox(height: 16),
+          pw.SizedBox(height: AppSpace.s(16)),
           if (c.coreCompetencies.text.isNotEmpty) ...[
             _heading('핵심역량/강점'),
             pw.Text(c.coreCompetencies.text),
-            pw.SizedBox(height: 12),
+            pw.SizedBox(height: AppSpace.s(12)),
           ],
           ..._listSection('경력사항', c.experience.map((e) => '${e.company} · ${e.role}\n${e.description}')),
           ..._listSection('학력사항', c.education.map((e) => '${e.school} · ${e.major}')),
@@ -53,7 +54,7 @@ abstract final class ResumePdfExporter {
                 pw.Text(ResumeSelfIntroLabels.labels[key] ?? key, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                 if (s.subtitle.isNotEmpty) pw.Text(s.subtitle),
                 pw.Text(s.body),
-                pw.SizedBox(height: 8),
+                pw.SizedBox(height: AppSpace.s(8)),
               ],
             );
           }),
@@ -65,7 +66,7 @@ abstract final class ResumePdfExporter {
   }
 
   static pw.Widget _heading(String text) => pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 6),
+        padding: pw.EdgeInsets.only(bottom: AppSpace.s(6)),
         child: pw.Text(text, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
       );
 
@@ -74,8 +75,8 @@ abstract final class ResumePdfExporter {
     if (list.isEmpty) return [];
     return [
       _heading(title),
-      ...list.map((e) => pw.Padding(padding: const pw.EdgeInsets.only(bottom: 4), child: pw.Text('• $e'))),
-      pw.SizedBox(height: 12),
+      ...list.map((e) => pw.Padding(padding: pw.EdgeInsets.only(bottom: AppSpace.s(4)), child: pw.Text('• $e'))),
+      pw.SizedBox(height: AppSpace.s(12)),
     ];
   }
 }

@@ -1,26 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../../core/theme/app_space.dart';
 
 /// 드롭다운/팝업 메뉴 공통 패널 스타일 — 떠 있는 박스감 줄이고 트리거에 붙는 느낌.
 abstract final class AppMenuStyles {
   static MenuStyle get panel => MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(AppColors.surface),
-        elevation: const WidgetStatePropertyAll(2),
-        shadowColor: WidgetStatePropertyAll(
-          Colors.black.withValues(alpha: 0.06),
-        ),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(color: AppColors.border),
-          ),
-        ),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: 4),
-        ),
-        visualDensity: VisualDensity.compact,
-      );
+    backgroundColor: WidgetStatePropertyAll(AppColors.surface),
+    elevation: const WidgetStatePropertyAll(2),
+    shadowColor: WidgetStatePropertyAll(
+      Colors.black.withValues(alpha: 0.06),
+    ),
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: AppColors.border),
+      ),
+    ),
+    padding: WidgetStatePropertyAll(
+      EdgeInsets.symmetric(vertical: AppSpace.s(4)),
+    ),
+    visualDensity: VisualDensity.compact,
+  );
 
   /// 트리거와 동일한 너비로 메뉴를 고정.
   static MenuStyle matchedPanel(double width) {
@@ -32,18 +33,18 @@ abstract final class AppMenuStyles {
   }
 
   static PopupMenuThemeData get popupTheme => PopupMenuThemeData(
-        color: AppColors.surface,
-        elevation: 2,
-        shadowColor: Colors.black.withValues(alpha: 0.06),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(color: AppColors.border),
-        ),
-        textStyle: const TextStyle(
-          fontSize: 13,
-          color: AppColors.textPrimary,
-        ),
-      );
+    color: AppColors.surface,
+    elevation: 2,
+    shadowColor: Colors.black.withValues(alpha: 0.06),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(10),
+      side: BorderSide(color: AppColors.border),
+    ),
+    textStyle: TextStyle(
+      fontSize: 13,
+      color: AppColors.textPrimary,
+    ),
+  );
 }
 
 class AppDropdownItem<T> {
@@ -74,9 +75,12 @@ Widget _menuItem({
   required bool selected,
   required VoidCallback? onPressed,
   required Widget child,
-  EdgeInsetsGeometry padding =
-      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  EdgeInsetsGeometry? padding,
 }) {
+  padding ??= EdgeInsets.symmetric(
+    horizontal: AppSpace.s(12),
+    vertical: AppSpace.s(10),
+  );
   return MenuItemButton(
     onPressed: onPressed,
     style: ButtonStyle(
@@ -111,7 +115,7 @@ class _MatchedMenuAnchor extends StatefulWidget {
   });
 
   final Widget Function(BuildContext context, MenuController controller)
-      trigger;
+  trigger;
   final List<Widget> Function(double width) menuChildren;
   final double? forceWidth;
 
@@ -144,7 +148,9 @@ class _MatchedMenuAnchorState extends State<_MatchedMenuAnchor> {
     final width = _width;
     return MenuAnchor(
       crossAxisUnconstrained: false,
-      style: width > 0 ? AppMenuStyles.matchedPanel(width) : AppMenuStyles.panel,
+      style: width > 0
+          ? AppMenuStyles.matchedPanel(width)
+          : AppMenuStyles.panel,
       alignmentOffset: const Offset(0, 2),
       builder: (context, controller, _) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -228,22 +234,23 @@ class AppDropdownField<T> extends StatelessWidget {
     }
 
     List<Widget> menus(double width) => [
-          for (final item in items)
-            _menuItem(
-              width: width,
-              selected: value == item.value,
-              onPressed: item.enabled && onChanged != null
-                  ? () => onChanged!(item.value)
-                  : null,
-              child: item.display,
-            ),
-        ];
+      for (final item in items)
+        _menuItem(
+          width: width,
+          selected: value == item.value,
+          onPressed: item.enabled && onChanged != null
+              ? () => onChanged!(item.value)
+              : null,
+          child: item.display,
+        ),
+    ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxW = constraints.maxWidth;
-        final force =
-            maxW.isFinite && maxW < double.infinity && maxW > 0 ? maxW : null;
+        final force = maxW.isFinite && maxW < double.infinity && maxW > 0
+            ? maxW
+            : null;
         return _MatchedMenuAnchor(
           forceWidth: force,
           trigger: trigger,
@@ -290,7 +297,8 @@ class AppDropdownInline<T> extends StatelessWidget {
 
     Widget trigger(BuildContext context, MenuController controller) {
       final open = controller.isOpen;
-      final label = selected?.display ??
+      final label =
+          selected?.display ??
           Text(
             hint ?? '',
             style: TextStyle(fontSize: fontSize, color: AppColors.textHint),
@@ -320,7 +328,7 @@ class AppDropdownInline<T> extends StatelessWidget {
             : null,
         borderRadius: BorderRadius.circular(6),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(4), vertical: AppSpace.s(2)),
           child: DefaultTextStyle.merge(
             style: TextStyle(fontSize: fontSize, color: AppColors.textPrimary),
             child: row,
@@ -330,26 +338,27 @@ class AppDropdownInline<T> extends StatelessWidget {
     }
 
     List<Widget> menus(double width) => [
-          for (final item in items)
-            _menuItem(
-              width: width,
-              selected: value == item.value,
-              onPressed: item.enabled && onChanged != null
-                  ? () => onChanged!(item.value)
-                  : null,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: DefaultTextStyle.merge(
-                style: TextStyle(fontSize: fontSize),
-                child: item.display,
-              ),
-            ),
-        ];
+      for (final item in items)
+        _menuItem(
+          width: width,
+          selected: value == item.value,
+          onPressed: item.enabled && onChanged != null
+              ? () => onChanged!(item.value)
+              : null,
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(8)),
+          child: DefaultTextStyle.merge(
+            style: TextStyle(fontSize: fontSize),
+            child: item.display,
+          ),
+        ),
+    ];
 
     final menu = LayoutBuilder(
       builder: (context, constraints) {
         final maxW = constraints.maxWidth;
-        final force =
-            maxW.isFinite && maxW < double.infinity && maxW > 0 ? maxW : null;
+        final force = maxW.isFinite && maxW < double.infinity && maxW > 0
+            ? maxW
+            : null;
         return _MatchedMenuAnchor(
           forceWidth: force,
           trigger: trigger,
@@ -446,8 +455,8 @@ class AppIconMenu<T> extends StatelessWidget {
                 }
                 return Colors.transparent;
               }),
-              padding: const WidgetStatePropertyAll(
-                EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(10)),
               ),
             ),
             child: Text(

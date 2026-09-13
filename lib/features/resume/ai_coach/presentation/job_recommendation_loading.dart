@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 part 'job_recommendation_error.dart';
 
@@ -132,11 +133,11 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
               child: Stack(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      48,
-                      22,
-                      48,
-                      16,
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpace.s(48),
+                      AppSpace.s(22),
+                      AppSpace.s(48),
+                      AppSpace.s(16),
                     ),
                     child: Stack(
                       clipBehavior: Clip.none,
@@ -144,7 +145,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                         Container(
                           // 글에 맞춰 줄어든다. 가장 긴 줄이 카드 너비를 정한다.
                           constraints: const BoxConstraints(minHeight: 244),
-                          padding: const EdgeInsets.fromLTRB(15, 25, 15, 17),
+                          padding: EdgeInsets.fromLTRB(AppSpace.s(15), AppSpace.s(25), AppSpace.s(15), AppSpace.s(17)),
                           decoration: BoxDecoration(
                             color: AppColors.surface,
                             border: Border.all(
@@ -152,7 +153,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(12),
-                            boxShadow: const [
+                            boxShadow: [
                               BoxShadow(
                                 color: AppColors.primaryLight,
                                 offset: Offset(4, 5),
@@ -168,13 +169,13 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                                     : widget.completed
                                     ? '추천 준비 완료!'
                                     : '공고를 고르고 있어요',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.sidebar,
                                 ),
                               ),
-                              const SizedBox(height: 15),
+                              SizedBox(height: AppSpace.s(15)),
                               if (widget.errorMessage != null)
                                 _RecommendationError(
                                   message: widget.errorMessage!,
@@ -182,14 +183,14 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                                 )
                               else ...[
                                 if (index < 0 && !widget.completed) ...[
-                                  const SizedBox(
+                                  SizedBox(
                                     width: 196,
                                     child: LinearProgressIndicator(
                                       minHeight: 2,
                                       color: AppColors.primary,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  SizedBox(height: AppSpace.s(12)),
                                 ],
                                 for (var i = 0; i < _steps.length; i++)
                                   _ChecklistStep(
@@ -367,39 +368,39 @@ class _ChecklistStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: last ? 0 : 13),
+    padding: EdgeInsets.only(bottom: last ? AppSpace.s(0) : AppSpace.s(13)),
     child: Row(
       // 카드가 글에 맞춰 줄어들어야 하므로 줄도 제 너비만 차지한다.
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 1),
+          padding: EdgeInsets.only(top: AppSpace.s(1)),
           child: SizedBox(
             width: 16,
             height: 16,
             child: done
-                ? const Icon(
+                ? Icon(
                     Icons.check_circle,
                     size: 16,
                     color: AppColors.primary,
                   )
                 : running
-                ? const Padding(
-                    padding: EdgeInsets.all(1),
+                ? Padding(
+                    padding: EdgeInsets.all(AppSpace.s(1)),
                     child: CircularProgressIndicator(
                       strokeWidth: 1.7,
                       color: AppColors.primary,
                     ),
                   )
-                : const Icon(
+                : Icon(
                     Icons.circle_outlined,
                     size: 9,
                     color: AppColors.textHint,
                   ),
           ),
         ),
-        const SizedBox(width: 9),
+        SizedBox(width: AppSpace.s(9)),
         Flexible(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -434,10 +435,10 @@ class _ChecklistStep extends StatelessWidget {
                 ],
               ),
               if (detail != null) ...[
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   detail!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
@@ -477,7 +478,8 @@ class _HangingRobotPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.7
       ..strokeCap = StrokeCap.round;
-    void shape(Rect rect, double radius, [Color color = AppColors.surface]) {
+    void shape(Rect rect, double radius, [Color? color]) {
+      color ??= AppColors.surface;
       final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
       canvas.drawRRect(rrect, Paint()..color = color);
       canvas.drawRRect(rrect, outline);

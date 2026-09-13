@@ -7,6 +7,7 @@ import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/models/resume_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 툴바의 종. 읽지 않은 피드백 수를 배지로 달고, 누르면 아래로 말풍선이 내려온다.
 ///
@@ -84,16 +85,20 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
   @override
   Widget build(BuildContext context) {
     final feedback = ref.watch(resumeFeedbackProvider(widget.resume.id));
-    final items =
-        feedback.maybeWhen(data: (l) => l, orElse: () => const <ResumeFeedbackModel>[]);
+    final items = feedback.maybeWhen(
+      data: (l) => l,
+      orElse: () => const <ResumeFeedbackModel>[],
+    );
     // 안 읽은 건수는 **보는 사람 기준**으로 센다. 학생은 강사의 말을, 검토자는 학생의
     // 답글을 읽어야 한다. 예전에는 건수만 빼서 셌는데, 그러면 검토자가 아무리 읽어도
     // 학생의 숫자를 보고 있어 줄지 않았다.
     final asReviewer = ref.watch(canReviewResumesProvider);
-    final unreadItems =
-        unreadFeedback(items, widget.resume,
-            asReviewer: asReviewer,
-            viewerId: ref.watch(currentUserSyncProvider)?.uid);
+    final unreadItems = unreadFeedback(
+      items,
+      widget.resume,
+      asReviewer: asReviewer,
+      viewerId: ref.watch(currentUserSyncProvider)?.uid,
+    );
     final unreadIds = {for (final f in unreadItems) f.id};
     final unread = unreadItems.length;
 
@@ -137,8 +142,9 @@ class _FeedbackBellState extends ConsumerState<FeedbackBell> {
           child: IconButton(
             tooltip: _open ? '피드백 닫기' : '피드백 열기',
             isSelected: _open,
-                onPressed:
-                items.isEmpty && widget.resume.feedbackCount == 0 ? null : _toggle,
+            onPressed: items.isEmpty && widget.resume.feedbackCount == 0
+                ? null
+                : _toggle,
             icon: _BellIcon(unread: unread, active: _open || unread > 0),
           ),
         ),
@@ -166,16 +172,16 @@ class _BellIcon extends StatelessWidget {
             child: Container(
               constraints: const BoxConstraints(minWidth: 16),
               height: 16,
-              padding: const EdgeInsets.symmetric(horizontal: 3),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(3)),
               decoration: BoxDecoration(
                 color: AppColors.error,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white, width: 1.5),
+                border: Border.all(color: AppColors.surface, width: 1.5),
               ),
               child: Center(
                 child: Text(
                   unread > 9 ? '9+' : '$unread',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 9.5,
                     height: 1,
@@ -211,6 +217,7 @@ class _FeedbackPopover extends StatelessWidget {
   static const double followerDx = width / 2 - tailFromLeft;
 
   final List<ResumeFeedbackModel> items;
+
   /// 안 읽은 것의 id. 보는 사람에 따라 다르므로 바깥에서 정해 준다.
   final Set<String> unreadIds;
   final ValueChanged<ResumeFeedbackModel> onPick;
@@ -231,57 +238,65 @@ class _FeedbackPopover extends StatelessWidget {
             children: [
               // 꼬리. 종 한가운데에 온다.
               Padding(
-                padding: const EdgeInsets.only(left: tailFromLeft - 6),
-                child: CustomPaint(size: const Size(12, 7), painter: _TailPainter()),
+                padding: EdgeInsets.only(left: tailFromLeft - AppSpace.s(6)),
+                child: CustomPaint(
+                  size: const Size(12, 7),
+                  painter: _TailPainter(),
+                ),
               ),
               // Flexible 이 없으면 목록이 길 때 남은 높이를 넘어서 '13 pixels
               // overflowed' 가 뜬다. 꼬리가 먼저 자리를 차지하기 때문이다.
               Flexible(
                 child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.border),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.14),
-                      blurRadius: 26,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _header(),
-                    if (items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(13, 14, 13, 16),
-                        child: Text(
-                          '아직 피드백이 없습니다.',
-                          style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                        ),
-                      )
-                    else
-                      Flexible(
-                        child: ListView.separated(
-                          // 넘칠 때만 구른다. 두세 건이면 내용만큼만 차지한다.
-                          shrinkWrap: true,
-                          padding: EdgeInsets.zero,
-                          itemCount: items.length,
-                          separatorBuilder: (_, _) =>
-                              const Divider(height: 1, color: Color(0xFFF1F3F7)),
-                          itemBuilder: (_, i) => _Row(
-                            item: items[i],
-                            unread: unreadIds.contains(items[i].id),
-                            onTap: () => onPick(items[i]),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.14),
+                        blurRadius: 26,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _header(),
+                      if (items.isEmpty)
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(AppSpace.s(13), AppSpace.s(14), AppSpace.s(13), AppSpace.s(16)),
+                          child: Text(
+                            '아직 피드백이 없습니다.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        )
+                      else
+                        Flexible(
+                          child: ListView.separated(
+                            // 넘칠 때만 구른다. 두세 건이면 내용만큼만 차지한다.
+                            shrinkWrap: true,
+                            padding: EdgeInsets.zero,
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) => Divider(
+                              height: 1,
+                              color: AppColors.tint(const Color(0xFFF1F3F7)),
+                            ),
+                            itemBuilder: (_, i) => _Row(
+                              item: items[i],
+                              unread: unreadIds.contains(items[i].id),
+                              onTap: () => onPick(items[i]),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               ),
             ],
           ),
@@ -293,24 +308,29 @@ class _FeedbackPopover extends StatelessWidget {
   Widget _header() {
     final unread = unreadIds.length;
     return Container(
-      padding: const EdgeInsets.fromLTRB(13, 11, 8, 11),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEEF1F5))),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(13), AppSpace.s(11), AppSpace.s(8), AppSpace.s(11)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.tint(const Color(0xFFEEF1F5))),
+        ),
       ),
       child: Row(
         children: [
-          const Text('피드백', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-          const SizedBox(width: 7),
+          const Text(
+            '피드백',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          SizedBox(width: AppSpace.s(7)),
           if (unread > 0)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(1)),
               decoration: BoxDecoration(
                 color: AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '$unread',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: AppColors.primary,
@@ -322,7 +342,7 @@ class _FeedbackPopover extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             iconSize: 18,
             onPressed: onClose,
-            icon: const Icon(Icons.close, color: AppColors.textHint),
+            icon: Icon(Icons.close, color: AppColors.textHint),
           ),
         ],
       ),
@@ -344,9 +364,9 @@ class _Row extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(13, 11, 11, 11),
+        padding: EdgeInsets.fromLTRB(AppSpace.s(13), AppSpace.s(11), AppSpace.s(11), AppSpace.s(11)),
         decoration: BoxDecoration(
-          color: unread ? const Color(0xFFFBFCFF) : null,
+          color: unread ? AppColors.tint(const Color(0xFFFBFCFF)) : null,
           border: Border(
             left: BorderSide(
               color: unread ? AppColors.primary : Colors.transparent,
@@ -361,17 +381,20 @@ class _Row extends StatelessWidget {
               children: [
                 Text(
                   item.authorName,
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const Spacer(),
                 if (item.createdAt != null)
                   Text(
                     AppDateUtils.formatDisplay(item.createdAt!),
-                    style: const TextStyle(fontSize: 10.5, color: AppColors.textHint),
+                    style: TextStyle(fontSize: 10.5, color: AppColors.textHint),
                   ),
               ],
             ),
-            const SizedBox(height: 5),
+            SizedBox(height: AppSpace.s(5)),
             Row(
               children: [
                 Expanded(
@@ -380,12 +403,12 @@ class _Row extends StatelessWidget {
                       children: [
                         TextSpan(
                           text: label,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w500,
                             color: AppColors.textPrimary,
                           ),
                         ),
-                        const TextSpan(
+                        TextSpan(
                           text: '에 대한 피드백',
                           style: TextStyle(color: AppColors.textSecondary),
                         ),
@@ -396,7 +419,7 @@ class _Row extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
+                Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
               ],
             ),
           ],

@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'widgets/form_task_card.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 학생 — 설문·제출 전체 목록
 class FormTasksScreen extends ConsumerWidget {
@@ -21,8 +22,8 @@ class FormTasksScreen extends ConsumerWidget {
       child: tasks.when(
         loading: () => ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(height: 120),
+          children: [
+            SizedBox(height: AppSpace.s(120)),
             Center(child: CircularProgressIndicator()),
           ],
         ),
@@ -35,7 +36,7 @@ class FormTasksScreen extends ConsumerWidget {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                SizedBox(height: 120),
+                SizedBox(height: AppSpace.s(120)),
                 Center(
                   child: Text(
                     '등록된 설문·제출 과제가 없습니다.',
@@ -51,7 +52,7 @@ class FormTasksScreen extends ConsumerWidget {
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(AppSpace.s(16)),
             children: [
               Center(
                 child: ConstrainedBox(
@@ -62,7 +63,7 @@ class FormTasksScreen extends ConsumerWidget {
                       if (pending.isNotEmpty) ...[
                         const _SectionLabel('해야 할 설문'),
                         ...pending.map((item) => FormTaskCard(item: item)),
-                        const SizedBox(height: 16),
+                        SizedBox(height: AppSpace.s(16)),
                       ],
                       if (done.isNotEmpty) ...[
                         const _SectionLabel('제출 완료'),
@@ -104,11 +105,11 @@ class FormTasksDashboardSection extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpace.s(8)),
         tasks.when(
-          loading: () => const Card(
+          loading: () => Card(
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: EdgeInsets.all(AppSpace.s(24)),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             ),
           ),
@@ -117,7 +118,7 @@ class FormTasksDashboardSection extends ConsumerWidget {
             if (list.isEmpty) {
               return Card(
                 child: Padding(
-                  padding: EdgeInsets.all(20),
+                  padding: EdgeInsets.all(AppSpace.s(20)),
                   child: Center(
                     child: Text(
                       '등록된 설문이 없습니다',
@@ -135,13 +136,13 @@ class FormTasksDashboardSection extends ConsumerWidget {
               children: [
                 if (pendingCount > 0)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.only(bottom: AppSpace.s(8)),
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppSpace.s(10),
+                          vertical: AppSpace.s(4),
                         ),
                         decoration: BoxDecoration(
                           color: AppColors.badgeLate.withValues(alpha: 0.15),
@@ -149,7 +150,7 @@ class FormTasksDashboardSection extends ConsumerWidget {
                         ),
                         child: Text(
                           '미제출 $pendingCount건',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: AppColors.badgeLate,
@@ -175,7 +176,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: Text(
         text,
         style: TextStyle(

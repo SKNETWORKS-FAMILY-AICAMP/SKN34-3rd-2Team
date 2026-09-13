@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../../core/theme/app_space.dart';
 
 /// Shell이 이미 AppBar를 가진 페이지용 — 중첩 AppBar 대신 쓰는 툴바/탭 헤더.
 class InPageHeader extends StatelessWidget {
@@ -29,11 +30,11 @@ class InPageHeader extends StatelessWidget {
             SizedBox(
               height: kToolbarHeight,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
                 child: Row(
                   children: [
                     if (hasTitle) ...[
-                      const SizedBox(width: 8),
+                      SizedBox(width: AppSpace.s(8)),
                       Expanded(
                         child: Text(
                           title!,

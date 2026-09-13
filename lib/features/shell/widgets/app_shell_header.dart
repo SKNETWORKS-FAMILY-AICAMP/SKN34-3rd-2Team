@@ -12,12 +12,20 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/providers/side_rail_theme_provider.dart';
 import '../../../core/theme/shell_chrome.dart';
+import '../../../core/theme/app_space.dart';
 
 /// AppBar — PLAYDATA 홈 이동 + 관리자 기수 선택
 class AppShellHeader extends ConsumerWidget {
-  const AppShellHeader({super.key, this.homePath = RoutePaths.dashboard});
+  const AppShellHeader({
+    super.key,
+    this.homePath = RoutePaths.dashboard,
+    this.overRail = false,
+  });
 
   final String homePath;
+
+  /// 로고가 사이드바 위 칸에 걸쳐 있는가. 넓은 화면에서 참이다.
+  final bool overRail;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,16 +38,17 @@ class AppShellHeader extends ConsumerWidget {
           onTap: () => context.go(homePath),
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(vertical: AppSpace.s(4)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // 로고는 정사각형이다. 한 변만 줄이면 찌그러진다.
                 Container(
-                  width: 36,
-                  height: 36,
-                  padding: const EdgeInsets.all(4),
+                  width: AppSpace.row(36),
+                  height: AppSpace.row(36),
+                  padding: EdgeInsets.all(AppSpace.s(4)),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppColors.border),
                     boxShadow: [
@@ -56,12 +65,14 @@ class AppShellHeader extends ConsumerWidget {
                     filterQuality: FilterQuality.high,
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: AppSpace.s(10)),
                 Text(
                   AppConstants.appName,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
-                    color: ShellChrome.appBarForeground(railDark),
+                    color: overRail && railDark
+                        ? Colors.white
+                        : ShellChrome.appBarForeground(railDark),
                   ),
                 ),
               ],
@@ -69,7 +80,7 @@ class AppShellHeader extends ConsumerWidget {
           ),
         ),
         if (isAdmin) ...[
-          const SizedBox(width: 12),
+          SizedBox(width: AppSpace.s(12)),
           Flexible(child: _CohortSelector(isDark: railDark)),
         ],
       ],
@@ -157,8 +168,7 @@ class _CohortSelectorState extends ConsumerState<_CohortSelector> {
                     minimumSize: WidgetStatePropertyAll(Size(menuWidth, 40)),
                     maximumSize: WidgetStatePropertyAll(Size(menuWidth, 64)),
                     backgroundColor: WidgetStateProperty.resolveWith((states) {
-                      final selectedItem =
-                          cohort.cohortId == selected.cohortId;
+                      final selectedItem = cohort.cohortId == selected.cohortId;
                       if (selectedItem) return AppColors.primaryLight;
                       if (states.contains(WidgetState.hovered) ||
                           states.contains(WidgetState.focused)) {
@@ -166,15 +176,17 @@ class _CohortSelectorState extends ConsumerState<_CohortSelector> {
                       }
                       return Colors.transparent;
                     }),
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(
+                        horizontal: AppSpace.s(12),
+                        vertical: AppSpace.s(10),
+                      ),
                     ),
                   ),
                   leadingIcon: SizedBox(
                     width: 18,
                     child: cohort.cohortId == selected.cohortId
-                        ? const Icon(Icons.check,
-                            size: 16, color: AppColors.primary)
+                        ? Icon(Icons.check, size: 16, color: AppColors.primary)
                         : null,
                   ),
                   child: Text(
@@ -249,8 +261,13 @@ class _CohortTrigger extends StatelessWidget {
         onTap: onPressed,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 36),
-          padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+          constraints: BoxConstraints(minHeight: AppSpace.row(36)),
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.s(12),
+            AppSpace.s(6),
+            AppSpace.s(8),
+            AppSpace.s(6),
+          ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: ShellChrome.appBarBorder(isDark)),
@@ -270,7 +287,7 @@ class _CohortTrigger extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: AppSpace.s(4)),
               Icon(
                 isOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                 size: 18,

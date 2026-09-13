@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 class RecordFileUpload extends StatelessWidget {
   const RecordFileUpload({
@@ -29,13 +30,13 @@ class RecordFileUpload extends StatelessWidget {
           icon: const Icon(Icons.upload_file_outlined),
           label: Text(multiple ? '파일 추가' : '파일 선택'),
           style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
+            padding: EdgeInsets.symmetric(vertical: AppSpace.s(14)),
             side: BorderSide(color: AppColors.border),
           ),
         ),
         if (files.isEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: EdgeInsets.only(top: AppSpace.s(8)),
             child: Text(
               hint,
               style: TextStyle(fontSize: 12, color: AppColors.textHint),

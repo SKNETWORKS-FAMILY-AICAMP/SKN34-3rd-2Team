@@ -11,6 +11,7 @@ import '../../../../shared/models/curriculum_sheet_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
 import '../../../assessments/data/assessment_functions_service.dart';
+import '../../../../core/theme/app_space.dart';
 
 enum _MixPreset { mcHeavy, balanced, moreSa }
 
@@ -26,9 +27,7 @@ String _friendlyFunctionsError(Object e) {
       }
     }
     final m = e.message?.trim();
-    if (m != null &&
-        m.isNotEmpty &&
-        !m.toUpperCase().startsWith('INTERNAL')) {
+    if (m != null && m.isNotEmpty && !m.toUpperCase().startsWith('INTERNAL')) {
       return m;
     }
     // code만 internal이어도 message에 한글 상세가 있으면 우선
@@ -258,9 +257,7 @@ class _CurriculumAiGenerateDialogState
     final sheetAsync = ref.watch(latestCurriculumSheetProvider);
     final sheet = sheetAsync.asData?.value;
     final screenH = MediaQuery.sizeOf(context).height;
-    final dialogH = sheet == null
-        ? 280.0
-        : (screenH * 0.9).clamp(520.0, 860.0);
+    final dialogH = sheet == null ? 280.0 : (screenH * 0.9).clamp(520.0, 860.0);
     final allRows = sheet?.rows ?? const <CurriculumRowModel>[];
     final filtered = _filteredRows(allRows);
     final range = _resolvedRange;
@@ -269,10 +266,9 @@ class _CurriculumAiGenerateDialogState
     final inRangeCount = range == null
         ? 0
         : allRows
-            .where((r) => r.dayIndex >= range.$1 && r.dayIndex <= range.$2)
-            .length;
-    final canGenerate =
-        sheet != null && !_generating && _resolvedRange != null;
+              .where((r) => r.dayIndex >= range.$1 && r.dayIndex <= range.$2)
+              .length;
+    final canGenerate = sheet != null && !_generating && _resolvedRange != null;
 
     final overrideMc = _showAdvanced
         ? int.tryParse(_mcOverrideCtrl.text.trim())
@@ -295,12 +291,12 @@ class _CurriculumAiGenerateDialogState
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      insetPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(16), vertical: AppSpace.s(12)),
       child: SizedBox(
         width: 760,
         height: dialogH,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(12)),
           child: sheetAsync.isLoading
               ? const Center(child: CircularProgressIndicator())
               : Column(
@@ -312,7 +308,7 @@ class _CurriculumAiGenerateDialogState
                       stepLabel: '1 · 범위 & 규모',
                     ),
                     if (_error != null) ...[
-                      const SizedBox(height: 8),
+                      SizedBox(height: AppSpace.s(8)),
                       _ErrorBanner(message: _error!),
                     ],
                     if (sheet == null)
@@ -338,7 +334,7 @@ class _CurriculumAiGenerateDialogState
                         ),
                       )
                     else ...[
-                      const SizedBox(height: 8),
+                      SizedBox(height: AppSpace.s(8)),
                       Expanded(
                         child: CustomScrollView(
                           slivers: [
@@ -356,7 +352,7 @@ class _CurriculumAiGenerateDialogState
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  SizedBox(height: AppSpace.s(12)),
                                   TextField(
                                     controller: _searchCtrl,
                                     enabled: !_generating,
@@ -364,8 +360,9 @@ class _CurriculumAiGenerateDialogState
                                         setState(() => _query = v),
                                     decoration: InputDecoration(
                                       hintText: '주제·교과목 검색 (예: 딥러닝)',
-                                      prefixIcon:
-                                          const Icon(Icons.search_rounded),
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                      ),
                                       filled: true,
                                       fillColor: AppColors.surfaceVariant,
                                       border: OutlineInputBorder(
@@ -379,8 +376,8 @@ class _CurriculumAiGenerateDialogState
                                               onPressed: _generating
                                                   ? null
                                                   : () => _applySearchAsRange(
-                                                        filtered,
-                                                      ),
+                                                      filtered,
+                                                    ),
                                               icon: const Icon(
                                                 Icons
                                                     .playlist_add_check_rounded,
@@ -389,21 +386,21 @@ class _CurriculumAiGenerateDialogState
                                     ),
                                   ),
                                   if (_query.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
+                                    SizedBox(height: AppSpace.s(4)),
                                     Align(
                                       alignment: Alignment.centerLeft,
                                       child: TextButton(
                                         onPressed: _generating
                                             ? null
                                             : () =>
-                                                _applySearchAsRange(filtered),
+                                                  _applySearchAsRange(filtered),
                                         child: Text(
                                           '검색 ${filtered.length}건으로 구간 잡기',
                                         ),
                                       ),
                                     ),
                                   ],
-                                  const SizedBox(height: 12),
+                                  SizedBox(height: AppSpace.s(12)),
                                   Row(
                                     children: [
                                       Expanded(
@@ -415,13 +412,13 @@ class _CurriculumAiGenerateDialogState
                                           onTap: _generating
                                               ? null
                                               : () => setState(
-                                                    () => _pickingStart = true,
-                                                  ),
+                                                  () => _pickingStart = true,
+                                                ),
                                         ),
                                       ),
                                       Padding(
                                         padding: EdgeInsets.symmetric(
-                                          horizontal: 8,
+                                          horizontal: AppSpace.s(8),
                                         ),
                                         child: Icon(
                                           Icons.arrow_forward_rounded,
@@ -438,25 +435,25 @@ class _CurriculumAiGenerateDialogState
                                           onTap: _generating
                                               ? null
                                               : () => setState(
-                                                    () =>
-                                                        _pickingStart = false,
-                                                  ),
+                                                  () => _pickingStart = false,
+                                                ),
                                         ),
                                       ),
-                                      const SizedBox(width: 4),
+                                      SizedBox(width: AppSpace.s(4)),
                                       TextButton(
-                                        onPressed:
-                                            _generating ? null : _clearRange,
+                                        onPressed: _generating
+                                            ? null
+                                            : _clearRange,
                                         child: const Text('초기화'),
                                       ),
                                     ],
                                   ),
                                   if (range != null) ...[
-                                    const SizedBox(height: 10),
+                                    SizedBox(height: AppSpace.s(10)),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: AppSpace.s(12),
+                                        vertical: AppSpace.s(10),
                                       ),
                                       decoration: BoxDecoration(
                                         color: AppColors.primaryLight,
@@ -464,7 +461,7 @@ class _CurriculumAiGenerateDialogState
                                       ),
                                       child: Text(
                                         '선택 구간 D${range.$1}~D${range.$2} · ${inRangeCount}차시',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w700,
                                           color: AppColors.primaryDark,
@@ -472,7 +469,7 @@ class _CurriculumAiGenerateDialogState
                                       ),
                                     ),
                                   ],
-                                  const SizedBox(height: 18),
+                                  SizedBox(height: AppSpace.s(18)),
                                   const Text(
                                     '이번 평가 문항 수',
                                     style: TextStyle(
@@ -480,7 +477,7 @@ class _CurriculumAiGenerateDialogState
                                       fontSize: 13,
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: AppSpace.s(8)),
                                   Wrap(
                                     spacing: 8,
                                     runSpacing: 8,
@@ -492,8 +489,8 @@ class _CurriculumAiGenerateDialogState
                                           onSelected: _generating
                                               ? null
                                               : (_) => setState(
-                                                    () => _targetCount = n,
-                                                  ),
+                                                  () => _targetCount = n,
+                                                ),
                                           selectedColor: AppColors.primaryLight,
                                           checkmarkColor: AppColors.primaryDark,
                                           labelStyle: TextStyle(
@@ -505,7 +502,7 @@ class _CurriculumAiGenerateDialogState
                                         ),
                                     ],
                                   ),
-                                  const SizedBox(height: 12),
+                                  SizedBox(height: AppSpace.s(12)),
                                   const Text(
                                     '유형 비중',
                                     style: TextStyle(
@@ -513,36 +510,37 @@ class _CurriculumAiGenerateDialogState
                                       fontSize: 13,
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: AppSpace.s(8)),
                                   SegmentedButton<_MixPreset>(
                                     style: ButtonStyle(
                                       visualDensity: VisualDensity.compact,
                                       backgroundColor:
                                           WidgetStateProperty.resolveWith(
-                                        (states) {
-                                          if (states.contains(
-                                            WidgetState.selected,
-                                          )) {
-                                            return AppColors.primaryLight;
-                                          }
-                                          return Colors.white;
-                                        },
-                                      ),
+                                            (states) {
+                                              if (states.contains(
+                                                WidgetState.selected,
+                                              )) {
+                                                return AppColors.primaryLight;
+                                              }
+                                              return Colors.white;
+                                            },
+                                          ),
                                       foregroundColor:
                                           WidgetStateProperty.resolveWith(
-                                        (states) {
-                                          if (states.contains(
-                                            WidgetState.selected,
-                                          )) {
-                                            return AppColors.primaryDark;
-                                          }
-                                          return AppColors.textPrimary;
-                                        },
-                                      ),
+                                            (states) {
+                                              if (states.contains(
+                                                WidgetState.selected,
+                                              )) {
+                                                return AppColors.primaryDark;
+                                              }
+                                              return AppColors.textPrimary;
+                                            },
+                                          ),
                                       side: WidgetStatePropertyAll(
                                         BorderSide(
-                                          color: AppColors.border
-                                              .withValues(alpha: 0.9),
+                                          color: AppColors.border.withValues(
+                                            alpha: 0.9,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -563,19 +561,20 @@ class _CurriculumAiGenerateDialogState
                                     selected: {_mix},
                                     onSelectionChanged: _generating
                                         ? null
-                                        : (s) =>
-                                            setState(() => _mix = s.first),
+                                        : (s) => setState(() => _mix = s.first),
                                   ),
-                                  const SizedBox(height: 12),
+                                  SizedBox(height: AppSpace.s(12)),
                                   Container(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      14,
-                                      12,
-                                      14,
-                                      12,
+                                    padding: EdgeInsets.fromLTRB(
+                                      AppSpace.s(14),
+                                      AppSpace.s(12),
+                                      AppSpace.s(14),
+                                      AppSpace.s(12),
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF8FAFC),
+                                      color: AppColors.tint(
+                                        const Color(0xFFF8FAFC),
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: AppColors.border,
@@ -593,13 +592,13 @@ class _CurriculumAiGenerateDialogState
                                             color: AppColors.textPrimary,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
+                                        SizedBox(height: AppSpace.s(4)),
                                         Text(
                                           planUsesOverride
                                               ? 'AI 초안 객관식 ${plan.mc} · 단답 ${plan.sa}'
-                                                  ' (직접 지정 · 총 ${plan.mc + plan.sa}개)'
+                                                    ' (직접 지정 · 총 ${plan.mc + plan.sa}개)'
                                               : 'AI 초안 객관식 ${plan.mc} · 단답 ${plan.sa}'
-                                                  ' (여유분 포함 총 ${plan.mc + plan.sa}개)',
+                                                    ' (여유분 포함 총 ${plan.mc + plan.sa}개)',
                                           style: TextStyle(
                                             fontSize: 12,
                                             height: 1.4,
@@ -615,9 +614,9 @@ class _CurriculumAiGenerateDialogState
                                       onPressed: _generating
                                           ? null
                                           : () => setState(
-                                                () => _showAdvanced =
-                                                    !_showAdvanced,
-                                              ),
+                                              () => _showAdvanced =
+                                                  !_showAdvanced,
+                                            ),
                                       icon: Icon(
                                         _showAdvanced
                                             ? Icons.expand_less
@@ -625,9 +624,7 @@ class _CurriculumAiGenerateDialogState
                                         size: 18,
                                       ),
                                       label: Text(
-                                        _showAdvanced
-                                            ? '고급 옵션 숨기기'
-                                            : '고급 옵션',
+                                        _showAdvanced ? '고급 옵션 숨기기' : '고급 옵션',
                                       ),
                                     ),
                                   ),
@@ -639,14 +636,13 @@ class _CurriculumAiGenerateDialogState
                                         color: AppColors.textSecondary,
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
+                                    SizedBox(height: AppSpace.s(8)),
                                     Row(
                                       children: [
                                         Expanded(
                                           child: TextField(
                                             controller: _mcOverrideCtrl,
-                                            keyboardType:
-                                                TextInputType.number,
+                                            keyboardType: TextInputType.number,
                                             enabled: !_generating,
                                             onChanged: (_) => setState(() {}),
                                             decoration: InputDecoration(
@@ -660,12 +656,11 @@ class _CurriculumAiGenerateDialogState
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 10),
+                                        SizedBox(width: AppSpace.s(10)),
                                         Expanded(
                                           child: TextField(
                                             controller: _saOverrideCtrl,
-                                            keyboardType:
-                                                TextInputType.number,
+                                            keyboardType: TextInputType.number,
                                             enabled: !_generating,
                                             onChanged: (_) => setState(() {}),
                                             decoration: InputDecoration(
@@ -681,9 +676,9 @@ class _CurriculumAiGenerateDialogState
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 8),
+                                    SizedBox(height: AppSpace.s(8)),
                                   ],
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: AppSpace.s(8)),
                                   Text(
                                     '커리큘럼 ${_pickingStart ? "시작일" : "종료일"} 선택 · ${filtered.length}행',
                                     style: const TextStyle(
@@ -691,14 +686,14 @@ class _CurriculumAiGenerateDialogState
                                       fontSize: 13,
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: AppSpace.s(8)),
                                 ],
                               ),
                             ),
                             if (filtered.isEmpty)
                               SliverToBoxAdapter(
                                 child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  padding: EdgeInsets.symmetric(vertical: AppSpace.s(24)),
                                   child: Text(
                                     '검색 결과가 없습니다.',
                                     style: TextStyle(
@@ -711,18 +706,16 @@ class _CurriculumAiGenerateDialogState
                               SliverList.separated(
                                 itemCount: filtered.length,
                                 separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 10),
+                                    SizedBox(height: AppSpace.s(10)),
                                 itemBuilder: (context, i) {
                                   final row = filtered[i];
-                                  final inRange =
-                                      _isDayInRange(row.dayIndex);
-                                  final isStart =
-                                      row.dayIndex == _rangeStart;
+                                  final inRange = _isDayInRange(row.dayIndex);
+                                  final isStart = row.dayIndex == _rangeStart;
                                   final isEnd = row.dayIndex == _rangeEnd;
                                   return Material(
                                     color: inRange
                                         ? AppColors.primaryLight
-                                        : Colors.white,
+                                        : AppColors.surface,
                                     borderRadius: BorderRadius.circular(12),
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(12),
@@ -730,21 +723,21 @@ class _CurriculumAiGenerateDialogState
                                           ? null
                                           : () => _onRowTap(row.dayIndex),
                                       child: Container(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          14,
-                                          14,
-                                          14,
-                                          14,
+                                        padding: EdgeInsets.fromLTRB(
+                                          AppSpace.s(14),
+                                          AppSpace.s(14),
+                                          AppSpace.s(14),
+                                          AppSpace.s(14),
                                         ),
                                         decoration: BoxDecoration(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           border: Border.all(
                                             color: isStart || isEnd
                                                 ? AppColors.primary
                                                 : AppColors.border,
-                                            width:
-                                                isStart || isEnd ? 1.5 : 1,
+                                            width: isStart || isEnd ? 1.5 : 1,
                                           ),
                                         ),
                                         child: Row(
@@ -769,8 +762,8 @@ class _CurriculumAiGenerateDialogState
                                                         ? '(내용 없음)'
                                                         : row.topic,
                                                     maxLines: 2,
-                                                    overflow: TextOverflow
-                                                        .ellipsis,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                     style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.w700,
@@ -778,19 +771,21 @@ class _CurriculumAiGenerateDialogState
                                                       height: 1.35,
                                                     ),
                                                   ),
-                                                  const SizedBox(height: 4),
+                                                  SizedBox(height: AppSpace.s(4)),
                                                   Text(
                                                     [
-                                                      if (row.subject
+                                                      if (row
+                                                          .subject
                                                           .isNotEmpty)
                                                         row.subject,
-                                                      if (row.dateLabel
+                                                      if (row
+                                                          .dateLabel
                                                           .isNotEmpty)
                                                         row.dateLabel,
                                                     ].join(' · '),
                                                     maxLines: 1,
-                                                    overflow: TextOverflow
-                                                        .ellipsis,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                     style: TextStyle(
                                                       fontSize: 12,
                                                       color: AppColors
@@ -801,27 +796,27 @@ class _CurriculumAiGenerateDialogState
                                               ),
                                             ),
                                             if (isStart || isEnd) ...[
-                                              const SizedBox(width: 8),
+                                              SizedBox(width: AppSpace.s(8)),
                                               Container(
                                                 padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
+                                                    EdgeInsets.symmetric(
+                                                      horizontal: AppSpace.s(8),
+                                                      vertical: AppSpace.s(4),
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: AppColors.primary,
                                                   borderRadius:
                                                       BorderRadius.circular(
-                                                    999,
-                                                  ),
+                                                        999,
+                                                      ),
                                                 ),
                                                 child: Text(
                                                   isStart && isEnd
                                                       ? '단독'
                                                       : isStart
-                                                          ? '시작'
-                                                          : '종료',
-                                                  style: const TextStyle(
+                                                      ? '시작'
+                                                      : '종료',
+                                                  style: TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.w700,
@@ -836,14 +831,14 @@ class _CurriculumAiGenerateDialogState
                                   );
                                 },
                               ),
-                            const SliverToBoxAdapter(
-                              child: SizedBox(height: 8),
+                            SliverToBoxAdapter(
+                              child: SizedBox(height: AppSpace.s(8)),
                             ),
                           ],
                         ),
                       ),
                     ],
-                    const SizedBox(height: 10),
+                    SizedBox(height: AppSpace.s(10)),
                     SafeArea(
                       top: false,
                       child: Row(
@@ -861,9 +856,9 @@ class _CurriculumAiGenerateDialogState
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
                               shape: const StadiumBorder(),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 22,
-                                vertical: 14,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: AppSpace.s(22),
+                                vertical: AppSpace.s(14),
                               ),
                             ),
                             child: Text(
@@ -909,9 +904,7 @@ class _AssessmentAiReviewDialogState
   var _submitting = false;
   var _regenerating = false;
 
-  int get _target =>
-      widget.initial.targetCount ??
-      _drafts.length.clamp(1, 20);
+  int get _target => widget.initial.targetCount ?? _drafts.length.clamp(1, 20);
 
   @override
   void initState() {
@@ -942,7 +935,10 @@ class _AssessmentAiReviewDialogState
     final sheetId = widget.initial.sheetId;
     final dayFrom = widget.initial.dayFrom;
     final dayTo = widget.initial.dayTo;
-    if (cohortId == null || sheetId == null || dayFrom == null || dayTo == null) {
+    if (cohortId == null ||
+        sheetId == null ||
+        dayFrom == null ||
+        dayTo == null) {
       setState(() => _error = '재생성에 필요한 구간 정보가 없습니다.');
       return;
     }
@@ -975,22 +971,24 @@ class _AssessmentAiReviewDialogState
       final oldLogId = _logId;
       if (oldLogId != null) {
         try {
-          await ref.read(assessmentFunctionsServiceProvider).recordAiQuestionFeedback(
-            cohortId: cohortId,
-            logId: oldLogId,
-            promptVersion: _promptVersion,
-            items: [
-              for (final i in indices)
-                {
-                  'draftId': _drafts[i].aiDraftId ?? _drafts[i].id,
-                  'outcome': 'discarded',
-                  if (_drafts[i].sourceDay != null)
-                    'sourceDay': _drafts[i].sourceDay,
-                  if (_drafts[i].sourceTopic != null)
-                    'sourceTopic': _drafts[i].sourceTopic,
-                },
-            ],
-          );
+          await ref
+              .read(assessmentFunctionsServiceProvider)
+              .recordAiQuestionFeedback(
+                cohortId: cohortId,
+                logId: oldLogId,
+                promptVersion: _promptVersion,
+                items: [
+                  for (final i in indices)
+                    {
+                      'draftId': _drafts[i].aiDraftId ?? _drafts[i].id,
+                      'outcome': 'discarded',
+                      if (_drafts[i].sourceDay != null)
+                        'sourceDay': _drafts[i].sourceDay,
+                      if (_drafts[i].sourceTopic != null)
+                        'sourceTopic': _drafts[i].sourceTopic,
+                    },
+                ],
+              );
         } catch (_) {}
       }
 
@@ -1097,24 +1095,23 @@ class _AssessmentAiReviewDialogState
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      insetPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(20), vertical: AppSpace.s(16)),
       child: SizedBox(
         width: 760,
         height: (screenH * 0.88).clamp(560.0, 820.0),
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(22, 20, 22, 0),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(22), AppSpace.s(20), AppSpace.s(22), AppSpace.s(0)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const _StepHeader(
                     title: '초안 검토',
-                    subtitle:
-                        '마음에 드는 문항을 고르세요. 별로인 것은 선택한 뒤 다시 만들 수 있습니다.',
+                    subtitle: '마음에 드는 문항을 고르세요. 별로인 것은 선택한 뒤 다시 만들 수 있습니다.',
                     stepLabel: '2 · 검토 & 출제',
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -1143,38 +1140,36 @@ class _AssessmentAiReviewDialogState
                     ],
                   ),
                   if (_error != null) ...[
-                    const SizedBox(height: 10),
+                    SizedBox(height: AppSpace.s(10)),
                     _ErrorBanner(message: _error!),
                   ],
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             Expanded(
               child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+                padding: EdgeInsets.fromLTRB(AppSpace.s(22), AppSpace.s(0), AppSpace.s(22), AppSpace.s(12)),
                 itemCount: _drafts.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                separatorBuilder: (_, _) => SizedBox(height: AppSpace.s(8)),
                 itemBuilder: (context, i) {
                   final q = _drafts[i];
                   final selected = _selected.contains(i);
                   final busy = _regenBusy.contains(i);
                   final typeLabel =
                       q.type == AssessmentQuestionType.multipleChoice
-                          ? '객관식'
-                          : '단답';
+                      ? '객관식'
+                      : '단답';
                   return Opacity(
                     opacity: busy ? 0.55 : 1,
                     child: Material(
-                      color: selected
-                          ? AppColors.primaryLight
-                          : Colors.white,
+                      color: selected ? AppColors.primaryLight : AppColors.surface,
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         onTap: busy ? null : () => _toggle(i),
                         borderRadius: BorderRadius.circular(14),
                         child: Container(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                          padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(12), AppSpace.s(12), AppSpace.s(12)),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
@@ -1189,14 +1184,12 @@ class _AssessmentAiReviewDialogState
                             children: [
                               Checkbox(
                                 value: selected,
-                                onChanged:
-                                    busy ? null : (_) => _toggle(i),
+                                onChanged: busy ? null : (_) => _toggle(i),
                               ),
-                              const SizedBox(width: 4),
+                              SizedBox(width: AppSpace.s(4)),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Wrap(
                                       spacing: 6,
@@ -1228,12 +1221,14 @@ class _AssessmentAiReviewDialogState
                                         if (busy)
                                           _TinyBadge(
                                             text: '다시 만드는 중…',
-                                            color: const Color(0xFFFFF7ED),
+                                            color: AppColors.tint(
+                                              const Color(0xFFFFF7ED),
+                                            ),
                                             textColor: const Color(0xFF9A3412),
                                           ),
                                       ],
                                     ),
-                                    const SizedBox(height: 8),
+                                    SizedBox(height: AppSpace.s(8)),
                                     Text(
                                       q.prompt,
                                       maxLines: 4,
@@ -1257,9 +1252,9 @@ class _AssessmentAiReviewDialogState
               ),
             ),
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(14)),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.surface,
                 border: Border(
                   top: BorderSide(color: AppColors.border),
                 ),
@@ -1267,9 +1262,8 @@ class _AssessmentAiReviewDialogState
               child: Row(
                 children: [
                   OutlinedButton.icon(
-                    onPressed: (_regenerating ||
-                            _submitting ||
-                            _selected.isEmpty)
+                    onPressed:
+                        (_regenerating || _submitting || _selected.isEmpty)
                         ? null
                         : _regenerateSelected,
                     icon: _regenerating
@@ -1286,11 +1280,11 @@ class _AssessmentAiReviewDialogState
                     ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.primaryDark,
-                      side: const BorderSide(color: AppColors.primary),
+                      side: BorderSide(color: AppColors.primary),
                       shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpace.s(14),
+                        vertical: AppSpace.s(12),
                       ),
                     ),
                   ),
@@ -1301,21 +1295,20 @@ class _AssessmentAiReviewDialogState
                         : () => Navigator.pop(context),
                     child: const Text('취소'),
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: AppSpace.s(6)),
                   FilledButton(
-                    onPressed:
-                        (_regenerating || _submitting) ? null : _confirm,
+                    onPressed: (_regenerating || _submitting) ? null : _confirm,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 14,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpace.s(20),
+                        vertical: AppSpace.s(14),
                       ),
                     ),
                     child: _submitting
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
@@ -1424,7 +1417,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1441,10 +1434,10 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                       height: 88,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: const LinearGradient(
+                        gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Color(0xFF2563EB), Color(0xFF0B2A6F)],
+                          colors: [AppColors.primary, AppColors.sidebar],
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -1458,13 +1451,13 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                     ),
                   );
                 },
-                child: const Icon(
+                child: Icon(
                   Icons.auto_awesome_rounded,
                   color: Colors.white,
                   size: 40,
                 ),
               ),
-              const SizedBox(height: 28),
+              SizedBox(height: AppSpace.s(28)),
               Text(
                 'AI가 문제를 만들고 있어요',
                 textAlign: TextAlign.center,
@@ -1474,7 +1467,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 420),
                 switchInCurve: Curves.easeOut,
@@ -1490,7 +1483,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                   ),
                 ),
               ),
-              const SizedBox(height: 22),
+              SizedBox(height: AppSpace.s(22)),
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
@@ -1500,7 +1493,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                   color: AppColors.primary,
                 ),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               Text(
                 '${(_progress * 100).round()}% · $_elapsedLabel',
                 style: TextStyle(
@@ -1509,12 +1502,12 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                   color: AppColors.textHint,
                 ),
               ),
-              const SizedBox(height: 22),
+              SizedBox(height: AppSpace.s(22)),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(14), AppSpace.s(16), AppSpace.s(14)),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: AppColors.tint(const Color(0xFFF8FAFC)),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.border),
                 ),
@@ -1530,7 +1523,7 @@ class _AiGeneratingPanelState extends State<_AiGeneratingPanel>
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: AppSpace.s(6)),
                     Text(
                       '보통 20~60초 정도 걸려요. 창을 닫지 말고 기다려 주세요.',
                       style: TextStyle(
@@ -1567,21 +1560,21 @@ class _StepHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(4)),
           decoration: BoxDecoration(
             color: AppColors.primaryLight,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             stepLabel,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
               color: AppColors.primaryDark,
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: AppSpace.s(10)),
         Text(
           title,
           style: TextStyle(
@@ -1591,7 +1584,7 @@ class _StepHeader extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: AppSpace.s(6)),
         Text(
           subtitle,
           style: TextStyle(
@@ -1613,17 +1606,17 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(10)),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
+        color: AppColors.tint(const Color(0xFFFEF2F2)),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFECACA)),
+        border: Border.all(color: AppColors.tint(const Color(0xFFFECACA))),
       ),
       child: Text(
         message,
         maxLines: 5,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppColors.error,
           fontSize: 13,
           height: 1.4,
@@ -1657,7 +1650,7 @@ class _RangeSlot extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(10)),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
@@ -1678,7 +1671,7 @@ class _RangeSlot extends StatelessWidget {
                       : AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: AppSpace.s(4)),
               Text(
                 day == null ? '선택하세요' : '일수 $day',
                 style: const TextStyle(
@@ -1720,8 +1713,10 @@ class _MetaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = switch (tone) {
-      _ChipTone.warn => const Color(0xFFFFF7ED),
-      _ChipTone.normal when emphasize => const Color(0xFFDCFCE7),
+      _ChipTone.warn => AppColors.tint(const Color(0xFFFFF7ED)),
+      _ChipTone.normal when emphasize => AppColors.tint(
+        const Color(0xFFDCFCE7),
+      ),
       _ChipTone.normal => AppColors.surfaceVariant,
     };
     final fg = switch (tone) {
@@ -1730,7 +1725,7 @@ class _MetaChip extends StatelessWidget {
       _ChipTone.normal => AppColors.textPrimary,
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(8)),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(10),
@@ -1764,8 +1759,8 @@ class _TinyBadge extends StatelessWidget {
     required this.text,
     Color? color,
     Color? textColor,
-  })  : color = color ?? const Color(0xFFF3F4F6),
-        textColor = textColor ?? AppColors.textSecondary;
+  }) : color = color ?? AppColors.tint(const Color(0xFFF3F4F6)),
+       textColor = textColor ?? AppColors.textSecondary;
 
   final String text;
   final Color color;
@@ -1775,7 +1770,7 @@ class _TinyBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxWidth: 180),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(2)),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(999),

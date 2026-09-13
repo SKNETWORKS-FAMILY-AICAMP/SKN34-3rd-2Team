@@ -16,6 +16,7 @@ import '../../hub/presentation/widgets/board_ui.dart';
 import '../../hub/presentation/widgets/notice_list_widgets.dart';
 import '../../onboarding/admin/admin_onboarding_keys.dart';
 import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 게시판 관리 (공지 + 예약 공지)
 class AdminBoardScreen extends ConsumerStatefulWidget {
@@ -43,10 +44,10 @@ class _AdminBoardScreenState extends ConsumerState<AdminBoardScreen>
   }
 
   String get _createLabel => switch (_tabController.index) {
-        0 => '공지 작성',
-        1 => '예약 등록',
-        _ => '알림 팝업',
-      };
+    0 => '공지 작성',
+    1 => '예약 등록',
+    _ => '알림 팝업',
+  };
 
   void _onCreate() {
     switch (_tabController.index) {
@@ -117,8 +118,8 @@ class _NoticeManageTab extends ConsumerWidget {
           if (list.isEmpty) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                SizedBox(height: 48),
+              children: [
+                SizedBox(height: AppSpace.s(48)),
                 EmptyView(
                   message: '등록된 공지가 없습니다.',
                   icon: Icons.campaign_outlined,
@@ -129,7 +130,7 @@ class _NoticeManageTab extends ConsumerWidget {
 
           return ListView.builder(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(AppSpace.s(20)),
             itemCount: list.length,
             itemBuilder: (_, i) {
               final notice = list[i];
@@ -168,7 +169,11 @@ class _NoticeManageTab extends ConsumerWidget {
                       },
                       items: const [
                         AppMenuAction(value: 'edit', label: '수정'),
-                        AppMenuAction(value: 'delete', label: '삭제', danger: true),
+                        AppMenuAction(
+                          value: 'delete',
+                          label: '삭제',
+                          danger: true,
+                        ),
                       ],
                     ),
                   ],
@@ -184,7 +189,9 @@ class _NoticeManageTab extends ConsumerWidget {
   Future<void> _toggleFavorite(WidgetRef ref, NoticeModel notice) async {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
-    await ref.read(lmsRepositoryProvider).toggleNoticeFavorite(
+    await ref
+        .read(lmsRepositoryProvider)
+        .toggleNoticeFavorite(
           cohortId: cohortId,
           noticeId: notice.id,
           isFavorite: !notice.isFavorite,
@@ -308,7 +315,8 @@ class _ScheduledNoticeTabState extends ConsumerState<_ScheduledNoticeTab> {
         error: (e, _) => ErrorView(message: e.toString()),
         data: (list) {
           final activeCount = list.where((n) => n.isActive).length;
-          final allActiveSelected = activeCount > 0 &&
+          final allActiveSelected =
+              activeCount > 0 &&
               list
                   .where((n) => n.isActive)
                   .every((n) => _selectedIds.contains(n.id));
@@ -316,9 +324,9 @@ class _ScheduledNoticeTabState extends ConsumerState<_ScheduledNoticeTab> {
           if (list.isEmpty) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              children: const [
-                SizedBox(height: 48),
+              padding: EdgeInsets.all(AppSpace.s(20)),
+              children: [
+                SizedBox(height: AppSpace.s(48)),
                 EmptyView(
                   message: '등록된 예약 공지가 없습니다.',
                   icon: Icons.schedule_outlined,
@@ -329,7 +337,7 @@ class _ScheduledNoticeTabState extends ConsumerState<_ScheduledNoticeTab> {
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(28)),
             children: [
               Row(
                 children: [
@@ -354,7 +362,7 @@ class _ScheduledNoticeTabState extends ConsumerState<_ScheduledNoticeTab> {
                         : () => _publishSelected(list),
                     style: BoardUi.primaryButtonStyle(),
                     icon: _runningNow
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 14,
                             height: 14,
                             child: CircularProgressIndicator(
@@ -371,10 +379,10 @@ class _ScheduledNoticeTabState extends ConsumerState<_ScheduledNoticeTab> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
@@ -382,8 +390,7 @@ class _ScheduledNoticeTabState extends ConsumerState<_ScheduledNoticeTab> {
                 child: Column(
                   children: [
                     for (var i = 0; i < list.length; i++) ...[
-                      if (i > 0)
-                        const Divider(height: 1, thickness: 1),
+                      if (i > 0) const Divider(height: 1, thickness: 1),
                       _ScheduledRow(
                         item: list[i],
                         selected: _selectedIds.contains(list[i].id),
@@ -429,7 +436,7 @@ class _ScheduledRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
-      height: 48,
+      height: AppSpace.row(48),
       child: Row(
         children: [
           SizedBox(
@@ -445,9 +452,7 @@ class _ScheduledRow extends ConsumerWidget {
           ),
           Expanded(
             child: InkWell(
-              onTap: onSelected == null
-                  ? null
-                  : () => onSelected!(!selected),
+              onTap: onSelected == null ? null : () => onSelected!(!selected),
               child: Row(
                 children: [
                   if (item.isFavorite) ...[
@@ -456,7 +461,7 @@ class _ScheduledRow extends ConsumerWidget {
                       size: 16,
                       color: BoardUi.favorite,
                     ),
-                    const SizedBox(width: 4),
+                    SizedBox(width: AppSpace.s(4)),
                   ],
                   Expanded(
                     child: Text(
@@ -472,7 +477,7 @@ class _ScheduledRow extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   Flexible(
                     child: Text(
                       _metaLine,
@@ -522,7 +527,9 @@ class _ScheduledRow extends ConsumerWidget {
   Future<void> _toggleActive(WidgetRef ref, bool isActive) async {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
-    await ref.read(lmsRepositoryProvider).toggleScheduledNoticeActive(
+    await ref
+        .read(lmsRepositoryProvider)
+        .toggleScheduledNoticeActive(
           cohortId: cohortId,
           scheduledId: item.id,
           isActive: isActive,
@@ -576,7 +583,7 @@ class _AlertPopupTab extends ConsumerWidget {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                const SizedBox(height: 48),
+                SizedBox(height: AppSpace.s(48)),
                 EmptyView(
                   message: '등록된 알림 팝업이 없습니다.',
                   icon: Icons.notifications_none_outlined,
@@ -590,9 +597,9 @@ class _AlertPopupTab extends ConsumerWidget {
 
           return ListView.separated(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(AppSpace.s(20)),
             itemCount: list.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => SizedBox(height: AppSpace.s(10)),
             itemBuilder: (_, i) {
               return _AlertPopupCard(item: list[i]);
             },
@@ -611,13 +618,13 @@ class _AlertPopupCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Material(
-      color: Colors.white,
+      color: AppColors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: AppColors.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(8), AppSpace.s(12)),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -637,9 +644,9 @@ class _AlertPopupCard extends ConsumerWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppSpace.s(8),
+                          vertical: AppSpace.s(3),
                         ),
                         decoration: BoxDecoration(
                           color: item.isActive
@@ -660,7 +667,7 @@ class _AlertPopupCard extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: AppSpace.s(6)),
                   Text(
                     item.content,
                     maxLines: 2,
@@ -671,7 +678,7 @@ class _AlertPopupCard extends ConsumerWidget {
                       height: 1.35,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: AppSpace.s(6)),
                   Text(
                     '순서 ${item.sortOrder} · ${item.timeWindowLabel}'
                     '${item.linkUrl != null && item.linkUrl!.isNotEmpty ? ' · 링크' : ''}',
@@ -711,7 +718,9 @@ class _AlertPopupCard extends ConsumerWidget {
   Future<void> _toggleActive(WidgetRef ref, bool isActive) async {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
-    await ref.read(lmsRepositoryProvider).toggleAlertPopupActive(
+    await ref
+        .read(lmsRepositoryProvider)
+        .toggleAlertPopupActive(
           cohortId: cohortId,
           popupId: item.id,
           isActive: isActive,
@@ -743,4 +752,3 @@ class _AlertPopupCard extends ConsumerWidget {
     await ref.read(lmsRepositoryProvider).deleteAlertPopup(cohortId, item.id);
   }
 }
-

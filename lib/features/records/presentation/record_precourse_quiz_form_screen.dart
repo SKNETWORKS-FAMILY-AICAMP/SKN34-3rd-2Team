@@ -11,6 +11,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../data/record_submission_helper.dart';
 import 'widgets/record_file_upload.dart';
 import 'widgets/record_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// Precourse quiz result submission
 class RecordPrecourseQuizFormScreen extends ConsumerStatefulWidget {
@@ -110,7 +111,7 @@ class _RecordPrecourseQuizFormScreenState
       user: user,
       cohortName: cohortName,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: EdgeInsets.only(bottom: AppSpace.s(24)),
         child: RecordFormPanel(
           title: '프리코스 퀴즈 제출',
           child: Column(
@@ -119,20 +120,20 @@ class _RecordPrecourseQuizFormScreenState
               RecordInfoBanner(
                 message: RecordTypes.descriptions[RecordTypes.precourseQuiz]!,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('회차 / 제목'),
               TextField(
                 controller: _titleCtrl,
                 decoration: recordInputDecoration(hint: '예: 프리코스 1차 쪽지시험'),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('점수 (0~100)'),
               TextField(
                 controller: _scoreCtrl,
                 keyboardType: TextInputType.number,
                 decoration: recordInputDecoration(hint: '예: 80'),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('증빙'),
               RecordFileUpload(
                 files: _files,

@@ -15,6 +15,7 @@ import '../../onboarding/domain/onboarding_target_registry.dart';
 import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../shell/widgets/app_shell_header.dart';
 import '../../../core/theme/shell_chrome.dart';
+import '../../../core/theme/app_space.dart';
 
 String? _adminTargetIdForPath(String path) => switch (path) {
   RoutePaths.admin => AdminOnboardingTargets.navDashboard,
@@ -171,6 +172,11 @@ List<AppSideRailSection> _adminSections({required bool expandAll}) {
           path: RoutePaths.adminAiQuality,
           itemKey: keyFor(RoutePaths.adminAiQuality),
         ),
+        const AppSideRailItem(
+          icon: Icons.settings_outlined,
+          label: '설정',
+          path: RoutePaths.adminSettings,
+        ),
       ],
     ),
   ];
@@ -220,13 +226,19 @@ class AdminShellScreen extends ConsumerWidget {
           iconTheme: IconThemeData(
             color: ShellChrome.appBarForeground(railDark),
           ),
-          title: const AppShellHeader(homePath: RoutePaths.admin),
+          flexibleSpace: wide
+              ? ShellChrome.railCorner(
+                  railDark: railDark,
+                  palette: railPalette,
+                )
+              : null,
+          title: AppShellHeader(homePath: RoutePaths.admin, overRail: wide),
           automaticallyImplyLeading: !wide,
           actions: [
             if (user != null)
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 12),
+                  padding: EdgeInsets.only(right: AppSpace.s(12)),
                   child: ProfileNavChip(
                     user: user,
                     style: ProfileNavChipStyle.appBar,
@@ -343,7 +355,7 @@ class _AdminDrawerState extends ConsumerState<_AdminDrawer> {
             bottom: false,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(16)),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 border: Border(bottom: BorderSide(color: AppColors.border)),
@@ -355,15 +367,15 @@ class _AdminDrawerState extends ConsumerState<_AdminDrawer> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: AppSpace.s(8),
+                              vertical: AppSpace.s(3),
                             ),
                             decoration: BoxDecoration(
                               color: AppColors.primaryLight,
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Text(
+                            child: Text(
                               '관리자',
                               style: TextStyle(
                                 fontSize: 11,
@@ -373,7 +385,7 @@ class _AdminDrawerState extends ConsumerState<_AdminDrawer> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppSpace.s(10)),
                         ProfileNavChip(
                           user: widget.user!,
                           style: ProfileNavChipStyle.drawer,
@@ -390,7 +402,7 @@ class _AdminDrawerState extends ConsumerState<_AdminDrawer> {
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(8)),
               children: [
                 for (final section in widget.sections) ...[
                   if (section.isGroup)
@@ -470,8 +482,8 @@ class _AdminDrawerState extends ConsumerState<_AdminDrawer> {
           ),
           const Divider(height: 1),
           ListTile(
-            leading: const Icon(Icons.logout, color: AppColors.error),
-            title: const Text(
+            leading: Icon(Icons.logout, color: AppColors.error),
+            title: Text(
               '로그아웃',
               style: TextStyle(color: AppColors.error),
             ),

@@ -13,6 +13,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../data/instructor_admin_service.dart';
 import 'widgets/admin_page_layout.dart';
 import 'widgets/credential_dialog.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 강사 계정 목록 / 기수 배정 / 활성 상태
 class AdminInstructorsScreen extends ConsumerWidget {
@@ -28,7 +29,7 @@ class AdminInstructorsScreen extends ConsumerWidget {
           InPageHeader(
             actions: [
               Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: EdgeInsets.only(right: AppSpace.s(8)),
                 child: FilledButton.icon(
                   onPressed: () =>
                       context.push(RoutePaths.adminInstructorsCreate),
@@ -68,9 +69,9 @@ class AdminInstructorsScreen extends ConsumerWidget {
 
             return ListView.separated(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(AppSpace.s(16)),
               itemCount: list.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => SizedBox(height: AppSpace.s(8)),
               itemBuilder: (_, i) => _InstructorTile(instructor: list[i]),
             );
                 },
@@ -118,7 +119,7 @@ class _InstructorTile extends ConsumerWidget {
                     controller: nameCtrl,
                     decoration: const InputDecoration(labelText: '이름'),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   AppDropdownField<String>(
                     key: ValueKey(selected),
                     value: selected,
