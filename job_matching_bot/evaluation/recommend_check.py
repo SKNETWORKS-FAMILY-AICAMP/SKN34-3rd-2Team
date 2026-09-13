@@ -40,12 +40,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from job_matching_bot.config import ARTIFACTS_DIR
-from job_matching_bot.evaluation.app_resume import load_personas
+from job_matching_bot.config import ARTIFACTS_DIR, PACKAGE_ROOT
+from job_matching_bot.evaluation.app_resume import EVAL_MOCKS, load_personas
 
 KST = timezone(timedelta(hours=9))
 # 이력서 원본은 앱과 같은 `scripts/resume_mocks.json` 하나다. `app_resume`가 읽는다.
 RUNS_DIR = ARTIFACTS_DIR / "eval_runs"
+# 회차별 검사 건수. 원본(`RUNS_DIR`)은 커밋하지 않지만 건수는 남긴다 — 고치기 전
+# 숫자가 없으면 좋아졌는지 말할 수 없다.
+CHECKS_DIR = PACKAGE_ROOT / "fixtures" / "checks"
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 
 # 회사 한 곳이 목록을 채우지 못하게 하는 상한. api/service.py 의 MAX_PER_COMPANY 와 같다.
@@ -72,6 +75,8 @@ class Report:
     checked: int = 0
     personas: int = 0
     elapsed: float = 0.0
+    missing_personas: list[str] = field(default_factory=list)
+    skipped_same_day: bool = False
 
     def add(self, check: str, persona: str, job: dict, detail: str) -> None:
         self.defects.append(
@@ -258,10 +263,9 @@ def store_rows(job_ids: set[str]) -> dict[str, sqlite3.Row]:
     return {row["job_id"]: row for row in rows}
 
 
-def fetch(base_url: str, top_k: int) -> dict:
+def fetch(base_url: str, top_k: int, personas: dict[str, dict]) -> dict:
     import urllib.request
 
-    personas = load_personas()
     raw: dict[str, dict] = {}
     for name, persona in personas.items():
         body = json.dumps({**persona, "top_k": top_k}, ensure_ascii=False).encode("utf-8")
@@ -276,9 +280,36 @@ def fetch(base_url: str, top_k: int) -> dict:
     return raw
 
 
-def inspect(raw: dict) -> Report:
-    personas = load_personas()
-    report = Report(personas=len(raw))
+# 이력서가 있어야 판정할 수 있는 검사. 이력서를 못 찾으면 건너뛴다.
+PERSONA_CHECKS = {"신입에게 경력 공고", "희망 지역 밖", "희망 고용형태 밖"}
+# 받은 그날이 아니면 뜻이 없는 검사. 그 사이 마감된 공고까지 결함으로 센다.
+SAME_DAY_CHECKS = {"마감·삭제된 공고"}
+
+
+def wrap_run(raw: dict, personas: dict[str, dict], resume_set: str) -> dict:
+    """저장할 모양. 받은 시각과 **그때의 이력서 조건**을 같이 남긴다.
+
+    결과만 남겼더니 나중에 다시 검사할 때 지금의 목업과 이름이 달라 이력서를 못 찾았고,
+    못 찾은 이력서를 연차 0으로 보아 경력 3년 이력서를 "신입에게 경력 공고"로 셌다.
+    """
+    keep = ("career_years", "preferred_regions", "preferred_employment_types")
+    return {
+        "fetched_at": datetime.now(KST).isoformat(timespec="seconds"),
+        "resume_set": resume_set,
+        "personas": {name: {k: personas[name].get(k) for k in keep} for name in raw if name in personas},
+        "results": raw,
+    }
+
+
+def unwrap_run(data: dict) -> tuple[dict, dict[str, dict] | None, str | None]:
+    """(결과, 저장해 둔 이력서 조건, 받은 날). 예전 파일은 결과만 있다."""
+    if "results" in data and isinstance(data.get("results"), dict):
+        return data["results"], data.get("personas"), (data.get("fetched_at") or "")[:10] or None
+    return data, None, None
+
+
+def inspect(raw: dict, personas: dict[str, dict], *, same_day: bool = True) -> Report:
+    report = Report(personas=len(raw), skipped_same_day=not same_day)
 
     job_ids = {
         job["job_id"]
@@ -288,22 +319,50 @@ def inspect(raw: dict) -> Report:
     rows = store_rows(job_ids)
 
     for name, result in raw.items():
-        persona = personas.get(name, {})
+        persona = personas.get(name)
+        if persona is None:
+            report.missing_personas.append(name)
         jobs = result.get("recommendations", [])
         check_company_cap(name, jobs, report)
         for job in jobs:
             report.checked += 1
             row = rows.get(job["job_id"])
             for label, rule in CHECKS:
-                reason = rule(persona, job, row)
+                if persona is None and label in PERSONA_CHECKS:
+                    continue
+                if not same_day and label in SAME_DAY_CHECKS:
+                    continue
+                reason = rule(persona or {}, job, row)
                 if reason:
                     report.add(label, name, job, reason)
     return report
 
 
+def summary(report: Report, resume_set: str, fetched_at: str | None) -> dict:
+    """회차 기록. 건수만 남기고 공고 원문은 넣지 않는다."""
+    counts = Counter(defect.check for defect in report.defects)
+    return {
+        "checked_at": datetime.now(KST).isoformat(timespec="seconds"),
+        "fetched_at": fetched_at,
+        "resume_set": resume_set,
+        "personas": report.personas,
+        "jobs": report.checked,
+        "counts": {label: counts.get(label, 0) for label, _ in [*CHECKS, ("회사당 상한 초과", None)]},
+        "skipped_personas": report.missing_personas,
+        "defects": [
+            {"check": d.check, "persona": d.persona, "job_id": d.job_id, "detail": d.detail}
+            for d in report.defects
+        ],
+    }
+
+
 def show(report: Report) -> int:
     print()
     print(f"이력서 {report.personas}종 · 공고 {report.checked}건 검사")
+    if report.missing_personas:
+        print(f"  이력서를 찾지 못해 조건 검사를 건너뜀: {', '.join(report.missing_personas)}")
+    if report.skipped_same_day:
+        print("  받은 날이 오늘이 아니라 마감 검사를 건너뜀")
     print()
     counts = Counter(defect.check for defect in report.defects)
     width = max((len(label) for label, _ in CHECKS), default=12) + 2
@@ -336,25 +395,50 @@ def main() -> int:
         "--run-file", type=Path, default=None,
         help="이미 받아 둔 결과를 검사한다. 없으면 서버를 호출한다",
     )
-    parser.add_argument("--save", action="store_true", help="받은 결과를 파일로 남긴다")
+    parser.add_argument(
+        "--save", action="store_true",
+        help="받은 결과 원본과 검사 건수를 남긴다(건수는 fixtures/checks/, 커밋 대상)",
+    )
+    parser.add_argument("--eval-resumes", action="store_true", help="앱 목업 대신 평가 전용 이력서")
     args = parser.parse_args()
 
+    resume_set = "eval-resumes" if args.eval_resumes else "app-mocks"
     started = time.time()
+    today = datetime.now(KST).date().isoformat()
     if args.run_file:
-        raw = json.loads(args.run_file.read_text(encoding="utf-8"))
+        raw, saved_personas, fetched_on = unwrap_run(json.loads(args.run_file.read_text(encoding="utf-8")))
+        # 받을 때 남긴 조건이 있으면 그것으로 본다. 목업이 그 뒤에 바뀌었을 수 있다.
+        personas = saved_personas if saved_personas is not None else load_personas(
+            EVAL_MOCKS if args.eval_resumes else None
+        )
+        same_day = fetched_on == today
         print(f"결과 파일로 검사: {args.run_file}")
     else:
+        personas = load_personas(EVAL_MOCKS if args.eval_resumes else None)
         print("추천을 받는 중…")
-        raw = fetch(args.base_url, args.top_k)
+        raw = fetch(args.base_url, args.top_k, personas)
+        fetched_on, same_day = today, True
         if args.save:
             RUNS_DIR.mkdir(parents=True, exist_ok=True)
             path = RUNS_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-check.json"
-            path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+            path.write_text(
+                json.dumps(wrap_run(raw, personas, resume_set), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
             print(f"결과 원본: {path}")
 
-    report = inspect(raw)
+    report = inspect(raw, personas, same_day=same_day)
     report.elapsed = time.time() - started
-    return show(report)
+    code = show(report)
+    if args.save:
+        CHECKS_DIR.mkdir(parents=True, exist_ok=True)
+        path = CHECKS_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-{resume_set}.json"
+        path.write_text(
+            json.dumps(summary(report, resume_set, fetched_on), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"검사 기록: {path}")
+    return code
 
 
 if __name__ == "__main__":
