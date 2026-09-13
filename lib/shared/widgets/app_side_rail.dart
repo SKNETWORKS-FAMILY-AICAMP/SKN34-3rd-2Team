@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/shell_chrome.dart';
 import '../providers/side_rail_theme_provider.dart';
 import '../../core/theme/app_space.dart';
 
@@ -128,7 +129,7 @@ class AppSideRail extends ConsumerWidget {
     this.onLogout,
     this.profile,
     this.isSelected,
-    this.width = 208,
+    this.width = ShellChrome.railWidth,
   });
 
   /// 평탄 목록 (기존 셸용). [sections]가 있으면 무시됨.
@@ -200,12 +201,22 @@ class AppSideRail extends ConsumerWidget {
                   ),
                   if (profile != null)
                     Padding(
-                      padding: EdgeInsets.fromLTRB(AppSpace.s(8), AppSpace.s(0), AppSpace.s(8), AppSpace.s(4)),
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpace.s(8),
+                        AppSpace.s(0),
+                        AppSpace.s(8),
+                        AppSpace.s(4),
+                      ),
                       child: profile,
                     ),
                   if (onLogout != null)
                     Padding(
-                      padding: EdgeInsets.fromLTRB(AppSpace.s(8), AppSpace.s(0), AppSpace.s(8), AppSpace.s(10)),
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpace.s(8),
+                        AppSpace.s(0),
+                        AppSpace.s(8),
+                        AppSpace.s(10),
+                      ),
                       child: _RailNavTile(
                         icon: Icons.logout_rounded,
                         label: '로그아웃',
@@ -315,7 +326,10 @@ class _SideRailSectionListState extends State<_SideRailSectionList> {
     // 메뉴를 가리키려고 자리를 물어도 답이 없어 그냥 건너뛴다. 메뉴는 많아야
     // 스무 줄이라 다 만들어도 값이 싸다.
     return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(vertical: AppSpace.s(6), horizontal: AppSpace.s(8)),
+      padding: EdgeInsets.symmetric(
+        vertical: AppSpace.s(6),
+        horizontal: AppSpace.s(8),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -369,7 +383,10 @@ class _RailSectionHeader extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(6)),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpace.s(10),
+              vertical: AppSpace.s(6),
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -444,7 +461,10 @@ class _RailNavTile extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(10)),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpace.s(10),
+              vertical: AppSpace.s(10),
+            ),
             child: Row(
               children: [
                 Icon(icon, size: 20, color: iconColor),
@@ -497,7 +517,10 @@ class SideRailProfileTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(10)),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(10),
+            vertical: AppSpace.s(10),
+          ),
           child: Row(
             children: [
               leading ??

@@ -89,6 +89,18 @@ const kSideRailDarkPalettes = <SideRailDarkPalette>[
     actionDark: Color(0xFF115E59),
     actionLight: Color(0xFFCCFBF1),
   ),
+  // 푸른 기가 없는 무채색 회색. 2 Charcoal은 이름과 달리 남색에 가깝다.
+  SideRailDarkPalette(
+    id: 'graphite',
+    label: '6 Graphite',
+    background: Color(0xFF2B2B2B),
+    border: Color(0xFF3A3A3A),
+    accent: Color(0xFFD4D4D4),
+    muted: Color(0xFFA3A3A3),
+    action: Color(0xFF404040),
+    actionDark: Color(0xFF262626),
+    actionLight: Color(0xFFEDEDED),
+  ),
 ];
 
 /// 사이드바가 어두운가. 화면 테마 설정에서 끌어온다.
