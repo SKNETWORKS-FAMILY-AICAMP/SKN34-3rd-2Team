@@ -228,6 +228,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// "두 공고의 자격요건만 간단히 비교해줘"에는 번호가 없다. 이게 없으면 챗봇이
   /// 스스로 권한 말을 눌렀는데 "공고가 보이지 않아 비교할 수 없다"고 답한다.
   List<String> _lastAnswerJobIds = const [];
+
+  /// **같은 조건으로 지금까지 보여 준 공고 전부.** "이거 말고"를 거듭할 때 서버가 빼고
+  /// 다음 공고를 준다. 조건이 바뀌면 새로 센다(`nextSeenJobIds`).
+  List<String> _seenJobIds = const [];
   bool _chatBusy = false;
 
   /// 기다리는 동안 보여줄 말. 추천은 11초쯤 걸리므로 무엇을 하는 중인지 밝힌다.
@@ -538,9 +542,20 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         // "두 공고의 자격요건만"은 번호가 없다. 방금 이야기한 공고가 무엇인지
         // 알려 줘야 답할 수 있다. 번호가 가리킬 목록과는 다른 값이다.
         lastAnswerJobIds: _lastAnswerJobIds,
+        // "이거 말고"를 거듭해도 앞에서 본 공고가 다시 나오지 않게 본 것을 모두 보낸다.
+        seenJobIds: _seenJobIds,
       );
       if (!mounted) return;
       setState(() {
+        _seenJobIds = nextSeenJobIds(
+          mode: result.mode,
+          jobsInAnswer: [for (final job in result.jobs) job.jobId],
+          previous: _seenJobIds,
+          sameConditions: sameChatConditions(
+            _chatFilters?.toJson(),
+            result.filters.toJson(),
+          ),
+        );
         _chatFilters = result.filters;
         _lastShownJobIds = nextShownJobIds(
           mode: result.mode,
