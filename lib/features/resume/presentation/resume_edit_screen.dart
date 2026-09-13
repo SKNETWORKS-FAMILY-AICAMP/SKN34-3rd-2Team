@@ -725,8 +725,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     openOnStart: widget.openFeedback,
                   ),
                 const SizedBox(width: 8),
-                if (!resume.isApproved || isReviewer)
-                  _ModeToggle(
+                // 승인된 이력서도 학생이 편집·문서 보기를 오갈 수 있다. 승인은
+                // "여기까지 봤다"는 표시일 뿐 잠금이 아니다.
+                _ModeToggle(
                     isEdit: _viewMode == _ResumeViewMode.edit,
                     onEdit: () =>
                         setState(() => _viewMode = _ResumeViewMode.edit),
@@ -815,7 +816,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     ),
                     color: AppColors.success.withValues(alpha: 0.12),
                     child: const Text(
-                      '승인 완료 — 더 이상 수정할 수 없습니다.',
+                      '승인 완료 — 계속 수정할 수 있습니다.',
                       style: TextStyle(fontSize: 12, color: AppColors.success),
                     ),
                   ),
