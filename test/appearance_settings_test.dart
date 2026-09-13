@@ -221,6 +221,35 @@ void main() {
     return (hi + 0.05) / (lo + 0.05);
   }
 
+  test('top bar chips look like the cards on the page', () {
+    // 기수 선택·프로필 칩이 옅은 회색이라 본문의 흰 카드들과 색이 달랐다.
+    // 기수 선택은 사이드바 다크에서 흰색 10%라 밝은 상단 바에 묻혔다.
+    for (final dark in [false, true]) {
+      for (final palette in kSideRailDarkPalettes) {
+        AppColors.apply(
+          dark: dark,
+          accent: palette.action,
+          accentDark: palette.actionDark,
+          accentLight: palette.actionLight,
+          rail: palette.background,
+        );
+        final fill = ShellChrome.chipFill(true);
+        expect(fill, AppColors.surface);
+        expect(ShellChrome.chipBorder(true), AppColors.border);
+        expect(
+          contrast(ShellChrome.appBarForeground(true), fill),
+          greaterThanOrEqualTo(4.5),
+          reason: '${palette.id} dark=$dark 이름',
+        );
+        expect(
+          contrast(ShellChrome.appBarMuted(true), fill),
+          greaterThanOrEqualTo(3),
+          reason: '${palette.id} dark=$dark 기수',
+        );
+      }
+    }
+  });
+
   test(
     'in dark mode, accents carry white text and still show on the dark ground',
     () {
