@@ -358,6 +358,9 @@ class JobChatResponse(StrictModel):
     prompt_version: str = ""
     model: str = ""
     reasoning_effort: str = ""
+    # 지난 단계별 시간(ms). 갈래마다 지나는 단계가 달라 열쇠가 다르다.
+    # route·store·search·meaning·stats·liveness·answer·peek 중 지난 것과 total.
+    timings_ms: dict[str, int] = Field(default_factory=dict)
 
 
 class HealthResponse(StrictModel):

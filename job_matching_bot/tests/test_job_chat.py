@@ -1047,3 +1047,33 @@ class AskJobEchoesTheJobTest(ChatTestCase):
                  message="2번 자세히 봐줘", last_job_ids=["J1", "J2", "J3"])
         self.assertNotIn("2번", self.asked["question"])
         self.assertIn("자세히", self.asked["question"])
+
+
+class ChatTimingsTest(ChatTestCase):
+    """갈래마다 지난 단계의 시간만 남긴다. LLM 횟수가 0~2번으로 달라 전체 시간만으로는
+    어디가 느린지 모른다."""
+
+    def _ask_quietly(self, *args, **kwargs):
+        import io
+        from contextlib import redirect_stdout
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            result = self.ask(*args, **kwargs)
+        return result, out.getvalue()
+
+    def test_search_times_routing_lookup_and_liveness(self):
+        result, log = self._ask_quietly(turn(roles=["백엔드"]))
+        self.assertEqual("검색", result.mode)
+        self.assertEqual(["route", "search", "liveness", "total"], list(result.timings_ms))
+        self.assertIn("[챗봇 시간] 검색 · 가르기", log)
+
+    def test_a_card_question_skips_routing(self):
+        """카드를 눌러 물으면 가르지 않는다. 가르기 시간이 없어야 맞다."""
+        result, _ = self._ask_quietly(turn(intent="질문"), message="자격요건 알려줘", job_id="J3")
+        self.assertEqual(["store", "liveness", "answer", "total"], list(result.timings_ms))
+
+    def test_a_blocked_word_has_only_the_total(self):
+        result, log = self._ask_quietly(turn(), message="호구")
+        self.assertEqual(["total"], list(result.timings_ms))
+        self.assertIn("[챗봇 시간] 안내", log)
