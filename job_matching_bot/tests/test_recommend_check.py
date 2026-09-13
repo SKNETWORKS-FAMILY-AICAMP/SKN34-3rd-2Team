@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from job_matching_bot.evaluation import recommend_check as check
 
@@ -168,9 +169,54 @@ class InspectTest(unittest.TestCase):
 
     def test_a_clean_result_has_no_defects(self):
         raw = {"백엔드 수료생": {"recommendations": []}}
-        report = check.inspect(raw)
+        report = check.inspect(raw, {"백엔드 수료생": ENTRY})
         self.assertEqual([], report.defects)
         self.assertEqual(0, report.checked)
+
+    def _inspect(self, raw, personas, **kwargs):
+        stored = {"SARAMIN-1": row(career_type="EXPERIENCED", min_years=3, status="REMOVED")}
+        with mock.patch.object(check, "store_rows", return_value=stored):
+            return check.inspect(raw, personas, **kwargs)
+
+    def test_an_unknown_resume_is_skipped_not_treated_as_a_new_grad(self):
+        """옛 결과 파일의 이력서 이름이 지금 목업과 달랐다. 못 찾은 이력서를 연차 0으로
+        보아 경력 3년 이력서에 "신입에게 경력 공고"를 4건 셌다."""
+        report = self._inspect({"백엔드 경력 3년": {"recommendations": [job()]}}, {})
+        self.assertNotIn("신입에게 경력 공고", [d.check for d in report.defects])
+        self.assertEqual(["백엔드 경력 3년"], report.missing_personas)
+
+    def test_closed_check_runs_only_on_the_day_it_was_fetched(self):
+        """지난 결과를 오늘 저장소로 보면 그 사이 마감된 공고까지 결함이 된다."""
+        raw = {"경력": {"recommendations": [job()]}}
+        today = [d.check for d in self._inspect(raw, {"경력": SENIOR}).defects]
+        later = [d.check for d in self._inspect(raw, {"경력": SENIOR}, same_day=False).defects]
+        self.assertIn("마감·삭제된 공고", today)
+        self.assertNotIn("마감·삭제된 공고", later)
+
+
+class RunFileTest(unittest.TestCase):
+    def test_saved_run_keeps_the_resume_conditions_it_was_checked_with(self):
+        personas = {"경력 3년": {**SENIOR, "resume_text": "길어서 남기지 않는다"}}
+        saved = check.wrap_run({"경력 3년": {"recommendations": []}}, personas, "app-mocks")
+        raw, kept, fetched_on = check.unwrap_run(saved)
+        self.assertEqual({"경력 3년": {"recommendations": []}}, raw)
+        self.assertEqual(3, kept["경력 3년"]["career_years"])
+        self.assertNotIn("resume_text", kept["경력 3년"])
+        self.assertEqual(10, len(fetched_on))
+
+    def test_an_old_file_is_results_only(self):
+        raw, kept, fetched_on = check.unwrap_run({"백엔드": {"recommendations": []}})
+        self.assertEqual({"백엔드": {"recommendations": []}}, raw)
+        self.assertIsNone(kept)
+        self.assertIsNone(fetched_on)
+
+    def test_summary_counts_every_check_even_when_zero(self):
+        report = check.Report(personas=1, checked=2)
+        report.add("희망 지역 밖", "경력", job(), "희망 서울 인데 부산")
+        out = check.summary(report, "eval-resumes", "2026-09-13")
+        self.assertEqual(1, out["counts"]["희망 지역 밖"])
+        self.assertEqual(0, out["counts"]["회사당 상한 초과"])
+        self.assertEqual(2, out["jobs"])
 
 
 if __name__ == "__main__":

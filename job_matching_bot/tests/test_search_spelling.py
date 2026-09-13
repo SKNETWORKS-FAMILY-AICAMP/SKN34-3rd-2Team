@@ -2,15 +2,15 @@
 
 `Spring Boot`라고 치면 태그에 걸린 공고가 0건이었다. 사람인은 `SpringBoot`로 붙인다.
 띄어쓰기 하나에 354건이 사라졌고, 챗봇은 "200건 중 직무가 맞는 건 8건"이라고 답했다.
-숫자도 틀렸고 "직무"라는 말도 틀렸다 — Spring Boot는 기술이다.
+숫자도 틀렸고 "직무"라는 말도 틀렸다 — Spring Boot는 기술이다. (지금 답은 직무·기술을
+가르는 말 없이 제목·태그에 맞은 건수만 말한다.)
 """
 
 from __future__ import annotations
 
 import unittest
 
-from job_matching_bot.api.service import _matched_what
-from job_matching_bot.retrieval.store_search import JobFilters, spellings_of
+from job_matching_bot.retrieval.store_search import spellings_of
 
 
 class SpellingTest(unittest.TestCase):
@@ -30,21 +30,6 @@ class SpellingTest(unittest.TestCase):
     def test_the_same_spelling_is_not_repeated(self):
         found = spellings_of("SpringBoot")
         self.assertEqual(len(found), len(set(s.lower() for s in found)))
-
-
-class MatchedWhatTest(unittest.TestCase):
-    def test_a_role_search_says_role(self):
-        self.assertEqual(_matched_what(JobFilters(roles=["백엔드"])), "직무가")
-
-    def test_a_skill_search_does_not_say_role(self):
-        self.assertEqual(_matched_what(JobFilters(skills=["Spring Boot"])), "기술이")
-
-    def test_both_together_name_neither(self):
-        filters = JobFilters(roles=["백엔드"], skills=["Spring Boot"])
-        self.assertEqual(_matched_what(filters), "제목·태그에")
-
-    def test_a_free_keyword_names_neither(self):
-        self.assertEqual(_matched_what(JobFilters(keywords=["핀테크"])), "제목·태그에")
 
 
 if __name__ == "__main__":

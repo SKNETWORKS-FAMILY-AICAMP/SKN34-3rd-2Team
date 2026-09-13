@@ -244,6 +244,15 @@ def check(expect: dict, sent: dict, got: dict, elapsed: float) -> list[tuple[str
         add("가리킨 공고", bool(want_id) and want_id in shown,
             f"{want_id} ∈ {shown}")
 
+    if expect.get("new_jobs"):
+        # "이거 말고"에 같은 공고를 다시 보여 주면서 "다른 공고를 찾았다"고 답한 적이 있다.
+        # 앞에서 본 공고가 하나라도 섞이면 틀린 것이다. 비어 있어도 틀린 것이다.
+        seen = set(sent.get("seen_job_ids") or [])
+        shown = [j.get("job_id") for j in (got.get("jobs") or [])]
+        repeated = [job_id for job_id in shown if job_id in seen]
+        add("새 공고", bool(shown) and not repeated,
+            f"앞에서 본 {len(seen)}건과 겹침 {repeated} · 보여 준 {len(shown)}건")
+
     if "resume_scope" in expect:
         add("이력서 범위", got.get("resume_scope") == expect["resume_scope"],
             f"{expect['resume_scope']} ↔ {got.get('resume_scope')}")
@@ -267,12 +276,12 @@ def check(expect: dict, sent: dict, got: dict, elapsed: float) -> list[tuple[str
 HTTP_KEYS = frozenset({
     "mode", "mode_not", "filters", "roles_not", "filters_empty",
     "deadline_set", "picked_rank", "resume_scope", "polite", "rules",
-    "career_years", "career_years_unset",
+    "career_years", "career_years_unset", "new_jobs",
 })
 # 응답에 안 나오는 것. `check_router`가 본다.
 ROUTER_KEYS = frozenset({
     "intent", "topic", "topic_not", "counts_jobs", "job_refs",
-    "refers_to_last_answer", "unavailable", "requirement_query_nonempty",
+    "refers_to_last_answer", "unavailable", "requirement_query_nonempty", "show_more",
 })
 
 
@@ -324,6 +333,9 @@ def check_router(expect: dict, turn: Any) -> list[tuple[str, bool, str]]:
     if "unavailable" in expect:
         add("없는 정보", turn.unavailable == expect["unavailable"],
             f"{expect['unavailable']} ↔ {turn.unavailable!r}")
+    if "show_more" in expect:
+        add("더 보기", turn.show_more is expect["show_more"],
+            f"{expect['show_more']} ↔ {turn.show_more}")
     if expect.get("requirement_query_nonempty"):
         add("뜻으로 찾을 문장", bool(turn.requirement_query.strip()),
             f"{turn.requirement_query!r}")
@@ -385,6 +397,7 @@ def run(base_url: str) -> Path:
     for case in cases:
         filters = None
         last_job_ids: list[str] = []
+        seen_job_ids: list[str] = []
         turns: list[dict] = []
         broke = False
         for turn in case["turns"]:
@@ -392,6 +405,7 @@ def run(base_url: str) -> Path:
                 "message": turn["message"],
                 "filters": filters,
                 "last_job_ids": last_job_ids,
+                "seen_job_ids": seen_job_ids,
                 "top_k": 5,
             }
             try:
@@ -406,6 +420,11 @@ def run(base_url: str) -> Path:
                 "elapsed": elapsed, "checks": checks,
             })
             # 앱이 하는 것과 같이 앞 턴의 결과를 다음 턴에 실어 보낸다.
+            # 본 공고는 조건이 그대로인 동안 쌓고, 조건이 바뀌면 새로 센다(앱 `nextSeenJobIds`).
+            if got.get("mode") == "검색" and got.get("jobs"):
+                ids = [j["job_id"] for j in got["jobs"]]
+                same = got.get("filters") == filters
+                seen_job_ids = [*seen_job_ids, *ids] if same else ids
             filters = got.get("filters")
             if got.get("jobs"):
                 last_job_ids = [j["job_id"] for j in got["jobs"]]
