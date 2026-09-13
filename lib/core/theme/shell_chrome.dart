@@ -25,8 +25,12 @@ abstract final class ShellChrome {
 
   static Color appBarBorder(bool isDark) => AppColors.border;
 
-  static Color chipFill(bool isDark) =>
-      AppColors.surfaceVariant.withValues(alpha: 0.55);
+  /// 상단 바의 기수 선택·프로필 칩. 본문 카드와 같은 바탕·테두리를 쓴다.
+  ///
+  /// 예전에는 옅은 회색이라 같은 화면의 흰 카드들과 색이 달랐다. 기수 선택은
+  /// 사이드바 다크일 때 흰색 10%를 깔았는데, 상단 바가 본문처럼 밝아진 뒤로는
+  /// 밝은 바탕에 묻혀 칩이 보이지 않았다.
+  static Color chipFill(bool isDark) => AppColors.surface;
 
   static Color chipBorder(bool isDark) => AppColors.border;
 

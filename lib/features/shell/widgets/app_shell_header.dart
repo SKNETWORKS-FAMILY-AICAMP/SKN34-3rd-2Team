@@ -268,9 +268,7 @@ class _CohortTrigger extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: isDark
-          ? Colors.white.withValues(alpha: 0.1)
-          : AppColors.surfaceVariant,
+      color: ShellChrome.chipFill(isDark),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onPressed,
@@ -285,7 +283,7 @@ class _CohortTrigger extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: ShellChrome.appBarBorder(isDark)),
+            border: Border.all(color: ShellChrome.chipBorder(isDark)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

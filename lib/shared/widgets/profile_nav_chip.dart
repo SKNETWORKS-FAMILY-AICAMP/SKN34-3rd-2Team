@@ -66,7 +66,7 @@ class _AppBarProfileChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final showCohort = width >= 720;
-    final textMaxWidth = showCohort ? 148.0 : 96.0;
+    final textMaxWidth = showCohort ? 184.0 : 112.0;
 
     return Material(
       color: Colors.transparent,
@@ -74,8 +74,12 @@ class _AppBarProfileChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: Container(
-          constraints: BoxConstraints(maxWidth: showCohort ? 220 : 160),
-          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(5)),
+          constraints: BoxConstraints(maxWidth: showCohort ? 264 : 184),
+          // 모서리가 둥글어 좌우 여백이 좁으면 글씨가 테두리에 붙어 보인다.
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(14),
+            vertical: AppSpace.s(6),
+          ),
           decoration: BoxDecoration(
             color: ShellChrome.chipFill(isDark),
             borderRadius: BorderRadius.circular(24),
