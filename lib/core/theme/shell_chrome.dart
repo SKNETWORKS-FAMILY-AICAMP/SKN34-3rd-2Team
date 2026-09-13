@@ -5,6 +5,9 @@ import '../../shared/providers/side_rail_theme_provider.dart';
 
 /// 상단 바 색. 본문 바탕을 따른다.
 abstract final class ShellChrome {
+  /// 넓은 화면의 사이드바 폭. 상단 바의 사이드바 칸과 로고 칸이 이 값에 맞춘다.
+  static const railWidth = 208.0;
+
   // 상단 바는 사이드바 색을 따라가지 않는다. 본문 바탕을 따른다.
   //
   // 예전에는 사이드바를 어둡게 하면 상단 바도 사이드바 팔레트 색으로 칠했다.
@@ -38,7 +41,7 @@ abstract final class ShellChrome {
   static Widget railCorner({
     required bool railDark,
     required SideRailDarkPalette palette,
-    double width = 208,
+    double width = railWidth,
   }) => Row(
     children: [
       Container(

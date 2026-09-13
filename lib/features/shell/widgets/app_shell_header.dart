@@ -32,41 +32,42 @@ class AppShellHeader extends ConsumerWidget {
     final isAdmin = ref.watch(isAdminProvider);
     final railDark = ref.watch(sideRailDarkModeProvider);
 
-    return Row(
-      children: [
-        InkWell(
-          onTap: () => context.go(homePath),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpace.s(4)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 로고는 정사각형이다. 한 변만 줄이면 찌그러진다.
-                Container(
-                  width: AppSpace.row(36),
-                  height: AppSpace.row(36),
-                  padding: EdgeInsets.all(AppSpace.s(4)),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.border),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+    final logo = InkWell(
+      onTap: () => context.go(homePath),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpace.s(4)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 로고는 정사각형이다. 한 변만 줄이면 찌그러진다.
+            Container(
+              width: AppSpace.row(36),
+              height: AppSpace.row(36),
+              padding: EdgeInsets.all(AppSpace.s(4)),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
-                  child: Image.asset(
-                    'assets/brand/playdata.jpg',
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                  ),
-                ),
-                SizedBox(width: AppSpace.s(10)),
-                Text(
+                ],
+              ),
+              child: Image.asset(
+                'assets/brand/playdata.jpg',
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+            SizedBox(width: AppSpace.s(10)),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
                   AppConstants.appName,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
@@ -75,10 +76,24 @@ class AppShellHeader extends ConsumerWidget {
                         : ShellChrome.appBarForeground(railDark),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
+      ),
+    );
+
+    return Row(
+      children: [
+        // 넓은 화면에서는 로고 칸을 사이드바 폭에 맞춘다. 글자 폭만큼만 차지하면
+        // 기수 선택이 사이드바 경계 위에 걸쳐 두 색에 반씩 올라앉는다.
+        if (overRail)
+          SizedBox(
+            width: ShellChrome.railWidth - NavigationToolbar.kMiddleSpacing,
+            child: Align(alignment: Alignment.centerLeft, child: logo),
+          )
+        else
+          logo,
         if (isAdmin) ...[
           SizedBox(width: AppSpace.s(12)),
           Flexible(child: _CohortSelector(isDark: railDark)),
