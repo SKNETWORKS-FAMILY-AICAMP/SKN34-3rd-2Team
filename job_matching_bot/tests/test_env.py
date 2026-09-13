@@ -78,7 +78,11 @@ class LoadTest(unittest.TestCase):
 class LocationTest(unittest.TestCase):
     def test_default_path_points_at_repository_env(self):
         # Python 서비스의 단일 원본은 레포 루트 환경 파일이다.
-        self.assertEqual("SKN34-3rd-2Team", DEFAULT_ENV_PATH.parent.name)
+        # 폴더 이름으로 확인하지 않는다. 다른 이름으로 체크아웃하면 멀쩡한데도 깨졌다.
+        # 레포 루트는 앱(`pubspec.yaml`)과 이 패키지를 함께 담은 곳이다.
+        root = DEFAULT_ENV_PATH.parent
+        self.assertTrue((root / "pubspec.yaml").is_file(), root)
+        self.assertTrue((root / "job_matching_bot" / "__init__.py").is_file(), root)
         self.assertEqual(".env", DEFAULT_ENV_PATH.name)
 
     def test_env_file_is_gitignored(self):
