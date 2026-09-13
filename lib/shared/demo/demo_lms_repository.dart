@@ -363,7 +363,15 @@ class DemoLmsRepository {
     }
   }
 
-  Stream<List<TodoModel>> watchTodos(String uid) => _todoController.stream;
+  /// broadcast 스트림은 구독 전에 보낸 값을 다시 주지 않는다. 화면이 늦게 구독해도
+  /// 로딩에 멈추지 않도록 현재 값을 앞에 붙인다.
+  Stream<T> _startWith<T>(T current, Stream<T> updates) async* {
+    yield current;
+    yield* updates;
+  }
+
+  Stream<List<TodoModel>> watchTodos(String uid) =>
+      _startWith(List.of(_todos), _todoController.stream);
 
   Future<void> addTodo(String uid, String title) async {
     _todos.insert(
@@ -397,7 +405,7 @@ class DemoLmsRepository {
   }
 
   Stream<List<PostModel>> watchPosts(String cohortId, {int limit = 20}) =>
-      _postController.stream;
+      _startWith(List.of(_posts), _postController.stream);
 
   Future<void> createPost({
     required String cohortId,
@@ -523,12 +531,12 @@ class DemoLmsRepository {
     String cohortId,
     String userId,
   ) {
-    return _submissionController.stream
+    return _startWith(List.of(_submissions), _submissionController.stream)
         .map((list) => list.where((s) => s.userId == userId).toList());
   }
 
   Stream<List<SubmissionModel>> watchAllSubmissions(String cohortId) {
-    return _submissionController.stream;
+    return _startWith(List.of(_submissions), _submissionController.stream);
   }
 
   Future<String> createSubmission({
@@ -1158,13 +1166,15 @@ class DemoLmsRepository {
   }
 
   Stream<List<InflearnPackageModel>> watchInflearnPackages(String cohortId) {
-    return _inflearnPackageController.stream;
+    return _startWith(
+        List.of(_inflearnPackages), _inflearnPackageController.stream);
   }
 
   Stream<List<InflearnPackageModel>> watchPublishedInflearnPackages(
     String cohortId,
   ) {
-    return _inflearnPackageController.stream
+    return _startWith(
+            List.of(_inflearnPackages), _inflearnPackageController.stream)
         .map((list) => list.where((p) => p.isPublished).toList());
   }
 
@@ -1270,7 +1280,8 @@ class DemoLmsRepository {
   Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
     String cohortId,
   ) {
-    return _youtubeRecommendationController.stream;
+    return _startWith(List.of(_youtubeRecommendations),
+        _youtubeRecommendationController.stream);
   }
 
   Stream<List<YoutubeRecommendationModel>> watchPublishedYoutubeRecommendations(
@@ -1351,11 +1362,11 @@ class DemoLmsRepository {
   }
 
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {
-    return _assessmentController.stream;
+    return _startWith(List.of(_assessments), _assessmentController.stream);
   }
 
   Stream<List<AssessmentModel>> watchPublishedAssessments(String cohortId) {
-    return _assessmentController.stream
+    return _startWith(List.of(_assessments), _assessmentController.stream)
         .map((list) => list.where((a) => a.published).toList());
   }
 
@@ -1471,7 +1482,8 @@ class DemoLmsRepository {
     String cohortId,
     String userId,
   ) {
-    return _assessmentSubmissionController.stream
+    return _startWith(List.of(_assessmentSubmissions),
+            _assessmentSubmissionController.stream)
         .map((list) => list.where((s) => s.userId == userId).toList());
   }
 
@@ -1479,7 +1491,8 @@ class DemoLmsRepository {
     String cohortId,
     String assessmentId,
   ) {
-    return _assessmentSubmissionController.stream
+    return _startWith(List.of(_assessmentSubmissions),
+            _assessmentSubmissionController.stream)
         .map((list) => list.where((s) => s.assessmentId == assessmentId).toList());
   }
 
@@ -1604,20 +1617,23 @@ class DemoLmsRepository {
   }
 
   Stream<List<CurriculumSheetModel>> watchCurriculumSheets(String cohortId) {
-    return _curriculumSheetController.stream;
+    return _startWith(
+        List.of(_curriculumSheets), _curriculumSheetController.stream);
   }
 
   Stream<CurriculumSheetModel?> watchLatestCurriculumSheet(String cohortId) {
-    return _curriculumSheetController.stream.map(
-      (list) => list.isEmpty ? null : list.first,
-    );
+    return _startWith(
+            List.of(_curriculumSheets), _curriculumSheetController.stream)
+        .map((list) => list.isEmpty ? null : list.first);
   }
 
   Stream<CurriculumSheetModel?> watchCurriculumSheet(
     String cohortId,
     String sheetId,
   ) {
-    return _curriculumSheetController.stream.map(
+    return _startWith(
+            List.of(_curriculumSheets), _curriculumSheetController.stream)
+        .map(
       (list) => list.where((s) => s.id == sheetId).firstOrNull,
     );
   }
