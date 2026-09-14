@@ -26,6 +26,8 @@ from job_matching_bot.crawling.nightly import (
     link_check,
     link_check_budget,
     prioritize,
+    prune,
+    run_stamp,
     sweep,
     sweep_category,
 )
@@ -45,6 +47,30 @@ class CategoriesTest(unittest.TestCase):
         for cat in SKIPPED_CATEGORIES:
             self.assertNotIn(cat, sunday)
         self.assertEqual(sunday, categories_for(date(2026, 9, 7), full=True))
+
+
+class RunStampTest(unittest.TestCase):
+    """같은 날 두 번 돌아도 파일을 덮어쓰지 않는다.
+
+    09-13 00:55에 다시 돌린 배치와 같은 날 23:00 정기 배치가 둘 다 `2026-09-13`이라
+    뒤엣것이 요약·적재 리포트·목록 원본을 덮어썼다.
+    """
+
+    def test_two_runs_on_the_same_day_get_different_names(self):
+        rerun = datetime(2026, 9, 13, 0, 55, tzinfo=KST)
+        nightly = datetime(2026, 9, 13, 23, 0, tzinfo=KST)
+        self.assertNotEqual(run_stamp(rerun), run_stamp(nightly))
+        self.assertEqual("2026-09-13-2300", run_stamp(nightly))
+
+    def test_prune_still_reads_the_date(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            old = folder / f"{run_stamp(datetime(2026, 8, 1, 23, 0, tzinfo=KST))}.json"
+            new = folder / f"{run_stamp(datetime(2026, 9, 13, 23, 0, tzinfo=KST))}.json"
+            old.write_text("[]")
+            new.write_text("[]")
+            self.assertEqual(1, prune(folder, 14, date(2026, 9, 14)))
+            self.assertTrue(new.exists())
 
 
 def _rows(cat: str, start: int, n: int) -> list[dict]:
