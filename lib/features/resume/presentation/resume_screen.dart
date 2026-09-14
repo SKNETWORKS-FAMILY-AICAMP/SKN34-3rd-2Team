@@ -429,19 +429,35 @@ class _SectionProgress extends StatelessWidget {
             child: LinearProgressIndicator(
               minHeight: 5,
               value: resume.totalCount == 0 ? 0 : resume.completedCount / resume.totalCount,
-              color: AppColors.primary,
+              color: _complete ? AppColors.success : AppColors.primary,
               backgroundColor: AppColors.primaryLight,
             ),
           ),
         ),
       ),
       SizedBox(width: AppSpace.s(8)),
-      Text(
-        '${resume.completedCount}/${resume.totalCount}',
-        style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+      Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '${resume.completedCount}',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: _complete ? AppColors.success : AppColors.textPrimary,
+              ),
+            ),
+            TextSpan(
+              text: '/${resume.totalCount}',
+              style: TextStyle(color: AppColors.textHint),
+            ),
+          ],
+        ),
+        style: const TextStyle(fontSize: 12.5),
       ),
     ],
   );
+
+  bool get _complete => resume.totalCount > 0 && resume.completedCount >= resume.totalCount;
 }
 
 /// 피드백 요약. **알리기만 한다.** 내용은 이력서 안의 종에서 읽는다.
@@ -472,16 +488,30 @@ class _FeedbackSummary extends ConsumerWidget {
     ).length;
     final muted = TextStyle(color: AppColors.textSecondary, fontSize: 12.5);
 
+    // 할 일이 없는 줄은 옅게, 읽을 것이 있는 줄만 빨갛게 해서 눈이 거기로 가게 한다.
     if (total == 0) {
       return Text(
         asReviewer ? '아직 남긴 피드백 없음' : '피드백 없음',
-        style: muted,
+        style: TextStyle(color: AppColors.textHint, fontSize: 12.5),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       );
     }
     if (unread == 0) {
-      return Text('$total건 · 모두 읽음', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis);
+      return Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$total건',
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+            ),
+            const TextSpan(text: ' · 모두 읽음'),
+          ],
+        ),
+        style: muted,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
     }
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -817,9 +847,10 @@ class _StudentTable extends ConsumerWidget {
                   onTap: () => _openResume(context, ref, resume),
                   title: Text(resume.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   details: [
-                    _statusBadge(resume),
-                    _SectionProgress(resume: resume),
-                    _FeedbackSummary(resume: resume, asReviewer: false),
+                    (child: _statusBadge(resume), width: 104),
+                    (child: _labeled('수정', _dateValue(resume)), width: 130),
+                    (child: _labeled('섹션', _SectionProgress(resume: resume)), width: 150),
+                    (child: _FeedbackSummary(resume: resume, asReviewer: false), width: null),
                   ],
                   trailing: menu(resume),
                 ),
@@ -831,12 +862,19 @@ class _StudentTable extends ConsumerWidget {
   }
 }
 
-/// 좁은 화면의 한 줄: 제목, 그 아래 상태·진행·피드백.
+/// 좁은 화면의 세부 항목 하나. [width]가 있으면 그 폭을 차지해 줄끼리 세로로 맞는다.
+typedef _Detail = ({Widget child, double? width});
+
+/// 좁은 화면의 한 줄: 제목, 그 아래 상태·수정일·진행·피드백.
+///
+/// 처음에는 세부 항목을 간격 12로 왼쪽부터 붙여 늘어놓았다. 줄마다 글자 길이가 달라
+/// 같은 항목이 위아래로 안 맞았고, 전부 같은 회색이라 무엇이 날짜이고 무엇이 피드백인지
+/// 한눈에 안 들어왔다. 항목마다 폭을 정해 줄끼리 맞추고, 이름표는 옅게·값은 진하게 쓴다.
 class _NarrowRow extends StatelessWidget {
   const _NarrowRow({required this.title, required this.details, required this.trailing, this.onTap});
 
   final Widget title;
-  final List<Widget> details;
+  final List<_Detail> details;
   final Widget trailing;
   final VoidCallback? onTap;
 
@@ -844,7 +882,7 @@ class _NarrowRow extends StatelessWidget {
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
     child: Padding(
-      padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(10), AppSpace.s(4), AppSpace.s(10)),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(14), AppSpace.s(8), AppSpace.s(14)),
       child: Row(
         children: [
           Expanded(
@@ -852,22 +890,59 @@ class _NarrowRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 title,
-                SizedBox(height: AppSpace.s(6)),
-                Wrap(
-                  spacing: AppSpace.s(12),
-                  runSpacing: AppSpace.s(6),
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: details,
+                SizedBox(height: AppSpace.s(8)),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fixed = details.fold<double>(0, (sum, d) => sum + (d.width ?? 0));
+                    // 폭을 맞출 자리가 없으면(폰) 줄바꿈으로 흘린다.
+                    if (constraints.maxWidth < fixed + 120) {
+                      return Wrap(
+                        spacing: AppSpace.s(16),
+                        runSpacing: AppSpace.s(8),
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [for (final d in details) d.child],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        for (final d in details)
+                          if (d.width != null)
+                            SizedBox(
+                              width: d.width,
+                              child: Align(alignment: Alignment.centerLeft, child: d.child),
+                            )
+                          else
+                            Expanded(child: Align(alignment: Alignment.centerLeft, child: d.child)),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
           ),
+          SizedBox(width: AppSpace.s(12)),
           trailing,
         ],
       ),
     ),
   );
 }
+
+/// 옅은 이름표와 진한 값. "수정 2026.09.14".
+Widget _labeled(String label, Widget value) => Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    Text(label, style: TextStyle(fontSize: 11.5, color: AppColors.textHint)),
+    SizedBox(width: AppSpace.s(6)),
+    Flexible(child: value),
+  ],
+);
+
+Widget _dateValue(ResumeModel r) => Text(
+  r.updatedAt == null ? '—' : AppDateUtils.formatDisplay(r.updatedAt!),
+  maxLines: 1,
+  style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+);
 
 // ── 강사·관리자 ────────────────────────────────────────────────
 
@@ -967,17 +1042,19 @@ class _ReviewTable extends ConsumerWidget {
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                         ),
                         TextSpan(
-                          text: '  ${resumes[i].title}',
-                          style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                          text: '   ${resumes[i].title}',
+                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                         ),
                       ],
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   details: [
-                    _statusBadge(resumes[i]),
-                    date(resumes[i]),
-                    _SectionProgress(resume: resumes[i]),
-                    _FeedbackSummary(resume: resumes[i], asReviewer: true),
+                    (child: _statusBadge(resumes[i]), width: 104),
+                    (child: _labeled('수정', _dateValue(resumes[i])), width: 130),
+                    (child: _labeled('섹션', _SectionProgress(resume: resumes[i])), width: 150),
+                    (child: _FeedbackSummary(resume: resumes[i], asReviewer: true), width: null),
                   ],
                   trailing: actions(resumes[i]),
                 ),
