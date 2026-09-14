@@ -143,6 +143,69 @@ class StoreSearchTest(unittest.TestCase):
         # 직무만 말했을 때는 예전처럼 본문도 본다.
         self.assertIn("F", {job.job_id for job in self.find(roles=["프론트엔드"]).jobs})
 
+    def _add(self, *jobs):
+        with SqliteJobStore(self.path) as store:
+            store.upsert(self.jobs + list(jobs), source="MOCK")
+
+    def _job(self, job_id, **fields):
+        return replace(self.jobs[0], job_id=job_id, source_job_id=job_id, **fields)
+
+    def test_a_long_role_is_found_word_by_word(self):
+        """'AI 엔지니어'는 한 덩어리가 아니다. 'AI Engineer'·'인공지능 개발'도 같은 일이다."""
+        self._add(
+            self._job("E1", title="AI Engineer 채용", company="가"),
+            self._job("E2", title="인공지능 엔지니어 모집", company="나"),
+            self._job("E3", title="메일 서버 엔지니어", company="다", description="Mail 서버 운영"),
+        )
+        found = {job.job_id for job in self.find(roles=["AI 엔지니어"]).jobs}
+        self.assertTrue({"E1", "E2"} <= found)
+        self.assertNotIn("E3", found, "Mail의 ai는 AI가 아니다")
+
+    def test_the_exact_phrase_in_the_title_comes_first(self):
+        """낱말로 나눠 찾아도 제목에 말 그대로 있는 공고가 앞이다."""
+        self._add(
+            self._job("S1", title="서비스 사업기획 담당", company="가", tech_stack=[], keywords=["기획"]),
+            self._job("S2", title="서비스 기획자 채용", company="나", tech_stack=[], keywords=["기획"]),
+        )
+        self.assertEqual("S2", self.find(roles=["서비스 기획"]).jobs[0].job_id)
+
+    def test_korean_tool_names_find_english_titles(self):
+        self._add(self._job("U1", title="Unity 클라이언트 개발자", company="가", description="모바일 게임"))
+        self.assertIn("U1", {job.job_id for job in self.find(roles=["유니티 클라이언트"]).jobs})
+
+    def test_develop_is_not_business_development(self):
+        """'개발'로 찾을 때 '사업개발'만 적힌 공고는 걸리지 않는다."""
+        self._add(
+            self._job("F1", title="B2B 사업개발 매니저", company="가", description="영업 채널 확대", tech_stack=[], keywords=["영업"]),
+            self._job("F2", title="앱 개발 인턴", company="나", tech_stack=[], keywords=["IT개발·데이터"]),
+        )
+        found = {job.job_id for job in self.find(roles=["개발"]).jobs}
+        self.assertIn("F2", found)
+        self.assertNotIn("F1", found)
+
+    def test_company_type_words_filter_by_company_info_not_text(self):
+        """'대기업'은 기업 정보 칸으로 거른다. 제목의 '(대기업 상주)'나 '1000대기업'은 아니다."""
+        self._add(
+            self._job("G1", title="IT 신입", company="큰회사", company_type="대기업, 주식회사"),
+            self._job("G2", title="시스템 엔지니어 (대기업 상주)", company="파견사", company_type="중소기업"),
+            self._job("G3", title="IT 운영", company="중간회사", company_type="중견기업, 1000대기업"),
+        )
+        found = {job.job_id for job in self.find(roles=["IT"], keywords=["대기업"]).jobs}
+        self.assertEqual({"G1"}, found)
+
+    def test_the_same_posting_listed_per_region_shows_once(self):
+        """회사와 머리말 뗀 제목이 같으면 한 공고다. 소괄호가 다르면 다른 공고다."""
+        self._add(
+            self._job("H1", company="고려휴먼스", title="[공기업/부산] 사무 보조"),
+            self._job("H2", company="고려휴먼스", title="[공기업/강남] 사무 보조"),
+            self._job("H3", company="고려휴먼스", title="사무 보조 (경력 3년)"),
+        )
+        result = self.find(roles=["사무"])
+        ids = [job.job_id for job in result.jobs]
+        self.assertEqual(1, len({"H1", "H2"} & set(ids)))
+        self.assertIn("H3", ids)
+        self.assertEqual(len(ids), result.total)
+
     def test_region_narrows(self):
         self.assertEqual({"A", "C"}, {job.job_id for job in self.find(regions=["서울"]).jobs})
 
@@ -238,10 +301,22 @@ class StoreSearchTest(unittest.TestCase):
         self.assertGreater(self.find(roles=["백엔드"]).total, both.total)
 
     def test_keywords_of_the_same_meaning_are_either_or(self):
-        """"공기업이나 공공기관"은 둘 중 하나만 적혀 있어도 된다."""
+        """"재택이나 원격근무"는 둘 중 하나만 적혀 있어도 된다."""
         with SqliteJobStore(self.path) as store:
             store.upsert([replace(self.jobs[0], job_id="P", source_job_id="P",
-                                  title="백엔드 개발자 (공공기관)")], source="MOCK")
+                                  title="백엔드 개발자 (원격근무)")], source="MOCK")
+        found = self.find(roles=["백엔드"], keywords=["재택", "원격근무"])
+        self.assertEqual(["P"], [job.job_id for job in found.jobs])
+
+    def test_company_type_words_of_the_same_meaning_are_either_or(self):
+        """"공기업이나 공공기관"은 기업 정보 칸의 '공사/공기업'이다. 제목의 "(공공기관)"은 아니다."""
+        with SqliteJobStore(self.path) as store:
+            store.upsert([
+                replace(self.jobs[0], job_id="P", source_job_id="P", title="백엔드 개발자",
+                        company="공사", company_type="공사/공기업"),
+                replace(self.jobs[0], job_id="Q", source_job_id="Q", title="백엔드 개발자 (공공기관)",
+                        company="파견사", company_type="중소기업"),
+            ], source="MOCK")
         found = self.find(roles=["백엔드"], keywords=["공기업", "공공기관"])
         self.assertEqual(["P"], [job.job_id for job in found.jobs])
 
