@@ -12,6 +12,7 @@ import { chromium } from 'playwright';
 import { serveBuild, waitForApp, go, outRoot, deliverRoot, sleep } from './lib/app.mjs';
 import {
   size, installCursor, resetMouse, moveTo, tap, tapIf, hover, typeInto, btn, btnLike, openMenu, login, walkTour, themeOption,
+  scrollCoachPanelToTop,
 } from './lib/actions.mjs';
 
 const only = process.argv[2];
@@ -135,7 +136,7 @@ const scripts = {
     // 이력서
     await step('이력서 작성', '항목을 채우고 「저장」, 다 쓰면 강사·매니저에게 피드백을 요청합니다');
     await openMenu(page, '이력서 관리', '/resume');
-    await go(page, '/resume/r-demo-1/edit', 2200);
+    if (!(await tapIf(page, btn(page, '이어서 작성'), { pause: 2200 }))) await go(page, '/resume/r-demo-1/edit', 2200);
     await typeInto(page, page.getByRole('textbox', { name: '연락처' }), '010-1234-5678');
     await tapIf(page, btn(page, '저장'), { pause: 1500 });
 
@@ -151,7 +152,8 @@ const scripts = {
     await tapIf(page, btn(page, '이 문장으로 바꾸기'), { pause: 3200 });
     await tapIf(page, btn(page, '첨삭 완료'), { pause: 1200 });
     await tapIf(page, btn(page, '닫기'), { pause: 600 });
-    await caption('공고와 관계없이 문장만 다듬을 때는 「이력서 첨삭」', '피드백이 오면 위의 종 아이콘에 표시됩니다', 1000);
+    await caption('공고와 관계없이 문장만 다듬을 때는 「이력서 첨삭」', '피드백이 오면 위의 종 아이콘에 표시됩니다', 600);
+    await scrollCoachPanelToTop(page);
     await hover(page, btn(page, '이력서 첨삭'), 1600);
 
     // 기록실

@@ -17,7 +17,7 @@ import { chromium } from 'playwright';
 import { serveBuild, waitForApp, go, outRoot, deliverRoot, sleep } from './lib/app.mjs';
 import {
   size, installCursor, highlight, resetMouse, tapAt, tapIf, hover, typeInto,
-  btn, btnLike, openMenu, login, themeOption,
+  btn, btnLike, openMenu, login, themeOption, scrollCoachPanelToTop,
 } from './lib/actions.mjs';
 
 const reuse = process.argv.includes('--reuse');
@@ -184,14 +184,14 @@ const parts = [
         say: '이력서 관리에서는 이력서를 작성하고, 다 쓰면 강사와 매니저에게 피드백을 요청합니다.',
         do: async (page) => {
           await openMenu(page, '이력서 관리', '/resume');
-          await highlight(page, btnLike(page, /피드백 요청$/), 2400);
+          await highlight(page, btnLike(page, /^피드백 요청/), 2400);
         },
       },
       {
         label: '이력서 작성',
         say: '편집 화면에서 항목을 채우고 저장합니다. 위쪽 섹션 버튼을 누르면 해당 항목으로 바로 이동합니다.',
         do: async (page) => {
-          await go(page, '/resume/r-demo-1/edit', 2000);
+          if (!(await tapIf(page, btn(page, '이어서 작성'), { pause: 2000 }))) await go(page, '/resume/r-demo-1/edit', 2000);
           await typeInto(page, page.getByRole('textbox', { name: '연락처' }), '010-1234-5678');
           await highlight(page, btn(page, '저장'), 1600);
           await tapIf(page, btn(page, '저장'), { pause: 800 });
@@ -250,7 +250,9 @@ const parts = [
         label: '이력서 첨삭',
         say: '특정 공고와 관계없이 문장 표현만 다듬고 싶을 때는 이력서 첨삭 버튼을 누르면 됩니다.',
         do: async (page) => {
+          await scrollCoachPanelToTop(page);
           await highlight(page, btn(page, '이력서 첨삭'), 2600);
+          await hover(page, btn(page, '이력서 첨삭'), 400);
         },
       },
       {

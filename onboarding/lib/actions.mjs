@@ -39,10 +39,32 @@ export async function installCursor(page) {
   });
 }
 
+/// 대상이 화면 밖(스크롤로 밀려난 곳)에 있으면 그 자리에서 휠을 굴려 화면 안으로 들인다.
+/// Flutter 웹은 DOM 스크롤이 아니라 캔버스 안에서 스크롤하므로 마우스 휠로 움직인다.
+/// 돌려주는 값은 화면 안에 들어온 뒤의 위치(없으면 null).
+export async function ensureVisible(page, locator) {
+  const target = locator.first();
+  let box = await target.boundingBox();
+  for (let i = 0; box && i < 4; i++) {
+    // 상단 고정 헤더(저장·출결 폼 등)는 0 가까이에 있으므로 창 밖으로 벗어났을 때만 굴린다.
+    const top = 0;
+    const bottom = size.height;
+    if (box.y >= top && box.y + box.height <= bottom) break;
+    // 대상의 가로 위치(같은 스크롤 영역)에서, 화면 가운데쯤 오도록 굴린다.
+    const x = Math.min(Math.max(box.x + box.width / 2, 10), size.width - 10);
+    const delta = box.y < top ? box.y - top - 120 : box.y + box.height - bottom + 120;
+    await moveTo(page, x, size.height / 2);
+    await page.mouse.wheel(0, delta);
+    await sleep(600);
+    box = await target.boundingBox();
+  }
+  return box;
+}
+
 /// 설명하는 곳에 주황색 상자를 잠깐 띄운다. 기다리지 않고 바로 돌아온다.
 export async function highlight(page, locator, ms = 2600, pad = 6) {
   if (!(await locator.count())) return;
-  const box = await locator.first().boundingBox();
+  const box = await ensureVisible(page, locator);
   if (!box) return;
   await page.evaluate(
     ([b, ms, pad]) => {
@@ -77,7 +99,7 @@ export async function moveTo(page, x, y) {
 export async function tap(page, locator, { pause = 700 } = {}) {
   const target = locator.first();
   await target.waitFor({ state: 'attached', timeout: 15_000 });
-  const box = await target.boundingBox();
+  const box = await ensureVisible(page, target);
   if (!box) throw new Error('누를 위치를 찾지 못했습니다');
   await moveTo(page, box.x + box.width / 2, box.y + box.height / 2);
   await sleep(250);
@@ -107,7 +129,7 @@ export async function tapIf(page, locator, opts) {
 /// 누르지 않고 커서만 올린다.
 export async function hover(page, locator, holdMs = 800) {
   if (!(await locator.count())) return;
-  const box = await locator.first().boundingBox();
+  const box = await ensureVisible(page, locator);
   if (box) await moveTo(page, box.x + box.width / 2, box.y + box.height / 2);
   await sleep(holdMs);
 }
@@ -154,6 +176,15 @@ export async function walkTour(page, perStepMs = 1900) {
     await sleep(perStepMs);
     await tap(page, next, { pause: 900 });
   }
+}
+
+/// 이력서 편집 화면 오른쪽 AI 코치 패널을 맨 위로 되돌린다.
+/// 추천 결과를 펼치거나 내리면 패널 안에서만 스크롤되어, 위의 「이력서 첨삭」 버튼이
+/// 패널 영역 밖으로 가려진다(창 좌표로는 화면 안이라 ensureVisible이 못 잡는다).
+export async function scrollCoachPanelToTop(page) {
+  await moveTo(page, size.width - 200, size.height / 2);
+  await page.mouse.wheel(0, -3000);
+  await sleep(700);
 }
 
 /// 화면 설정의 테마 항목. "라벨 + 설명"이 한 버튼이라 라벨로 시작하는 이름으로 찾는다.
