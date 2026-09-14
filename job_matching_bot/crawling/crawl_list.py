@@ -45,6 +45,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from job_matching_bot.ingestion.company_name import clean_company_name
 from job_matching_bot.crawling.http_session import (
     LIST_PAGE_URL,
     BlockedByTargetSiteError,
@@ -81,19 +82,16 @@ def _text(node: Any, selector: str) -> str:
     return found.get_text(" ", strip=True) if found else ""
 
 
-# 회사명 칸에 섞여 오는 UI 텍스트. 링크가 없는 옛 마크업을 만났을 때만 쓴다.
-COMPANY_NOISE = ("관심기업 등록", "관심기업", "스크랩", "지원하기", "즉시지원")
-
-
 def _company_name(item: Any) -> str:
-    """회사명만 뽑는다. 링크(a.str_tit)가 정답이고, 없을 때만 텍스트를 손질한다."""
+    """회사명만 뽑는다. 링크(a.str_tit)가 정답이고, 없을 때만 칸 글자를 손질한다.
+
+    링크가 없는 카드가 아직 있다(2026-09-13 밤 21만 6천 줄 중 2,203줄). 예전에는 "관심기업 등록"
+    버튼 글자만 지워서 "현대카드(주) 현대자동차그룹 대기업"처럼 그룹·기업형태 뱃지가 남았다.
+    """
     link = item.select_one("div.company_nm a.str_tit")
     if link:
-        return link.get_text(" ", strip=True)
-    text = _text(item, "div.company_nm")
-    for noise in COMPANY_NOISE:
-        text = text.replace(noise, " ")
-    return " ".join(text.split())
+        return clean_company_name(link.get_text(" ", strip=True))
+    return clean_company_name(_text(item, "div.company_nm"))
 
 
 def parse_item(item: Any) -> dict[str, Any]:
