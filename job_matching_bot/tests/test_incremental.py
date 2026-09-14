@@ -8,15 +8,16 @@
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
-from job_matching_bot.config import AS_OF, REPO_ROOT
 from job_matching_bot.ingest import ingest
-from job_matching_bot.ingestion.job_store import JobStore
 from job_matching_bot.ingestion.mock_source import mock_jobs
+from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
 from job_matching_bot.ingestion.record_files import append_record, read_records, record_ids
 from job_matching_bot.schemas.job_record import STATUS_OPEN, STATUS_REMOVED
+from job_matching_bot.tests import AS_OF, saramin_records
 
 from job_matching_bot.crawling.crawl_detail import fresh_raw_ids, plan_targets
 from job_matching_bot.crawling.crawl_list import pages_for
@@ -65,73 +66,64 @@ class RecordFilesTest(unittest.TestCase):
 class ObservedSemanticsTest(unittest.TestCase):
     """목록에서 본 공고는 상세 없이도 살아 있다."""
 
-    def _seed(self, store_path: Path):
-        store = JobStore(store_path).load()
-        store.upsert(mock_jobs(as_of=AS_OF), source="MOCK", as_of=AS_OF)
-        store.save()
-        return store
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.store = SqliteJobStore(Path(self.temp.name) / "store.sqlite")
+        self.store.upsert(mock_jobs(as_of=AS_OF), source="MOCK", as_of=AS_OF)
+
+    def tearDown(self):
+        # Windows는 열린 SQLite 파일을 못 지운다. 연결을 먼저 닫는다.
+        self.store.close()
+        self.temp.cleanup()
 
     def test_observed_but_not_collected_stays_open(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            store_path = Path(temp_dir) / "store.json"
-            store = self._seed(store_path)
-            ids = {record.job.source_job_id for record in store.records.values()}
-            later = AS_OF + timedelta(days=1)
-            # 상세는 하나도 안 받았지만 목록에서는 전부 봤다.
-            report = store.upsert([], source="MOCK", as_of=later, observed_ids=ids)
-            # 전부 목록에서 봤으니 미관측은 없고, 만료가 아닌 것은 전부 observed다.
-            self.assertEqual(len(ids), len(report.observed) + len(report.expired))
-            self.assertEqual([], report.still_missing)
-            self.assertEqual([], report.removed)
-            for record in store.records.values():
-                if record.job.deadline is None or record.status == STATUS_OPEN:
-                    self.assertEqual(later.isoformat(), record.last_seen_at)
-                    self.assertEqual(0, record.missing_runs)
+        store = self.store
+        ids = {record.job.source_job_id for record in store.all_records()}
+        later = AS_OF + timedelta(days=1)
+        # 상세는 하나도 안 받았지만 목록에서는 전부 봤다.
+        report = store.upsert([], source="MOCK", as_of=later, observed_ids=ids)
+        # 전부 목록에서 봤으니 미관측은 없고, 만료가 아닌 것은 전부 observed다.
+        self.assertEqual(len(ids), len(report.observed) + len(report.expired))
+        self.assertEqual([], report.still_missing)
+        self.assertEqual([], report.removed)
+        for record in store.all_records():
+            if record.job.deadline is None or record.status == STATUS_OPEN:
+                self.assertEqual(later.isoformat(), record.last_seen_at)
+                self.assertEqual(0, record.missing_runs)
 
     def test_unobserved_jobs_still_go_missing(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            store_path = Path(temp_dir) / "store.json"
-            store = self._seed(store_path)
-            first = next(iter(store.records.values())).job.source_job_id
-            later = AS_OF + timedelta(days=1)
-            # 목록에서 하나만 봤다. 나머지는 미관측으로 세어야 한다.
-            report = store.upsert([], source="MOCK", as_of=later, observed_ids={first})
-            self.assertEqual(1, len(report.observed))
-            self.assertTrue(report.still_missing or report.expired)
+        store = self.store
+        first = store.all_records()[0].job.source_job_id
+        later = AS_OF + timedelta(days=1)
+        # 목록에서 하나만 봤다. 나머지는 미관측으로 세어야 한다.
+        report = store.upsert([], source="MOCK", as_of=later, observed_ids={first})
+        self.assertEqual(1, len(report.observed))
+        self.assertTrue(report.still_missing or report.expired)
 
     def test_removed_job_reappearing_in_listing_is_reopened(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            store_path = Path(temp_dir) / "store.json"
-            store = self._seed(store_path)
-            # 마감 전인 공고를 삭제 처리해 두고 목록에 다시 나타나게 한다.
-            target = next(iter(store.records.values()))
-            target.status = STATUS_REMOVED
-            report = store.upsert(
-                [], source="MOCK", as_of=AS_OF + timedelta(days=1),
-                observed_ids={target.job.source_job_id},
-            )
-            self.assertIn(target.job.job_id, report.observed)
-            self.assertEqual(STATUS_OPEN, target.status)
+        store = self.store
+        # 마감 전인 공고를 삭제 처리해 두고 목록에 다시 나타나게 한다.
+        target = store.all_records()[0]
+        store.put(replace(target, status=STATUS_REMOVED))
+        report = store.upsert(
+            [], source="MOCK", as_of=AS_OF + timedelta(days=1),
+            observed_ids={target.job.source_job_id},
+        )
+        self.assertIn(target.job.job_id, report.observed)
+        self.assertEqual(STATUS_OPEN, store.get(target.job.job_id).status)
 
     def test_without_observed_ids_behaviour_is_unchanged(self):
         # 전량 수집(예전 방식)은 그대로 동작해야 한다.
-        with tempfile.TemporaryDirectory() as temp_dir:
-            store_path = Path(temp_dir) / "store.json"
-            store = self._seed(store_path)
-            report = store.upsert([], source="MOCK", as_of=AS_OF + timedelta(days=1))
-            self.assertEqual([], report.observed)
-            self.assertTrue(report.still_missing or report.expired)
+        report = self.store.upsert([], source="MOCK", as_of=AS_OF + timedelta(days=1))
+        self.assertEqual([], report.observed)
+        self.assertTrue(report.still_missing or report.expired)
 
     def test_ingest_adds_collected_ids_to_observed_set(self):
         # 이번에 상세를 받은 공고는 목록 파일에 없어도 관측된 것이다.
-        records = json.loads(
-            (REPO_ROOT / "job_matching_bot" / "fixtures" / "jobkorea_detail_first_page.json").read_text(
-                encoding="utf-8"
-            )
-        )
+        records = saramin_records(3)
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            common = dict(source="JOBKOREA_POC", store_path=root / "s.json", raw_root=root / "raw")
+            common = dict(source="SARAMIN_POC", store_path=root / "s.sqlite", raw_root=root / "raw")
             ingest(records, **common)
             report = ingest(records[:1], observed_ids=set(), **common)
             # 첫 건은 다시 받았고(변경없음), 나머지는 목록에 없으니 미관측이다.

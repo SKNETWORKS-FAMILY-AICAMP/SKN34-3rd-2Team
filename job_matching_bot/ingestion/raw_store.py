@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from job_matching_bot.config import AS_OF
+from job_matching_bot.config import now
 
 PARSE_OK = "OK"
 PARSE_FAILED = "FAILED"
@@ -44,9 +44,10 @@ def save_raw(
     parse_status: str = PARSE_OK,
     parse_error: str | None = None,
     parser_version: str = "",
-    fetched_at: datetime = AS_OF,
+    fetched_at: datetime | None = None,
 ) -> Path:
     """원본 한 건을 저장한다. 파싱 성공 여부도 함께 남긴다."""
+    fetched_at = fetched_at or now()
     path = raw_path(root, source, source_job_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {

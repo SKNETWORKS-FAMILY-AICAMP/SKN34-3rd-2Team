@@ -714,7 +714,7 @@ class _JobPreferencesCard extends StatelessWidget {
             ),
             SizedBox(height: AppSpace.s(4)),
             Text(
-              '이력서에는 표시되지 않고 AI 코치의 맞춤 공고 추천에만 쓰입니다.',
+              '이력서에는 표시되지 않고 커리어 코치의 맞춤 공고 추천에만 쓰입니다.',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
             SizedBox(height: AppSpace.s(12)),

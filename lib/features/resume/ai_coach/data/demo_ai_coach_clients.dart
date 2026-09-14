@@ -156,6 +156,7 @@ class DemoJobRecommendApiClient extends JobRecommendApiClient {
     String? resumeText,
     List<String> lastJobIds = const [],
     List<String> lastAnswerJobIds = const [],
+    List<String> seenJobIds = const [],
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     return JobChatResponse.fromMap({

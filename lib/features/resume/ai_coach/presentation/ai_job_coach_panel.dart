@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/demo/demo_accounts.dart';
+import '../../../chatbot/presentation/robot_head_icon.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/providers/firebase_providers.dart';
@@ -238,10 +240,15 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   /// "두 공고의 자격요건만 간단히 비교해줘"에는 번호가 없다. 이게 없으면 챗봇이
   /// 스스로 권한 말을 눌렀는데 "공고가 보이지 않아 비교할 수 없다"고 답한다.
   List<String> _lastAnswerJobIds = const [];
+
+  /// **같은 조건으로 지금까지 보여 준 공고 전부.** "이거 말고"를 거듭할 때 서버가 빼고
+  /// 다음 공고를 준다. 조건이 바뀌면 새로 센다(`nextSeenJobIds`).
+  List<String> _seenJobIds = const [];
   bool _chatBusy = false;
 
   /// 기다리는 동안 보여줄 말. 추천은 11초쯤 걸리므로 무엇을 하는 중인지 밝힌다.
-  String? _chatBusyLabel;
+  /// 차례대로 넘어가고 마지막 말에서 멈춘다.
+  List<String> _chatBusyLabels = const [];
   AiJobCoachResult? _result;
   bool _chatMode = false;
   bool _loading = false;
@@ -353,13 +360,17 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
 
     setState(() {
       _chatBusy = true;
-      _chatBusyLabel = switch (scope) {
-        '프로젝트' => '프로젝트 경험을 읽고 공고를 고르는 중…',
-        '기술스택' => '기술스택을 읽고 공고를 고르는 중…',
-        '자기소개서' => '자기소개서를 읽고 공고를 고르는 중…',
-        '경력' => '경력을 읽고 공고를 고르는 중…',
-        _ => '이력서를 읽고 공고를 고르는 중…',
-      };
+      _chatBusyLabels = [
+        switch (scope) {
+          '프로젝트' => '프로젝트 경험을 읽는 중…',
+          '기술스택' => '기술스택을 읽는 중…',
+          '자기소개서' => '자기소개서를 읽는 중…',
+          '경력' => '경력을 읽는 중…',
+          _ => '이력서를 읽는 중…',
+        },
+        '맞는 공고를 고르는 중…',
+        '적합도를 비교하는 중…',
+      ];
     });
     try {
       final result = await ref
@@ -396,7 +407,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       if (mounted) {
         setState(() {
           _chatBusy = false;
-          _chatBusyLabel = null;
+          _chatBusyLabels = const [];
         });
       }
     }
@@ -519,6 +530,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       _messages.add(_ChatMessage.user(text));
       _chatController.clear();
       _chatBusy = true;
+      _chatBusyLabels = _askingAbout != null
+          ? const ['공고 내용을 살펴보는 중…', '답을 정리하는 중…']
+          // 공고 검색만이 아니라 준비·자소서 같은 질문도 온다. 어느 쪽이든 맞는 말로.
+          : const ['질문을 살펴보는 중…', '필요한 정보를 찾는 중…', '답을 정리하는 중…'];
     });
 
     if (client == null) {
@@ -550,9 +565,20 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         // "두 공고의 자격요건만"은 번호가 없다. 방금 이야기한 공고가 무엇인지
         // 알려 줘야 답할 수 있다. 번호가 가리킬 목록과는 다른 값이다.
         lastAnswerJobIds: _lastAnswerJobIds,
+        // "이거 말고"를 거듭해도 앞에서 본 공고가 다시 나오지 않게 본 것을 모두 보낸다.
+        seenJobIds: _seenJobIds,
       );
       if (!mounted) return;
       setState(() {
+        _seenJobIds = nextSeenJobIds(
+          mode: result.mode,
+          jobsInAnswer: [for (final job in result.jobs) job.jobId],
+          previous: _seenJobIds,
+          sameConditions: sameChatConditions(
+            _chatFilters?.toJson(),
+            result.filters.toJson(),
+          ),
+        );
         _chatFilters = result.filters;
         _lastShownJobIds = nextShownJobIds(
           mode: result.mode,
@@ -724,7 +750,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                 onSend: _sendChatMessage,
                 onSuggestion: _sendChatMessage,
                 busy: _chatBusy,
-                busyLabel: _chatBusyLabel,
+                busyLabels: _chatBusyLabels,
               ),
             )
           else
@@ -784,10 +810,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                             ),
                             SizedBox(width: AppSpace.s(8)),
                             Expanded(
+                              // 검색창이 아니라 코치와의 대화가 열린다.
                               child: _ActionButton(
-                                icon: Icons.search_rounded,
-                                iconColor: Color(0xFF3B82F6),
-                                label: '채용공고 찾기',
+                                art: const RobotHeadIcon(
+                                  size: 34,
+                                  inverted: true,
+                                ),
+                                label: '코치에게 묻기',
                                 loading: false,
                                 // 공고 검색은 이력서 상태와 무관하다.
                                 enabled: true,
@@ -897,13 +926,15 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(width: AppSpace.s(12)),
+          SizedBox(width: AppSpace.s(10)),
+          const RobotHeadIcon(size: 40, inverted: true),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '채용공고 찾기',
+                  '커리어 코치',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
                 Text(
@@ -926,17 +957,21 @@ class _Header extends StatelessWidget {
 
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
-    required this.icon,
-    required this.iconColor,
+    this.icon,
+    this.iconColor,
+    this.art,
     required this.label,
     required this.loading,
     required this.enabled,
     required this.disabledTooltip,
     required this.onPressed,
-  });
+  }) : assert(icon != null || art != null);
 
-  final IconData icon;
-  final Color iconColor;
+  final IconData? icon;
+  final Color? iconColor;
+
+  /// 아이콘 글꼴 대신 그림을 쓸 때. 코치에게 묻기의 로봇 머리.
+  final Widget? art;
   final String label;
   final bool loading;
   final bool enabled;
@@ -959,15 +994,22 @@ class _ActionButton extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (loading)
-            const SizedBox(
-              width: 23,
-              height: 23,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            Icon(icon, size: 26, color: enabled ? iconColor : null),
-          SizedBox(height: AppSpace.s(13)),
+          // 그림 칸 높이를 셋이 같게 둔다. 로봇 머리가 아이콘보다 커서, 칸을
+          // 맞추지 않으면 버튼마다 글자 줄 높이가 달라진다.
+          SizedBox(
+            height: 34,
+            child: Center(
+              child: loading
+                  ? const SizedBox(
+                      width: 23,
+                      height: 23,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : art ??
+                        Icon(icon, size: 26, color: enabled ? iconColor : null),
+            ),
+          ),
+          SizedBox(height: AppSpace.s(9)),
           Text(
             label,
             textAlign: TextAlign.center,
@@ -1906,7 +1948,7 @@ class _ChatView extends StatefulWidget {
     required this.onStopAsking,
     required this.onAskAbout,
     required this.onOpenDetail,
-    this.busyLabel,
+    this.busyLabels = const [],
   });
 
   final List<_ChatMessage> messages;
@@ -1925,8 +1967,8 @@ class _ChatView extends StatefulWidget {
   /// 근거 전체를 보러 코치 화면으로 넘어간다.
   final VoidCallback onOpenDetail;
 
-  /// 무엇을 기다리는 중인지. 비어 있으면 기본 문구를 쓴다.
-  final String? busyLabel;
+  /// 무엇을 기다리는 중인지. 차례대로 넘어간다. 비어 있으면 기본 문구를 쓴다.
+  final List<String> busyLabels;
 
   @override
   State<_ChatView> createState() => _ChatViewState();
@@ -1946,7 +1988,8 @@ class _ChatViewState extends State<_ChatView> {
     super.didUpdateWidget(oldWidget);
     // 답이 왔는데 화면은 그대로면 사용자가 직접 내려야 한다. 말이 길수록 어디까지
     // 왔는지도 모른다. 새 말이 붙을 때마다 아래로 따라간다.
-    if (widget.messages.length != oldWidget.messages.length) {
+    if (widget.messages.length != oldWidget.messages.length ||
+        (widget.busy && !oldWidget.busy)) {
       _scrollToBottom();
     }
   }
@@ -1970,7 +2013,7 @@ class _ChatViewState extends State<_ChatView> {
     final onAskAbout = widget.onAskAbout;
     final onOpenDetail = widget.onOpenDetail;
     final onSuggestion = widget.onSuggestion;
-    final busyLabel = widget.busyLabel;
+    final busyLabels = widget.busyLabels;
     final askingAbout = widget.askingAbout;
     final onStopAsking = widget.onStopAsking;
     final controller = widget.controller;
@@ -1981,8 +2024,13 @@ class _ChatViewState extends State<_ChatView> {
           child: ListView.builder(
             controller: _scroll,
             padding: EdgeInsets.all(AppSpace.s(14)),
-            itemCount: messages.length,
-            itemBuilder: (context, index) => _ChatBubble(
+            // 기다리는 동안에는 대화 끝에 코치가 입력 중인 말풍선을 하나 더 둔다.
+            itemCount: messages.length + (busy ? 1 : 0),
+            itemBuilder: (context, index) => index == messages.length
+                ? _CoachTyping(
+                    labels: busyLabels.isEmpty ? const ['답을 찾는 중…'] : busyLabels,
+                  )
+                : _ChatBubble(
               message: messages[index],
               onAskAbout: busy ? null : onAskAbout,
               // 넘어가기는 마지막 답에서만. 지나간 답의 버튼을 누르면 그때 물어본
@@ -1996,28 +2044,6 @@ class _ChatViewState extends State<_ChatView> {
             ),
           ),
         ),
-        if (busy)
-          Padding(
-            padding: EdgeInsets.only(bottom: AppSpace.s(8)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: AppSpace.s(8)),
-                Text(
-                  busyLabel ?? '답을 찾는 중…',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
         // 무엇에 대해 묻는 중인지. 이게 없으면 짧은 말이 어디로 가는지 알 수 없다.
         if (askingAbout case final job?)
           Container(
@@ -2105,9 +2131,7 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+    final bubble = Container(
         margin: EdgeInsets.only(bottom: AppSpace.s(10)),
         padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(12)),
         constraints: const BoxConstraints(maxWidth: 300),
@@ -2178,7 +2202,164 @@ class _ChatBubble extends StatelessWidget {
             ],
           ],
         ),
-      ),
+    );
+
+    if (message.isUser) {
+      return Align(alignment: Alignment.centerRight, child: bubble);
+    }
+    // 코치의 답 옆에는 학생 챗봇처럼 머리를 둔다. 누가 말하는지 보이게.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox.square(
+          dimension: 40,
+          child: Center(child: RobotHeadIcon(size: 36, inverted: true)),
+        ),
+        SizedBox(width: AppSpace.s(7)),
+        Flexible(child: bubble),
+      ],
+    );
+  }
+}
+
+/// 코치가 답을 쓰는 중. 학생 챗봇과 같은 물결 점을 코치 말풍선 안에 둔다.
+///
+/// 예전에는 입력창 위에 작은 원형 표시만 돌아, 대화와 떨어져서 누가 무엇을
+/// 하는 중인지 잘 보이지 않았다. 답이 올 자리에서 기다리게 한다.
+class _CoachTyping extends StatefulWidget {
+  const _CoachTyping({required this.labels});
+
+  /// 차례대로 보여 줄 말. 마지막 말에서 멈춘다.
+  final List<String> labels;
+
+  /// 다음 말로 넘어가는 간격. 추천이 11초쯤 걸려 세 단계가 고르게 지나간다.
+  static const step = Duration(milliseconds: 3200);
+
+  @override
+  State<_CoachTyping> createState() => _CoachTypingState();
+}
+
+class _CoachTypingState extends State<_CoachTyping>
+    with SingleTickerProviderStateMixin {
+  late final _wave = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  Timer? _next;
+  var _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedule();
+  }
+
+  @override
+  void didUpdateWidget(_CoachTyping oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 질문 답을 받은 뒤 이어서 추천을 돌리면 같은 자리에 새 말 묶음이 온다.
+    if (widget.labels.join('|') != oldWidget.labels.join('|')) {
+      _index = 0;
+      _schedule();
+    }
+  }
+
+  void _schedule() {
+    _next?.cancel();
+    if (_index >= widget.labels.length - 1) return;
+    _next = Timer(_CoachTyping.step, () {
+      if (!mounted) return;
+      setState(() => _index++);
+      _schedule();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 움직임 줄이기를 켠 사람에게는 점을 멈춰 둔다.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _wave.stop();
+    } else if (!_wave.isAnimating) {
+      _wave.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _next?.cancel();
+    _wave.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox.square(
+          dimension: 40,
+          child: Center(child: RobotHeadIcon(size: 36, inverted: true)),
+        ),
+        SizedBox(width: AppSpace.s(7)),
+        Flexible(
+          child: Container(
+            margin: EdgeInsets.only(bottom: AppSpace.s(10)),
+            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(11)),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Semantics(
+              liveRegion: true,
+              label: '커리어 코치 응답 대기 중',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedBuilder(
+                    animation: _wave,
+                    builder: (context, _) => Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(3, (i) {
+                        final wave = math.sin(
+                          _wave.value * math.pi * 2 - i * 0.8,
+                        );
+                        return Transform.translate(
+                          offset: Offset(0, -3 * wave),
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                  SizedBox(width: AppSpace.s(10)),
+                  Flexible(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: Text(
+                        widget.labels[math.min(_index, widget.labels.length - 1)],
+                        key: ValueKey(_index),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

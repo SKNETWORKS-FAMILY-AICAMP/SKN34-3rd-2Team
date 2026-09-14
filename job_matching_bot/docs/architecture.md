@@ -185,14 +185,18 @@ LangChain `ChatPromptTemplate`으로 만들고 구조화 출력 스키마를 강
 
 ## 7. 모듈 구조
 
+파일별 역할과 누가 누구를 부르는지는 [modules.md](modules.md)에 있다.
+
 ```text
 crawling/     목록·상세 수집, 야간 배치, 스케줄 등록
-ingestion/    원본 → Job 정규화. 요건 구간 분리, 전공·자격증 추출, 제외 직종
-retrieval/    Pinecone 적재·검색, 중복·만료 판정, 증분 지문, 마감 확인
-matching/     하드 필터, 기술 겹침 재정렬
+ingestion/    원본 → Job 정규화. 요건 구간 분리, 전공·자격증 추출, 제외 직종, SQLite 저장소
+coach/        LLM 요구역량 추출(야간 배치에서는 꺼져 있고 요건 구간 사전 매칭을 쓴다)
+retrieval/    Pinecone 적재·검색, 챗봇 조건 조회·집계, 중복·만료 판정, 증분 지문, 마감 확인
+matching/     하드 필터, 기술 겹침 사전 순위, 기술명 표준화
 api/          FastAPI. 추천·챗봇 서비스, 프롬프트, 가드레일
 evaluation/   사람 채점 도구, 규칙 결함 검사, 챗봇 평가
 sharing/      팀원 공유용 슬림 저장소 생성·업로드
+exporters/    앱(Dart)으로 내보내기 — 가상 이력서, 공고에 쓰인 기술 이름
 schemas/      Job / ResumeProfile / 원본 레코드
 sync.py       수집 원본 → 저장소 → 인덱스 (증분)
 tests/        외부 접속 없이 도는 단위 테스트
