@@ -80,7 +80,7 @@ evaluation/ · exporters/ · sharing/         도구
 | `exporters.resume_mocks_dart` · `skill_names_dart` | 앱이 읽는 Dart 파일 생성 | 수동 |
 | `crawling.crawl_list` · `crawl_detail` · `detail_queue` | 각 단계만 따로 | 수동(디버깅) |
 | `evaluation.scan_terms` | 헷갈리는 접두사 태그 후보 뽑기(Java⊂JavaScript) | 수동 |
-| `ingestion.migrate_store` | 옛 JSON 저장소 → SQLite 한 번 이관 | 끝난 도구 |
+| `evaluation.extract_compare` | LLM 요구역량 추출 vs 요건 구간 사전 매칭 표본 비교 | 수동 |
 
 ## 3. 폴더별
 
@@ -101,7 +101,7 @@ evaluation/ · exporters/ · sharing/         도구
 
 | 파일 | 줄 | 하는 일 | 쓰는 곳 |
 |---|---:|---|---|
-| `saramin.py` | 341 | 상세 원본 → `Job`. 경력·학력·고용형태·마감 해석, 기술 태그 분리, **메타가 경력무관인데 요건이 경력을 요구하면 경력직으로** | `ingest` |
+| `saramin.py` | 344 | 상세 원본 → `Job`. 경력·학력·고용형태·마감 해석, 기술 태그 분리, **메타가 경력무관인데 요건이 경력을 요구하면 경력직으로** | `ingest` |
 | `requirement_sections.py` | 141 | 본문을 제목으로 잘라 자격요건·우대사항·주요업무 구간 | `saramin`, `coach`, `pre_ranker`, `documents`, 평가 |
 | `qualifications.py` | 245 | 요건 구간에서 전공·자격증·병역·최소 연차 | `saramin`, `pre_ranker` |
 | `saramin_tech_vocab.py` | 163 | 직무 코드표로 태그를 기술/키워드로 가르기, **글에서 기술 찾기** | `saramin`, `pre_ranker`, `store_search` |
@@ -109,13 +109,11 @@ evaluation/ · exporters/ · sharing/         도구
 | `listing_conditions.py` | 171 | 목록 한 줄의 조건 글 → 지역·경력·고용형태·학력·마감 | `sqlite_store` |
 | `detail_quality.py` | 34 | 본문이 이미지뿐인지, 요건 문장이 있는지 | `crawl_detail`, `saramin`, `sqlite_store`, 첨삭 모듈 |
 | `excluded_roles.py` | 49 | 추천에서 뺄 직종(배달·운전 등) | `detail_queue` |
-| `sqlite_store.py` | 801 | **저장소.** `jobs`·`job_tags`·`runs`·`list_seen`·`list_jobs`·`list_sweeps`·`link_checks` 표, 상태 전이, 컬럼 이관 | `job_store`, `service`, `liveness`, 평가 |
-| `job_store.py` | 227 | 저장소 공통 규칙(content_hash upsert, 상태 전이)과 경로로 SQLite/JSON 고르기 | 적재·인덱스 쪽 전부 |
+| `sqlite_store.py` | 803 | **저장소.** `jobs`·`job_tags`·`runs`·`list_seen`·`list_jobs`·`list_sweeps`·`link_checks` 표, 상태 전이, 컬럼 이관 | `job_store`, `service`, `liveness`, 평가 |
+| `job_store.py` | 169 | 저장소 판정 규칙(content_hash upsert, 상태 전이)과 SQLite 저장소 열기(`open_store`, `.sqlite`/`.db`만) | 적재·인덱스 쪽 전부 |
 | `record_files.py` | 71 | JSON Lines 원본 읽기·덧붙이기 | 수집·적재 |
-| `raw_store.py` | 104 | 정규화 전 원본을 공고별로 보존, 다시 파싱 | `ingest` |
-| `jobkorea.py` | 175 | 다른 채용 사이트 표본 정규화(수집기는 없음) | `ingest`(소스 목록) |
-| `mock_source.py` | 104 | 통제된 가짜 공고 | 테스트 12개 파일 |
-| `migrate_store.py` | 106 | JSON → SQLite 이관(끝난 도구) | — |
+| `raw_store.py` | 105 | 정규화 전 원본을 공고별로 보존, 다시 파싱 | `ingest` |
+| `mock_source.py` | 105 | 통제된 가짜 공고 | 테스트 12개 파일 |
 
 ### coach/ — LLM 요구역량 추출
 
@@ -127,6 +125,21 @@ evaluation/ · exporters/ · sharing/         도구
 
 **야간 배치에서는 LLM 추출이 꺼져 있다.** `sync.py`의 기본값이 `--no-llm`이라 요건 구간 사전 매칭만 쓴다.
 비용이 없고 결과가 매번 같다. `--llm`으로 켤 수 있다.
+
+켰을 때를 OPEN 공고 표본 200건으로 쟀다(`evaluation.extract_compare`).
+
+| | 사전 매칭 | LLM |
+|---|---:|---:|
+| 글 본문 공고(153건) 중 기술 1개 이상 | 35 (23%) | 138 (90%) |
+| 공고당 필수+우대 수 | 0.54 | 7.09 |
+| 건당 시간(중앙값 / 90%) | — | 7.3초 / 15.1초 |
+| 건당 토큰(입력 / 출력) | — | 1,454 / 768 |
+
+- LLM이 뽑은 1,418개 중 기술(언어·프레임워크·DB·인프라·도구)은 449개다. 나머지는 도메인 775, 태도 194다.
+- 기술 449개 중 72%는 사전에 없는 이름이다. "Adobe Photoshop", "AI 도구 활용"처럼 표기가 제각각이다. 그래서 이력서 기술과 겹침을 세는 `pre_ranker`는 그대로는 이 이름들을 쓰지 못한다.
+- 사전 매칭이 필수로 본 기술을 LLM도 필수로 본 비율은 53%다.
+- 원문에 근거가 없어 버린 기술은 15개다. 스키마 재시도와 실패는 0건이다.
+- 하룻밤 신규 3,814건에 쓰면 입력 약 554만, 출력 약 293만 토큰이 든다. 동시 6건으로 약 80분이 더 걸린다.
 
 ### retrieval/ — 인덱스와 조회
 
@@ -180,13 +193,12 @@ evaluation/ · exporters/ · sharing/         도구
 | 위치 | 하는 일 |
 |---|---|
 | `sync.py` (203줄) | 적재 파이프라인: 유효성 → 중복 → 정규화(`ingest`) → 품질·지문 → Pinecone → `runs` 표 기록 |
-| `ingest.py` (215줄) | 원본 보존 → 정규화 → 저장소 upsert → 리포트. 저장소 경로 상수(`DEFAULT_STORE`)도 여기 있다 |
-| `config.py` (28줄) | 경로(`artifacts/`, `fixtures/`, 앱 Dart 출력)와 옛 POC 기준 시각 |
+| `ingest.py` (208줄) | 원본 보존 → 정규화 → 저장소 upsert → 리포트. 저장소 경로 상수(`DEFAULT_STORE`)도 여기 있다 |
+| `config.py` (45줄) | 경로(`artifacts/`, `fixtures/`, 앱 Dart 출력)와 지금 시각(`now()`, 테스트는 `tests/__init__.py`가 고정) |
 | `env.py` (75줄) | 레포 루트 `.env` 읽기 |
 | `schemas/` | `Job`(공통 공고) · `JobRecord`·`CollectionReport`(저장소 레코드·수집 리포트) · `ResumeProfile` |
 | `sharing/share_store.py` (231줄) | 저장소에서 필요한 칸만 뽑아 압축해 Firebase Storage로 올리고 받기 |
 | `exporters/` | `resume_mocks_dart.py`(가상 이력서 → 앱), `skill_names_dart.py`(공고에 쓰인 기술 이름 → 앱 태그 후보) |
-| `text_match.py` (40줄) | 한글·영문 섞인 글의 낱말 경계 매칭 |
 | `tests/` | 단위 테스트 36개 파일, 646건. 외부 접속 없이 돈다 |
 | `fixtures/` | 기술 코드표, 평가 케이스, 채점 라벨(`labels/`), 결함 검사 기록(`checks/`) |
 | `artifacts/` | git 제외. 저장소 sqlite, 원본(`raw/`), 야간 요약·로그(`nightly/`), 평가 결과 |
@@ -208,7 +220,13 @@ evaluation/ · exporters/ · sharing/         도구
 
 | 무엇 | 상태 |
 |---|---|
-| `text_match.py` | 어디서도 import하지 않는다 |
-| `ingestion/jobkorea.py`, `job_store.py`의 JSON 저장소, `migrate_store.py`, `config.AS_OF` | POC 때의 것. 테스트가 쓰는 것도 있어 지우려면 테스트부터 옮겨야 한다 |
-| `coach/` LLM 추출 | 야간 배치에서 꺼져 있다. 켤지, 뺄지 정하지 않았다 |
-| 파일 이름 `saramin*` | 한 사이트 전용 코드가 이름에 드러난다. 소스를 늘리면 나눌 곳이다 |
+| `coach/` LLM 추출 | 야간 배치에서 꺼져 있다. 표본 측정 결과는 3장 coach/에 있다 |
+| 파일 이름 `saramin*` | 한 사이트 전용 코드가 이름에 드러난다. 소스를 늘릴 때 나눈다 |
+
+정리한 것:
+
+- 쓰는 곳이 없던 `text_match.py`를 지웠다.
+- 수집기 없이 파서만 있던 다른 사이트 정규화(`ingestion/jobkorea.py`)와 그 표본을 지웠다.
+- 테스트만 쓰던 JSON 파일 저장소를 지웠다. `open_store`는 SQLite 경로만 받는다.
+- 이관이 끝난 `migrate_store.py`를 지웠다.
+- 고정 기준 시각 `config.AS_OF`를 `config.now()`로 바꿨다. 이 시각이 운영 함수 7곳의 기본값이었다. 테스트는 같은 시각으로 시계를 고정한다.

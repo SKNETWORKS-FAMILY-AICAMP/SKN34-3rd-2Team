@@ -1,6 +1,6 @@
-"""SQLite 저장소가 JSON 저장소(`reconcile`)와 같은 판정을 내리는지 대조한다.
+"""SQLite 저장소가 판정 규칙(`job_store.reconcile`)과 같은 판정을 내리는지 대조한다.
 
-두 구현을 같은 입력으로 돌려 리포트와 상태를 비교한다. 규칙을 한쪽만 고치면
+규칙과 저장소를 같은 입력으로 돌려 리포트와 상태를 비교한다. 규칙을 한쪽만 고치면
 여기서 깨진다.
 """
 
@@ -12,11 +12,11 @@ from dataclasses import asdict, replace
 from datetime import timedelta
 from pathlib import Path
 
-from job_matching_bot.config import AS_OF
-from job_matching_bot.ingestion.job_store import JobStore, reconcile
+from job_matching_bot.ingestion.job_store import open_store, reconcile
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.sqlite_store import SqliteJobStore, is_sqlite_path
 from job_matching_bot.schemas.job_record import STATUS_EXPIRED, STATUS_OPEN, STATUS_REMOVED
+from job_matching_bot.tests import AS_OF
 
 
 def _report_view(report):
@@ -31,8 +31,8 @@ def _status_view(records):
     return {r.job.job_id: (r.status, r.missing_runs, r.revisions) for r in records}
 
 
-class SqliteVersusJsonTest(unittest.TestCase):
-    """같은 시나리오를 두 저장소에 돌리고 결과가 같은지 본다."""
+class SqliteVersusRulesTest(unittest.TestCase):
+    """같은 시나리오를 규칙과 저장소에 돌리고 결과가 같은지 본다."""
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -140,14 +140,12 @@ class RoundTripTest(unittest.TestCase):
             store.upsert([job], source="MOCK")
             self.assertFalse(store.get(job.job_id).job.body_is_image)
 
-    def test_json_store_still_used_for_json_paths(self):
+    def test_open_store_rejects_non_sqlite_paths(self):
+        # JSON 파일 저장소는 없앴다. 예전 경로를 넘기면 조용히 새 파일을 만들지 않고 멈춘다.
         self.assertTrue(is_sqlite_path(Path("x/store.sqlite")))
         self.assertFalse(is_sqlite_path(Path("x/store.json")))
-        with tempfile.TemporaryDirectory() as temp:
-            store = JobStore(Path(temp) / "store.json")
-            store.upsert(mock_jobs(), source="MOCK")
-            store.save()
-            self.assertEqual(len(mock_jobs()), len(JobStore(Path(temp) / "store.json").load().records))
+        with self.assertRaises(ValueError):
+            open_store(Path("x/store.json"))
 
 
 if __name__ == "__main__":
@@ -218,7 +216,7 @@ class RefreshTest(unittest.TestCase):
 
     def test_an_expired_posting_does_not_come_back_to_life(self):
         """**이 테스트가 있는 이유.** 처음에는 `resolve_status`로 상태를 다시 계산했다.
-        그 판정이 9일 전에 고정된 `AS_OF`를 기준으로 해서, 실제로 돌려 보니 만료·삭제된
+        그 판정이 9일 전에 고정된 기준 시각(옛 `config.AS_OF`)을 기준으로 해서, 실제로 돌려 보니 만료·삭제된
         공고 7,090건이 한꺼번에 OPEN으로 되살아났다.
 
         다시 파싱하는 것은 저장해 둔 글을 다시 읽는 일이지, 그 공고가 아직 살아 있는지

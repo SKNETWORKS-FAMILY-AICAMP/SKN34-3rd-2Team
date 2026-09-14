@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records
-from job_matching_bot.config import ARTIFACTS_DIR, AS_OF, REPO_ROOT
+from job_matching_bot.config import ARTIFACTS_DIR, REPO_ROOT
+from job_matching_bot.tests import AS_OF, SARAMIN_SAMPLE
 from job_matching_bot.ingestion.saramin import (
     normalize_many,
     normalize_saramin,
@@ -21,25 +22,7 @@ from job_matching_bot.ingestion.saramin import (
     parse_tech_stack,
 )
 
-SAMPLE = {
-    "source_job_id": "54845055",
-    "source_url": "https://www.saramin.co.kr/zf_user/jobs/view?rec_idx=54845055",
-    "conditions": {
-        "경력": "신입·경력",
-        "학력": "대졸(4년제) 이상",
-        "근무형태": "정규직 수습기간 3개월",
-        "근무지역": "서울 마포구 지도보기",
-    },
-    "company_info": {"기업형태": "중소기업, 1000대기업, 주식회사"},
-    "description": "Python과 FastAPI로 백엔드 API를 개발합니다.",
-    "needs_human_review": False,
-    "list_item": {
-        "company": "주식회사 아이티에스코",
-        "title": "솔루션 개발팀 신입•경력 채용",
-        "job_sectors": ["백엔드/서버개발", "데이터엔지니어"],
-        "support_text": "입사지원 D-6 7일 전 등록",
-    },
-}
+SAMPLE = SARAMIN_SAMPLE
 
 
 class CareerTest(unittest.TestCase):

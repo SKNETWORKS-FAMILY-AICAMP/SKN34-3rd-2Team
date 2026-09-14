@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from job_matching_bot.config import AS_OF
+from job_matching_bot.config import now
 from job_matching_bot.schemas.job_posting import Job
 
 PARSER_VERSION = "mock-0.1.0"
@@ -61,7 +61,8 @@ MOCK_FIXTURES: list[dict[str, Any]] = [
 ]
 
 
-def mock_jobs(as_of: datetime = AS_OF) -> list[Job]:
+def mock_jobs(as_of: datetime | None = None) -> list[Job]:
+    as_of = as_of or now()
     jobs = []
     for value in MOCK_FIXTURES:
         raw = json.dumps(value, ensure_ascii=False, sort_keys=True)
