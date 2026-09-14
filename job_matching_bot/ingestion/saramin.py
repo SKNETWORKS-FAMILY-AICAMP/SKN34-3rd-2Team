@@ -269,7 +269,7 @@ def normalize_saramin(
         source_job_id=source_job_id,
         source_url=str(record.get("source_url") or listing.get("source_url") or ""),
         # 옛 수집본의 회사명에는 뱃지가 붙어 있다. 수집기를 고친 뒤에도 원본은 그대로라 여기서도 뗀다.
-        company=clean_company_name(str(listing.get("company") or "")),
+        company=clean_company_name(listing.get("company")),
         company_type=_clean(company_info.get("기업형태", "")) or "미기재",
         title=clean_listing_text(str(listing.get("title") or "")),
         description=description,

@@ -32,6 +32,15 @@ def test_reads_full_text_and_does_not_create_missing_store(store, tmp_path):
     with pytest.raises(ReviewInputError): load_selected_job(store, "' OR 1=1 --")
 
 
+def test_legacy_company_ui_noise_is_not_handed_to_review(store):
+    with sqlite3.connect(store) as db:
+        db.execute("UPDATE jobs SET company = ?", ("(주)엣지크로스 관심기업 등록",))
+    selected = load_selected_job(store, 'saramin:1')
+    assert selected['source']['company'] == '(주)엣지크로스'
+    assert '회사: (주)엣지크로스\n' in selected['text']
+    assert '관심기업 등록' not in selected['text']
+
+
 @pytest.mark.parametrize('field,value,error', [
     ('status', 'CLOSED', ReviewConflict), ('deadline', '2020-01-01', ReviewConflict),
     ('deadline', '알 수 없음', ReviewInputError), ('description', '', ReviewInputError),

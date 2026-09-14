@@ -355,9 +355,11 @@ _HIT_COLUMNS = (
 
 
 def _to_hit(row, relevance: int, has_detail: bool = True) -> JobHit:
+    from job_matching_bot.ingestion.company_name import clean_company_name
+
     return JobHit(
         job_id=row["job_id"],
-        company=row["company"] or "",
+        company=clean_company_name(row["company"]),
         title=row["title"] or "",
         source_url=row["source_url"] or "",
         region=row["region"] or "미기재",

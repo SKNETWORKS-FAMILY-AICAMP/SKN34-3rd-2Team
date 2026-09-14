@@ -12,6 +12,7 @@ class FakeReviewClient extends ResumeReviewApiClient {
   Map<String, dynamic>? applied;
   Map<String, dynamic>? undone;
   Map<String, dynamic>? tailoredRequest;
+  Map<String, dynamic>? savedSession;
   int reviews = 0;
 
   @override
@@ -76,6 +77,16 @@ class FakeReviewClient extends ResumeReviewApiClient {
     text = '개발 하였습니다.';
     return {'operation_id': 'undo', 'input_hash': 'version'};
   }
+
+  @override
+  Future<void> saveTailoredSession(
+    String cohortId,
+    String resumeId,
+    String tailoredResumeId,
+    Map<String, dynamic> state,
+  ) async {
+    savedSession = Map<String, dynamic>.from(state);
+  }
 }
 
 Widget _dialog(
@@ -83,6 +94,8 @@ Widget _dialog(
   required ResumeContent draft,
   required ValueChanged<ResumeContent> onChanged,
   bool generalReview = true,
+  String tailoredResumeId = '',
+  Map<String, dynamic> initialReviewSession = const {},
 }) => MaterialApp(
   home: Scaffold(
     body: JobResumeReviewDialog(
@@ -91,16 +104,17 @@ Widget _dialog(
       resumeId: 'r',
       jobId: 'job',
       generalReview: generalReview,
+      tailoredResumeId: tailoredResumeId,
+      initialReviewSession: initialReviewSession,
       draft: draft,
       onChanged: onChanged,
     ),
   ),
 );
 
-ResumeContent _draft(String text) =>
-    ResumeContent.fromMap({
-      'coreCompetencies': {'text': text},
-    });
+ResumeContent _draft(String text) => ResumeContent.fromMap({
+  'coreCompetencies': {'text': text},
+});
 
 /// 기본 시험 화면(800x600)에서는 첨삭 대화가 접혀 버튼이 화면 밖으로 나간다.
 /// 실제로 쓰는 창 크기를 흉내 내야 눌린다.
@@ -172,6 +186,13 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
+    expect(
+      client.tailoredRequest,
+      isNull,
+      reason: '추천 공고를 열어보기만 한 경우에는 맞춤 이력서를 만들지 않는다',
+    );
+
     await tester.ensureVisible(find.text('첨삭 시작'));
     await tester.tap(find.text('첨삭 시작'));
     await tester.pumpAndSettle();
@@ -183,6 +204,40 @@ void main() {
     expect(client.applied!['tailored_resume_id'], 'tailored');
     expect(changes, isEmpty, reason: '기본 이력서에는 전달하지 않는다');
 
+    client.close();
+  });
+
+  testWidgets('공고별 첨삭 진행 상태를 다시 열면 복원한다', (tester) async {
+    await _wideWindow(tester);
+    final client = FakeReviewClient();
+    await tester.pumpWidget(
+      _dialog(
+        client,
+        draft: _draft('개발 하였습니다.'),
+        onChanged: (_) {},
+        generalReview: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('첨삭 시작'));
+    await tester.pumpAndSettle();
+    final saved = client.savedSession!;
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      _dialog(
+        client,
+        draft: _draft('개발 하였습니다.'),
+        onChanged: (_) {},
+        generalReview: false,
+        tailoredResumeId: 'tailored',
+        initialReviewSession: saved,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('이 문장으로 바꾸기'), findsOneWidget);
+    expect(client.reviews, 1, reason: '재진입할 때 모델을 다시 호출하지 않는다');
     client.close();
   });
 }

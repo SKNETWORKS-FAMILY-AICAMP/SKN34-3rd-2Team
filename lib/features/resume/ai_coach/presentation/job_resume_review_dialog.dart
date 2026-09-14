@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -25,6 +26,7 @@ class JobResumeReviewDialog extends StatefulWidget {
     this.jobCompany = '',
     this.jobTitle = '',
     this.tailoredResumeId = '',
+    this.initialReviewSession = const {},
     this.generalReview = false,
     this.aiOps,
   });
@@ -40,12 +42,14 @@ class JobResumeReviewDialog extends StatefulWidget {
   final ResumeContent draft;
   final ValueChanged<ResumeContent> onChanged;
   final bool generalReview;
+  final Map<String, dynamic> initialReviewSession;
 
   @override
   State<JobResumeReviewDialog> createState() => _JobResumeReviewDialogState();
 }
 
 class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
+  static const int _maxReviewQuestions = 7;
   Map<String, dynamic>? _result, _reviewRequest, _applyRequest;
   final Set<int> _selected = {};
   final Set<int> _appliedSuggestionIndices = {};
@@ -67,10 +71,13 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   bool _gapAuditScheduled = false;
   bool _gapAuditStarted = false;
   bool _gapAuditFinished = false;
+  bool _manuallyCompleted = false;
   Map<String, dynamic>? _pendingQuestion;
   String? _error;
   String? _focusedFieldPath;
   String? _tailoredResumeId;
+  Future<void> _sessionSaveChain = Future<void>.value();
+  final ValueNotifier<double> _previewFraction = ValueNotifier(0.5);
   late ResumeContent _preview;
   String _id() =>
       '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 30)}';
@@ -86,6 +93,168 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _tailoredResumeId = widget.tailoredResumeId.isEmpty
         ? null
         : widget.tailoredResumeId;
+    // 새 공고는 창을 열어보는 것만으로 맞춤 이력서를 만들지 않는다.
+    // 사용자가 실제로 첨삭을 시작할 때 _reviewOnce에서 분기하고,
+    // 기존 맞춤 이력서로 재진입한 경우에만 전달받은 세션을 복원한다.
+    if (!widget.generalReview &&
+        _tailoredResumeId != null &&
+        widget.initialReviewSession.isNotEmpty) {
+      _restoreSession(widget.initialReviewSession);
+    }
+  }
+
+  void _restoreSession(Map<String, dynamic> state) {
+    if (state['version'] != 1 || state['result'] is! Map) return;
+    final savedResumeId = state['resume_id'] as String?;
+    final savedJobId = state['job_id'] as String?;
+    final savedResult = Map<String, dynamic>.from(state['result'] as Map);
+    final savedJobSource = Map<String, dynamic>.from(
+      savedResult['job_source'] as Map? ?? const {},
+    );
+    final sourceJobId = savedJobSource['job_id'] as String?;
+    final sourceCompany = (savedJobSource['company'] as String? ?? '').trim();
+    final sourceTitle = (savedJobSource['title'] as String? ?? '').trim();
+    if ((savedResumeId != null && savedResumeId != widget.resumeId) ||
+        (savedJobId != null && savedJobId != widget.jobId) ||
+        (sourceJobId != null &&
+            sourceJobId.isNotEmpty &&
+            sourceJobId != widget.jobId) ||
+        ((sourceJobId == null || sourceJobId.isEmpty) &&
+            sourceCompany.isNotEmpty &&
+            widget.jobCompany.isNotEmpty &&
+            sourceCompany != widget.jobCompany) ||
+        ((sourceJobId == null || sourceJobId.isEmpty) &&
+            sourceTitle.isNotEmpty &&
+            widget.jobTitle.isNotEmpty &&
+            sourceTitle != widget.jobTitle)) {
+      return;
+    }
+    _result = savedResult;
+    _messages
+      ..clear()
+      ..addAll(
+        (state['messages'] as List? ?? const []).whereType<Map>().map(
+          (item) => _ReviewChatMessage.fromMap(item),
+        ),
+      );
+    _questionQueue
+      ..clear()
+      ..addAll(
+        (state['question_queue'] as List? ?? const []).whereType<Map>().map(
+          (item) => Map<String, dynamic>.from(item),
+        ),
+      );
+    _suggestionQueue
+      ..clear()
+      ..addAll(
+        (state['suggestion_queue'] as List? ?? const []).whereType<Map>().map(
+          (item) => _ReviewChatMessage.fromMap(item),
+        ),
+      );
+    _pendingQuestion = state['pending_question'] is Map
+        ? Map<String, dynamic>.from(state['pending_question'] as Map)
+        : null;
+    _answeredQuestionIds
+      ..clear()
+      ..addAll(
+        (state['answered_question_ids'] as List? ?? const [])
+            .whereType<String>(),
+      );
+    _appliedSuggestionIndices
+      ..clear()
+      ..addAll(
+        (state['applied_indices'] as List? ?? const []).whereType<int>(),
+      );
+    _gapAuditStarted = state['gap_audit_started'] == true;
+    _gapAuditFinished = state['gap_audit_finished'] == true;
+    _manuallyCompleted = state['manually_completed'] == true;
+    _changed = state['changed'] == true;
+    _trimQuestionBacklog();
+  }
+
+  Map<String, dynamic> _sessionState() => {
+    'version': 1,
+    'resume_id': widget.resumeId,
+    'job_id': widget.jobId,
+    'tailored_resume_id': _tailoredResumeId,
+    // 원문 전체가 든 input_fields와 진단 결과를 다시 복제하지 않는다.
+    // 이어하기에는 서버 review ID, 현재 hash, 선택 공고 정보만 필요하다.
+    'result': _compactSessionResult(),
+    'messages': _messages.map((message) => message.toMap()).toList(),
+    'question_queue': _questionQueue,
+    'suggestion_queue': _suggestionQueue
+        .map((message) => message.toMap())
+        .toList(),
+    'pending_question': _pendingQuestion,
+    'answered_question_ids': _answeredQuestionIds.toList(),
+    'applied_indices': _appliedSuggestionIndices.toList(),
+    'gap_audit_started': _gapAuditStarted,
+    'gap_audit_finished': _gapAuditFinished,
+    'manually_completed': _manuallyCompleted,
+    'changed': _changed,
+    'completed': _sessionCompleted,
+  };
+
+  Map<String, dynamic> _compactSessionResult() {
+    final result = _result ?? const <String, dynamic>{};
+    return {
+      for (final key in [
+        'review_id',
+        'input_hash',
+        'job_source',
+        'summary',
+        'grounding_warnings',
+      ])
+        if (result.containsKey(key)) key: result[key],
+    };
+  }
+
+  bool get _sessionCompleted {
+    if (_manuallyCompleted) return _result != null;
+    final hasActiveQuestion = _messages.any((message) {
+      final id = message.question?['question_id'] as String?;
+      return message.question != null &&
+          (id == null || !_answeredQuestionIds.contains(id));
+    });
+    final hasActiveSuggestion = _messages.any(
+      (message) =>
+          (message.suggestion != null &&
+              message.suggestion!['_applied'] != true &&
+              message.suggestion!['_skipped'] != true) ||
+          (message.identitySuggestion != null &&
+              message.identitySuggestion!['_applied'] != true &&
+              message.identitySuggestion!['_skipped'] != true),
+    );
+    return _result != null &&
+        !hasActiveQuestion &&
+        !hasActiveSuggestion &&
+        _pendingQuestion == null &&
+        _questionQueue.isEmpty &&
+        _suggestionQueue.isEmpty &&
+        !_gapAuditScheduled &&
+        (!_gapAuditStarted || _gapAuditFinished);
+  }
+
+  Future<void> _persistSession() {
+    final tailoredId = _tailoredResumeId;
+    if (widget.generalReview || tailoredId == null || _result == null) {
+      return Future<void>.value();
+    }
+    final state = _sessionState();
+    _sessionSaveChain = _sessionSaveChain.then((_) async {
+      try {
+        await widget.client.saveTailoredSession(
+          widget.cohortId,
+          widget.resumeId,
+          tailoredId,
+          state,
+        );
+      } catch (_) {
+        // 이력서 적용 자체는 이미 원자 저장됐다. 세션 저장 실패로 적용을
+        // 실패처럼 보이게 하지 않고 다음 사용자 동작에서 다시 저장한다.
+      }
+    });
+    return _sessionSaveChain;
   }
 
   @override
@@ -106,6 +275,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     }
     _answerController.dispose();
     _chatScrollController.dispose();
+    _previewFraction.dispose();
     super.dispose();
   }
 
@@ -212,6 +382,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _result = await widget.client.review(_reviewRequest!);
     _setBusyStage(4);
     _appendReview(_result!, isFirstReview: _messages.isEmpty);
+    await _persistSession();
   }
 
   Future<void> _ensureTailoredResume() async {
@@ -230,8 +401,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       Map<String, dynamic>.from(rawContent),
     );
     _tailoredResumeId = tailoredId;
+    final session = Map<String, dynamic>.from(
+      tailored['review_session'] as Map? ?? const {},
+    );
     if (mounted) {
-      setState(() => _preview = tailoredContent);
+      setState(() {
+        _preview = tailoredContent;
+        _restoreSession(session);
+      });
     } else {
       _preview = tailoredContent;
     }
@@ -408,7 +585,38 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         );
   }
 
+  Set<String> _acceptedQuestionKeys() => {
+    for (final message in _messages)
+      if (message.question != null) _questionKey(message.question!),
+    for (final question in _questionQueue) _questionKey(question),
+    if (_pendingQuestion != null) _questionKey(_pendingQuestion!),
+  };
+
+  void _trimQuestionBacklog() {
+    final accepted = <String>{};
+    for (final message in _messages) {
+      if (message.question != null)
+        accepted.add(_questionKey(message.question!));
+    }
+    if (_pendingQuestion != null) {
+      final key = _questionKey(_pendingQuestion!);
+      if (accepted.length >= _maxReviewQuestions && !accepted.contains(key)) {
+        _pendingQuestion = null;
+      } else {
+        accepted.add(key);
+      }
+    }
+    _questionQueue.removeWhere((question) {
+      final key = _questionKey(question);
+      if (accepted.contains(key)) return true;
+      if (accepted.length >= _maxReviewQuestions) return true;
+      accepted.add(key);
+      return false;
+    });
+  }
+
   void _enqueueQuestions(List<Map> questions) {
+    final acceptedKeys = _acceptedQuestionKeys();
     for (final rawQuestion in questions) {
       final question = Map<String, dynamic>.from(rawQuestion);
       final questionId = question['question_id'] as String?;
@@ -430,10 +638,66 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       } else if (_pendingQuestion != null &&
           _questionKey(_pendingQuestion!) == key) {
         _pendingQuestion = question;
-      } else if (!_hasQuestionKey(key)) {
+      } else if (!_hasQuestionKey(key) &&
+          acceptedKeys.length < _maxReviewQuestions) {
         _questionQueue.add(question);
+        acceptedKeys.add(key);
       }
     }
+  }
+
+  Future<void> _completeReview() async {
+    if (_busy || _result == null) return;
+    final shouldComplete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('첨삭을 완료할까요?'),
+        content: const Text(
+          '현재까지 적용한 내용은 유지됩니다. 남은 질문과 적용하지 않은 수정안은 건너뛰고 첨삭을 완료합니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('계속 첨삭'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('첨삭 완료'),
+          ),
+        ],
+      ),
+    );
+    if (shouldComplete != true || !mounted) return;
+    setState(() {
+      _manuallyCompleted = true;
+      _questionQueue.clear();
+      _pendingQuestion = null;
+      _suggestionQueue.clear();
+      for (final message in _messages) {
+        final questionId = message.question?['question_id'] as String?;
+        if (questionId != null) _answeredQuestionIds.add(questionId);
+        message.suggestion?['_skipped'] = true;
+        message.identitySuggestion?['_skipped'] = true;
+      }
+    });
+    await _run(() async {
+      _mutationPending = true;
+      try {
+        await _persistSession();
+        await _sessionSaveChain;
+        String? workspaceResumeId;
+        if (!widget.generalReview && _tailoredResumeId != null) {
+          workspaceResumeId = await widget.client.promoteTailoredResume(
+            widget.cohortId,
+            widget.resumeId,
+            _tailoredResumeId!,
+          );
+        }
+        if (mounted) Navigator.pop(context, workspaceResumeId);
+      } finally {
+        _mutationPending = false;
+      }
+    }, kind: _ReviewBusyKind.apply);
   }
 
   Map<String, dynamic>? _takeNextQuestion() {
@@ -506,6 +770,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _result = await widget.client.review(request);
         _gapAuditFinished = true;
         _appendReview(_result!, isFirstReview: false, isGapAudit: true);
+        await _persistSession();
       }, kind: _ReviewBusyKind.answer);
     });
   }
@@ -579,6 +844,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           nextSuggestion.suggestion?['field_path'] as String? ??
           nextSuggestion.identitySuggestion?['field_path'] as String?;
       _focusPreviewField(fieldPath);
+      unawaited(_persistSession());
       return;
     }
     if (_pendingQuestion != null) {
@@ -588,9 +854,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _messages.add(_ReviewChatMessage.question(question));
       });
       _focusPreviewField(question['field_path'] as String?);
+      unawaited(_persistSession());
       return;
     }
     _scheduleGapAudit();
+    unawaited(_persistSession());
   }
 
   bool _isIdentityPlaceholderSuggestion(Map<String, dynamic> sentence) {
@@ -678,6 +946,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         isFirstReview: false,
         answeredFieldPath: question['field_path'] as String?,
       );
+      await _persistSession();
     }, kind: _ReviewBusyKind.answer);
   }
 
@@ -749,6 +1018,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           nextSuggestion.suggestion?['field_path'] as String? ??
           nextSuggestion.identitySuggestion?['field_path'] as String?;
       _focusPreviewField(fieldPath);
+      await _persistSession();
       return;
     }
     if (_pendingQuestion != null) {
@@ -758,9 +1028,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _messages.add(_ReviewChatMessage.question(question));
       });
       _focusPreviewField(question['field_path'] as String?);
+      await _persistSession();
       return;
     }
     _scheduleGapAudit();
+    await _persistSession();
   }, kind: _ReviewBusyKind.apply);
 
   Future<void> _undoSuggestion(Map<String, dynamic> item) async {
@@ -811,6 +1083,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           item['_undo_available'] = false;
         });
       }
+      await _persistSession();
     }, kind: _ReviewBusyKind.undo);
   }
 
@@ -890,6 +1163,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                           },
                 generalReview: widget.generalReview,
                 busy: _busy,
+                canComplete: _result != null,
+                onComplete: _completeReview,
                 onClose: () => Navigator.pop(context),
               ),
               const Divider(height: 1),
@@ -936,12 +1211,45 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                         ],
                       );
                     }
-                    return Row(
-                      children: [
-                        Expanded(child: preview),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: chat),
-                      ],
+                    const handleWidth = 14.0;
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _previewFraction,
+                      builder: (_, fraction, _) => Row(
+                        children: [
+                          SizedBox(
+                            width:
+                                (constraints.maxWidth - handleWidth) * fraction,
+                            child: preview,
+                          ),
+                          MouseRegion(
+                            cursor: SystemMouseCursors.resizeColumn,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragUpdate: (details) {
+                                final available =
+                                    constraints.maxWidth - handleWidth;
+                                _previewFraction.value =
+                                    (_previewFraction.value +
+                                            details.delta.dx / available)
+                                        .clamp(0.3, 0.7)
+                                        .toDouble();
+                              },
+                              onDoubleTap: () => _previewFraction.value = 0.5,
+                              child: SizedBox(
+                                width: handleWidth,
+                                child: Center(
+                                  child: Container(
+                                    width: 2,
+                                    height: double.infinity,
+                                    color: AppColors.border,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(child: chat),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -959,19 +1267,28 @@ class _ReviewDialogHeader extends StatelessWidget {
     required this.job,
     required this.generalReview,
     required this.busy,
+    required this.canComplete,
+    required this.onComplete,
     required this.onClose,
   });
 
   final Map? job;
   final bool generalReview;
   final bool busy;
+  final bool canComplete;
+  final VoidCallback onComplete;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final jobLabel = '${job?['company'] ?? ''} ${job?['title'] ?? ''}'.trim();
     return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(12), AppSpace.s(12), AppSpace.s(12)),
+      padding: EdgeInsets.fromLTRB(
+        AppSpace.s(20),
+        AppSpace.s(12),
+        AppSpace.s(12),
+        AppSpace.s(12),
+      ),
       child: Row(
         children: [
           const Icon(Icons.auto_awesome, color: Color(0xFF16A34A), size: 20),
@@ -987,7 +1304,10 @@ class _ReviewDialogHeader extends StatelessWidget {
                 if (generalReview)
                   Text(
                     '문장 표현과 이력서 근거를 검토해 수정안을 제시합니다.',
-                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   )
                 else if (jobLabel.isNotEmpty)
                   Text(
@@ -1002,6 +1322,14 @@ class _ReviewDialogHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (canComplete) ...[
+            SizedBox(width: AppSpace.s(8)),
+            OutlinedButton.icon(
+              onPressed: busy ? null : onComplete,
+              icon: const Icon(Icons.check, size: 16),
+              label: const Text('첨삭 완료'),
+            ),
+          ],
           IconButton(
             tooltip: '닫기',
             onPressed: busy ? null : onClose,
@@ -1289,7 +1617,10 @@ class _CompactItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(11), vertical: AppSpace.s(9)),
+    padding: EdgeInsets.symmetric(
+      horizontal: AppSpace.s(11),
+      vertical: AppSpace.s(9),
+    ),
     decoration: BoxDecoration(
       color: AppColors.tint(const Color(0xFFF8FAFC)),
       border: Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
@@ -1507,7 +1838,10 @@ class _PreviewUpdatedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(3)),
+    padding: EdgeInsets.symmetric(
+      horizontal: AppSpace.s(7),
+      vertical: AppSpace.s(3),
+    ),
     decoration: BoxDecoration(
       color: AppColors.tint(const Color(0xFFDCFCE7)),
       borderRadius: BorderRadius.circular(99),
@@ -1626,7 +1960,10 @@ class _ReviewChatPane extends StatelessWidget {
       children: [
         Container(
           width: double.infinity,
-          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(20), vertical: AppSpace.s(14)),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(20),
+            vertical: AppSpace.s(14),
+          ),
           decoration: BoxDecoration(
             color: AppColors.surface,
             border: Border(
@@ -1913,7 +2250,10 @@ class _CompactBusyCardState extends State<_CompactBusyCard>
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(13)),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(14),
+        vertical: AppSpace.s(13),
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(12),
@@ -2021,7 +2361,9 @@ class _ReviewProgressRow extends StatelessWidget {
         SizedBox(width: AppSpace.s(11)),
         Expanded(
           child: Padding(
-            padding: EdgeInsets.only(bottom: last ? AppSpace.s(0) : AppSpace.s(8)),
+            padding: EdgeInsets.only(
+              bottom: last ? AppSpace.s(0) : AppSpace.s(8),
+            ),
             child: Row(
               children: [
                 Flexible(
@@ -2484,7 +2826,10 @@ class _ReviewChatBubble extends StatelessWidget {
       child: Container(
         margin: EdgeInsets.only(bottom: AppSpace.s(12)),
         constraints: const BoxConstraints(maxWidth: 410),
-        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(10)),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpace.s(12),
+          vertical: AppSpace.s(10),
+        ),
         decoration: BoxDecoration(
           color: isUser ? AppColors.primary : AppColors.surface,
           border: isUser
@@ -2516,7 +2861,10 @@ class _AppliedSuggestionNotice extends StatelessWidget {
     alignment: Alignment.centerLeft,
     child: Container(
       margin: EdgeInsets.only(bottom: AppSpace.s(12)),
-      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(11), vertical: AppSpace.s(8)),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(11),
+        vertical: AppSpace.s(8),
+      ),
       decoration: BoxDecoration(
         color: AppColors.tint(const Color(0xFFF0FDF4)),
         borderRadius: BorderRadius.circular(9),
@@ -2585,4 +2933,28 @@ class _ReviewChatMessage {
   final Map<String, dynamic>? question;
   final Map<String, dynamic>? suggestion;
   final Map<String, dynamic>? identitySuggestion;
+
+  factory _ReviewChatMessage.fromMap(Map<dynamic, dynamic> raw) {
+    final map = Map<String, dynamic>.from(raw);
+    final payload = map['payload'] is Map
+        ? Map<String, dynamic>.from(map['payload'] as Map)
+        : <String, dynamic>{};
+    return switch (map['type']) {
+      'user' => _ReviewChatMessage.user(map['text'] as String? ?? ''),
+      'question' => _ReviewChatMessage.question(payload),
+      'suggestion' => _ReviewChatMessage.suggestion(payload),
+      'identity' => _ReviewChatMessage.identityConfirmation(payload),
+      _ => _ReviewChatMessage.assistant(map['text'] as String? ?? ''),
+    };
+  }
+
+  Map<String, dynamic> toMap() {
+    if (question != null) return {'type': 'question', 'payload': question};
+    if (suggestion != null)
+      return {'type': 'suggestion', 'payload': suggestion};
+    if (identitySuggestion != null) {
+      return {'type': 'identity', 'payload': identitySuggestion};
+    }
+    return {'type': isUser ? 'user' : 'assistant', 'text': text};
+  }
 }

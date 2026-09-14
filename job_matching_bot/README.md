@@ -166,6 +166,14 @@ python -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1
 python -m uvicorn job_matching_bot.api.main:app --host 127.0.0.1 --port 8000   # 추천봇만
 ```
 
+통합 백엔드를 로컬에서 켤 때는 아래 스크립트를 쓰면 Firebase Storage의 공유 공고 DB가
+새 generation인지 확인하고, 새 파일만 무결성 검사 후 교체한 다음 서버를 시작한다.
+크롤링·임베딩·Pinecone 적재는 실행하지 않는다.
+
+```powershell
+.\scripts\start-backend.ps1
+```
+
 ```
 GET  /health                        인덱스 이름, 벡터 수, LLM 설정 여부
 POST /api/v1/resume/profile         이력서 구조화. 앱이 저장할 때 미리 받아 두면 추천에서 건너뛴다
