@@ -813,6 +813,73 @@
           }
         }
       ]
+    },
+    {
+      "id": "question-new-topic-drops-previous",
+      "note": "새 주제로 묻는 질문에 앞 검색의 서울·대기업·신입이 붙어 24건짜리 표로 답했다",
+      "turns": [
+        {
+          "message": "대기업 IT 신입",
+          "expect": {
+            "intent": "검색"
+          }
+        },
+        {
+          "message": "서울만",
+          "expect": {
+            "intent": "검색",
+            "filters": {
+              "regions": [
+                "서울"
+              ]
+            }
+          }
+        },
+        {
+          "message": "데이터 분석가 되려면 뭐 준비해야 해?",
+          "expect": {
+            "intent": "질문",
+            "mode": "질문",
+            "filters": {
+              "roles": [
+                "데이터분석"
+              ]
+            },
+            "empty_fields": [
+              "regions",
+              "keywords",
+              "career"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "question-about-shown-list-keeps",
+      "note": "'그중에'는 앞 목록을 가리킨다. 이때는 조건을 이어받는다",
+      "turns": [
+        {
+          "message": "서울 백엔드 신입 찾아줘",
+          "expect": {
+            "intent": "검색"
+          }
+        },
+        {
+          "message": "그중에 파이썬 요구하는 데 많아?",
+          "expect": {
+            "intent": "질문",
+            "filters": {
+              "roles": [
+                "백엔드"
+              ],
+              "regions": [
+                "서울"
+              ],
+              "career": "신입"
+            }
+          }
+        }
+      ]
     }
   ]
 }

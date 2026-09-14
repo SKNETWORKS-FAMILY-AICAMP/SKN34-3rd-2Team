@@ -234,6 +234,17 @@ def check(expect: dict, sent: dict, got: dict, elapsed: float) -> list[tuple[str
         empty = empty and filters.get("career", "무관") == "무관"
         add("조건 비우기", empty, f"비어야 함 ↔ {filters}")
 
+    if expect.get("empty_fields"):
+        # 이어받으면 안 되는 칸. 새 주제로 묻는 질문에 앞 대화의 지역·키워드가 붙었었다.
+        def filled(field: str) -> bool:
+            value = filters.get(field)
+            if field == "career":
+                return (value or "무관") != "무관"
+            return bool(_listy(value))
+
+        stale = {f: filters.get(f) for f in expect["empty_fields"] if filled(f)}
+        add("이어받지 않을 조건", not stale, f"비어야 함 ↔ {stale}")
+
     if expect.get("deadline_set"):
         add("마감 조건", filters.get("deadline_within_days") is not None,
             f"숫자여야 함 ↔ {filters.get('deadline_within_days')}")
@@ -284,7 +295,7 @@ HTTP_KEYS = frozenset({
     "mode", "mode_not", "filters", "roles_not", "filters_empty",
     "deadline_set", "picked_rank", "resume_scope", "polite", "rules",
     "career_years", "career_years_unset", "new_jobs",
-    "posted_within_days", "posted_unset",
+    "posted_within_days", "posted_unset", "empty_fields",
 })
 # 응답에 안 나오는 것. `check_router`가 본다.
 ROUTER_KEYS = frozenset({
