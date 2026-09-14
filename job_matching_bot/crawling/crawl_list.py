@@ -45,7 +45,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from job_matching_bot.ingestion.company_name import clean_company_name
+from job_matching_bot.ingestion.company_name import clean_company_name, clean_listing_text
 from job_matching_bot.crawling.http_session import (
     LIST_PAGE_URL,
     BlockedByTargetSiteError,
@@ -121,7 +121,7 @@ def parse_item(item: Any) -> dict[str, Any]:
         # 회사명은 링크 텍스트만 쓴다. div.company_nm 전체를 읽으면 "관심기업 등록"
         # 버튼과 그룹명·기업형태 뱃지가 딸려 온다(목록 11,882건 중 672건에서 확인).
         "company": _company_name(item),
-        "title": link.get("title", "").strip() if link else "",
+        "title": clean_listing_text(link.get("title", "")) if link else "",
         # 사람인이 붙여 둔 직무 분류. 기술 키워드 추출의 좋은 입력이다.
         "job_sectors": [
             span.get_text(strip=True)

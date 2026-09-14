@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import html
+
 # 칸에 섞여 오는 버튼 글자. 어디에 있든 지운다.
 UI_TEXT = ("관심기업 등록", "관심기업", "스크랩", "지원하기", "즉시지원")
 
@@ -33,8 +35,28 @@ LEGAL_FORMS = frozenset({
 })
 
 
+def clean_listing_text(text: str) -> str:
+    """목록에서 온 글자(제목·회사명)의 HTML 기호를 푼다.
+
+    사람인이 제목 속성에 `&`를 한 번 더 감싸 넣어서, HTML을 읽고 나서도 `안드로이드&amp;ios`로
+    남는다. 게시 중 공고 1,840건, 목록 2,892건의 제목이 이랬고 챗봇 카드에 그대로 나갔다.
+    두 번 감싼 것도 있어 바뀌지 않을 때까지 푼다.
+
+    띄어쓰기는 건드리지 않는다. 제목이 바뀌면 인덱스 지문이 바뀌어 다시 올리게 되는데,
+    기호가 없는 제목까지 바꿀 이유가 없다.
+    """
+    text = text or ""
+    for _ in range(3):
+        unescaped = html.unescape(text)
+        if unescaped == text:
+            break
+        text = unescaped
+    return text.strip()
+
+
 def clean_company_name(text: str) -> str:
     """회사명 칸의 글자에서 버튼·뱃지를 뗀다. 이미 깨끗하면 그대로 돌려준다."""
+    text = clean_listing_text(text)
     for noise in UI_TEXT:
         text = text.replace(noise, " ")
     tokens = text.split()

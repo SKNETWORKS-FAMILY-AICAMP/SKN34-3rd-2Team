@@ -38,7 +38,7 @@ from job_matching_bot.ingestion.job_store import (
     keep_listing_fields,
     resolve_status,
 )
-from job_matching_bot.ingestion.company_name import clean_company_name
+from job_matching_bot.ingestion.company_name import clean_company_name, clean_listing_text
 from job_matching_bot.ingestion.detail_quality import has_requirement_text
 from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
 from job_matching_bot.schemas.job_posting import Job
@@ -661,7 +661,7 @@ class SqliteJobStore:
                 f"SARAMIN-{job_id}",
                 str(record.get("source_url") or ""),
                 clean_company_name(str(record.get("company") or "")),
-                str(record.get("title") or ""),
+                clean_listing_text(str(record.get("title") or "")),
                 json.dumps(list(record.get("job_sectors") or []), ensure_ascii=False),
                 cond["region"],
                 cond["career_type"],

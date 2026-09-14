@@ -2,7 +2,7 @@
 
 import unittest
 
-from job_matching_bot.ingestion.company_name import clean_company_name
+from job_matching_bot.ingestion.company_name import clean_company_name, clean_listing_text
 
 
 class CleanCompanyNameTest(unittest.TestCase):
@@ -24,6 +24,13 @@ class CleanCompanyNameTest(unittest.TestCase):
         for name in ("(주)크루컴퍼니", "메리티움(주)", "주식회사브이링크글로벌(VLINKGLOBALCo.,Ltd.)", "대기업"):
             with self.subTest(name):
                 self.assertEqual(name, clean_company_name(name))
+
+
+class CleanListingTextTest(unittest.TestCase):
+    def test_html_entities_in_titles_are_decoded(self):
+        self.assertEqual("안드로이드&ios 개발자", clean_listing_text("안드로이드&amp;ios 개발자"))
+        self.assertEqual("R&D", clean_listing_text("R&amp;amp;D"), "두 번 감싼 것도 푼다")
+        self.assertEqual("[코레이즈]  Python", clean_listing_text("[코레이즈]  Python"), "띄어쓰기는 그대로")
 
 
 if __name__ == "__main__":
