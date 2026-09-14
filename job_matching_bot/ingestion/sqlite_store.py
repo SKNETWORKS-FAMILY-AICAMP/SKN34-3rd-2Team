@@ -258,6 +258,11 @@ class SqliteJobStore:
     # ── 읽기 ──────────────────────────────────────────────────
     def _row_to_record(self, row: sqlite3.Row) -> JobRecord:
         job_fields = {name: _decode(name, row[name]) for name in JOB_FIELDS}
+        # 구 사람인 수집본에 저장된 UI 버튼 문구도 읽는 즉시 보정한다.
+        if str(job_fields.get("source", "")).startswith("SARAMIN"):
+            from job_matching_bot.ingestion.company_name import clean_company_name
+
+            job_fields["company"] = clean_company_name(job_fields.get("company"))
         # 구 버전은 상세 영역 안의 보조 이미지가 하나라도 있으면 image 플래그를
         # 남겼다. 실제 요구사항 텍스트가 저장돼 있으면 텍스트 공고로 복구한다.
         # 옛 행을 위해 읽을 때도 한 번 더 적용한다 — 쓰는 쪽과 같은 규칙이다.

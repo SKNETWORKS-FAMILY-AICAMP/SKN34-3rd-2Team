@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from job_matching_bot.config import AS_OF
+from job_matching_bot.ingestion.company_name import clean_company_name
 from job_matching_bot.ingestion.detail_quality import is_image_only_detail
 from job_matching_bot.ingestion.saramin_tech_vocab import split_tags
 from job_matching_bot.schemas.job_posting import Job
@@ -265,7 +266,7 @@ def normalize_saramin(
         source=SOURCE,
         source_job_id=source_job_id,
         source_url=str(record.get("source_url") or listing.get("source_url") or ""),
-        company=str(listing.get("company") or ""),
+        company=clean_company_name(listing.get("company")),
         company_type=_clean(company_info.get("기업형태", "")) or "미기재",
         title=str(listing.get("title") or ""),
         description=description,

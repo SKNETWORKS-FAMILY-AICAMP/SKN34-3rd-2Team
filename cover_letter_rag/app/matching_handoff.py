@@ -4,6 +4,7 @@ from datetime import datetime, time, timezone, timedelta
 from pathlib import Path
 
 from job_matching_bot.ingestion.detail_quality import is_image_only_detail
+from job_matching_bot.ingestion.company_name import clean_company_name
 
 from app.review_workflow import ReviewConflict, ReviewInputError, digest, job_role_title
 
@@ -29,6 +30,7 @@ def load_selected_job(path: Path, job_id: str) -> dict:
     if row is None:
         raise ReviewInputError('selected_job_not_found')
     record = dict(row)
+    record['company'] = clean_company_name(record.get('company'))
     if record.get('status') != 'OPEN':
         raise ReviewConflict('selected_job_closed')
     deadline = record.get('deadline')
