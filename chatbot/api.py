@@ -101,6 +101,17 @@ def get_student_chatbot() -> LmsStudentChatbot:
     return create_student_chatbot(student_context_loader=loader)
 
 
+def _ready_chatbot() -> LmsStudentChatbot:
+    try:
+        return get_student_chatbot()
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="챗봇 서버를 준비하지 못했습니다.") from exc
+
+
 def _chat_inputs(request: InitRequest, session: dict[str, Any]) -> dict[str, Any]:
     uid_key = hashlib.sha256(session["uid"].encode()).hexdigest()[:24]
     return {
@@ -115,7 +126,7 @@ def initialize_chatbot(
     request: InitRequest,
     session: dict[str, Any] = Depends(_student_session),
 ) -> dict[str, Any]:
-    get_student_chatbot()
+    _ready_chatbot()
     inputs = _chat_inputs(request, session)
     return {
         "thread_id": request.thread_id,
@@ -141,7 +152,7 @@ def stream_chat(
     inputs = _chat_inputs(request, session)
     inputs["question"] = request.question.strip()
     return StreamingResponse(
-        _ndjson(get_student_chatbot().stream(inputs)),
+        _ndjson(_ready_chatbot().stream(inputs)),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
