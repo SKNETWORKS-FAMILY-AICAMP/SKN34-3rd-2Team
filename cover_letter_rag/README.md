@@ -91,7 +91,7 @@ flowchart LR
   "cohort_id": "cohort_34",
   "resume_id": "resume-id",
   "tailored_resume_id": "tailored_...",
-  "selected_job_id": "SARAMIN-12345678",
+  "selected_job_id": "<공고 ID>",
   "expected_job_hash": "review-context에서 받은 스냅샷 해시",
   "request_id": "review-001"
 }
@@ -205,14 +205,14 @@ pytest
 ```powershell
 cd cover_letter_rag
 python -m scripts.index_jobs                               # data/jobs 정적 샘플 → 청킹 → 임베딩 → 저장
-python -m scripts.index_saramin_jsonl --validate-only      # 크롤링 JSONL 중복 제거·품질 분류·청킹만(비용 없음)
-python -m scripts.index_saramin_jsonl                      # 실제 임베딩·적재
 ```
+
+크롤링 JSONL은 `scripts/`의 JSONL 인덱싱 스크립트로 넣는다. `--validate-only`를 붙이면 중복 제거·품질 분류·청킹까지만 하고 비용이 들지 않는다.
 
 - 같은 `job_id`를 다시 넣으면 기존 벡터를 지운 뒤 넣어 오래된 청크가 섞이지 않는다.
 - 기존 인덱스의 차원·metric이 다르면 멈춘다.
 - `VECTOR_STORE_PROVIDER=chroma`로 바꾸면 비용 없이 로컬 Chroma(`chroma_db/`)로 시험할 수 있다.
-- `data/jobs/`의 샘플 공고는 사람인 API 응답 형식을 검증하려고 만든 가짜 데이터다.
+- `data/jobs/`의 샘플 공고는 채용 사이트 API 응답 형식을 검증하려고 만든 가짜 데이터다.
 
 ## 파일
 

@@ -30,8 +30,8 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 | 기능 | 무엇을 | 근거 데이터 | 코드 · 문서 |
 |---|---|---|---|
 | **① 학생 LMS 챗봇** | "지각 3번이면 결석인가요?", "34기 최종 프로젝트 뭐 있었어요?", "이번 달 출석률 80% 넘었나요?" | 정책·FAQ, 기수 공지, 전 기수 프로젝트(Pinecone) + 본인 LMS 데이터(Firestore) | [chatbot/](chatbot/README.md) |
-| **② 맞춤 채용공고 추천** | 이력서를 읽고 맞는 공고 6건을 적합도·근거 인용·우려와 함께 | 사람인 공고(Pinecone + SQLite) | [job_matching_bot/](job_matching_bot/README.md) |
-| **③ 공고 찾기 챗봇** | "서울 백엔드 신입", "이거 말고 다른 거" 같은 대화로 공고 검색 | 사람인 공고(SQLite 조건 검색 + Pinecone 뜻 검색) | [job_matching_bot/docs/chatbot.md](job_matching_bot/docs/chatbot.md) |
+| **② 맞춤 채용공고 추천** | 이력서를 읽고 맞는 공고 6건을 적합도·근거 인용·우려와 함께 | 채용공고(Pinecone + SQLite) | [job_matching_bot/](job_matching_bot/README.md) |
+| **③ 공고 찾기 챗봇** | "서울 백엔드 신입", "이거 말고 다른 거" 같은 대화로 공고 검색 | 채용공고(SQLite 조건 검색 + Pinecone 뜻 검색) | [job_matching_bot/docs/chatbot.md](job_matching_bot/docs/chatbot.md) |
 | **④ 공고 맞춤 이력서 첨삭** | 고른 공고 원문 기준으로 문장별 수정안 → 골라서 적용 · 되돌리기 | 공고 원문 + Firestore 이력서 | [cover_letter_rag/](cover_letter_rag/README.md) |
 | 공부방 AI 수업 노트 | 수업 GitHub 저장소를 읽어 노트·복습 문제 생성 | 수업 저장소(.ipynb·.py·.md) | [study_notes/](study_notes/README.md) |
 | LMS 앱 | 학생·강사·관리자 화면(이력서, 기록실, 출석, 좌석, 성취도평가, 마일리지 …) | Firebase | [lib/](lib/README.md), [functions/](functions/README.md) |
@@ -75,7 +75,7 @@ flowchart LR
 
   SQL[("job_store.sqlite<br>공고 원문")]
   OAI(["OpenAI<br>임베딩 · LLM"])
-  NIGHT["야간 배치<br>사람인 수집 → 정제 → 증분 임베딩"]
+  NIGHT["야간 배치<br>공고 수집 → 정제 → 증분 임베딩"]
 
   S --> CB & JM & RV & SN
   S & T --> AU
@@ -108,7 +108,7 @@ flowchart LR
 | `student` / `policy` | 훈련 정책·FAQ·가이드(md·csv·pdf·Notion) | 제목 단위 → 500자·40자 겹침, FAQ는 문답 단위 | — | `vectordb/policy_ingestion.py` | ① |
 | `student` / `notice` | 기수 공지 | 500자·40자 겹침 | `cohort` = 학생 기수 (서버가 고정) | Functions 트리거, 공지 저장 즉시 | ① |
 | `student` / `project_reference` | 전 기수 단위·최종 프로젝트 | 프로젝트 1건 = 문서 1건 | `cohort`, `project_round` | `vectordb/project_reference_ingestion.py` | ① |
-| `job-posting` | 사람인 공고의 **요건 구간**(주요업무·자격요건·우대사항) | 안 함(중앙값 약 500자) | `status=OPEN`, 지역, 고용형태, 연차 | `job_matching_bot/sync.py` 야간 증분 | ②③ |
+| `job-posting` | 채용공고의 **요건 구간**(주요업무·자격요건·우대사항) | 안 함(중앙값 약 500자) | `status=OPEN`, 지역, 고용형태, 연차 | `job_matching_bot/sync.py` 야간 증분 | ②③ |
 
 임베딩은 모두 OpenAI `text-embedding-3-small`(1536차원, cosine)이다.
 
@@ -127,7 +127,7 @@ flowchart LR
 |---|---|
 | 요청마다 인덱싱하지 않기 | 적재는 별도 CLI·야간 배치·Functions 트리거에서만 |
 | 변경분만 증분 인덱싱 | 공고는 내용 지문(`embed_hash`)이 바뀐 것만 임베딩(09-13: 대상 23,627건 중 2,415건만). 공지는 작성·수정·삭제된 공지만 트리거로 반영 |
-| 문서 고유 ID | 공고 `SARAMIN-<번호>`, 정책 `{유형}_{순번}`, 공지 `{기수}_{순번}`, 프로젝트 `{기수}_{차수}_{순번}` |
+| 문서 고유 ID | 공고 `<출처>-<공고번호>`, 정책 `{유형}_{순번}`, 공지 `{기수}_{순번}`, 프로젝트 `{기수}_{차수}_{순번}` |
 | 메타데이터로 검색 범위 제한 | 공지는 기수, 프로젝트는 기수·차수, 공고는 상태·지역·고용형태·연차 |
 | 서버 시작 시 객체 재사용 | 챗봇·추천·첨삭 서비스 객체와 Pinecone 클라이언트를 처음 한 번만 만들어 재사용 |
 | top-k 조절 | 챗봇 기본 4(여러 namespace면 8, 질문에 개수가 있으면 그 수), 추천 25 → 필터 → 재정렬 12 → 표시 6 |
@@ -177,7 +177,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 | 데이터 | 출처 · 규모 | 전처리 | 문서 |
 |---|---|---|---|
-| 채용공고 | 사람인 공개 페이지. 저장소 38,226건, 벡터 23,627건 (2026-09-13) | 유효성 검사 → 중복 제거 → 최신 레코드 → 필드 정규화 → 요건 구간 분리 → 전공·자격증 추출 → 품질·상태 판정 → 지문 대조 → 임베딩 | [data_preprocessing.md](job_matching_bot/docs/data_preprocessing.md), [crawling/README.md](job_matching_bot/crawling/README.md) |
+| 채용공고 | 국내 채용 사이트 공개 페이지. 저장소 38,226건, 벡터 23,627건 (2026-09-13) | 유효성 검사 → 중복 제거 → 최신 레코드 → 필드 정규화 → 요건 구간 분리 → 전공·자격증 추출 → 품질·상태 판정 → 지문 대조 → 임베딩 | [data_preprocessing.md](job_matching_bot/docs/data_preprocessing.md), [crawling/README.md](job_matching_bot/crawling/README.md) |
 | 훈련 정책·FAQ | 플레이데이터 안내 문서 md 5·csv 2·OT pdf 1, Notion 5페이지 | 잡음(개인 후기) 제거 → 정규화 → 제목 단위 분리 → LLM 유형 분류 → 청킹. OT PDF는 이미지 기준 LLM 추출 | [vectordb/](vectordb/README.md#1-정책faq-policy) |
 | 전 기수 프로젝트 | 프로젝트 레퍼런스 공유 CSV | 빈 행 제외 → 차수·팀·GitHub 주소 정규화 → 프로젝트당 문서 1건 | [vectordb/](vectordb/README.md#2-전-기수-프로젝트-레퍼런스-project_reference) |
 | 기수 공지 | LMS Firestore | 정규화 → 청킹 → 기수 메타데이터 | [vectordb/](vectordb/README.md#3-공지-notice--자동-동기화) |

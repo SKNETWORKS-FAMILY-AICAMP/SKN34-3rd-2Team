@@ -46,7 +46,7 @@ flowchart LR
 
 | 구성 요소 | 기술 | 역할 |
 |---|---|---|
-| 수집기 | requests + BeautifulSoup | 사람인 목록·상세 수집, 차단 신호 시 즉시 종료 |
+| 수집기 | requests + BeautifulSoup | 채용 사이트 목록·상세 수집, 차단 신호 시 즉시 종료 |
 | 저장소 | SQLite | 공고 원문 전체, 관측 기록, 인덱싱 지문. 첨삭 모듈이 원문을 여기서 읽는다 |
 | 벡터 DB | Pinecone serverless (aws us-east-1) | 요건 구간 임베딩 + 필터 메타데이터 |
 | 임베딩 | OpenAI `text-embedding-3-small` (LangChain `OpenAIEmbeddings`) | 1536차원, cosine |
@@ -170,7 +170,7 @@ LangChain `ChatPromptTemplate`으로 만들고 구조화 출력 스키마를 강
 |---|---|
 | 요청마다 인덱싱하지 않기 | 인덱싱은 야간 배치(`sync.py`)에서만. 요청은 검색 + 판정만 |
 | 변경분만 증분 인덱싱 | `embed_hash` ≠ `indexed_embed_hash`인 공고만 임베딩 |
-| 문서 고유 ID | `job_id`(`SARAMIN-<rec_idx>`)를 벡터 ID로 고정 |
+| 문서 고유 ID | `job_id`(`<출처>-<공고번호>`)를 벡터 ID로 고정 |
 | 메타데이터로 검색 범위 제한 | `status`·지역·고용형태·연차를 벡터 검색과 동시에 필터 |
 | 청킹 | 하지 않음. 요건 구간만 넣어 문서 중앙값 500자 안팎([이유](data_preprocessing.md#5-설계-판단)) |
 | 재시작해도 유지 | Pinecone serverless + SQLite 파일 |

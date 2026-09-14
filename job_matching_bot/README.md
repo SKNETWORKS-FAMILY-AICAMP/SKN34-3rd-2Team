@@ -140,7 +140,7 @@ pip install -r requirements.txt       # 레포 루트. 수집·적재·API·통�
 python -m unittest discover -s job_matching_bot/tests -t .
 ```
 
-2026-09-15 수집본이 없는 체크아웃 기준 670개 실행, 통과(건너뜀 8개). 건너뛴 8개는 실제 사람인 수집본
+2026-09-15 수집본이 없는 체크아웃 기준 670개 실행, 통과(건너뜀 8개). 건너뛴 8개는 실제 공고 수집본
 (`artifacts/`)이 있어야 도는 테스트다. 평가 도구(규칙 결함 검사·사람 채점·챗봇 대조)는 추천 API를 실제로 부르므로
 [docs/test_report.md](docs/test_report.md) 2장의 명령으로 따로 돌린다.
 

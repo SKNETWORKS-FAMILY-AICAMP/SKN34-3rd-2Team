@@ -11,7 +11,7 @@ flowchart LR
   subgraph NIGHT["밤 · 작업 스케줄러 23:00"]
     CR["crawling/<br>nightly · crawl_list · crawl_detail<br>detail_queue · http_session"]
     SY["sync.py → ingest.py"]
-    IN["ingestion/<br>saramin · requirement_sections<br>qualifications · sqlite_store"]
+    IN["ingestion/<br>출처 파서 · requirement_sections<br>qualifications · sqlite_store"]
     CO["coach/<br>skill_source<br>(LLM 추출은 기본 꺼짐)"]
     UP["retrieval/<br>upsert · documents · dedup"]
     SH["sharing/<br>share_store"]
@@ -101,13 +101,13 @@ evaluation/ · exporters/ · sharing/         도구
 
 | 파일 | 줄 | 하는 일 | 쓰는 곳 |
 |---|---:|---|---|
-| `saramin.py` | 344 | 상세 원본 → `Job`. 경력·학력·고용형태·마감 해석, 기술 태그 분리, **메타가 경력무관인데 요건이 경력을 요구하면 경력직으로** | `ingest` |
-| `requirement_sections.py` | 141 | 본문을 제목으로 잘라 자격요건·우대사항·주요업무 구간 | `saramin`, `coach`, `pre_ranker`, `documents`, 평가 |
-| `qualifications.py` | 245 | 요건 구간에서 전공·자격증·병역·최소 연차 | `saramin`, `pre_ranker` |
-| `saramin_tech_vocab.py` | 163 | 직무 코드표로 태그를 기술/키워드로 가르기, **글에서 기술 찾기** | `saramin`, `pre_ranker`, `store_search` |
+| 출처 파서 | 344 | 상세 원본 → `Job`. 경력·학력·고용형태·마감 해석, 기술 태그 분리, **메타가 경력무관인데 요건이 경력을 요구하면 경력직으로** | `ingest` |
+| `requirement_sections.py` | 141 | 본문을 제목으로 잘라 자격요건·우대사항·주요업무 구간 | 출처 파서, `coach`, `pre_ranker`, `documents`, 평가 |
+| `qualifications.py` | 245 | 요건 구간에서 전공·자격증·병역·최소 연차 | 출처 파서, `pre_ranker` |
+| 기술 어휘 모듈 | 163 | 직무 코드표로 태그를 기술/키워드로 가르기, **글에서 기술 찾기** | 출처 파서, `pre_ranker`, `store_search` |
 | `skill_extractor.py` | 121 | 손으로 만든 기술 사전 매칭(구간 규칙 추출이 쓴다) | `coach/skill_source`, 평가 |
 | `listing_conditions.py` | 171 | 목록 한 줄의 조건 글 → 지역·경력·고용형태·학력·마감 | `sqlite_store` |
-| `detail_quality.py` | 34 | 본문이 이미지뿐인지, 요건 문장이 있는지 | `crawl_detail`, `saramin`, `sqlite_store`, 첨삭 모듈 |
+| `detail_quality.py` | 34 | 본문이 이미지뿐인지, 요건 문장이 있는지 | `crawl_detail`, 출처 파서, `sqlite_store`, 첨삭 모듈 |
 | `excluded_roles.py` | 49 | 추천에서 뺄 직종(배달·운전 등) | `detail_queue` |
 | `sqlite_store.py` | 803 | **저장소.** `jobs`·`job_tags`·`runs`·`list_seen`·`list_jobs`·`list_sweeps`·`link_checks` 표, 상태 전이, 컬럼 이관 | `job_store`, `service`, `liveness`, 평가 |
 | `job_store.py` | 169 | 저장소 판정 규칙(content_hash upsert, 상태 전이)과 SQLite 저장소 열기(`open_store`, `.sqlite`/`.db`만) | 적재·인덱스 쪽 전부 |
@@ -164,7 +164,7 @@ evaluation/ · exporters/ · sharing/         도구
 |---|---:|---|---|
 | `hard_filter.py` | 178 | 경력·학력·지역(전국 근무)·고용형태·전공·자격증 → PASS / CHECK_REQUIRED / FAIL | `service`, `store_search`(연차 경계) |
 | `pre_ranker.py` | 167 | 벡터 순위 50% + 기술 겹침 50%, 우대 자격증·전공 가산 → LLM에 보낼 12건 | `service` |
-| `skill_normalize.py` | 58 | 기술명 표준키(ReactJS = React) | `pre_ranker`, `store_search`, `saramin_tech_vocab` |
+| `skill_normalize.py` | 58 | 기술명 표준키(ReactJS = React) | `pre_ranker`, `store_search`, 기술 어휘 모듈 |
 
 ### api/ — 서버
 
@@ -222,7 +222,7 @@ evaluation/ · exporters/ · sharing/         도구
 
 | 무엇 | 상태 |
 |---|---|
-| 파일 이름 `saramin*` | 한 사이트 전용 코드가 이름에 드러난다. 소스를 늘릴 때 나눈다 |
+| 출처 파서·기술 어휘 모듈의 파일 이름 | 한 사이트 전용 코드가 이름에 드러난다. 소스를 늘릴 때 나눈다 |
 
 정리한 것:
 
