@@ -264,9 +264,9 @@ def _dedupe(terms: list[str]) -> list[str]:
     return seen
 
 
-def _role_terms(filters: JobFilters) -> list[str]:
-    """직무·기술 말. 이 중 하나만 맞아도 된다."""
-    return _dedupe([*filters.roles, *filters.skills])
+# 말을 찾는 칸. 직무를 기술과 함께 말했을 때는 본문을 보지 않는다(아래 `conditions`).
+_ALL_COLUMNS = ("title", "keywords", "tech_stack", "description")
+_ROLE_COLUMNS = ("title", "keywords", "tech_stack")
 
 
 def _terms(filters: JobFilters) -> list[str]:
@@ -277,8 +277,15 @@ def _terms(filters: JobFilters) -> list[str]:
 def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[object]]:
     """조건을 WHERE 절과 값으로. 검색(`search`)과 집계(`market_stats`)가 같이 쓴다.
 
-    조건이 여럿이면 **모두 만족**해야 한다. 직무·기술 말은 그중 하나만 맞아도 된다 —
-    "백엔드 파이썬"이라고 하면 둘 다 적힌 공고만 남기는 것보다 하나라도 걸리는 편이 낫다.
+    조건이 여럿이면 **모두 만족**해야 한다. 같은 갈래의 말끼리는 하나만 맞아도 된다
+    ("백엔드나 프론트엔드", "Python이나 Go").
+
+    **직무와 기술을 함께 말하면 둘 다 맞아야 한다.** 예전에는 직무·기술을 한 묶음 OR로 걸었다.
+    "파이썬 쓰는 서울 신입 프론트엔드"가 Python만 적힌 백엔드·AI 공고까지 480건 걸려서
+    "프론트엔드 공고"라며 프론트엔드가 아닌 공고를 보여 줬다. 둘 다 맞게 하면 53건이다.
+    이때 직무는 **제목·직무 태그·기술 태그**에서만 찾는다. 본문의 "프론트엔드와 협업"은 그 일을
+    뽑는 공고라는 뜻이 아니라서, 본문까지 보면 Python 백엔드 공고가 다시 섞인다(53 → 41건).
+    직무만 말했을 때는 예전처럼 본문도 본다 — 좁힐 다른 말이 없으니 놓치지 않는 쪽이 낫다.
 
     **키워드(재택·공기업·비전공자 …)는 직무·기술과 따로 묶어 함께 만족해야 한다.** 예전에는
     한 묶음으로 OR였다. "재택 가능한 QA"가 QA 공고 전부에 "재택"이 스친 공고까지 3,000건
@@ -323,15 +330,20 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
         where.append("deadline IS NOT NULL AND substr(deadline, 1, 10) <= ?")
         params.append(until)
 
-    # 직무·기술은 제목·분류 태그·기술 태그·본문 어디에 있어도 맞은 것으로 본다.
-    # 직무·기술 묶음과 키워드 묶음을 따로 걸어 둘 다 만족하게 한다(위 설명).
-    for group in (_role_terms(filters), _dedupe(filters.keywords)):
+    # 직무 묶음·기술 묶음·키워드 묶음을 따로 걸어 모두 만족하게 한다(위 설명).
+    roles, skills = _dedupe(filters.roles), _dedupe(filters.skills)
+    groups = [
+        (roles, _ROLE_COLUMNS if skills else _ALL_COLUMNS),
+        (skills, _ALL_COLUMNS),
+        (_dedupe(filters.keywords), _ALL_COLUMNS),
+    ]
+    for group, columns in groups:
         if not group:
             continue
         clauses = []
         for term in group:
             parts = []
-            for column in ("title", "keywords", "tech_stack", "description"):
+            for column in columns:
                 sql, values = _match(column, term)
                 parts.append(sql)
                 params.extend(values)
@@ -361,6 +373,11 @@ def search(
     # 공고가 온갖 직무 말을 다 담고 있어서 무엇을 물어도 같은 공고가 올라온다.
     # 제목에 있으면 그 일을 뽑는 공고이고, 태그에 있으면 기업이 그렇게 분류한 것이다.
     terms = _terms(filters)
+    # 직무와 기술을 함께 말했으면 **직무가 어디 있나**로 가른다. 둘 다 맞는 공고만 남았으니
+    # 기술이 제목에 있는 "Python (Flask) 웹 개발자"보다 제목이 "프론트엔드 개발자"인 공고가
+    # 물어본 일에 가깝다.
+    if filters.roles and filters.skills:
+        terms = _dedupe([*filters.roles, *filters.keywords])
     relevance = "0"
     # CASE 식이 SELECT에 들어가므로 그 물음표 값을 따로 모은다. 제목 먼저, 그다음 태그 둘씩.
     case_params: list[object] = []

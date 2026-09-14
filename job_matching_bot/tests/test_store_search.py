@@ -119,6 +119,30 @@ class StoreSearchTest(unittest.TestCase):
         result = self.find(roles=["백엔드", "프론트엔드"])
         self.assertEqual({"A", "B"}, {job.job_id for job in result.jobs})
 
+    def test_role_and_skill_together_must_both_match(self):
+        """'파이썬 쓰는 프론트엔드'에 Python 백엔드 공고가 나가면 안 된다.
+
+        예전에는 직무·기술을 하나라도 맞으면 걸어서, Python만 적힌 공고가 프론트엔드 공고로 나갔다.
+        """
+        with SqliteJobStore(self.path) as store:
+            store.upsert(self.jobs + [replace(
+                self.jobs[1], job_id="E", source_job_id="E", title="프론트엔드 개발자 (Python 도구)",
+                tech_stack=["React", "Python"], region="서울 강남구",
+            )], source="MOCK")
+        found = {job.job_id for job in self.find(roles=["프론트엔드"], skills=["Python"]).jobs}
+        self.assertEqual({"E"}, found, "Python만 있는 A, 프론트엔드만 있는 B는 빠진다")
+
+    def test_a_role_only_in_the_body_does_not_count_when_a_skill_is_given(self):
+        """본문의 '프론트엔드와 협업'은 프론트엔드를 뽑는 공고가 아니다."""
+        with SqliteJobStore(self.path) as store:
+            store.upsert(self.jobs + [replace(
+                self.jobs[0], job_id="F", source_job_id="F", title="백엔드 개발자",
+                description="Python API를 만들고 프론트엔드와 협업합니다",
+            )], source="MOCK")
+        self.assertEqual([], self.find(roles=["프론트엔드"], skills=["Python"]).jobs)
+        # 직무만 말했을 때는 예전처럼 본문도 본다.
+        self.assertIn("F", {job.job_id for job in self.find(roles=["프론트엔드"]).jobs})
+
     def test_region_narrows(self):
         self.assertEqual({"A", "C"}, {job.job_id for job in self.find(regions=["서울"]).jobs})
 
