@@ -19,8 +19,10 @@ import '../../../core/theme/app_space.dart';
 
 const _kResumeContentMaxWidth = 1100.0;
 
-/// 이 폭보다 좁으면 표 대신 두 줄짜리 목록으로 보여 준다.
-const _kTableMinWidth = 720.0;
+/// 이 폭보다 좁으면 표 대신 두 줄짜리 목록으로 보여 준다. 칸 수가 달라 기준도 다르다.
+/// 강사 표는 일곱 칸이라, 창을 반쯤 줄인 폭(780 안팎)에서 칸이 겹쳐 넘쳤다.
+const _kStudentTableMinWidth = 760.0;
+const _kReviewTableMinWidth = 960.0;
 
 /// 이력서 관리 — 목록 + 작성 페이지 이동
 ///
@@ -185,7 +187,18 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
               ),
               child: _FilterTabs(
                 tabs: [
-                  for (final f in tabs) (label: labels[f]!, count: counts[f]!, selected: f == _filter),
+                  for (final f in tabs)
+                    (
+                      label: labels[f]!,
+                      count: counts[f]!,
+                      selected: f == _filter,
+                      color: switch (f) {
+                        _ResumeFilter.all => AppColors.textPrimary,
+                        _ResumeFilter.writing => AppColors.warning,
+                        _ResumeFilter.requested => AppColors.primary,
+                        _ResumeFilter.approved => AppColors.success,
+                      },
+                    ),
                 ],
                 onSelect: (index) => setState(() => _filter = tabs[index]),
               ),
@@ -305,10 +318,14 @@ StatusBadge _statusBadge(ResumeModel resume) {
 }
 
 /// 상태 탭. 숫자 카드 네 개가 차지하던 높이를 한 줄로 줄였다.
+///
+/// 처음에는 "전체 8"처럼 이름과 숫자를 한 글자 줄로 이어 붙이고 고른 탭만 파랗게 칠했다.
+/// 고른 탭과 아닌 탭이 색 한 끗 차이라 구별이 안 됐고, 숫자도 이름에 묻혔다.
+/// 숫자는 상태 색의 작은 배지로 떼고, 고른 탭은 글자를 진하게·배지를 채워·밑줄을 굵게 한다.
 class _FilterTabs extends StatelessWidget {
   const _FilterTabs({required this.tabs, required this.onSelect});
 
-  final List<({String label, int count, bool selected})> tabs;
+  final List<({String label, int count, bool selected, Color color})> tabs;
   final ValueChanged<int> onSelect;
 
   @override
@@ -322,24 +339,54 @@ class _FilterTabs extends StatelessWidget {
         child: Row(
           children: [
             for (var i = 0; i < tabs.length; i++)
-              InkWell(
-                onTap: () => onSelect(i),
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(10)),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: tabs[i].selected ? AppColors.primary : Colors.transparent,
-                        width: 2,
+              Semantics(
+                selected: tabs[i].selected,
+                button: true,
+                child: InkWell(
+                  onTap: () => onSelect(i),
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(4), AppSpace.s(10), AppSpace.s(4), AppSpace.s(9)),
+                    margin: EdgeInsets.only(right: AppSpace.s(18)),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: tabs[i].selected ? AppColors.textPrimary : Colors.transparent,
+                          width: 3,
+                        ),
                       ),
                     ),
-                  ),
-                  child: Text(
-                    '${tabs[i].label} ${tabs[i].count}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: tabs[i].selected ? FontWeight.w700 : FontWeight.w500,
-                      color: tabs[i].selected ? AppColors.primary : AppColors.textSecondary,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          tabs[i].label,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: tabs[i].selected ? FontWeight.w700 : FontWeight.w500,
+                            color: tabs[i].selected ? AppColors.textPrimary : AppColors.textSecondary,
+                          ),
+                        ),
+                        SizedBox(width: AppSpace.s(6)),
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 22),
+                          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(2)),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: tabs[i].selected
+                                ? tabs[i].color
+                                : tabs[i].color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${tabs[i].count}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: tabs[i].selected ? AppColors.surface : tabs[i].color,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -373,15 +420,18 @@ class _SectionProgress extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      SizedBox(
-        width: 64,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            minHeight: 5,
-            value: resume.totalCount == 0 ? 0 : resume.completedCount / resume.totalCount,
-            color: AppColors.primary,
-            backgroundColor: AppColors.primaryLight,
+      // 칸이 좁으면 막대가 줄어든다. 폭을 64로 박아 두면 옆 칸으로 넘친다.
+      Flexible(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 64, minWidth: 24),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              minHeight: 5,
+              value: resume.totalCount == 0 ? 0 : resume.completedCount / resume.totalCount,
+              color: AppColors.primary,
+              backgroundColor: AppColors.primaryLight,
+            ),
           ),
         ),
       ),
@@ -423,9 +473,16 @@ class _FeedbackSummary extends ConsumerWidget {
     final muted = TextStyle(color: AppColors.textSecondary, fontSize: 12.5);
 
     if (total == 0) {
-      return Text(asReviewer ? '아직 남긴 피드백 없음' : '피드백 없음', style: muted);
+      return Text(
+        asReviewer ? '아직 남긴 피드백 없음' : '피드백 없음',
+        style: muted,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
     }
-    if (unread == 0) return Text('$total건 · 모두 읽음', style: muted);
+    if (unread == 0) {
+      return Text('$total건 · 모두 읽음', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -435,11 +492,17 @@ class _FeedbackSummary extends ConsumerWidget {
           margin: EdgeInsets.only(right: AppSpace.s(6)),
           decoration: BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
         ),
-        Text(
-          asReviewer ? '학생 답글 $unread' : '새 피드백 $unread',
-          style: TextStyle(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.w600),
+        Flexible(
+          child: Text(
+            asReviewer ? '학생 답글 $unread' : '새 피드백 $unread',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
         ),
-        Text(' · 전체 $total건', style: muted),
+        Flexible(
+          child: Text(' · 전체 $total건', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
       ],
     );
   }
@@ -463,9 +526,12 @@ class _TableRow extends StatelessWidget {
           for (var i = 0; i < cells.length; i++)
             Expanded(
               flex: flex[i],
-              child: Align(
-                alignment: i == cells.length - 1 ? Alignment.centerRight : Alignment.centerLeft,
-                child: cells[i],
+              child: Padding(
+                padding: EdgeInsets.only(right: i == cells.length - 1 ? 0 : AppSpace.s(8)),
+                child: Align(
+                  alignment: i == cells.length - 1 ? Alignment.centerRight : Alignment.centerLeft,
+                  child: cells[i],
+                ),
               ),
             ),
         ],
@@ -707,7 +773,7 @@ class _StudentTable extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= _kTableMinWidth;
+        final wide = constraints.maxWidth >= _kStudentTableMinWidth;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -851,7 +917,7 @@ class _ReviewTable extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= _kTableMinWidth;
+        final wide = constraints.maxWidth >= _kReviewTableMinWidth;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
