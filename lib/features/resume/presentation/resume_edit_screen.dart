@@ -708,8 +708,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (MediaQuery.sizeOf(context).width < 1000)
                   IconButton(
                     tooltip: _showAiCoach
-                        ? (isReviewer ? '피드백 접기' : 'AI 코치 접기')
-                        : (isReviewer ? '피드백 열기' : 'AI 코치 열기'),
+                        ? (isReviewer ? '피드백 접기' : '커리어 코치 접기')
+                        : (isReviewer ? '피드백 열기' : '커리어 코치 열기'),
                     onPressed: () => _setCoachVisible(!_showAiCoach),
                     icon: Icon(
                       _showAiCoach
