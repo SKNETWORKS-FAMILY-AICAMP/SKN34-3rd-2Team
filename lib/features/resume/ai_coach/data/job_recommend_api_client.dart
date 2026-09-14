@@ -178,33 +178,50 @@ class JobRecommendResponse {
 ///
 /// 서버가 대화를 저장하지 않는다. 응답으로 받은 조건을 앱이 들고 있다가 다음 질문에
 /// 그대로 실어 보내야 "서울만" 같은 말이 앞말을 이어받는다.
+///
+/// **서버가 주는 칸을 빠짐없이 들고 있어야 한다.** 여기 없는 칸은 되돌려 보낼 때 사라진다.
+/// `career_years`가 빠져 있어 "3년차" 다음 "서울만"에서 연차가 풀렸고, 빼는 조건·올라온 날도
+/// 칸이 없으면 "스타트업 빼고" 다음 말에서 스타트업이 다시 섞인다.
 class JobChatFilters {
   const JobChatFilters({
     this.roles = const [],
     this.skills = const [],
     this.regions = const [],
     this.career = '무관',
+    this.careerYears,
     this.employmentTypes = const [],
     this.deadlineWithinDays,
     this.keywords = const [],
+    this.excludeKeywords = const [],
+    this.postedWithinDays,
   });
 
   final List<String> roles;
   final List<String> skills;
   final List<String> regions;
   final String career;
+  final int? careerYears;
   final List<String> employmentTypes;
   final int? deadlineWithinDays;
   final List<String> keywords;
+
+  /// 빼 달라는 말. "스타트업은 빼고" → 스타트업.
+  final List<String> excludeKeywords;
+
+  /// 최근 올라온 공고만. 0이면 마지막 수집에서 처음 본 공고.
+  final int? postedWithinDays;
 
   bool get isEmpty =>
       roles.isEmpty &&
       skills.isEmpty &&
       regions.isEmpty &&
       career == '무관' &&
+      careerYears == null &&
       employmentTypes.isEmpty &&
       deadlineWithinDays == null &&
-      keywords.isEmpty;
+      keywords.isEmpty &&
+      excludeKeywords.isEmpty &&
+      postedWithinDays == null;
 
   /// 무엇으로 걸렀는지 사용자에게 그대로 보여주기 위한 요약.
   String get summary {
@@ -213,9 +230,13 @@ class JobChatFilters {
       ...skills,
       ...regions,
       ...employmentTypes,
-      if (career != '무관') career,
+      if (careerYears != null) '$careerYears년차' else if (career != '무관') career,
       if (deadlineWithinDays != null) '$deadlineWithinDays일 내 마감',
+      // "오늘"이라고 쓰지 않는다. 서버는 마지막 수집일에서 센다.
+      if (postedWithinDays == 0) '새로 올라온'
+      else if (postedWithinDays != null) '최근 $postedWithinDays일 새로 올라온',
       ...keywords,
+      for (final word in excludeKeywords) '$word 제외',
     ];
     return parts.isEmpty ? '조건 없음' : parts.join(' · ');
   }
@@ -225,9 +246,12 @@ class JobChatFilters {
         'skills': skills,
         'regions': regions,
         'career': career,
+        'career_years': careerYears,
         'employment_types': employmentTypes,
         'deadline_within_days': deadlineWithinDays,
         'keywords': keywords,
+        'exclude_keywords': excludeKeywords,
+        'posted_within_days': postedWithinDays,
       };
 
   static List<String> _strings(dynamic value) =>
@@ -238,9 +262,12 @@ class JobChatFilters {
         skills: _strings(map['skills']),
         regions: _strings(map['regions']),
         career: map['career'] as String? ?? '무관',
+        careerYears: (map['career_years'] as num?)?.toInt(),
         employmentTypes: _strings(map['employment_types']),
         deadlineWithinDays: (map['deadline_within_days'] as num?)?.toInt(),
         keywords: _strings(map['keywords']),
+        excludeKeywords: _strings(map['exclude_keywords']),
+        postedWithinDays: (map['posted_within_days'] as num?)?.toInt(),
       );
 }
 
