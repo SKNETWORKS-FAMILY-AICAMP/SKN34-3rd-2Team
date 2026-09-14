@@ -18,7 +18,11 @@
 | [docs/modules.md](docs/modules.md) | 모듈 구조 — 폴더·파일별 역할, 누가 누구를 부르는지, 실행하는 것, 정리할 거리 |
 | [docs/chatbot.md](docs/chatbot.md) | 공고 찾기 챗봇 — 갈래, 막는 것, 맥락 잇기, 조건 조회, 단계별 시간, 라우터 흔들림 |
 | [docs/test_report.md](docs/test_report.md) | 테스트 계획, 사람 채점·챗봇 평가 결과, 트러블슈팅 |
+| [docs/graphs/](docs/graphs/README.md) | 흐름도 mermaid 원본 |
 | [crawling/README.md](crawling/README.md) | 수집 규칙과 야간 배치 |
+
+함께 보는 README: [프로젝트 전체](../README.md) · [공고 맞춤 첨삭](../cover_letter_rag/README.md) ·
+[앱의 AI 취업 코치 화면](../lib/README.md#ai-취업-코치-resumeai_coach)
 
 ## 어떻게 추천하는가
 
@@ -116,11 +120,13 @@ OPENAI_EMBEDDING_MODEL=           # 생략하면 text-embedding-3-small
 CORS_ALLOW_ORIGINS=               # API 서버용. 쉼표로 구분
 ```
 
+레포 루트 `.env.example`에 있는 `PINECONE_INDEX_NAME`은 첨삭 모듈의 레거시 설정이다. 이 모듈은
+`PINECONE_INDEX`를 읽고, 없으면 `job-posting`을 쓴다.
+
 ```powershell
 py -3.12 -m venv playdata_venv
 playdata_venv\Scripts\activate
-pip install -r requirements.txt                       # 수집·정제
-pip install fastapi "uvicorn[standard]" langchain langchain-openai pinecone   # 적재·API
+pip install -r requirements.txt       # 레포 루트. 수집·적재·API·통합 서버에 필요한 것 전부
 ```
 
 설치하는 패키지가 아니라 레포 루트에서 `python -m job_matching_bot.<모듈>`로 실행한다.
@@ -134,7 +140,27 @@ pip install fastapi "uvicorn[standard]" langchain langchain-openai pinecone   # 
 python -m unittest discover -s job_matching_bot/tests -t .
 ```
 
-**수집** — 규칙과 인자는 [crawling/README.md](crawling/README.md).
+2026-09-15 수집본이 없는 체크아웃 기준 670개 실행, 통과(건너뜀 8개). 건너뛴 8개는 실제 사람인 수집본
+(`artifacts/`)이 있어야 도는 테스트다. 평가 도구(규칙 결함 검사·사람 채점·챗봇 대조)는 추천 API를 실제로 부르므로
+[docs/test_report.md](docs/test_report.md) 2장의 명령으로 따로 돌린다.
+
+**야간 배치** — 목록 훑기 → 신규 상세 → 링크 확인 → 적재 → 공유 파일 업로드를 한 번에. 매일 23:00 Windows 작업 스케줄러가 돌린다.
+
+```powershell
+python -m job_matching_bot.crawling.nightly                  # 오늘 몫 (월~토: IT 인접 4개 대분류 / 일: 전부)
+python -m job_matching_bot.crawling.nightly --dry-run        # 목록만 훑고 상세·기록·적재는 안 함
+.\job_matching_bot\crawling\schedule_nightly.ps1 -Register   # 스케줄 등록 (-Status, -RunNow, -Unregister)
+```
+
+**공유 공고 DB** — 저장소 파일(375MB)은 레포에 올리지 않는다. 슬림 파일을 Firebase Storage로 나눈다.
+
+```powershell
+python -m job_matching_bot.sharing.share_store --export --upload     # 만들어서 올리기 (야간 배치가 한다)
+python -m job_matching_bot.sharing.share_store --download-if-newer   # 새 파일만 받아 안전 교체 (팀원용)
+python -m job_matching_bot.sharing.share_store --info                # 올라가 있는 파일 정보
+```
+
+**수집** — 단계를 하나씩 돌릴 때. 규칙과 인자는 [crawling/README.md](crawling/README.md).
 
 ```powershell
 python -m job_matching_bot.crawling.crawl_list --all-categories --sort AD --page-count 100
@@ -215,7 +241,9 @@ POST /api/v1/jobs/chat              공고 찾기 챗봇
 }
 ```
 
-한 회사는 두 건까지만 올린다. 검색·필터가 실패하면 503이다.
+`top_k`는 기본 10, 최대 12다. 한 회사는 두 건까지만 올린다. 검색·필터가 실패하면 503이다.
+
+공고 찾기 챗봇(`/api/v1/jobs/chat`)의 요청·응답과 대화 맥락 잇기는 [docs/chatbot.md](docs/chatbot.md)에 있다.
 
 ## 인덱스와 비용
 
