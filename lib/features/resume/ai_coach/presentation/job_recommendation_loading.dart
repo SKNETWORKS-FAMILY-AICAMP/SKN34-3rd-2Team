@@ -172,7 +172,10 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.sidebar,
+                                  // 사이드바 색은 어두워서 전체 다크의 카드 위에서는 묻힌다.
+                                  color: AppColors.isDark
+                                      ? AppColors.textPrimary
+                                      : AppColors.sidebar,
                                 ),
                               ),
                               SizedBox(height: AppSpace.s(15)),
@@ -478,8 +481,15 @@ class _HangingRobotPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.7
       ..strokeCap = StrokeCap.round;
+    // 로봇은 어느 테마에서나 하얀 몸이다. 카드 바탕색·옅은 강조색을 따르면 전체
+    // 다크에서 몸이 카드에 묻히고, 어두운 얼굴 화면 위의 눈·입까지 어두워져
+    // 얼굴이 보이지 않았다.
+    const body = Colors.white;
+    final tint = AppColors.isDark
+        ? Color.alphaBlend(AppColors.primary.withValues(alpha: .22), body)
+        : AppColors.primaryLight;
     void shape(Rect rect, double radius, [Color? color]) {
-      color ??= AppColors.surface;
+      color ??= body;
       final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
       canvas.drawRRect(rrect, Paint()..color = color);
       canvas.drawRRect(rrect, outline);
@@ -490,7 +500,7 @@ class _HangingRobotPainter extends CustomPainter {
     canvas.translate(57, 0);
     canvas.rotate(.3 - release * .5);
     shape(const Rect.fromLTWH(-5, 0, 10, 63), 5);
-    shape(const Rect.fromLTWH(-6, -4, 13, 12), 5, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(-6, -4, 13, 12), 5, tint);
     canvas.drawLine(const Offset(0, 1), const Offset(5, 1), outline);
     canvas.restore();
 
@@ -500,7 +510,7 @@ class _HangingRobotPainter extends CustomPainter {
       canvas.rotate(
         completed ? (i == 0 ? -.25 : .33) : swing * (i == 0 ? .2 : -.2),
       );
-      shape(const Rect.fromLTWH(-5, 0, 10, 27), 5, AppColors.primaryLight);
+      shape(const Rect.fromLTWH(-5, 0, 10, 27), 5, tint);
       shape(const Rect.fromLTWH(-9, 23, 17, 8), 4);
       canvas.restore();
     }
@@ -508,14 +518,14 @@ class _HangingRobotPainter extends CustomPainter {
     canvas.translate(9, 64);
     canvas.rotate(completed ? release * 2.1 : .4 + swing * .12);
     shape(const Rect.fromLTWH(-5, 0, 10, 28), 5);
-    shape(const Rect.fromLTWH(-5, 24, 10, 10), 5, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(-5, 24, 10, 10), 5, tint);
     canvas.restore();
-    shape(const Rect.fromLTWH(19, 49, 13, 9), 3, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(19, 49, 13, 9), 3, tint);
     shape(const Rect.fromLTWH(10, 56, 33, 35), 10);
     canvas.drawCircle(
       const Offset(26, 71),
       7,
-      Paint()..color = AppColors.primaryLight,
+      Paint()..color = tint,
     );
     canvas.drawLine(const Offset(26, 67), const Offset(26, 75), outline);
     canvas.drawLine(const Offset(22, 71), const Offset(30, 71), outline);
@@ -529,8 +539,8 @@ class _HangingRobotPainter extends CustomPainter {
       3,
       Paint()..color = AppColors.primary,
     );
-    shape(const Rect.fromLTWH(-2, 28, 6, 12), 3, AppColors.primaryLight);
-    shape(const Rect.fromLTWH(46, 28, 6, 12), 3, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(-2, 28, 6, 12), 3, tint);
+    shape(const Rect.fromLTWH(46, 28, 6, 12), 3, tint);
     shape(const Rect.fromLTWH(3, 18, 44, 34), 14);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -546,11 +556,11 @@ class _HangingRobotPainter extends CustomPainter {
           Rect.fromLTWH(x, 30, 4, blink ? 1 : 5),
           const Radius.circular(2),
         ),
-        Paint()..color = AppColors.surface,
+        Paint()..color = body,
       );
     }
     final mouth = Paint()
-      ..color = AppColors.surface
+      ..color = body
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.3;
     if (completed) {

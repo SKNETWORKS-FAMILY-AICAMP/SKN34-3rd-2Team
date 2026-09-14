@@ -708,8 +708,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (MediaQuery.sizeOf(context).width < 1000)
                   IconButton(
                     tooltip: _showAiCoach
-                        ? (isReviewer ? '피드백 접기' : 'AI 코치 접기')
-                        : (isReviewer ? '피드백 열기' : 'AI 코치 열기'),
+                        ? (isReviewer ? '피드백 접기' : '커리어 코치 접기')
+                        : (isReviewer ? '피드백 열기' : '커리어 코치 열기'),
                     onPressed: () => _setCoachVisible(!_showAiCoach),
                     icon: Icon(
                       _showAiCoach
@@ -810,7 +810,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       ),
                     ),
                   ),
-                if (resume.isApproved)
+                // 학생에게 하는 안내다. 강사·관리자는 위 진행 줄의 "승인 완료"로 충분하다.
+                if (resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(
