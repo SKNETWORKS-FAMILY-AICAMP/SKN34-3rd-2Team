@@ -1297,9 +1297,9 @@ class ChatService(_LivenessMixin):
             )
 
         head = understood.strip() or f"{condition} 조건으로 찾았어요."
-        # "가까운 순"이라고 썼더니 거리 순으로 읽혔다. 실제 순서는 말한 조건이 제목에 그대로 있는
-        # 공고 → 제목에 있는 공고 → 태그에 있는 공고 → 본문에만 있는 공고다.
-        tail = f" 조건이 제목에 잘 맞는 공고부터 {shown}건 보여드릴게요." if count > shown else ""
+        # 순서는 말하지 않는다. "가까운 순"은 거리 순으로 읽혔고, "제목에 잘 맞는 순"은 태그로 걸린
+        # 공고가 맨 앞에 설 때 틀린 말이 됐다. 순서 규칙은 사용자가 알 필요가 없다.
+        tail = f" {shown}건 보여드릴게요." if count > shown else ""
         return f"{head}\n{found}{tail}"
 
 
