@@ -91,6 +91,13 @@ export const roles = [
         title: '마이페이지',
         desc: '프로필 사진과 비밀번호를 관리합니다. 앱 이용 안내(온보딩 투어)도 여기서 다시 볼 수 있습니다.',
       },
+      {
+        id: 'settings',
+        route: '/settings',
+        title: '화면 설정',
+        desc: '사이드바 맨 아래 「설정」에서 화면 테마(라이트·사이드바 다크·전체 다크), 사이드바 색, 화면 밀도를 고릅니다.',
+        tips: ['설정은 지금 쓰는 기기(브라우저)에만 저장됩니다. 다른 PC에서는 따로 고르세요.'],
+      },
     ],
   },
   {
@@ -141,6 +148,12 @@ export const roles = [
         title: '마이페이지',
         desc: '프로필과 비밀번호를 관리하고, 이용 안내를 다시 볼 수 있습니다.',
       },
+      {
+        id: 'settings',
+        route: '/instructor/settings',
+        title: '화면 설정',
+        desc: '사이드바의 「설정」에서 화면 테마, 사이드바 색, 화면 밀도를 고릅니다. 이 기기에만 저장됩니다.',
+      },
     ],
   },
   {
@@ -152,7 +165,7 @@ export const roles = [
         id: 'dashboard',
         route: '/admin',
         title: '대시보드',
-        desc: '기수 운영 현황을 한눈에 보는 관리자 홈입니다.',
+        desc: '기록실 승인 대기, 이력서 검토 대기 건수와 오른쪽 「승인 현황」 목록으로 오늘 처리할 일을 봅니다. 카드나 항목을 누르면 해당 화면으로 바로 이동합니다.',
       },
       {
         id: 'cohorts',
@@ -237,6 +250,12 @@ export const roles = [
         route: '/admin/ai-quality',
         title: 'AI 품질',
         desc: 'AI 기능의 품질 지표와 로그를 점검하는 시스템 메뉴입니다.',
+      },
+      {
+        id: 'settings',
+        route: '/admin/settings',
+        title: '화면 설정',
+        desc: '사이드바 「시스템」 그룹의 「설정」에서 화면 테마, 사이드바 색, 화면 밀도를 고릅니다. 이 기기에만 저장됩니다.',
       },
     ],
   },

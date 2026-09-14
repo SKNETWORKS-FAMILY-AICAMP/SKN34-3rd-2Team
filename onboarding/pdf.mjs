@@ -65,6 +65,32 @@ const roleSections = roles
   )
   .join('');
 
+// capture.mjs가 테마별 대시보드를 찍었으면 PART 1 뒤에 비교 페이지를 넣는다.
+const themes = [
+  { id: 'light', label: '라이트', desc: '전체를 밝게' },
+  { id: 'railDark', label: '사이드바 다크', desc: '본문은 밝게, 사이드바만 어둡게' },
+  { id: 'dark', label: '전체 다크', desc: '전체를 어둡게' },
+];
+const hasThemeShots = themes.every((t) => fs.existsSync(path.join(shots, 'themes', `${t.id}.png`)));
+const themeSection = hasThemeShots
+  ? `
+<section class="page">
+  <h2>화면 테마 고르기</h2>
+  <p class="desc">「설정 → 화면 테마」에서 세 가지 중 하나를 고릅니다. 고르는 즉시 전체 화면에 적용되고, 이 안내서의 나머지 화면은 기본값인 <b>라이트</b>로 찍었습니다.</p>
+  <div class="themes">
+    ${themes
+      .map(
+        (t) => `
+    <figure>
+      <img src="${img(`themes/${t.id}.png`)}" alt="${esc(t.label)} 테마">
+      <figcaption><strong>${esc(t.label)}</strong> — ${esc(t.desc)}</figcaption>
+    </figure>`,
+      )
+      .join('')}
+  </div>
+</section>`
+  : '';
+
 const html = `<!doctype html>
 <html lang="ko">
 <head>
@@ -136,6 +162,11 @@ const html = `<!doctype html>
   .two img { width: 100%; border: 1px solid #dfe3ea; border-radius: 2mm; }
   .two figcaption { font-size: 8.5pt; color: #6b7585; margin-top: 1mm; }
 
+  .themes { display: flex; flex-direction: column; gap: 5mm; margin-top: 5mm; }
+  .themes figure { margin: 0; break-inside: avoid; }
+  .themes img { width: 108mm; display: block; border: 1px solid #dfe3ea; border-radius: 2mm; }
+  .themes figcaption { font-size: 9pt; color: #4b5565; margin-top: 1mm; }
+
   /* 역할 구분 페이지 */
   .divider { page-break-before: always; page-break-after: always; padding-top: 55mm; }
   .divider .part { color: var(--accent); font-weight: 900; letter-spacing: .1em; margin: 0; }
@@ -178,7 +209,7 @@ const html = `<!doctype html>
 <section class="page">
   <h2>목차</h2>
   <ol class="toc">
-    <li class="start"><span class="toc-part">PART 1</span><strong>시작하기</strong><span class="toc-items">로그인 · 비밀번호 변경 · 이용 안내 투어 · 화면 구성</span></li>
+    <li class="start"><span class="toc-part">PART 1</span><strong>시작하기</strong><span class="toc-items">로그인 · 비밀번호 변경 · 이용 안내 투어 · 화면 구성 · 화면 설정(테마)</span></li>
     ${toc}
     <li class="start"><span class="toc-part">부록</span><strong>자주 묻는 질문</strong><span class="toc-items">로그인이 안 될 때 · 이용 안내 다시 보기 · 문의</span></li>
   </ol>
@@ -211,12 +242,17 @@ const html = `<!doctype html>
       <h4>화면 구성</h4>
       <p>왼쪽 사이드바에서 메뉴를 고르고, 오른쪽 위에서 내 계정과 기수를 확인합니다. 로그인한 역할(학생·강사·관리자)에 따라 보이는 메뉴가 다릅니다.</p>
     </li>
+    <li>
+      <h4>화면 설정</h4>
+      <p>사이드바 맨 아래 「설정」에서 화면 테마(라이트 · 사이드바 다크 · 전체 다크), 사이드바 색, 화면 밀도(자동 · 보통 · 좁게)를 고릅니다. 설정은 지금 쓰는 기기에만 저장됩니다.</p>
+    </li>
   </ol>
   <div class="two">
     <figure><img src="${img('login.png')}" alt="로그인 화면"><figcaption>로그인 화면</figcaption></figure>
     <figure><img src="${img('student/_tour.png')}" alt="이용 안내 투어"><figcaption>로그인 직후 뜨는 이용 안내 투어</figcaption></figure>
   </div>
 </section>
+${themeSection}
 
 ${roleSections}
 
@@ -233,6 +269,10 @@ ${roleSections}
     <dd>매니저가 승인하면 기수 규칙에 따라 자동으로 적립됩니다. 승인 상태는 기록실 목록에서 확인합니다.</dd>
     <dt>마일리지 상품을 구매 요청했는데 포인트가 그대로예요.</dt>
     <dd>구매 요청은 매니저가 승인할 때 차감됩니다. 반려되거나 취소하면 포인트는 변하지 않습니다.</dd>
+    <dt>다크 모드로 바꿨는데 다른 PC에서는 밝게 나와요.</dt>
+    <dd>화면 설정은 기기(브라우저)마다 따로 저장됩니다. 그 PC에서도 「설정 → 화면 테마」를 한 번 골라 주세요.</dd>
+    <dt>글자와 여백이 너무 크거나 작아요.</dt>
+    <dd>「설정 → 밀도」에서 「보통」(여유 있게) 또는 「좁게」(한 화면에 더 많이)를 고르세요. 「자동」은 창 크기에 맞춥니다.</dd>
     <dt>화면이 계속 로딩 중이에요.</dt>
     <dd>새로고침(F5)을 한 번 해 보세요. 그래도 같으면 로그아웃 후 다시 로그인하고, 해결되지 않으면 화면을 캡처해 매니저에게 알려 주세요.</dd>
   </dl>
