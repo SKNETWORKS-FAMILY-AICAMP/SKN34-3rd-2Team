@@ -11,11 +11,47 @@ import sqlite3
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
-from job_matching_bot.sharing.share_store import EMPTY_COLUMNS, SHARE_COLUMNS, compress, decompress, export
+from job_matching_bot.sharing.share_store import (
+    EMPTY_COLUMNS,
+    SHARE_COLUMNS,
+    compress,
+    decompress,
+    download_if_newer,
+    export,
+)
+
+
+class FakeBlob:
+    def __init__(self, archive: Path):
+        self.archive = archive
+        self.generation = "generation-1"
+        self.updated = datetime(2026, 9, 13, tzinfo=timezone.utc)
+        self.size = archive.stat().st_size
+        self.downloads = 0
+
+    def exists(self):
+        return True
+
+    def reload(self):
+        return None
+
+    def download_to_filename(self, destination):
+        self.downloads += 1
+        Path(destination).write_bytes(self.archive.read_bytes())
+
+
+class FakeBucket:
+    def __init__(self, blob: FakeBlob):
+        self.value = blob
+
+    def blob(self, _remote):
+        return self.value
 
 
 class ExportTest(unittest.TestCase):
@@ -104,6 +140,28 @@ class ExportTest(unittest.TestCase):
         restored = decompress(archive, self.root / "restored.sqlite")
         with SqliteJobStore(restored) as store:
             self.assertEqual("MOCK-1", store.get("MOCK-1").job.job_id)
+
+    def test_download_if_newer_replaces_once_then_skips_same_generation(self):
+        archive = compress(self._export())
+        blob = FakeBlob(archive)
+        destination = self.root / "received.sqlite"
+        with patch("job_matching_bot.sharing.share_store.bucket", return_value=FakeBucket(blob)):
+            self.assertTrue(download_if_newer("bucket", destination))
+            self.assertFalse(download_if_newer("bucket", destination))
+        self.assertEqual(1, blob.downloads)
+        with SqliteJobStore(destination) as store:
+            self.assertEqual("MOCK-1", store.get("MOCK-1").job.job_id)
+
+    def test_invalid_download_does_not_replace_existing_database(self):
+        destination = self.root / "received.sqlite"
+        destination.write_bytes(b"existing database")
+        corrupt = self.root / "corrupt.sqlite.gz"
+        corrupt.write_bytes(b"not gzip")
+        blob = FakeBlob(corrupt)
+        with patch("job_matching_bot.sharing.share_store.bucket", return_value=FakeBucket(blob)):
+            with self.assertRaises(Exception):
+                download_if_newer("bucket", destination)
+        self.assertEqual(b"existing database", destination.read_bytes())
 
 
 if __name__ == "__main__":

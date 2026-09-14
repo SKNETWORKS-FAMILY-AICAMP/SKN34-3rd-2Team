@@ -144,6 +144,32 @@ void main() {
       expect(filters['career'], '신입');
     });
 
+    test('서버가 준 조건을 빠짐없이 되돌려 보낸다 — 연차·빼는 조건·올라온 날', () async {
+      Map<String, dynamic>? sent;
+      final api = JobRecommendApiClient(
+        baseUrl: 'http://127.0.0.1:8000',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return _json(_response(filters: {
+            'roles': ['백엔드'],
+            'career': '경력',
+            'career_years': 3,
+            'exclude_keywords': ['스타트업'],
+            'posted_within_days': 0,
+          }));
+        }),
+      );
+
+      final first = await api.chat(message: '스타트업 빼고 오늘 올라온 3년차 백엔드');
+      await api.chat(message: '서울만', filters: first.filters);
+
+      final filters = sent!['filters'] as Map<String, dynamic>;
+      expect(filters['career_years'], 3, reason: '"3년차" 다음 말에서 연차가 풀리면 안 된다');
+      expect(filters['exclude_keywords'], ['스타트업']);
+      expect(filters['posted_within_days'], 0, reason: '0(새로 올라온)과 null(조건 없음)은 다르다');
+      expect(first.filters.summary, '백엔드 · 3년차 · 새로 올라온 · 스타트업 제외');
+    });
+
     test('조건 요약은 무엇으로 걸렀는지 그대로 보여준다', () {
       const filters = JobChatFilters(
         roles: ['백엔드'],

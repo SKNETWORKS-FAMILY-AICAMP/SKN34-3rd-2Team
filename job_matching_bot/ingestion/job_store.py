@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -58,6 +59,28 @@ def resolve_status(job: Job, as_of: datetime) -> str:
     return STATUS_EXPIRED if _is_expired(job, as_of) else STATUS_OPEN
 
 
+def keep_listing_fields(job: Job, company: str | None, title: str | None, deadline: str | None) -> Job:
+    """다시 받은 상세에 **목록 값이 없으면** 저장돼 있던 목록 값을 이어받는다.
+
+    제목·회사명·마감일은 상세 페이지가 아니라 목록에서 온다(`list_item`). 수집기는 목록에서
+    본 줄을 상세에 붙여 저장하는데, 공고 번호만 들고 상세를 다시 받으면 붙일 목록 줄이 없다.
+    2026-09-11에 파서를 고치고 328건을 번호로 다시 받았을 때 그렇게 들어온 레코드가 저장된
+    제목·회사명·마감일을 빈 값으로 덮어써 313건이 이름 없는 공고가 됐다. 마감일이 비어
+    마감이 지나도 만료로 넘어가지 않았다.
+
+    제목과 회사명이 **둘 다** 비었을 때만 목록이 없던 것으로 본다. 정상 공고는 둘 다 있다.
+    이때 마감일도 이어받는다 — 목록이 없어서 비었지 상시채용이라서 빈 것이 아니다.
+    """
+    if job.title or job.company or not (title or company):
+        return job
+    return replace(
+        job,
+        company=company or "",
+        title=title or "",
+        deadline=job.deadline or deadline,
+    )
+
+
 def _missing_field_names(job: Job) -> list[str]:
     return [name for name in REQUIRED_FIELDS if not getattr(job, name, None)]
 
@@ -92,6 +115,11 @@ def reconcile(
     for job in collected:
         key = (job.source, job.source_job_id)
         seen.add(key)
+        previous = merged.get(key)
+        if previous is not None:
+            job = keep_listing_fields(
+                job, previous.job.company, previous.job.title, previous.job.deadline
+            )
         status = resolve_status(job, as_of)
         job_id = job.job_id
 
@@ -102,7 +130,6 @@ def reconcile(
             report.parser_versions.get(job.parser_version, 0) + 1
         )
 
-        previous = merged.get(key)
         if previous is None:
             merged[key] = JobRecord(
                 job=job,

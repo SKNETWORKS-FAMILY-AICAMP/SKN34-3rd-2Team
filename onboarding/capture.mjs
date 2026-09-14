@@ -22,6 +22,46 @@ async function waitForSpinners(page, maxMs = 6000) {
   return false;
 }
 
+// 경로 이동만으로는 안 보이는 화면을 열어 둔다. scenes.mjs의 action 이름과 맞춘다.
+const sceneActions = {
+  async chatbot(page) {
+    await page.getByRole('button', { name: '학생 챗봇 열기', exact: true }).click();
+    await sleep(1500);
+    const input = page.getByRole('textbox', { name: /메시지를 입력하세요/ });
+    await input.click();
+    await sleep(400);
+    await page.keyboard.insertText('3단위기간 출석률 85%면 훈련장려금 받을 수 있어?');
+    await page.getByRole('button', { name: '질문 보내기', exact: true }).click();
+    // 데모 챗봇은 답을 몇 글자씩 흘려보낸다. 다 나올 때까지 기다린다.
+    await sleep(6000);
+  },
+};
+sceneActions.recommend = async (page) => {
+  if (!(await page.getByRole('button', { name: /공고 맞춤 첨삭/ }).count())) {
+    await page.getByRole('button', { name: '맞춤 공고 추천', exact: true }).click();
+    // 데모 추천은 단계 표시를 거쳐 몇 초 뒤 결과가 나온다.
+    await sleep(7000);
+  }
+};
+sceneActions.review = async (page) => {
+  await sceneActions.recommend(page);
+  await page.getByRole('button', { name: /공고 맞춤 첨삭/ }).first().click();
+  await sleep(1800);
+  await page.getByRole('button', { name: /첨삭 시작/ }).click();
+  await sleep(5000);
+};
+
+const closeActions = {
+  async review(page) {
+    await page.getByRole('button', { name: '닫기', exact: true }).first().click().catch(() => {});
+    await sleep(800);
+  },
+  async chatbot(page) {
+    await page.getByRole('button', { name: '챗봇 닫기', exact: true }).click().catch(() => {});
+    await sleep(500);
+  },
+};
+
 // 화면 설정에서 테마 항목을 누른다. 항목 전체가 하나의 탭 영역이라 라벨 텍스트로 찾는다.
 async function pickTheme(page, label) {
   const byRole = page.getByRole('button', { name: new RegExp(`^${label}`) });
@@ -87,7 +127,9 @@ try {
       await dismissTour(page);
       const settled = await waitForSpinners(page);
       await sleep(500);
+      if (s.action) await sceneActions[s.action](page);
       await page.screenshot({ path: path.join(dir, `${s.id}.png`) });
+      if (s.action && closeActions[s.action]) await closeActions[s.action](page);
       console.log(`${role}/${s.id}${settled ? '' : '  (로딩 표시 남음)'}`);
     }
     if (role === 'student') await captureThemes(page);

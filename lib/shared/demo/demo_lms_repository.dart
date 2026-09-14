@@ -5,6 +5,7 @@ import '../../core/constants/cohort_status.dart';
 import '../../core/constants/record_types.dart';
 import '../../core/constants/role.dart';
 import '../../core/utils/class_period_utils.dart';
+import '../../features/resume/ai_coach/data/generated/resume_mocks.g.dart';
 import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
@@ -114,13 +115,25 @@ class DemoLmsRepository {
         submittedAt: now.subtract(const Duration(days: 3)),
       ),
     ];
+    // AI 코치(맞춤 공고 추천·첨삭)를 보여 줄 수 있도록 데이터 직무 목업 이력서로 채운다.
+    // 연락처는 비워 두어 시연에서 직접 입력하는 모습을 보인다.
+    final demoResumeContent = resumeMockPersonas
+        .firstWhere((p) => p.key == 'data_entry_junior_college')
+        .toContent(
+          name: DemoAccounts.student.displayName,
+          email: DemoAccounts.student.personalEmail ?? '',
+        );
+    final seededContent = demoResumeContent.copyWith(
+      basicInfo: demoResumeContent.basicInfo.copyWith(phone: ''),
+    );
     _resumes = [
       ResumeModel(
         id: 'r-demo-1',
         userId: DemoAccounts.studentUid,
         title: '데이터 분석가 지원 이력서',
         status: 'submitted',
-        sections: const {},
+        content: seededContent,
+        sections: seededContent.computeSections(),
         isBaseResume: true,
         revisionCount: 1,
         updatedAt: now.subtract(const Duration(hours: 5)),

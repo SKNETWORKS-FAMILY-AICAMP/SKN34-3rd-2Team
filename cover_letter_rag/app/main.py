@@ -20,7 +20,9 @@ from app.models import (
     ResumeProfileRequest,
     ResumeProfileResponse,
     TailoredResumeCreateRequest,
+    TailoredResumePromoteRequest,
     TailoredResumeResponse,
+    TailoredResumeSessionRequest,
     TailoredResumeSummary,
 )
 from app.firebase_gateway import (
@@ -140,6 +142,105 @@ def list_tailored_resumes(
         raise HTTPException(status_code=403, detail='Resume access denied') from exc
     except ResumeNotFoundError as exc:
         raise HTTPException(status_code=404, detail='Resume was not found') from exc
+
+
+@app.get(
+    '/api/v1/resumes/{resume_id}/tailored/{tailored_resume_id}',
+    response_model=TailoredResumeResponse,
+)
+def get_tailored_resume(
+    resume_id: str,
+    tailored_resume_id: str,
+    cohort_id: str = Query(min_length=1, max_length=200, pattern=r'^[^/]+$'),
+    authorization: str | None = Header(default=None),
+    gateway: FirebaseGateway = Depends(get_context_gateway),
+):
+    try:
+        uid = gateway.verify_id_token(extract_bearer_token(authorization))
+        return TailoredResumeService(gateway, lambda _: {}).get(
+            uid, cohort_id, resume_id, tailored_resume_id,
+        )
+    except FirebaseAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
+    except ResumeAccessError as exc:
+        raise HTTPException(status_code=403, detail='Resume access denied') from exc
+    except ResumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Tailored resume was not found') from exc
+    except (GoogleAPIError, GoogleAuthError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
+
+
+@app.put('/api/v1/resumes/{resume_id}/tailored/{tailored_resume_id}/session')
+def save_tailored_resume_session(
+    resume_id: str,
+    tailored_resume_id: str,
+    request: TailoredResumeSessionRequest,
+    authorization: str | None = Header(default=None),
+    gateway: FirebaseGateway = Depends(get_context_gateway),
+):
+    try:
+        uid = gateway.verify_id_token(extract_bearer_token(authorization))
+        gateway.save_tailored_resume_session(
+            request.cohort_id, resume_id, tailored_resume_id, uid, request.state,
+        )
+        return {'saved': True}
+    except FirebaseAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
+    except ResumeAccessError as exc:
+        raise HTTPException(status_code=403, detail='Resume access denied') from exc
+    except ResumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Tailored resume was not found') from exc
+
+
+@app.delete('/api/v1/resumes/{resume_id}/tailored/{tailored_resume_id}')
+def delete_tailored_resume(
+    resume_id: str,
+    tailored_resume_id: str,
+    cohort_id: str = Query(min_length=1, max_length=200, pattern=r'^[^/]+$'),
+    authorization: str | None = Header(default=None),
+    gateway: FirebaseGateway = Depends(get_context_gateway),
+):
+    try:
+        uid = gateway.verify_id_token(extract_bearer_token(authorization))
+        gateway.delete_tailored_resume(
+            cohort_id, resume_id, tailored_resume_id, uid,
+        )
+        return {'deleted': True}
+    except FirebaseAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
+    except ResumeAccessError as exc:
+        raise HTTPException(status_code=403, detail='Resume access denied') from exc
+    except ResumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Tailored resume was not found') from exc
+    except (GoogleAPIError, GoogleAuthError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
+
+
+@app.post('/api/v1/resumes/{resume_id}/tailored/{tailored_resume_id}/promote')
+def promote_tailored_resume(
+    resume_id: str,
+    tailored_resume_id: str,
+    request: TailoredResumePromoteRequest,
+    authorization: str | None = Header(default=None),
+    gateway: FirebaseGateway = Depends(get_context_gateway),
+):
+    try:
+        uid = gateway.verify_id_token(extract_bearer_token(authorization))
+        workspace_resume_id = gateway.promote_tailored_resume(
+            request.cohort_id,
+            resume_id,
+            tailored_resume_id,
+            uid,
+        )
+        return {'workspace_resume_id': workspace_resume_id}
+    except FirebaseAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
+    except ResumeAccessError as exc:
+        raise HTTPException(status_code=403, detail='Resume access denied') from exc
+    except ResumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Tailored resume was not found') from exc
+    except (GoogleAPIError, GoogleAuthError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
 
 
 @lru_cache

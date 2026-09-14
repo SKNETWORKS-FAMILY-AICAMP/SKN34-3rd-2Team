@@ -316,10 +316,38 @@ class TailoredResumeSummary(StrictModel):
     source_resume_hash: str
     job_snapshot_hash: str
     status: Literal['draft', 'ready', 'archived']
+    review_progress: Literal['not_started', 'in_progress', 'completed'] = 'not_started'
+    workspace_resume_id: str = ''
 
 
 class TailoredResumeResponse(TailoredResumeSummary):
     content: dict[str, Any]
+    review_session: dict[str, Any] = Field(default_factory=dict)
+
+
+class TailoredResumeSessionRequest(StrictModel):
+    cohort_id: str = Field(min_length=1, max_length=200)
+    state: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("cohort_id")
+    @classmethod
+    def reject_unsafe_cohort_identifier(cls, value: str) -> str:
+        value = value.strip()
+        if not value or '/' in value or value in {'.', '..'}:
+            raise ValueError("identifier must not be blank")
+        return value
+
+
+class TailoredResumePromoteRequest(StrictModel):
+    cohort_id: str = Field(min_length=1, max_length=200)
+
+    @field_validator("cohort_id")
+    @classmethod
+    def reject_unsafe_cohort_identifier(cls, value: str) -> str:
+        value = value.strip()
+        if not value or '/' in value or value in {'.', '..'}:
+            raise ValueError("identifier must not be blank")
+        return value
 
 
 class ResumeSectionReview(StrictModel):

@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../shared/demo/demo_accounts.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../models/ai_job_coach_result.dart';
 import '../models/resume_readiness.dart';
+import 'demo_ai_coach_clients.dart';
 import 'job_recommend_api_client.dart';
 
 /// 맞춤 공고 추천.
@@ -79,6 +81,8 @@ class AiJobCoachRepository {
 
 /// 추천 서버 클라이언트. 주소가 비어 있으면 null이고 추천 버튼은 안내 오류를 낸다.
 final jobRecommendApiClientProvider = Provider<JobRecommendApiClient?>((ref) {
+  // 데모 모드에는 추천 서버가 없다. 온보딩 캡처용 예시 결과를 돌려준다.
+  if (DemoConfig.enabled) return DemoJobRecommendApiClient();
   return JobRecommendApiConfig.isConfigured ? JobRecommendApiClient() : null;
 });
 

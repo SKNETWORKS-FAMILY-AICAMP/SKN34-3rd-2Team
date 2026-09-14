@@ -32,7 +32,13 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from job_matching_bot.config import now
-from job_matching_bot.ingestion.job_store import REQUIRED_FIELDS, _is_expired, resolve_status
+from job_matching_bot.ingestion.job_store import (
+    REQUIRED_FIELDS,
+    _is_expired,
+    keep_listing_fields,
+    resolve_status,
+)
+from job_matching_bot.ingestion.company_name import clean_company_name, clean_listing_text
 from job_matching_bot.ingestion.detail_quality import has_requirement_text
 from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
 from job_matching_bot.schemas.job_posting import Job
@@ -258,6 +264,11 @@ class SqliteJobStore:
     # ── 읽기 ──────────────────────────────────────────────────
     def _row_to_record(self, row: sqlite3.Row) -> JobRecord:
         job_fields = {name: _decode(name, row[name]) for name in JOB_FIELDS}
+        # 구 사람인 수집본에 저장된 UI 버튼 문구도 읽는 즉시 보정한다.
+        if str(job_fields.get("source", "")).startswith("SARAMIN"):
+            from job_matching_bot.ingestion.company_name import clean_company_name
+
+            job_fields["company"] = clean_company_name(job_fields.get("company"))
         # 구 버전은 상세 영역 안의 보조 이미지가 하나라도 있으면 image 플래그를
         # 남겼다. 실제 요구사항 텍스트가 저장돼 있으면 텍스트 공고로 복구한다.
         # 옛 행을 위해 읽을 때도 한 번 더 적용한다 — 쓰는 쪽과 같은 규칙이다.
@@ -354,7 +365,8 @@ class SqliteJobStore:
             marks = ", ".join("(?, ?)" for _ in chunk)
             params = [v for key in chunk for v in key]
             rows = self.conn.execute(
-                "SELECT source, source_job_id, content_hash, first_seen_at, revisions "
+                "SELECT source, source_job_id, content_hash, first_seen_at, revisions, "
+                "company, title, deadline "
                 f"FROM jobs WHERE (source, source_job_id) IN (VALUES {marks})",
                 params,
             )
@@ -370,7 +382,8 @@ class SqliteJobStore:
             params = [v for key in chunk for v in key]
             rows = self.conn.execute(
                 "SELECT source, source_job_id, content_hash, first_seen_at, last_seen_at, "
-                f"status, missing_runs, revisions FROM jobs WHERE (source, source_job_id) IN (VALUES {marks})",
+                "status, missing_runs, revisions, company, title, deadline "
+                f"FROM jobs WHERE (source, source_job_id) IN (VALUES {marks})",
                 params,
             )
             for row in rows:
@@ -405,6 +418,7 @@ class SqliteJobStore:
                 if previous is None:
                     result["unknown"].append(job.job_id)
                     continue
+                job = keep_listing_fields(job, previous["company"], previous["title"], previous["deadline"])
                 changed = previous["content_hash"] != job.content_hash
                 self._write_record(
                     JobRecord(
@@ -442,13 +456,15 @@ class SqliteJobStore:
             for job in collected:
                 key = (job.source, job.source_job_id)
                 seen.add(key)
+                previous = existing.get(key)
+                if previous is not None:
+                    job = keep_listing_fields(job, previous["company"], previous["title"], previous["deadline"])
                 status = resolve_status(job, as_of)
                 missing = [name for name in REQUIRED_FIELDS if not getattr(job, name, None)]
                 if missing:
                     report.missing_fields[job.job_id] = missing
                 report.parser_versions[job.parser_version] = report.parser_versions.get(job.parser_version, 0) + 1
 
-                previous = existing.get(key)
                 if previous is None:
                     record = JobRecord(job=job, first_seen_at=timestamp, last_seen_at=timestamp, status=status)
                     report.new.append(job.job_id)
@@ -469,6 +485,9 @@ class SqliteJobStore:
                     "content_hash": job.content_hash,
                     "first_seen_at": record.first_seen_at,
                     "revisions": record.revisions,
+                    "company": job.company,
+                    "title": job.title,
+                    "deadline": job.deadline,
                 }
 
             # ② 이번에 안 보인 같은 소스의 공고: 만료 / 목록에서 봄 / 미관측 누적 / 삭제
@@ -646,8 +665,8 @@ class SqliteJobStore:
                 job_id,
                 f"SARAMIN-{job_id}",
                 str(record.get("source_url") or ""),
-                str(record.get("company") or ""),
-                str(record.get("title") or ""),
+                clean_company_name(str(record.get("company") or "")),
+                clean_listing_text(str(record.get("title") or "")),
                 json.dumps(list(record.get("job_sectors") or []), ensure_ascii=False),
                 cond["region"],
                 cond["career_type"],

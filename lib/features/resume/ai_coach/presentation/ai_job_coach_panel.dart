@@ -3,9 +3,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/routing/route_paths.dart';
+import '../../../../shared/demo/demo_accounts.dart';
 import '../../../chatbot/presentation/robot_head_icon.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
@@ -13,9 +16,11 @@ import '../../../../shared/providers/firebase_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/services/ai_ops_service.dart';
 import '../../../../shared/constants/ai_ops_types.dart';
+import '../data/demo_ai_coach_clients.dart';
 import '../data/resume_review_api_client.dart';
 import 'job_resume_review_dialog.dart';
 import 'job_recommendation_loading.dart';
+import 'review_dock.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
@@ -30,15 +35,23 @@ class AiJobCoachPanel extends ConsumerStatefulWidget {
   const AiJobCoachPanel({
     super.key,
     required this.resumeId,
+    this.resumeTitle = '',
     required this.draftContent,
     required this.isSidebar,
     required this.onClose,
     this.hasUnsavedChanges = false,
     this.onResumeChanged,
     this.onSaveRequested,
+    this.baseResumeId = '',
+    this.sourceTailoredResumeId = '',
+    this.linkedJobId = '',
   });
 
   final String resumeId;
+  final String resumeTitle;
+  final String baseResumeId;
+  final String sourceTailoredResumeId;
+  final String linkedJobId;
   final ResumeContent draftContent;
   final bool isSidebar;
   final VoidCallback onClose;
@@ -88,6 +101,114 @@ class _ChatMessage {
 }
 
 class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
+  String _resolvedLinkedJobId = '';
+
+  bool get _hasLinkedJob =>
+      _resolvedLinkedJobId.isNotEmpty ||
+      widget.linkedJobId.isNotEmpty ||
+      (widget.baseResumeId.isNotEmpty &&
+          widget.sourceTailoredResumeId.isNotEmpty);
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvedLinkedJobId = widget.linkedJobId;
+    if (_resolvedLinkedJobId.isEmpty) {
+      unawaited(_restoreLinkedJobId());
+    }
+  }
+
+  Future<void> _restoreLinkedJobId() async {
+    if (widget.baseResumeId.isEmpty || widget.sourceTailoredResumeId.isEmpty) {
+      return;
+    }
+    final cohort = ref.read(effectiveCohortIdProvider);
+    if (cohort == null) return;
+    try {
+      final snapshot = await ref
+          .read(firestoreProvider)
+          .collection('cohorts')
+          .doc(cohort)
+          .collection('resumes')
+          .doc(widget.baseResumeId)
+          .collection('tailoredResumes')
+          .doc(widget.sourceTailoredResumeId)
+          .get();
+      final jobId = snapshot.data()?['jobId'] as String? ?? '';
+      if (mounted && jobId.isNotEmpty) {
+        setState(() => _resolvedLinkedJobId = jobId);
+      }
+    } catch (_) {
+      // 이전 저장본의 연결 정보를 읽지 못하면 버튼을 눌렀을 때 안내한다.
+    }
+  }
+
+  Future<void> _showLinkedJob() async {
+    if (_loading) return;
+    var jobId = _resolvedLinkedJobId;
+    if (jobId.isEmpty) {
+      await _restoreLinkedJobId();
+      jobId = _resolvedLinkedJobId;
+    }
+    final api = ref.read(jobRecommendApiClientProvider);
+    if (jobId.isEmpty || api == null) {
+      if (mounted) setState(() => _error = '연결된 맞춤 공고를 불러올 수 없습니다.');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+      _recommendationError = null;
+    });
+    try {
+      final response = await api.chat(message: '이 공고 정보', jobId: jobId);
+      final job = response.jobs
+          .where((item) => item.jobId == jobId)
+          .firstOrNull;
+      if (job == null) {
+        throw const JobRecommendApiException('연결된 공고가 현재 공고 저장소에 없습니다.');
+      }
+      final recommendation = JobRecommendation(
+        jobId: job.jobId,
+        source: '',
+        sourceUrl: job.sourceUrl,
+        company: job.company,
+        title: job.title,
+        score: 0,
+        grade: '맞춤',
+        hardFilterStatus: 'PASS',
+        unknownConditions: const [],
+        evidence: job.techStack,
+        matchedSkills: job.techStack,
+        region: job.region,
+        employmentType: job.employmentType,
+        careerText: job.career,
+        deadline: job.deadline,
+        // 연결 공고는 새로 점수를 계산한 추천 결과가 아니다. 서버 공고 카드로
+        // 표시해야 0.0점 같은 가짜 점수를 숨기고 재첨삭 버튼도 노출된다.
+        searchRank: 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _result = AiJobCoachResult(
+          testMode: false,
+          notice: '이 맞춤 이력서와 연결된 공고입니다.',
+          recommendations: [recommendation],
+          selectedJob: null,
+          skillJudgements: const [],
+          resumeFeedback: const [],
+          learningRecommendations: const [],
+          analysisId: '',
+          fromServer: true,
+        );
+      });
+    } on JobRecommendApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   /// 저장 안 된 변경이 있으면 사용자에게 묻고 대신 저장한다. 이어가도 되면 true.
   Future<bool> _saveBeforeReview() async {
     final save = widget.onSaveRequested;
@@ -135,11 +256,18 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (!mounted) return;
     final cohort = ref.read(effectiveCohortIdProvider);
     final user = ref.read(firebaseAuthProvider).currentUser;
-    if (cohort == null || user == null) {
+    if (cohort == null || (user == null && !DemoConfig.enabled)) {
       setState(() => _error = '첨삭에는 실제 Firebase 로그인이 필요합니다.');
       return;
     }
-    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    // 데모 모드에는 첨삭 서버가 없다. 온보딩 캡처용 예시 수정안을 돌려준다.
+    final ResumeReviewApiClient client = DemoConfig.enabled
+        ? DemoResumeReviewApiClient(
+            draft: widget.draftContent,
+            jobCompany: job.company,
+            jobTitle: job.title,
+          )
+        : ResumeReviewApiClient(token: () => user!.getIdToken());
     // 이 추천을 받아 첨삭까지 갔다는 표시. 추천이 실제로 쓰였는지를 이걸로 센다.
     // 기다리지 않는다 — 로그 때문에 대화창이 늦게 뜨면 안 된다.
     final recommendLogId = _recommendLogId;
@@ -157,14 +285,18 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             ),
       );
     }
+    // 창을 내려두고 다른 화면으로 가면 이 패널은 사라진다. 끝난 뒤 이동은 라우터로 한다.
+    final router = GoRouter.of(context);
+    final reviewKey = ValueKey('job-review-${widget.resumeId}-${job.jobId}');
     try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => JobResumeReviewDialog(
+      final workspaceResumeId = await ReviewDock.show<String>(
+        context,
+        key: reviewKey,
+        child: JobResumeReviewDialog(
+          key: reviewKey,
           client: client,
           cohortId: cohort,
-          aiOps: ref.read(aiOpsServiceProvider),
+          aiOps: DemoConfig.enabled ? null : ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           jobId: job.jobId,
           jobCompany: job.company,
@@ -180,6 +312,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           },
         ),
       );
+      if (workspaceResumeId != null) {
+        router.push(RoutePaths.resumeEditPath(workspaceResumeId));
+      }
     } finally {
       client.close();
     }
@@ -289,25 +424,31 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (!mounted) return;
     final cohort = ref.read(effectiveCohortIdProvider);
     final user = ref.read(firebaseAuthProvider).currentUser;
-    if (cohort == null || user == null) {
+    if (cohort == null || (user == null && !DemoConfig.enabled)) {
       setState(() => _error = '첨삭에는 실제 Firebase 로그인이 필요합니다.');
       return;
     }
-    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    final ResumeReviewApiClient client = DemoConfig.enabled
+        ? DemoResumeReviewApiClient(draft: widget.draftContent)
+        : ResumeReviewApiClient(token: () => user!.getIdToken());
+    final reviewKey = ValueKey('general-review-${widget.resumeId}');
     try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => JobResumeReviewDialog(
+      await ReviewDock.show<void>(
+        context,
+        key: reviewKey,
+        child: JobResumeReviewDialog(
+          key: reviewKey,
           client: client,
           cohortId: cohort,
-          aiOps: ref.read(aiOpsServiceProvider),
+          aiOps: DemoConfig.enabled ? null : ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           draft: widget.draftContent,
           generalReview: true,
           onChanged: (content) {
+            // 창을 내려두고 편집 화면을 떠났으면 알릴 곳이 없다. 저장은 서버가 이미 했다.
+            if (!mounted) return;
             widget.onResumeChanged?.call(content);
-            if (mounted) setState(() => _result = null);
+            setState(() => _result = null);
           },
         ),
       );
@@ -613,7 +754,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     // 무엇이 나왔고 얼마나 걸렸는지 남긴다. 원문은 안 보내고 메타만 보낸다.
     // 기수를 모르면(로그인 전) 남길 곳이 없으므로 건너뛴다. 로그가 실패해도
     // 추천은 막지 않는다 — `recordCoachLog`가 실패 시 null을 돌려준다.
-    final cohort = ref.read(effectiveCohortIdProvider);
+    // 데모 모드는 예시 결과라 남기지 않는다.
+    final cohort = DemoConfig.enabled
+        ? null
+        : ref.read(effectiveCohortIdProvider);
     final ops = ref.read(aiOpsServiceProvider);
     final watch = Stopwatch()..start();
     setState(() {
@@ -751,6 +895,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                       children: [
                         SizedBox(height: AppSpace.s(10)),
                         _CurrentResumeCard(
+                          title: widget.resumeTitle,
                           content: widget.draftContent,
                           readiness: _readiness,
                           analyzing: _loading,
@@ -786,14 +931,20 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                               child: _ActionButton(
                                 icon: Icons.star_rounded,
                                 iconColor: Color(0xFFF4C430),
-                                label: '맞춤 공고 추천',
+                                label: _hasLinkedJob ? '맞춤 공고 보기' : '맞춤 공고 추천',
                                 loading: _loading,
                                 // 필수 항목이 하나라도 비면 추천하지 않는다.
-                                enabled: _readiness.canRecommendJobs,
-                                disabledTooltip: _readiness.blockedReason(
-                                  AiCoachFeature.jobRecommendation,
-                                ),
-                                onPressed: _run,
+                                enabled:
+                                    _hasLinkedJob ||
+                                    _readiness.canRecommendJobs,
+                                disabledTooltip: _hasLinkedJob
+                                    ? null
+                                    : _readiness.blockedReason(
+                                        AiCoachFeature.jobRecommendation,
+                                      ),
+                                onPressed: _hasLinkedJob
+                                    ? _showLinkedJob
+                                    : _run,
                               ),
                             ),
                             SizedBox(width: AppSpace.s(8)),
@@ -829,7 +980,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                           SizedBox(height: AppSpace.s(18)),
                           // 기술 근거·이력서 피드백·학습 추천 섹션은 팀원의 첨삭 모듈(S32-17)이 맡기로 해 제거했다.
                           _RecommendationSection(
+                            title: _hasLinkedJob ? '맞춤 공고' : '맞춤 공고 Ranking',
                             result: result,
+                            reviewButtonLabel: _hasLinkedJob ? '재첨삭' : null,
                             onReview: widget.onResumeChanged == null
                                 ? null
                                 : _reviewJob,
@@ -843,7 +996,12 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: Padding(
-                        padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(14), AppSpace.s(24)),
+                        padding: EdgeInsets.fromLTRB(
+                          AppSpace.s(14),
+                          AppSpace.s(12),
+                          AppSpace.s(14),
+                          AppSpace.s(24),
+                        ),
                         child: Align(
                           alignment: Alignment.bottomCenter,
                           child: JobRecommendationLoading(
@@ -890,7 +1048,12 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(10), AppSpace.s(8), AppSpace.s(10)),
+      padding: EdgeInsets.fromLTRB(
+        AppSpace.s(14),
+        AppSpace.s(10),
+        AppSpace.s(8),
+        AppSpace.s(10),
+      ),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
@@ -974,7 +1137,10 @@ class _ActionButton extends StatelessWidget {
       onPressed: (loading || !enabled) ? null : onPressed,
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(98),
-        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(6), vertical: AppSpace.s(15)),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpace.s(6),
+          vertical: AppSpace.s(15),
+        ),
         foregroundColor: AppColors.textPrimary,
         side: BorderSide(color: AppColors.border),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -1044,15 +1210,22 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _RecommendationSection extends StatelessWidget {
-  const _RecommendationSection({required this.result, this.onReview});
+  const _RecommendationSection({
+    required this.result,
+    required this.title,
+    this.reviewButtonLabel,
+    this.onReview,
+  });
 
   final AiJobCoachResult result;
+  final String title;
+  final String? reviewButtonLabel;
   final ValueChanged<JobRecommendation>? onReview;
 
   @override
   Widget build(BuildContext context) {
     return _Section(
-      title: '맞춤 공고 Ranking',
+      title: title,
       subtitle: result.notice,
       child: Column(
         children: [
@@ -1078,6 +1251,7 @@ class _RecommendationSection extends StatelessWidget {
               child: _RecommendationCard(
                 index: index + 1,
                 item: result.recommendations[index],
+                reviewButtonLabel: reviewButtonLabel,
                 onReview: onReview,
               ),
             ),
@@ -1091,11 +1265,13 @@ class _RecommendationCard extends StatefulWidget {
   const _RecommendationCard({
     required this.index,
     required this.item,
+    this.reviewButtonLabel,
     this.onReview,
   });
 
   final int index;
   final JobRecommendation item;
+  final String? reviewButtonLabel;
   final ValueChanged<JobRecommendation>? onReview;
 
   @override
@@ -1171,7 +1347,10 @@ class _RecommendationCardState extends State<_RecommendationCard> {
         style: FilledButton.styleFrom(
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 32),
-          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(7)),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(10),
+            vertical: AppSpace.s(7),
+          ),
           visualDensity: VisualDensity.compact,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
@@ -1179,7 +1358,7 @@ class _RecommendationCardState extends State<_RecommendationCard> {
         ),
         icon: const Icon(Icons.auto_fix_high, size: 14),
         label: Text(
-          unavailable ? '원문 확인 불가' : '공고 맞춤 첨삭',
+          unavailable ? '원문 확인 불가' : (widget.reviewButtonLabel ?? '공고 맞춤 첨삭'),
           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
       ),
@@ -1686,7 +1865,10 @@ class _SkillChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(3)),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(7),
+        vertical: AppSpace.s(3),
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
@@ -1717,7 +1899,10 @@ class _ChipRow extends StatelessWidget {
       children: [
         for (final text in items)
           Container(
-            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(3)),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpace.s(7),
+              vertical: AppSpace.s(3),
+            ),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
@@ -1802,19 +1987,20 @@ class _ErrorCard extends StatelessWidget {
 /// Figma 시안의 "현재 분석 중인 이력서" 카드.
 class _CurrentResumeCard extends StatelessWidget {
   const _CurrentResumeCard({
+    required this.title,
     required this.content,
     required this.readiness,
     required this.analyzing,
   });
 
   final ResumeContent content;
+  final String title;
   final ResumeReadiness readiness;
   final bool analyzing;
 
   @override
   Widget build(BuildContext context) {
     final ready = readiness.canRecommendJobs;
-    final name = content.basicInfo.name.trim();
     final skillCount = content.techStack.where((item) => item.isFilled).length;
     final projectCount = content.projects.where((item) => item.isFilled).length;
 
@@ -1844,7 +2030,7 @@ class _CurrentResumeCard extends StatelessWidget {
                     ),
                     SizedBox(height: AppSpace.s(5)),
                     Text(
-                      name.isEmpty ? '현재 작성 중인 이력서' : '$name 님의 이력서',
+                      title.trim().isEmpty ? '현재 작성 중인 이력서' : title.trim(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -2016,26 +2202,33 @@ class _ChatViewState extends State<_ChatView> {
             itemCount: messages.length + (busy ? 1 : 0),
             itemBuilder: (context, index) => index == messages.length
                 ? _CoachTyping(
-                    labels: busyLabels.isEmpty ? const ['답을 찾는 중…'] : busyLabels,
+                    labels: busyLabels.isEmpty
+                        ? const ['답을 찾는 중…']
+                        : busyLabels,
                   )
                 : _ChatBubble(
-              message: messages[index],
-              onAskAbout: busy ? null : onAskAbout,
-              // 넘어가기는 마지막 답에서만. 지나간 답의 버튼을 누르면 그때 물어본
-              // 것이 아니라 지금 이력서로 돌아 혼란스럽다.
-              onOpenDetail: busy ? null : onOpenDetail,
-              // 제안은 마지막 답에서만 누를 수 있다. 지나간 답의 제안을 누르면 그때가
-              // 아니라 지금 조건에 붙어 엉뚱한 결과가 나온다.
-              onSuggestion: index == messages.length - 1 && !busy
-                  ? onSuggestion
-                  : null,
-            ),
+                    message: messages[index],
+                    onAskAbout: busy ? null : onAskAbout,
+                    // 넘어가기는 마지막 답에서만. 지나간 답의 버튼을 누르면 그때 물어본
+                    // 것이 아니라 지금 이력서로 돌아 혼란스럽다.
+                    onOpenDetail: busy ? null : onOpenDetail,
+                    // 제안은 마지막 답에서만 누를 수 있다. 지나간 답의 제안을 누르면 그때가
+                    // 아니라 지금 조건에 붙어 엉뚱한 결과가 나온다.
+                    onSuggestion: index == messages.length - 1 && !busy
+                        ? onSuggestion
+                        : null,
+                  ),
           ),
         ),
         // 무엇에 대해 묻는 중인지. 이게 없으면 짧은 말이 어디로 가는지 알 수 없다.
         if (askingAbout case final job?)
           Container(
-            padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(8), AppSpace.s(6), AppSpace.s(8)),
+            padding: EdgeInsets.fromLTRB(
+              AppSpace.s(12),
+              AppSpace.s(8),
+              AppSpace.s(6),
+              AppSpace.s(8),
+            ),
             color: AppColors.primaryLight.withValues(alpha: 0.4),
             child: Row(
               children: [
@@ -2066,7 +2259,12 @@ class _ChatViewState extends State<_ChatView> {
             ),
           ),
         Container(
-          padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(8), AppSpace.s(12), AppSpace.s(12)),
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.s(12),
+            AppSpace.s(8),
+            AppSpace.s(12),
+            AppSpace.s(12),
+          ),
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: AppColors.border)),
           ),
@@ -2120,76 +2318,81 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bubble = Container(
-        margin: EdgeInsets.only(bottom: AppSpace.s(10)),
-        padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(12)),
-        constraints: const BoxConstraints(maxWidth: 300),
-        // 답이 길면 말풍선이 배경에 묻혀 글자만 흩어져 보였다. 배경을 옅게라도
-        // 깔고 테두리를 둘러야 "여기까지가 한 답"이라는 게 보인다.
-        decoration: BoxDecoration(
-          color: message.isUser
-              ? AppColors.primaryLight
-              : AppColors.surfaceVariant,
-          borderRadius: BorderRadius.circular(10),
-          border: message.isUser ? null : Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ChatText(message.text),
-            // 이력서를 읽고 고른 공고. 적합도와 근거가 붙는다.
-            for (final job in message.recommendations) ...[
-              SizedBox(height: AppSpace.s(8)),
-              _ChatRecommendCard(job: job),
-            ],
-            if (message.recommendations.isNotEmpty && onOpenDetail != null) ...[
-              SizedBox(height: AppSpace.s(8)),
-              InkWell(
-                onTap: onOpenDetail,
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: AppSpace.s(2)),
-                  child: Text(
-                    '근거 전체 보기 →',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF7C3AED),
-                    ),
+      margin: EdgeInsets.only(bottom: AppSpace.s(10)),
+      padding: EdgeInsets.fromLTRB(
+        AppSpace.s(12),
+        AppSpace.s(10),
+        AppSpace.s(12),
+        AppSpace.s(12),
+      ),
+      constraints: const BoxConstraints(maxWidth: 300),
+      // 답이 길면 말풍선이 배경에 묻혀 글자만 흩어져 보였다. 배경을 옅게라도
+      // 깔고 테두리를 둘러야 "여기까지가 한 답"이라는 게 보인다.
+      decoration: BoxDecoration(
+        color: message.isUser
+            ? AppColors.primaryLight
+            : AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(10),
+        border: message.isUser ? null : Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ChatText(message.text),
+          // 이력서를 읽고 고른 공고. 적합도와 근거가 붙는다.
+          for (final job in message.recommendations) ...[
+            SizedBox(height: AppSpace.s(8)),
+            _ChatRecommendCard(job: job),
+          ],
+          if (message.recommendations.isNotEmpty && onOpenDetail != null) ...[
+            SizedBox(height: AppSpace.s(8)),
+            InkWell(
+              onTap: onOpenDetail,
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpace.s(2)),
+                child: Text(
+                  '근거 전체 보기 →',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF7C3AED),
                   ),
                 ),
               ),
-            ],
-            // 질문에 답한 경우 목록은 찾아 준 결과가 아니라 **답의 근거**다.
-            // 그렇게 적어 두지 않으면 "이게 추천인가?"로 읽힌다.
-            if (message.mode == '질문' && message.jobs.isNotEmpty) ...[
-              SizedBox(height: AppSpace.s(8)),
-              Text(
-                '이 숫자를 센 공고들이에요',
-                style: TextStyle(fontSize: 10.5, color: AppColors.textHint),
+            ),
+          ],
+          // 질문에 답한 경우 목록은 찾아 준 결과가 아니라 **답의 근거**다.
+          // 그렇게 적어 두지 않으면 "이게 추천인가?"로 읽힌다.
+          if (message.mode == '질문' && message.jobs.isNotEmpty) ...[
+            SizedBox(height: AppSpace.s(8)),
+            Text(
+              '이 숫자를 센 공고들이에요',
+              style: TextStyle(fontSize: 10.5, color: AppColors.textHint),
+            ),
+          ],
+          for (final job in message.jobs) ...[
+            SizedBox(height: AppSpace.s(8)),
+            _ChatJobCard(
+              job: job,
+              onAsk: onAskAbout == null ? null : () => onAskAbout!(job),
+            ),
+          ],
+          if (message.suggestions.isNotEmpty && onSuggestion != null) ...[
+            SizedBox(height: AppSpace.s(8)),
+            // 제안은 문장이라 한 줄에 안 들어간다. Chip은 높이가 한 줄로 고정되어
+            // 폭을 좁혀 줘도 글자가 잘렸다. 줄이 늘어나는 만큼 키가 크는 버튼으로
+            // 바꾼다. 나란히 놓을 것도 아니어서 한 줄에 하나씩 세로로 쌓는다.
+            for (final suggestion in message.suggestions) ...[
+              SizedBox(height: AppSpace.s(6)),
+              _SuggestionButton(
+                text: suggestion,
+                onTap: () => onSuggestion!(suggestion),
               ),
-            ],
-            for (final job in message.jobs) ...[
-              SizedBox(height: AppSpace.s(8)),
-              _ChatJobCard(
-                job: job,
-                onAsk: onAskAbout == null ? null : () => onAskAbout!(job),
-              ),
-            ],
-            if (message.suggestions.isNotEmpty && onSuggestion != null) ...[
-              SizedBox(height: AppSpace.s(8)),
-              // 제안은 문장이라 한 줄에 안 들어간다. Chip은 높이가 한 줄로 고정되어
-              // 폭을 좁혀 줘도 글자가 잘렸다. 줄이 늘어나는 만큼 키가 크는 버튼으로
-              // 바꾼다. 나란히 놓을 것도 아니어서 한 줄에 하나씩 세로로 쌓는다.
-              for (final suggestion in message.suggestions) ...[
-                SizedBox(height: AppSpace.s(6)),
-                _SuggestionButton(
-                  text: suggestion,
-                  onTap: () => onSuggestion!(suggestion),
-                ),
-              ],
             ],
           ],
-        ),
+        ],
+      ),
     );
 
     if (message.isUser) {
@@ -2293,7 +2496,10 @@ class _CoachTypingState extends State<_CoachTyping>
         Flexible(
           child: Container(
             margin: EdgeInsets.only(bottom: AppSpace.s(10)),
-            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(11)),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpace.s(12),
+              vertical: AppSpace.s(11),
+            ),
             decoration: BoxDecoration(
               color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(10),
@@ -2333,7 +2539,10 @@ class _CoachTypingState extends State<_CoachTyping>
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
                       child: Text(
-                        widget.labels[math.min(_index, widget.labels.length - 1)],
+                        widget.labels[math.min(
+                          _index,
+                          widget.labels.length - 1,
+                        )],
                         key: ValueKey(_index),
                         style: TextStyle(
                           fontSize: 11,
@@ -2366,7 +2575,10 @@ class _SuggestionButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(7)),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpace.s(10),
+          vertical: AppSpace.s(7),
+        ),
         decoration: BoxDecoration(
           color: AppColors.primaryLight.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(8),
@@ -2604,7 +2816,10 @@ class _ChatJobCard extends StatelessWidget {
                     onTap: onAsk,
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(4), vertical: AppSpace.s(2)),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpace.s(4),
+                        vertical: AppSpace.s(2),
+                      ),
                       child: Text(
                         '이 공고 물어보기',
                         style: TextStyle(
