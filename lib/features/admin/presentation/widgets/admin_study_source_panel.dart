@@ -6,6 +6,7 @@ import '../../../../core/widgets/loading_widgets.dart';
 import '../../../../shared/models/study_source_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 class AdminStudySourcePanel extends ConsumerWidget {
   const AdminStudySourcePanel({super.key});
@@ -31,22 +32,22 @@ class AdminStudySourcePanel extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        const Text(
+        SizedBox(height: AppSpace.s(8)),
+        Text(
           '기수별 수업 저장소를 등록합니다. 공개 GitHub 저장소면 토큰 없이 됩니다. 학생은 활성 소스만 보고, 고른 범위만 정리합니다.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         sources.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.all(24),
+          loading: () => Padding(
+            padding: EdgeInsets.all(AppSpace.s(24)),
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (e, _) => ErrorView(message: e.toString()),
           data: (list) {
             if (list.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
+              return Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpace.s(12)),
                 child: Text(
                   '등록된 수업 저장소가 없습니다',
                   style: TextStyle(color: AppColors.textSecondary),
@@ -61,7 +62,7 @@ class AdminStudySourcePanel extends ConsumerWidget {
                     onEdit: () => _openForm(context, ref, source: source),
                     onToggle: () => _toggle(context, ref, source),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                 ],
               ],
             );
@@ -79,7 +80,9 @@ class AdminStudySourcePanel extends ConsumerWidget {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
     try {
-      await ref.read(lmsRepositoryProvider).updateStudySource(
+      await ref
+          .read(lmsRepositoryProvider)
+          .updateStudySource(
             cohortId: cohortId,
             sourceId: source.id,
             updates: {'isActive': !source.isActive},
@@ -106,7 +109,8 @@ class AdminStudySourcePanel extends ConsumerWidget {
         onSubmit: (draft) async {
           final repo = ref.read(lmsRepositoryProvider);
           if (source == null) {
-            final count = ref.read(studySourcesProvider).asData?.value.length ?? 0;
+            final count =
+                ref.read(studySourcesProvider).asData?.value.length ?? 0;
             await repo.createStudySource(
               cohortId: cohortId,
               source: StudySourceModel(
@@ -151,7 +155,7 @@ class _SourceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(10)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
@@ -163,12 +167,18 @@ class _SourceTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(source.title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text(source.repoLabel, style: const TextStyle(color: AppColors.textSecondary)),
+                Text(
+                  source.title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: AppSpace.s(2)),
+                Text(
+                  source.repoLabel,
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
                 Text(
                   '${source.branch} · ${source.prefixSummary}',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textHint),
+                  style: TextStyle(fontSize: 12, color: AppColors.textHint),
                 ),
               ],
             ),
@@ -184,7 +194,11 @@ class _SourceTile extends StatelessWidget {
           IconButton(
             onPressed: onToggle,
             tooltip: source.isActive ? '비활성화' : '공개',
-            icon: Icon(source.isActive ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+            icon: Icon(
+              source.isActive
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+            ),
           ),
         ],
       ),
@@ -245,7 +259,9 @@ class _StudySourceFormDialogState extends State<_StudySourceFormDialog> {
     _title = TextEditingController(text: source?.title ?? '');
     _url = TextEditingController(text: source?.repoUrl ?? '');
     _branch = TextEditingController(text: source?.branch ?? 'main');
-    _prefixes = TextEditingController(text: source?.allowedPrefixes.join('\n') ?? '');
+    _prefixes = TextEditingController(
+      text: source?.allowedPrefixes.join('\n') ?? '',
+    );
     _active = source?.isActive ?? true;
   }
 
@@ -300,24 +316,26 @@ class _StudySourceFormDialogState extends State<_StudySourceFormDialog> {
                 TextFormField(
                   controller: _title,
                   decoration: const InputDecoration(labelText: '제목'),
-                  validator: (value) =>
-                      (value == null || value.trim().isEmpty) ? '제목을 입력하세요.' : null,
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? '제목을 입력하세요.'
+                      : null,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _url,
                   decoration: const InputDecoration(
                     labelText: 'GitHub URL',
                     hintText: 'https://github.com/owner/repo',
                   ),
-                  validator: (value) => StudySourceModel.validateRepoUrl(value ?? ''),
+                  validator: (value) =>
+                      StudySourceModel.validateRepoUrl(value ?? ''),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _branch,
                   decoration: const InputDecoration(labelText: '브랜치'),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _prefixes,
                   minLines: 3,
@@ -332,7 +350,9 @@ class _StudySourceFormDialogState extends State<_StudySourceFormDialog> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('공개'),
                   value: _active,
-                  onChanged: _saving ? null : (value) => setState(() => _active = value),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _active = value),
                 ),
               ],
             ),

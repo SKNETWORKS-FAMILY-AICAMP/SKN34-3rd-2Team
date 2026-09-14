@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../theme/mileage_theme.dart';
+import '../../../../core/theme/app_space.dart';
 
 export 'mileage_credit_card.dart';
 
@@ -22,11 +23,11 @@ class MileagePageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         MileageLayout.pagePaddingH,
-        8,
+        AppSpace.s(8),
         MileageLayout.pagePaddingH,
-        0,
+        AppSpace.s(0),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,7 +44,7 @@ class MileagePageHeader extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: AppSpace.s(2)),
                 Text(
                   subtitle,
                   style: TextStyle(
@@ -111,7 +112,7 @@ class MileageSegmentTabs extends StatelessWidget {
           ),
           child: SizedBox(
             width: double.infinity,
-            height: 40,
+            height: AppSpace.row(40),
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: AppColors.surface,
@@ -174,7 +175,7 @@ class _SegmentTab extends StatelessWidget {
         ),
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
             child: Text(
               label,
               maxLines: 1,
@@ -184,7 +185,9 @@ class _SegmentTab extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppColors.textPrimary,
+                // 선택 칸은 글씨색으로 칠한다. 그 위 글씨는 바탕색이어야 라이트에서는
+                // 검정 칸에 흰 글씨, 다크에서는 밝은 칸에 어두운 글씨가 된다.
+                color: selected ? AppColors.surface : AppColors.textPrimary,
               ),
             ),
           ),
@@ -207,7 +210,7 @@ class MileageTagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(6), vertical: AppSpace.s(2)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
@@ -253,7 +256,7 @@ class MileageFilterChipRow extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: AppSpace.s(6)),
         ],
         Wrap(
           spacing: 6,
@@ -278,7 +281,7 @@ class MileageFilterChipRow extends StatelessWidget {
               showCheckmark: false,
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: const EdgeInsets.symmetric(horizontal: 2),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(2)),
             );
           }).toList(),
         ),
@@ -329,8 +332,8 @@ class MileageDateFilterBar extends StatelessWidget {
                       onTap: onPickStart,
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(6)),
                     child: Text('~', style: TextStyle(fontSize: 13)),
                   ),
                   Expanded(
@@ -342,7 +345,7 @@ class MileageDateFilterBar extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -362,7 +365,7 @@ class MileageDateFilterBar extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       minimumSize: const Size(0, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14)),
                       textStyle: const TextStyle(fontSize: 12),
                     ),
                     onPressed: () {},
@@ -399,7 +402,7 @@ class _DateField extends StatelessWidget {
           labelText: label,
           labelStyle: const TextStyle(fontSize: 12),
           border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          contentPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(6)),
           suffixIcon: const Icon(Icons.calendar_today, size: 16),
           isDense: true,
         ),
@@ -432,7 +435,7 @@ class _SmallPresetChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(6),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(6)),
           child: Text(
             label,
             style: TextStyle(
@@ -457,7 +460,7 @@ class MileagePageScroll extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 32),
+      padding: EdgeInsets.only(bottom: AppSpace.s(32)),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: MileageLayout.maxContentWidth + 40),

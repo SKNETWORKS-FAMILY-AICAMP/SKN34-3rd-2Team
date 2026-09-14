@@ -7,6 +7,7 @@ import '../../../shared/models/notice_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../hub/presentation/widgets/board_ui.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 공지 작성/수정
 class AdminNoticeFormScreen extends ConsumerStatefulWidget {
@@ -141,12 +142,12 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 16),
+            padding: EdgeInsets.only(right: AppSpace.s(16)),
             child: FilledButton(
               onPressed: _loading ? null : _save,
               style: BoardUi.primaryButtonStyle(),
               child: _loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
@@ -164,7 +165,7 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(32), AppSpace.s(24), AppSpace.s(32), AppSpace.s(32)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -184,9 +185,9 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppSpace.s(16)),
                 Divider(height: 1, color: AppColors.border),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 Expanded(
                   child: TextField(
                     controller: _contentController,

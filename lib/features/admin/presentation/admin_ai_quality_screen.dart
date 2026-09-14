@@ -7,6 +7,7 @@ import '../../../shared/constants/ai_ops_types.dart';
 import '../../../shared/models/ai_ops_models.dart';
 import '../../../shared/providers/ai_ops_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — LLM 기능 운영 (로그·지연·피드백·버전)
 class AdminAiQualityScreen extends ConsumerWidget {
@@ -36,7 +37,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
           ref.invalidate(aiQuestionFeedbackProvider);
         },
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(16), AppSpace.s(16), AppSpace.s(32)),
           children: [
             Text(
               'AI 품질 · ${cohortName ?? '기수 미선택'}',
@@ -45,7 +46,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: AppSpace.s(6)),
             Text(
               'LLM 기능 운영 — 생성 로그 · 지연 · 피드백 · 프롬프트 버전 비교\n'
               '문제생성 · 공고챗봇 · 맞춤 추천 · 이력서 첨삭',
@@ -55,7 +56,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
                 height: 1.4,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -72,7 +73,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -110,12 +111,12 @@ class AdminAiQualityScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: AppSpace.s(20)),
             const Text(
               '프롬프트 버전별',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             if (stats.byPromptVersion.isEmpty)
               Text(
                 '아직 버전별 데이터가 없습니다.',
@@ -128,7 +129,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
                 final useful = e.value.useful;
                 final rate = g <= 0 ? 0.0 : a / g;
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
+                  margin: EdgeInsets.only(bottom: AppSpace.s(8)),
                   child: ListTile(
                     title: Text(
                       e.key,
@@ -142,15 +143,15 @@ class AdminAiQualityScreen extends ConsumerWidget {
                   ),
                 );
               }),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             const Text(
               '최근 생성 로그',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             logsAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(24),
+              loading: () => Padding(
+                padding: EdgeInsets.all(AppSpace.s(24)),
                 child: Center(child: CircularProgressIndicator()),
               ),
               error: (e, _) => ErrorView(message: '$e'),
@@ -158,7 +159,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
                 final logs = filterLogsByType(allLogs, typeFilter);
                 if (logs.isEmpty) {
                   return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    padding: EdgeInsets.symmetric(vertical: AppSpace.s(24)),
                     child: Text(
                       '아직 AI 생성 로그가 없습니다.\n'
                       '문제 생성 AI · 취업 코치(챗봇/추천/첨삭)를 실행해 보세요.',
@@ -169,12 +170,15 @@ class AdminAiQualityScreen extends ConsumerWidget {
                 return Column(
                   children: logs.map((log) {
                     final fb = feedback.where((f) => f.logId == log.id);
-                    final adopted =
-                        fb.where((f) => f.outcome == 'adopted').length;
-                    final edited =
-                        fb.where((f) => f.outcome == 'edited').length;
-                    final discarded =
-                        fb.where((f) => f.outcome == 'discarded').length;
+                    final adopted = fb
+                        .where((f) => f.outcome == 'adopted')
+                        .length;
+                    final edited = fb
+                        .where((f) => f.outcome == 'edited')
+                        .length;
+                    final discarded = fb
+                        .where((f) => f.outcome == 'discarded')
+                        .length;
                     final useful = fb
                         .where(
                           (f) => AiOpsOutcomes.isUseful(log.type, f.outcome),
@@ -209,9 +213,9 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 140,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(10)),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -225,7 +229,7 @@ class _StatChip extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           Text(
             value,
             style: const TextStyle(
@@ -270,17 +274,19 @@ class _LogCard extends StatelessWidget {
     ];
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(12), AppSpace.s(12), AppSpace.s(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(8),
+                    vertical: AppSpace.s(2),
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(999),
@@ -293,14 +299,16 @@ class _LogCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: AppSpace.s(6)),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(8),
+                    vertical: AppSpace.s(2),
+                  ),
                   decoration: BoxDecoration(
                     color: ok
-                        ? const Color(0xFFDCFCE7)
-                        : const Color(0xFFFEE2E2),
+                        ? AppColors.tint(const Color(0xFFDCFCE7))
+                        : AppColors.tint(const Color(0xFFFEE2E2)),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -314,7 +322,7 @@ class _LogCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: AppSpace.s(8)),
                 Expanded(
                   child: Text(
                     when,
@@ -333,7 +341,7 @@ class _LogCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: AppSpace.s(6)),
             Text(
               log.isAssessment
                   ? '${log.promptVersion} · ${log.model} · '
@@ -343,7 +351,7 @@ class _LogCard extends StatelessWidget {
                         '${metaBits.isEmpty ? '' : ' · ${metaBits.join(' · ')}'}',
               style: const TextStyle(fontSize: 12, height: 1.35),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: AppSpace.s(4)),
             Text(
               log.isAssessment
                   ? '피드백 채택 $adopted · 수정 $edited · 폐기 $discarded'
@@ -355,10 +363,10 @@ class _LogCard extends StatelessWidget {
               ),
             ),
             if (log.errorMessage != null && log.errorMessage!.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: AppSpace.s(4)),
               Text(
                 log.errorMessage!,
-                style: const TextStyle(fontSize: 12, color: AppColors.error),
+                style: TextStyle(fontSize: 12, color: AppColors.error),
               ),
             ],
           ],

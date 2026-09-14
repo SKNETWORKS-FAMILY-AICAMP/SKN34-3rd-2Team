@@ -67,4 +67,76 @@ void main() {
       );
     });
   });
+
+  group('"이거 말고"에 뺄 공고', () {
+    // 예전에는 직전 목록만 기억해서, 서버가 빼 줘도 두 번째 "이거 말고"에 첫 목록이
+    // 다시 나올 수밖에 없었다. 끝까지 넘겨 보려면 본 것을 모두 들고 있어야 한다.
+    const page1 = ['J1', 'J2', 'J3'];
+    const page2 = ['J4', 'J5', 'J6'];
+
+    test('같은 조건으로 넘겨 보면 쌓인다', () {
+      final afterTwo = nextSeenJobIds(
+        mode: '검색',
+        jobsInAnswer: page2,
+        previous: page1,
+        sameConditions: true,
+      );
+      expect(afterTwo, [...page1, ...page2]);
+    });
+
+    test('조건이 바뀌면 새로 센다', () {
+      expect(
+        nextSeenJobIds(
+          mode: '검색',
+          jobsInAnswer: const ['K1'],
+          previous: page1,
+          sameConditions: false,
+        ),
+        const ['K1'],
+      );
+    });
+
+    test('검색이 아닌 답은 본 목록을 바꾸지 않는다', () {
+      expect(
+        nextSeenJobIds(
+          mode: '비교',
+          jobsInAnswer: const ['J2', 'J3'],
+          previous: page1,
+          sameConditions: true,
+        ),
+        page1,
+      );
+    });
+
+    test('다 넘겨서 0건이면 그대로 둔다', () {
+      expect(
+        nextSeenJobIds(
+          mode: '검색',
+          jobsInAnswer: const [],
+          previous: page1,
+          sameConditions: true,
+        ),
+        page1,
+      );
+    });
+
+    test('같은 공고가 두 번 쌓이지 않는다', () {
+      expect(
+        nextSeenJobIds(
+          mode: '검색',
+          jobsInAnswer: const ['J3', 'J4'],
+          previous: page1,
+          sameConditions: true,
+        ),
+        const ['J1', 'J2', 'J3', 'J4'],
+      );
+    });
+
+    test('조건 비교는 서버가 돌려준 값 그대로 본다', () {
+      final a = {'roles': ['백엔드'], 'regions': <String>[]};
+      expect(sameChatConditions(a, {'roles': ['백엔드'], 'regions': <String>[]}), isTrue);
+      expect(sameChatConditions(a, {'roles': ['백엔드'], 'regions': ['서울']}), isFalse);
+      expect(sameChatConditions(null, a), isFalse, reason: '첫 검색은 새로 센다');
+    });
+  });
 }

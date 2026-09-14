@@ -10,6 +10,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
 import '../../mileage/theme/mileage_theme.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 마일리지 기수 설정 (카테고리 한도)
 class AdminMileageSettingsScreen extends ConsumerStatefulWidget {
@@ -119,7 +120,7 @@ class _AdminMileageSettingsScreenState
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppSpace.s(16)),
                 AdminFormSection(
                   title: '카테고리별 사용 한도 (기수 전체 동일)',
                   children: [
@@ -149,7 +150,7 @@ class _AdminMileageSettingsScreenState
                   ],
                 ),
                 FilledButton(
-                  style: mileagePrimaryButtonStyle(minHeight: 40),
+                  style: mileagePrimaryButtonStyle(minHeight: AppSpace.row(40)),
                   onPressed: _saving ? null : _save,
                   child: _saving
                       ? const SizedBox(
@@ -177,7 +178,7 @@ class _LimitField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: AppSpace.s(12)),
       child: TextField(
         controller: controller,
         keyboardType: TextInputType.number,

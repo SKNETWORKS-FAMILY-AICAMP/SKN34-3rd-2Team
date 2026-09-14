@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../../../shared/widgets/profile_avatar_editor.dart';
 import 'skill_picker_dialog.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 프로필 카드 — 스킬 선택 (마일리지는 별도 3D 카드)
 class DashboardProfileCard extends ConsumerWidget {
@@ -31,7 +32,7 @@ class DashboardProfileCard extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: EdgeInsets.all(AppSpace.s(18)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -45,7 +46,7 @@ class DashboardProfileCard extends ConsumerWidget {
                       photoStoragePath: user.photoStoragePath,
                       radius: 26,
                     ),
-                    const SizedBox(width: 14),
+                    SizedBox(width: AppSpace.s(14)),
                   ],
                   Expanded(
                     child: Column(
@@ -73,9 +74,9 @@ class DashboardProfileCard extends ConsumerWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: AppSpace.s(14)),
               Divider(height: 1, color: AppColors.border),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               InkWell(
                 onTap: () => showSkillPickerDialog(
                   context,
@@ -85,7 +86,7 @@ class DashboardProfileCard extends ConsumerWidget {
                 ),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: EdgeInsets.symmetric(vertical: AppSpace.s(2)),
                   child: user.skills.isEmpty
                       ? Row(
                           children: [
@@ -94,7 +95,7 @@ class DashboardProfileCard extends ConsumerWidget {
                               size: 16,
                               color: AppColors.textHint.withValues(alpha: 0.9),
                             ),
-                            const SizedBox(width: 6),
+                            SizedBox(width: AppSpace.s(6)),
                             Text(
                               '탭하여 스킬을 선택해 주세요',
                               style: TextStyle(
@@ -108,11 +109,13 @@ class DashboardProfileCard extends ConsumerWidget {
                           spacing: 6,
                           runSpacing: 6,
                           children: [
-                            ...user.skills.take(6).map(
+                            ...user.skills
+                                .take(6)
+                                .map(
                                   (s) => Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: AppSpace.s(10),
+                                      vertical: AppSpace.s(4),
                                     ),
                                     decoration: BoxDecoration(
                                       color: AppColors.primaryLight,
@@ -120,7 +123,7 @@ class DashboardProfileCard extends ConsumerWidget {
                                     ),
                                     child: Text(
                                       s,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 11,
                                         color: AppColors.primary,
                                         fontWeight: FontWeight.w600,

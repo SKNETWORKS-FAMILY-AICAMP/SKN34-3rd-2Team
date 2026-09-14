@@ -10,6 +10,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_section_card.dart';
 import '../../../study_room/data/curriculum_youtube_models.dart';
 import '../../../study_room/providers/curriculum_youtube_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 — 이번 주 커리큘럼 기반 학습 추천 (LXP 1순위)
 class WeeklyLearningRecommendSection extends ConsumerWidget {
@@ -34,7 +35,7 @@ class WeeklyLearningRecommendSection extends ConsumerWidget {
           ),
         ),
         AppSectionCard(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(14), AppSpace.s(14)),
           child: async.when(
             loading: () => const SizedBox(
               height: 88,
@@ -53,8 +54,7 @@ class WeeklyLearningRecommendSection extends ConsumerWidget {
             data: (data) {
               if (data.videos.isEmpty) {
                 return _RecommendEmpty(
-                  message: data.message ??
-                      '이번 주 커리큘럼에 맞는 추천이 아직 없습니다.',
+                  message: data.message ?? '이번 주 커리큘럼에 맞는 추천이 아직 없습니다.',
                   onOpenStudyRoom: () => context.go(RoutePaths.studyRoom),
                 );
               }
@@ -117,14 +117,13 @@ class _RecommendBodyState extends State<_RecommendBody> {
           ),
         ),
         if (data.topics.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: data.topics.take(5).map((t) {
               return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(3)),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(999),
@@ -141,7 +140,7 @@ class _RecommendBodyState extends State<_RecommendBody> {
             }).toList(),
           ),
         ],
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpace.s(8)),
         Row(
           children: [
             Text(
@@ -163,7 +162,7 @@ class _RecommendBodyState extends State<_RecommendBody> {
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: AppSpace.s(4)),
         SizedBox(
           height: 160,
           child: ScrollConfiguration(
@@ -187,11 +186,10 @@ class _RecommendBodyState extends State<_RecommendBody> {
                 physics: const BouncingScrollPhysics(
                   parent: AlwaysScrollableScrollPhysics(),
                 ),
-                padding: const EdgeInsets.only(bottom: 10, right: 4),
+                padding: EdgeInsets.only(bottom: AppSpace.s(10), right: AppSpace.s(4)),
                 itemCount: videos.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, i) =>
-                    _MiniVideoCard(video: videos[i]),
+                separatorBuilder: (_, __) => SizedBox(width: AppSpace.s(10)),
+                itemBuilder: (context, i) => _MiniVideoCard(video: videos[i]),
               ),
             ),
           ),
@@ -230,7 +228,7 @@ class _MiniVideoCard extends StatelessWidget {
                 height: 99,
                 child: video.thumbnailUrl.isEmpty
                     ? Container(
-                        color: const Color(0xFFE5E7EB),
+                        color: AppColors.tint(const Color(0xFFE5E7EB)),
                         alignment: Alignment.center,
                         child: const Icon(Icons.play_circle_outline),
                       )
@@ -240,7 +238,7 @@ class _MiniVideoCard extends StatelessWidget {
                         width: double.infinity,
                         height: 99,
                         errorBuilder: (_, __, ___) => Container(
-                          color: const Color(0xFFE5E7EB),
+                          color: AppColors.tint(const Color(0xFFE5E7EB)),
                           alignment: Alignment.center,
                           child: const Icon(Icons.play_circle_outline),
                         ),
@@ -248,7 +246,7 @@ class _MiniVideoCard extends StatelessWidget {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  padding: EdgeInsets.fromLTRB(AppSpace.s(8), AppSpace.s(6), AppSpace.s(8), AppSpace.s(6)),
                   child: Align(
                     alignment: Alignment.topLeft,
                     child: Text(
@@ -285,7 +283,7 @@ class _RecommendEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: AppSpace.s(8)),
       child: Column(
         children: [
           Text(
@@ -297,7 +295,7 @@ class _RecommendEmpty extends StatelessWidget {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: AppSpace.s(10)),
           OutlinedButton(
             onPressed: onOpenStudyRoom,
             child: const Text('학습실 바로가기'),

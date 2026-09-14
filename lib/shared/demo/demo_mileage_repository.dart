@@ -67,7 +67,7 @@ class DemoMileageRepository {
   }
 
   Stream<MileageSettingsModel> watchMileageSettings(String cohortId) =>
-      _settingsController.stream;
+      _startWith(_settings, _settingsController.stream);
 
   Future<void> saveMileageSettings(
     String cohortId,
@@ -79,12 +79,12 @@ class DemoMileageRepository {
   }
 
   Stream<List<MileageProductModel>> watchMileageProducts(String cohortId) =>
-      _productsController.stream.map(
-        (list) => list.where((p) => p.isActive).toList(),
-      );
+      _startWith(List<MileageProductModel>.unmodifiable(_products),
+              _productsController.stream)
+          .map((list) => list.where((p) => p.isActive).toList());
 
   Stream<List<MileageProductModel>> watchAllMileageProducts(String cohortId) =>
-      _productsController.stream;
+      _startWith(List.unmodifiable(_products), _productsController.stream);
 
   Future<String> saveMileageProduct({
     required String cohortId,
@@ -118,7 +118,7 @@ class DemoMileageRepository {
   }
 
   Stream<MileageCartModel> watchMileageCart(String cohortId, String userId) =>
-      _cartController.stream;
+      _startWith(_cart, _cartController.stream);
 
   Future<void> saveMileageCart({
     required String cohortId,
@@ -138,22 +138,22 @@ class DemoMileageRepository {
     String cohortId,
     String userId,
   ) =>
-      _requestsController.stream;
+      _startWith(List.unmodifiable(_requests), _requestsController.stream);
 
   Stream<List<PurchaseRequestModel>> watchAllPurchaseRequests(String cohortId) =>
-      _requestsController.stream;
+      _startWith(List.unmodifiable(_requests), _requestsController.stream);
 
   Stream<List<MileageTransactionModel>> watchMyMileageTransactions(
     String cohortId,
     String userId,
   ) =>
-      _txController.stream;
+      _startWith(List.unmodifiable(_transactions), _txController.stream);
 
   Stream<List<MileageTransactionModel>> watchRecentMileageTransactions(
     String cohortId, {
     int limit = 30,
   }) =>
-      _txController.stream;
+      _startWith(List.unmodifiable(_transactions), _txController.stream);
 
   Future<List<MileageCategoryUsageModel>> computeCategoryUsage({
     required String cohortId,
@@ -172,6 +172,13 @@ class DemoMileageRepository {
         )
         .toList();
   }
+}
+
+/// broadcast 스트림은 구독 전에 보낸 값을 다시 주지 않는다. 화면이 늦게 구독해도
+/// 로딩에 멈추지 않도록 현재 값을 앞에 붙인다.
+Stream<T> _startWith<T>(T current, Stream<T> updates) async* {
+  yield current;
+  yield* updates;
 }
 
 final demoMileageRepository = DemoMileageRepository();

@@ -11,6 +11,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../study_room/presentation/widgets/inflearn_package_card.dart';
 import '../../study_room/presentation/widgets/study_room_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 인프런 강의 패키지 생성/수정
 class AdminInflearnPackageFormScreen extends ConsumerStatefulWidget {
@@ -312,7 +313,7 @@ class _AdminInflearnPackageFormScreenState
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? '제목을 입력하세요' : null,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _subjectController,
                   decoration: const InputDecoration(
@@ -322,7 +323,7 @@ class _AdminInflearnPackageFormScreenState
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? '교과목을 입력하세요' : null,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 AppDropdownField<InflearnPackageType>(
                   value: _type,
                   decoration: const InputDecoration(labelText: '유형'),
@@ -334,7 +335,7 @@ class _AdminInflearnPackageFormScreenState
                     if (v != null) setState(() => _type = v);
                   },
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _summaryController,
                   maxLines: 3,
@@ -343,7 +344,7 @@ class _AdminInflearnPackageFormScreenState
                     hintText: '공지에 포함된 안내 문구를 입력하세요.',
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _sortOrderController,
                   keyboardType: TextInputType.number,
@@ -352,7 +353,7 @@ class _AdminInflearnPackageFormScreenState
                     hintText: '숫자가 작을수록 위에 표시',
                   ),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 SegmentedButton<bool>(
                   segments: const [
                     ButtonSegment(
@@ -370,16 +371,16 @@ class _AdminInflearnPackageFormScreenState
                   onSelectionChanged: (s) =>
                       setState(() => _useUnits = s.first),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppSpace.s(16)),
                 if (_useUnits) _buildUnitsEditor() else _buildFlatEditor(),
-                const SizedBox(height: 24),
+                SizedBox(height: AppSpace.s(24)),
                 const Text(
                   '미리보기',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 InflearnPackageCard(package: preview, showDraft: true),
-                const SizedBox(height: 24),
+                SizedBox(height: AppSpace.s(24)),
                 Row(
                   children: [
                     Expanded(
@@ -388,7 +389,7 @@ class _AdminInflearnPackageFormScreenState
                         child: const Text('임시 저장'),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: AppSpace.s(12)),
                     Expanded(
                       child: FilledButton(
                         onPressed: _isSaving ? null : () => _save(publish: true),
@@ -423,7 +424,7 @@ class _AdminInflearnPackageFormScreenState
               side: BorderSide(color: AppColors.border),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(AppSpace.s(12)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -450,7 +451,7 @@ class _AdminInflearnPackageFormScreenState
                         ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                   for (var j = 0; j < _units[i].courses.length; j++)
                     _courseRow(
                       _units[i].courses[j],
@@ -477,7 +478,7 @@ class _AdminInflearnPackageFormScreenState
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
         ],
         OutlinedButton.icon(
           onPressed: () => setState(() => _units.add(_UnitField())),
@@ -517,7 +518,7 @@ class _AdminInflearnPackageFormScreenState
 
   Widget _courseRow(_CourseField field, {VoidCallback? onRemove}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -531,7 +532,7 @@ class _AdminInflearnPackageFormScreenState
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             flex: 3,
             child: TextFormField(

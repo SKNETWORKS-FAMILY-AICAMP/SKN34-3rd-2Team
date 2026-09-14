@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/onboarding_step.dart';
 import '../domain/onboarding_target_registry.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 딤 + 하이라이트 구멍 + 설명 카드
 class OnboardingOverlay extends StatefulWidget {
@@ -305,7 +306,7 @@ class _TooltipCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             child: SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(14), AppSpace.s(16), AppSpace.s(12)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
@@ -315,7 +316,7 @@ class _TooltipCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             step.title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
@@ -332,7 +333,7 @@ class _TooltipCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: AppSpace.s(8)),
                     Text(
                       step.body,
                       style: TextStyle(
@@ -341,7 +342,7 @@ class _TooltipCard extends StatelessWidget {
                         color: AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: AppSpace.s(14)),
                     Row(
                       children: [
                         TextButton(
@@ -354,15 +355,15 @@ class _TooltipCard extends StatelessWidget {
                             onPressed: onPrevious,
                             child: const Text('이전'),
                           ),
-                          const SizedBox(width: 4),
+                          SizedBox(width: AppSpace.s(4)),
                         ],
                         FilledButton(
                           onPressed: onNext,
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 10,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: AppSpace.s(18),
+                              vertical: AppSpace.s(10),
                             ),
                           ),
                           child: Text(isLast ? '완료' : '다음'),

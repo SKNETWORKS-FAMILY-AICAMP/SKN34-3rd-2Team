@@ -5,6 +5,7 @@ import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../mileage/theme/mileage_theme.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 마일리지 CMS 허브
 class AdminMileageHubScreen extends StatelessWidget {
@@ -21,12 +22,12 @@ class AdminMileageHubScreen extends StatelessWidget {
               '마일리지 관리',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: AppSpace.s(4)),
             Text(
               '상품 등록, 구매 요청 처리, 마일리지 지급 및 기수 설정을 관리합니다.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             _HubCard(
               icon: Icons.inventory_2_outlined,
               title: '상품 관리',
@@ -74,7 +75,7 @@ class _HubCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: ListTile(
         dense: true,
         visualDensity: VisualDensity.compact,

@@ -11,6 +11,7 @@ import '../../../shared/providers/alert_popup_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/services/alert_popup_dismiss_store.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 학생 셸 — 활성 알림을 화면 위 오버레이로 표시
 class AlertPopupHost extends ConsumerStatefulWidget {
@@ -148,7 +149,7 @@ class _AlertPopupOverlay extends StatelessWidget {
       child: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(AppSpace.s(24)),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: AlertDialog(
@@ -156,7 +157,7 @@ class _AlertPopupOverlay extends StatelessWidget {
                 title: Row(
                   children: [
                     const Icon(Icons.notifications_active_outlined, size: 22),
-                    const SizedBox(width: 8),
+                    SizedBox(width: AppSpace.s(8)),
                     Expanded(
                       child: Text(
                         popup.title,
@@ -174,7 +175,7 @@ class _AlertPopupOverlay extends StatelessWidget {
                       style: const TextStyle(fontSize: 14, height: 1.45),
                     ),
                     if (popup.hasTimeWindow) ...[
-                      const SizedBox(height: 10),
+                      SizedBox(height: AppSpace.s(10)),
                       Text(
                         '표시 시간 ${popup.timeWindowLabel}',
                         style: TextStyle(
@@ -184,7 +185,7 @@ class _AlertPopupOverlay extends StatelessWidget {
                       ),
                     ],
                     if (popup.linkUrl != null && popup.linkUrl!.isNotEmpty) ...[
-                      const SizedBox(height: 14),
+                      SizedBox(height: AppSpace.s(14)),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(

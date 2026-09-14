@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../constants/ai_ops_types.dart';
+import '../demo/demo_accounts.dart';
 import '../models/ai_ops_models.dart';
 import '../providers/cohort_providers.dart';
 import '../providers/firebase_providers.dart';
@@ -71,7 +72,7 @@ class AiQualityStats {
 final aiGenerationLogsProvider =
     StreamProvider.autoDispose<List<AiGenerationLogModel>>((ref) {
       final cohortId = ref.watch(effectiveCohortIdProvider);
-      if (cohortId == null) return Stream.value(const []);
+      if (cohortId == null || DemoConfig.enabled) return Stream.value(const []);
       return ref
           .watch(firestoreProvider)
           .collection('aiGenerationLogs')
@@ -87,7 +88,7 @@ final aiGenerationLogsProvider =
 final aiQuestionFeedbackProvider =
     StreamProvider.autoDispose<List<AiQuestionFeedbackModel>>((ref) {
       final cohortId = ref.watch(effectiveCohortIdProvider);
-      if (cohortId == null) return Stream.value(const []);
+      if (cohortId == null || DemoConfig.enabled) return Stream.value(const []);
       return ref
           .watch(firestoreProvider)
           .collection('aiQuestionFeedback')

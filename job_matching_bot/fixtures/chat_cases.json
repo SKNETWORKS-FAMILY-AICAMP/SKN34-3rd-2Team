@@ -594,6 +594,60 @@
           }
         }
       ]
+    },
+    {
+      "id": "show-more-twice",
+      "note": "이거 말고를 거듭하면 앞에서 본 공고가 다시 나오면 안 된다",
+      "turns": [
+        {
+          "message": "서울 백엔드 신입 찾아줘",
+          "expect": {
+            "mode": "검색"
+          }
+        },
+        {
+          "message": "이거 말고 다른 거 보여줘",
+          "expect": {
+            "mode": "검색",
+            "show_more": true,
+            "new_jobs": true,
+            "rules": [
+              "건수"
+            ]
+          }
+        },
+        {
+          "message": "또 다른 거 없어?",
+          "expect": {
+            "mode": "검색",
+            "show_more": true,
+            "new_jobs": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "narrow-is-not-more",
+      "note": "조건을 바꾸는 말은 더 보기가 아니다",
+      "turns": [
+        {
+          "message": "백엔드 신입 공고",
+          "expect": {
+            "mode": "검색"
+          }
+        },
+        {
+          "message": "서울 것만 다시 찾아줘",
+          "expect": {
+            "show_more": false,
+            "filters": {
+              "regions": [
+                "서울"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -19,6 +19,7 @@ import '../../onboarding/admin/admin_onboarding_steps.dart';
 import '../../onboarding/instructor/instructor_onboarding_steps.dart';
 import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../onboarding/student/student_onboarding_steps.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 마이페이지 — 프로필 요약, 개인 정보, 비밀번호 변경
 class MyPageScreen extends ConsumerStatefulWidget {
@@ -31,7 +32,9 @@ class MyPageScreen extends ConsumerStatefulWidget {
 class _MyPageScreenState extends ConsumerState<MyPageScreen> {
   Future<void> _savePersonalEmail(UserModel user, String email) async {
     try {
-      await ref.read(lmsRepositoryProvider).updatePersonalEmail(
+      await ref
+          .read(lmsRepositoryProvider)
+          .updatePersonalEmail(
             uid: user.uid,
             personalEmail: email,
           );
@@ -64,7 +67,7 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
               '구글폼 제출 시 이 이메일로 LMS 계정과 자동 매칭됩니다.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             TextField(
               controller: controller,
               keyboardType: TextInputType.emailAddress,
@@ -77,15 +80,23 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          FilledButton(onPressed: () {
-            final error = Validators.email(controller.text);
-            if (error != null) {
-              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(error)));
-              return;
-            }
-            Navigator.pop(ctx, true);
-          }, child: const Text('저장')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final error = Validators.email(controller.text);
+              if (error != null) {
+                ScaffoldMessenger.of(
+                  ctx,
+                ).showSnackBar(SnackBar(content: Text(error)));
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('저장'),
+          ),
         ],
       ),
     );
@@ -99,14 +110,14 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
     try {
       final repository = ref.read(lmsRepositoryProvider);
       await repository.updateProfile(
-            uid: user.uid,
-            birthDate: birthDate,
-          );
+        uid: user.uid,
+        birthDate: birthDate,
+      );
       final updatedResumes = await repository.syncBirthDateToMyResumes(
-            cohortId: user.cohortId,
-            userId: user.uid,
-            birthDate: birthDate,
-          );
+        cohortId: user.cohortId,
+        userId: user.uid,
+        birthDate: birthDate,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -139,7 +150,9 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
       links[key] = value.trim();
     }
     try {
-      await ref.read(lmsRepositoryProvider).updateProfile(
+      await ref
+          .read(lmsRepositoryProvider)
+          .updateProfile(
             uid: user.uid,
             socialLinks: links,
           );
@@ -187,8 +200,14 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('저장')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('저장'),
+          ),
         ],
       ),
     );
@@ -203,7 +222,9 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
     );
     if (result == null) return;
     try {
-      await ref.read(lmsRepositoryProvider).updateProfile(
+      await ref
+          .read(lmsRepositoryProvider)
+          .updateProfile(
             uid: user.uid,
             jobPreferences: result,
           );
@@ -241,16 +262,16 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
 
         return Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(12), AppSpace.s(20), AppSpace.s(24)),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _PageHeader(onBack: () => _goBack(user)),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpace.s(16)),
                   _ProfileOverviewCard(user: user),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   _PersonalInfoCard(
                     user: user,
                     onEditPersonalEmail: () => _editPersonalEmail(user),
@@ -258,34 +279,35 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
                     onEditGithub: () => _editLinkDialog(
                       title: 'GitHub URL',
                       initial: user.socialLinks['github'] ?? '',
-                      onSave: (v) => _saveSocialLink(user, key: 'github', value: v),
+                      onSave: (v) =>
+                          _saveSocialLink(user, key: 'github', value: v),
                     ),
                     onEditBlog: () => _editLinkDialog(
                       title: '블로그 URL',
                       initial: user.socialLinks['blog'] ?? '',
-                      onSave: (v) => _saveSocialLink(user, key: 'blog', value: v),
+                      onSave: (v) =>
+                          _saveSocialLink(user, key: 'blog', value: v),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   _JobPreferencesCard(
                     preferences: user.jobPreferences,
                     onEdit: () => _editJobPreferences(user),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   MyPagePasswordSection(
                     userEmail: user.email,
                     initiallyExpanded: user.mustChangePassword,
                   ),
-                  if (user.isInstructor ||
-                      user.isStudent ||
-                      user.isAdmin) ...[
-                    const SizedBox(height: 12),
+                  if (user.isInstructor || user.isStudent || user.isAdmin) ...[
+                    SizedBox(height: AppSpace.s(12)),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
                         onPressed: () async {
-                          final notifier =
-                              ref.read(onboardingTourProvider.notifier);
+                          final notifier = ref.read(
+                            onboardingTourProvider.notifier,
+                          );
                           if (user.isInstructor) {
                             await notifier.restart(
                               tourId: InstructorOnboarding.tourId,
@@ -344,10 +366,12 @@ class _PageHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           style: IconButton.styleFrom(
             backgroundColor: AppColors.surfaceVariant.withValues(alpha: 0.5),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: AppSpace.s(8)),
         const Text(
           '마이페이지',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -376,7 +400,7 @@ class _ProfileOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(20), vertical: AppSpace.s(20)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -385,10 +409,10 @@ class _ProfileOverviewCard extends StatelessWidget {
               avatarRadius: 32,
               showEditBadge: true,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(12)),
               decoration: BoxDecoration(
                 color: AppColors.surfaceVariant.withValues(alpha: 0.45),
                 borderRadius: BorderRadius.circular(8),
@@ -396,16 +420,16 @@ class _ProfileOverviewCard extends StatelessWidget {
               child: Column(
                 children: [
                   _InfoRow(label: '교육과정', value: _courseName),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                   _InfoRow(label: '기수', value: _termLabel),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                   _InfoRow(
                     label: '계정 생성일',
                     value: user.createdAt != null
                         ? AppDateUtils.formatDetailDateTime(user.createdAt!)
                         : '-',
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                   _InfoRow(
                     label: '마지막 로그인',
                     value: user.lastLoginAt != null
@@ -479,7 +503,7 @@ class _PersonalInfoCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(AppSpace.s(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -488,21 +512,21 @@ class _PersonalInfoCard extends StatelessWidget {
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
             if (!hasPersonalEmail) ...[
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(AppSpace.s(10)),
                 decoration: BoxDecoration(
                   color: AppColors.warning.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   '개인 이메일이 등록되지 않았습니다. 구글폼 제출 연동을 위해 등록해 주세요.',
                   style: TextStyle(fontSize: 11, color: AppColors.warning),
                 ),
               ),
             ],
-            const SizedBox(height: 14),
+            SizedBox(height: AppSpace.s(14)),
             _LinkRow(
               icon: Icons.mail_outline,
               label: '개인 이메일 (구글폼)',
@@ -510,34 +534,42 @@ class _PersonalInfoCard extends StatelessWidget {
               emptyLabel: '등록된 이메일 없음',
               onEdit: onEditPersonalEmail,
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpace.s(12)),
               child: Divider(height: 1),
             ),
             const Text(
               '생년월일',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: AppSpace.s(6)),
             InkWell(
               onTap: onPickBirthDate,
               borderRadius: BorderRadius.circular(8),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpace.s(12),
+                  vertical: AppSpace.s(10),
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(color: AppColors.border),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textHint),
-                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.calendar_today_outlined,
+                      size: 16,
+                      color: AppColors.textHint,
+                    ),
+                    SizedBox(width: AppSpace.s(8)),
                     Text(
                       birthLabel,
                       style: TextStyle(
                         fontSize: 13,
-                        color: user.birthDate != null && user.birthDate!.isNotEmpty
+                        color:
+                            user.birthDate != null && user.birthDate!.isNotEmpty
                             ? AppColors.textPrimary
                             : AppColors.textHint,
                       ),
@@ -546,8 +578,8 @@ class _PersonalInfoCard extends StatelessWidget {
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpace.s(12)),
               child: Divider(height: 1),
             ),
             _LinkRow(
@@ -556,8 +588,8 @@ class _PersonalInfoCard extends StatelessWidget {
               url: user.socialLinks['github'],
               onEdit: onEditGithub,
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpace.s(12)),
               child: Divider(height: 1),
             ),
             _LinkRow(
@@ -597,23 +629,26 @@ class _LinkRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 18, color: AppColors.textSecondary),
-        const SizedBox(width: 8),
+        SizedBox(width: AppSpace.s(8)),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: AppSpace.s(4)),
               if (hasUrl)
                 isHttpUrl
                     ? InkWell(
                         onTap: () => launchUrl(Uri.parse(url!)),
                         child: Text(
                           url!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             color: AppColors.primary,
                             decoration: TextDecoration.underline,
@@ -646,7 +681,6 @@ class _LinkRow extends StatelessWidget {
   }
 }
 
-
 /// 취업 희망 조건 카드. 이력서 문서에는 찍히지 않고 맞춤 공고 추천에만 쓰인다.
 class _JobPreferencesCard extends StatelessWidget {
   const _JobPreferencesCard({required this.preferences, required this.onEdit});
@@ -658,7 +692,7 @@ class _JobPreferencesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(AppSpace.s(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -678,17 +712,20 @@ class _JobPreferencesCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: AppSpace.s(4)),
             Text(
-              '이력서에는 표시되지 않고 AI 코치의 맞춤 공고 추천에만 쓰입니다.',
+              '이력서에는 표시되지 않고 커리어 코치의 맞춤 공고 추천에만 쓰입니다.',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             _PreferenceRow(label: '희망 직무', values: preferences.targetRoles),
-            const SizedBox(height: 10),
+            SizedBox(height: AppSpace.s(10)),
             _PreferenceRow(label: '희망 근무지역', values: preferences.regions),
-            const SizedBox(height: 10),
-            _PreferenceRow(label: '희망 고용형태', values: preferences.employmentTypes),
+            SizedBox(height: AppSpace.s(10)),
+            _PreferenceRow(
+              label: '희망 고용형태',
+              values: preferences.employmentTypes,
+            ),
           ],
         ),
       ),
@@ -711,7 +748,7 @@ class _PreferenceRow extends StatelessWidget {
           label,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: AppSpace.s(4)),
         if (values.isEmpty)
           Text(
             '미입력',
@@ -725,7 +762,10 @@ class _PreferenceRow extends StatelessWidget {
               for (final value in values)
                 Chip(
                   label: Text(value),
-                  labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  labelStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                   backgroundColor: AppColors.primaryLight,
                   side: BorderSide.none,
                   visualDensity: VisualDensity.compact,
@@ -769,21 +809,21 @@ class _JobPreferencesDialogState extends State<_JobPreferencesDialog> {
                 selected: _roles,
                 onChanged: (next) => setState(() => _roles = next),
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: AppSpace.s(14)),
               _ChoiceGroup(
                 label: '희망 근무지역',
                 options: JobPreferenceOptions.regions,
                 selected: _regions,
                 onChanged: (next) => setState(() => _regions = next),
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: AppSpace.s(14)),
               _ChoiceGroup(
                 label: '희망 고용형태',
                 options: JobPreferenceOptions.employmentTypes,
                 selected: _employmentTypes,
                 onChanged: (next) => setState(() => _employmentTypes = next),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               Text(
                 '비워 두면 해당 조건으로 거르지 않습니다.',
                 style: TextStyle(fontSize: 11, color: AppColors.textHint),
@@ -793,15 +833,23 @@ class _JobPreferencesDialogState extends State<_JobPreferencesDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('취소'),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(
             context,
             JobPreferences(
-              targetRoles: JobPreferenceOptions.roles.where(_roles.contains).toList(),
-              regions: JobPreferenceOptions.regions.where(_regions.contains).toList(),
-              employmentTypes:
-                  JobPreferenceOptions.employmentTypes.where(_employmentTypes.contains).toList(),
+              targetRoles: JobPreferenceOptions.roles
+                  .where(_roles.contains)
+                  .toList(),
+              regions: JobPreferenceOptions.regions
+                  .where(_regions.contains)
+                  .toList(),
+              employmentTypes: JobPreferenceOptions.employmentTypes
+                  .where(_employmentTypes.contains)
+                  .toList(),
             ),
           ),
           child: const Text('저장'),
@@ -829,8 +877,11 @@ class _ChoiceGroup extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: AppSpace.s(6)),
         Wrap(
           spacing: 6,
           runSpacing: 6,

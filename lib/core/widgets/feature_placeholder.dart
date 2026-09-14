@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_space.dart';
 
 /// Phase 3 이전 공통 Placeholder 위젯
 class FeaturePlaceholder extends StatelessWidget {
@@ -19,17 +20,17 @@ class FeaturePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(AppSpace.s(32)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 56, color: AppColors.textHint),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             Text(
               title,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             Text(
               subtitle,
               textAlign: TextAlign.center,

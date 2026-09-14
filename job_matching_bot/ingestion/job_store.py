@@ -1,4 +1,7 @@
-"""공고 저장소: content_hash 기반 upsert와 상태 전이.
+"""공고 저장소의 판정 규칙: content_hash 기반 upsert와 상태 전이.
+
+저장은 `sqlite_store.SqliteJobStore`가 하고, 이 모듈은 그 저장소가 따르는 규칙
+(`reconcile`, `resolve_status`)과 여는 곳(`open_store`)만 둔다.
 
 매 수집마다 전량을 새로 만들면 두 번째 수집부터 무엇이 새 공고이고 무엇이
 사라진 공고인지 알 수 없다. 이 모듈은 `source + source_job_id`를 키로
@@ -16,12 +19,11 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
-from job_matching_bot.config import AS_OF
+from job_matching_bot.config import now
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import (
     DEFAULT_MISSING_RUN_LIMIT,
@@ -65,7 +67,7 @@ def reconcile(
     collected: Iterable[Job],
     *,
     source: str,
-    as_of: datetime = AS_OF,
+    as_of: datetime | None = None,
     missing_run_limit: int = DEFAULT_MISSING_RUN_LIMIT,
     observed_ids: set[str] | None = None,
 ) -> tuple[dict[tuple[str, str], JobRecord], CollectionReport]:
@@ -81,6 +83,7 @@ def reconcile(
     살아 있는 것이고, 내용은 마지막으로 받은 것을 유지한다. None이면 전량 수집으로
     보고 `collected`만으로 판단한다.
     """
+    as_of = as_of or now()
     merged = dict(existing)
     report = CollectionReport(source=source, collected_at=as_of.isoformat())
     seen: set[tuple[str, str]] = set()
@@ -151,77 +154,16 @@ def reconcile(
 
 
 def open_store(path: Path):
-    """경로 확장자로 저장소 구현을 고른다. `.sqlite`/`.db`면 SQLite, 아니면 JSON.
+    """저장소를 연다. **SQLite만 쓴다.**
 
-    JSON은 전량을 메모리에 올렸다 통째로 쓰는 방식이라 수만 건까지만 맞다.
-    테스트와 작은 실험은 JSON을, 실제 수집은 SQLite를 쓴다.
+    예전에는 확장자가 `.json`이면 JSON 파일 저장소를 골랐다. 전량을 메모리에 올렸다 통째로
+    쓰는 방식이라 수만 건에서 못 쓰게 됐고, 운영은 처음부터 SQLite였다. 테스트만 JSON을
+    쓰고 있어 두 구현을 같이 지고 가던 것을 걷어냈다. 판정 규칙(`reconcile`)은 남긴다 —
+    SQLite 저장소가 따라야 할 기준이고 `test_sqlite_store`가 둘을 대조한다.
     """
     from job_matching_bot.ingestion.sqlite_store import SqliteJobStore, is_sqlite_path
 
     path = Path(path)
-    return SqliteJobStore(path) if is_sqlite_path(path) else JobStore(path)
-
-
-class JobStore:
-    """JSON 파일 한 개로 동작하는 저장소. 작은 규모와 테스트용.
-
-    수집 운영은 `sqlite_store.SqliteJobStore`가 맡는다(`open_store`가 경로로 고른다).
-    upsert 판정 로직은 `reconcile`에 있고 이 클래스는 읽고 쓰는 일만 하므로,
-    백엔드를 바꿔도 판정 규칙은 그대로 쓴다.
-    """
-
-    def __init__(self, path: Path):
-        self.path = Path(path)
-        self.records: dict[tuple[str, str], JobRecord] = {}
-
-    def load(self) -> JobStore:
-        if self.path.exists():
-            payloads = json.loads(self.path.read_text(encoding="utf-8"))
-            self.records = {}
-            for payload in payloads:
-                record = JobRecord.from_dict(payload)
-                self.records[record.key] = record
-        return self
-
-    def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = [record.to_dict() for record in self.records.values()]
-        self.path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-
-    def upsert(
-        self,
-        collected: Iterable[Job],
-        *,
-        source: str,
-        as_of: datetime = AS_OF,
-        missing_run_limit: int = DEFAULT_MISSING_RUN_LIMIT,
-        observed_ids: set[str] | None = None,
-    ) -> CollectionReport:
-        self.records, report = reconcile(
-            self.records,
-            collected,
-            source=source,
-            as_of=as_of,
-            missing_run_limit=missing_run_limit,
-            observed_ids=observed_ids,
-        )
-        return report
-
-    def active_jobs(self) -> list[Job]:
-        """추천 대상에 넣을 수 있는 공고. 만료·삭제된 공고는 뺀다."""
-        return [
-            record.job
-            for record in self.records.values()
-            if record.status == STATUS_OPEN
-        ]
-
-    def all_records(self) -> list[JobRecord]:
-        return list(self.records.values())
-
-    def stats(self) -> dict[str, Any]:
-        by_status: dict[str, int] = {}
-        for record in self.records.values():
-            by_status[record.status] = by_status.get(record.status, 0) + 1
-        return {"total": len(self.records), "by_status": by_status}
+    if not is_sqlite_path(path):
+        raise ValueError(f"SQLite 저장소 경로(.sqlite/.db)여야 합니다: {path}")
+    return SqliteJobStore(path)

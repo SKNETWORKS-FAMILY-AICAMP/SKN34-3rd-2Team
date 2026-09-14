@@ -12,6 +12,7 @@ import '../../../shared/providers/mileage_providers.dart';
 import '../../mileage/theme/mileage_theme.dart';
 import '../data/mileage_seed_data.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 마일리지 상품 CRUD
 class AdminMileageProductsScreen extends ConsumerWidget {
@@ -27,7 +28,9 @@ class AdminMileageProductsScreen extends ConsumerWidget {
     var created = 0;
     for (final product in MileageSeedProducts.defaults()) {
       if (existingNames.contains(product.name)) continue;
-      await ref.read(mileageRepositoryProvider).saveMileageProduct(
+      await ref
+          .read(mileageRepositoryProvider)
+          .saveMileageProduct(
             cohortId: cohortId,
             product: product,
           );
@@ -38,7 +41,9 @@ class AdminMileageProductsScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            created > 0 ? '시드 상품 $created개를 등록했습니다.' : '이미 모든 시드 상품이 등록되어 있습니다.',
+            created > 0
+                ? '시드 상품 $created개를 등록했습니다.'
+                : '이미 모든 시드 상품이 등록되어 있습니다.',
           ),
         ),
       );
@@ -56,7 +61,10 @@ class AdminMileageProductsScreen extends ConsumerWidget {
         title: const Text('상품 삭제'),
         content: Text('「${product.name}」 상품을 삭제할까요?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
@@ -70,7 +78,9 @@ class AdminMileageProductsScreen extends ConsumerWidget {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
 
-    await ref.read(mileageRepositoryProvider).deleteMileageProduct(
+    await ref
+        .read(mileageRepositoryProvider)
+        .deleteMileageProduct(
           cohortId,
           product.id,
         );
@@ -97,7 +107,8 @@ class AdminMileageProductsScreen extends ConsumerWidget {
                         children: [
                           IconButton(
                             visualDensity: VisualDensity.compact,
-                            onPressed: () => context.go(RoutePaths.adminMileage),
+                            onPressed: () =>
+                                context.go(RoutePaths.adminMileage),
                             icon: const Icon(Icons.arrow_back, size: 20),
                           ),
                           const Text(
@@ -113,11 +124,12 @@ class AdminMileageProductsScreen extends ConsumerWidget {
                             onPressed: () => _seedProducts(ref, context),
                             child: const Text('시드 상품'),
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: AppSpace.s(8)),
                           FilledButton.icon(
                             style: mileagePrimaryButtonStyle(),
-                            onPressed: () => context
-                                .push(RoutePaths.adminMileageProductsCreate),
+                            onPressed: () => context.push(
+                              RoutePaths.adminMileageProductsCreate,
+                            ),
                             icon: const Icon(Icons.add, size: 16),
                             label: const Text('등록'),
                           ),
@@ -167,18 +179,18 @@ class AdminMileageProductsScreen extends ConsumerWidget {
                     );
                   },
                 ),
-                const SizedBox(height: 12),
-              if (list.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(
-                    child: Text('등록된 상품이 없습니다.\n「시드 상품 등록」으로 기본 상품을 추가하세요.'),
-                  ),
-                )
+                SizedBox(height: AppSpace.s(12)),
+                if (list.isEmpty)
+                  Padding(
+                    padding: EdgeInsets.all(AppSpace.s(32)),
+                    child: Center(
+                      child: Text('등록된 상품이 없습니다.\n「시드 상품 등록」으로 기본 상품을 추가하세요.'),
+                    ),
+                  )
                 else
                   ...list.map((p) {
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
+                      padding: EdgeInsets.only(bottom: AppSpace.s(6)),
                       child: Card(
                         margin: EdgeInsets.zero,
                         child: ListTile(
@@ -205,8 +217,9 @@ class AdminMileageProductsScreen extends ConsumerWidget {
                                 child: Switch(
                                   value: p.isActive,
                                   onChanged: (v) async {
-                                    final cohortId =
-                                        ref.read(effectiveCohortIdProvider);
+                                    final cohortId = ref.read(
+                                      effectiveCohortIdProvider,
+                                    );
                                     if (cohortId == null) return;
                                     await ref
                                         .read(mileageRepositoryProvider)
@@ -236,8 +249,11 @@ class AdminMileageProductsScreen extends ConsumerWidget {
                               ),
                               IconButton(
                                 visualDensity: VisualDensity.compact,
-                                icon: const Icon(Icons.delete_outline,
-                                    color: AppColors.error, size: 20),
+                                icon: Icon(
+                                  Icons.delete_outline,
+                                  color: AppColors.error,
+                                  size: 20,
+                                ),
                                 onPressed: () => _delete(ref, context, p),
                               ),
                             ],

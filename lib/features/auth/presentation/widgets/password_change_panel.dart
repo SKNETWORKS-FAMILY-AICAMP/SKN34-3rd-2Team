@@ -5,6 +5,7 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/validators.dart';
 import '../../providers/auth_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 비밀번호 변경 폼 — 최초 변경 / 마이페이지 공용
 class PasswordChangePanel extends ConsumerStatefulWidget {
@@ -83,7 +84,9 @@ class _PasswordChangePanelState extends ConsumerState<PasswordChangePanel> {
   Future<void> _skip() async {
     setState(() => _isLoading = true);
     try {
-      await ref.read(changePasswordProvider.notifier).skipMandatoryPasswordChange();
+      await ref
+          .read(changePasswordProvider.notifier)
+          .skipMandatoryPasswordChange();
       if (mounted) widget.onSkip?.call();
     } on AuthException catch (e) {
       if (mounted) {
@@ -140,7 +143,7 @@ class _PasswordChangePanelState extends ConsumerState<PasswordChangePanel> {
           ),
           SizedBox(height: widget.compact ? 16 : 20),
           SizedBox(
-            height: 40,
+            height: AppSpace.row(40),
             child: FilledButton(
               onPressed: _isLoading ? null : _submit,
               style: FilledButton.styleFrom(
@@ -148,7 +151,7 @@ class _PasswordChangePanelState extends ConsumerState<PasswordChangePanel> {
                 foregroundColor: Colors.white,
               ),
               child: _isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
@@ -160,7 +163,7 @@ class _PasswordChangePanelState extends ConsumerState<PasswordChangePanel> {
             ),
           ),
           if (widget.showSkipButton) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             TextButton(
               onPressed: _isLoading ? null : _skip,
               child: Text(
@@ -204,7 +207,7 @@ class _PasswordField extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: AppSpace.s(6)),
         TextFormField(
           controller: controller,
           obscureText: obscure,
@@ -214,13 +217,15 @@ class _PasswordField extends StatelessWidget {
             hintText: hint,
             hintStyle: const TextStyle(fontSize: 13),
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: AppSpace.s(12),
+              vertical: AppSpace.s(10),
             ),
             suffixIcon: IconButton(
               icon: Icon(
-                obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
                 size: 18,
                 color: AppColors.textHint,
               ),
@@ -252,10 +257,10 @@ class MyPagePasswordSection extends StatelessWidget {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: initiallyExpanded,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          leading: const Icon(Icons.lock_outline, color: AppColors.primary, size: 20),
-          title: const Text(
+          tilePadding: EdgeInsets.symmetric(horizontal: AppSpace.s(16), vertical: AppSpace.s(4)),
+          childrenPadding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(0), AppSpace.s(16), AppSpace.s(16)),
+          leading: Icon(Icons.lock_outline, color: AppColors.primary, size: 20),
+          title: Text(
             '비밀번호 변경',
             style: TextStyle(
               fontSize: 15,

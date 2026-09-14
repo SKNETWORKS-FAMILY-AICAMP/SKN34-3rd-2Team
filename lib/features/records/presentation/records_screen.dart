@@ -15,6 +15,7 @@ import 'widgets/mission_guidance_panel.dart';
 import 'widgets/record_page_layout.dart';
 import 'widgets/record_status_badge.dart';
 import 'widgets/submission_detail_sheet.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 기록실 — 제출 목록 + 관리자 승인
 class RecordsScreen extends ConsumerStatefulWidget {
@@ -82,10 +83,10 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(color: AppColors.border),
               ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(0)),
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -102,7 +103,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                     onTap: () => setState(() => _typeFilter = t),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: AppSpace.s(8)),
                 _FilterChip(
                   label: '대기',
                   selected: _statusFilter == 'pending',
@@ -131,7 +132,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
             ),
           ),
           if (!isAdmin) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
@@ -139,16 +140,16 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('새로운 기록 추가'),
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(20),
+                    vertical: AppSpace.s(12),
                   ),
                   backgroundColor: AppColors.primary,
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           Expanded(
             child: submissionsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -163,12 +164,12 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(0, 0, 14, 24),
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(0), AppSpace.s(0), AppSpace.s(14), AppSpace.s(24)),
                     children: [
                       if (!isAdmin) const MissionGuidancePanel(),
                       if (filtered.isEmpty)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 48),
+                          padding: EdgeInsets.symmetric(vertical: AppSpace.s(48)),
                           child: Center(
                             child: Text(
                               isAdmin
@@ -213,14 +214,14 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: EdgeInsets.only(right: AppSpace.s(8)),
       child: FilterChip(
         label: Text(label, style: const TextStyle(fontSize: 13)),
         selected: selected,
         onSelected: (_) => onTap(),
         selectedColor: AppColors.primaryLight,
         checkmarkColor: AppColors.primary,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(4)),
       ),
     );
   }
@@ -296,7 +297,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
     final hasLink = s.link != null && s.link!.isNotEmpty;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: AppSpace.s(8)),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
@@ -306,7 +307,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
       child: InkWell(
         onTap: _openDetail,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(10)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -314,7 +315,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                 children: [
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(2)),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(5),
@@ -325,7 +326,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                     ),
                   ),
                   if (hasFiles || hasLink) ...[
-                    const SizedBox(width: 6),
+                    SizedBox(width: AppSpace.s(6)),
                     Icon(
                       hasFiles ? Icons.attach_file : Icons.link,
                       size: 14,
@@ -343,7 +344,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                   RecordStatusBadge(status: s.status),
                 ],
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               Text(
                 s.title,
                 style: const TextStyle(
@@ -353,7 +354,7 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                 ),
               ),
               if (metaParts.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   metaParts.join(' · '),
                   style: TextStyle(
@@ -365,14 +366,14 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               Row(
                 children: [
                   TextButton(
                     onPressed: _openDetail,
                     style: TextButton.styleFrom(
                       visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(4)),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       foregroundColor: AppColors.primary,
@@ -387,20 +388,20 @@ class _SubmissionCardState extends ConsumerState<_SubmissionCard> {
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         minimumSize: const Size(0, 32),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         textStyle: const TextStyle(fontSize: 13),
                       ),
                       child: const Text('반려'),
                     ),
-                    const SizedBox(width: 6),
+                    SizedBox(width: AppSpace.s(6)),
                     FilledButton(
                       onPressed: _busy ? null : () => _review('approved'),
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.success,
                         visualDensity: VisualDensity.compact,
                         minimumSize: const Size(0, 32),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         textStyle: const TextStyle(fontSize: 13),
                       ),

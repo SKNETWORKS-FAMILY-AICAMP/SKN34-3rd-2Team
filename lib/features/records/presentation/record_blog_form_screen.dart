@@ -10,6 +10,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../data/record_submission_helper.dart';
 import 'widgets/record_page_layout.dart';
 import 'widgets/record_week_picker.dart';
+import '../../../core/theme/app_space.dart';
 
 class RecordBlogFormScreen extends ConsumerStatefulWidget {
   const RecordBlogFormScreen({super.key});
@@ -108,7 +109,7 @@ class _RecordBlogFormScreenState extends ConsumerState<RecordBlogFormScreen> {
       user: user,
       cohortName: cohortName,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: EdgeInsets.only(bottom: AppSpace.s(24)),
         child: RecordFormPanel(
           title: '블로그 제출',
           child: Column(
@@ -117,7 +118,7 @@ class _RecordBlogFormScreenState extends ConsumerState<RecordBlogFormScreen> {
               RecordInfoBanner(
                 message: RecordTypes.descriptions[RecordTypes.blog]!,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('주차 선택'),
               RecordWeekPicker(
                 weeks: weeks,
@@ -125,12 +126,12 @@ class _RecordBlogFormScreenState extends ConsumerState<RecordBlogFormScreen> {
                 selectedWeek: _selectedWeek,
                 onSelected: (n) => setState(() => _selectedWeek = n),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               Text(
                 '승인된 주차는 다시 작성할 수 없습니다.',
                 style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('링크'),
               TextField(
                 controller: _urlCtrl,

@@ -281,13 +281,14 @@ def link_check(
 
 # ── 5. 적재 ────────────────────────────────────────────────────
 def run_sync(detail_file: Path, observed: set[str], store_path: Path, as_of: datetime, work_dir: Path) -> int:
-    observed_file = work_dir / f"{as_of.date().isoformat()}_observed.json"
+    stamp = run_stamp(as_of)
+    observed_file = work_dir / f"{stamp}_observed.json"
     observed_file.write_text(json.dumps([{"source_job_id": i} for i in sorted(observed)]), encoding="utf-8")
     command = [
         sys.executable, "-m", "job_matching_bot.sync",
         "--input", str(detail_file), "--observed", str(observed_file),
         "--store", str(store_path), "--as-of", as_of.isoformat(),
-        "--report", str(work_dir / f"{as_of.date().isoformat()}_sync.json"),
+        "--report", str(work_dir / f"{stamp}_sync.json"),
     ]
     print("[적재] " + " ".join(command[2:]), flush=True)
     return subprocess.run(command, cwd=str(REPO_ROOT)).returncode
@@ -311,6 +312,19 @@ def share_store_file(store_path: Path) -> dict[str, Any]:
         # 인증 만료, 네트워크 끊김 등. 다음 밤에 다시 올라간다.
         print(f"  실패(수집·적재에는 영향 없음): {type(error).__name__}: {error}")
         return {"ok": False, "error": f"{type(error).__name__}: {error}"}
+
+
+def run_stamp(now: datetime) -> str:
+    """이번 실행의 파일 이름. **날짜에 시작 시각을 붙인다.**
+
+    날짜만 쓰던 때, 00:55에 시작한 배치(새벽에 다시 돌린 것)와 같은 날 23:00에 시작한
+    정기 배치가 둘 다 `2026-09-13`이라 뒤엣것이 요약·적재 리포트·관측 목록·목록 원본을
+    덮어썼다. 이름 앞 10자는 그대로 날짜라 `prune`이 보관 기간을 그대로 센다.
+
+    상세 원본(`raw/details/<날짜>.jsonl`)은 날짜로 둔다. 같은 날 다시 돌리면 이미 받은
+    상세를 건너뛰고 이어 받게 일부러 한 파일에 덧붙인다.
+    """
+    return f"{now:%Y-%m-%d-%H%M}"
 
 
 def prune(directory: Path, keep_days: int, today: date) -> int:
@@ -343,9 +357,12 @@ def main() -> int:
     started = time.monotonic()
     now = datetime.now(KST)
     today = now.date()
-    stamp = today.isoformat()
+    stamp = run_stamp(now)
     planned = [c.strip() for c in args.categories.split(",")] if args.categories else categories_for(today, args.full)
-    summary: dict[str, Any] = {"date": stamp, "started_at": now.isoformat(timespec="seconds"), "categories": planned}
+    summary: dict[str, Any] = {
+        "date": today.isoformat(), "run": stamp,
+        "started_at": now.isoformat(timespec="seconds"), "categories": planned,
+    }
     print(f"야간 배치 {now:%Y-%m-%d %H:%M} · 대분류 {len(planned)}개 · 한도 {args.max_minutes:.0f}분")
 
     def minutes_left() -> float:
@@ -379,7 +396,7 @@ def main() -> int:
         print(f"SQLite 저장소만 지원합니다: {args.store}")
         return 1
     known_ids = store.source_job_ids(SOURCE)
-    detail_file = DETAIL_DIR / f"{stamp}.jsonl"
+    detail_file = DETAIL_DIR / f"{today.isoformat()}.jsonl"
     already_today = set(latest_by_id(read_records(detail_file)))
     # 목록에서 처음 본 시각을 함께 넘긴다. 인기순 줄에 오래 기다린 공고를
     # 끼워 넣어, 순위가 밀린 공고도 매일 조금씩 차례가 오게 한다.

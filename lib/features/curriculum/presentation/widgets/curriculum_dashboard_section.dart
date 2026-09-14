@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../providers/curriculum_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 사이드바 — 커리큘럼 PDF 바로보기
 class CurriculumDashboardSection extends ConsumerWidget {
@@ -27,8 +28,8 @@ class CurriculumDashboardSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: EdgeInsets.only(bottom: AppSpace.s(8)),
           child: Text(
             '커리큘럼',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -37,10 +38,10 @@ class CurriculumDashboardSection extends ConsumerWidget {
         Card(
           margin: EdgeInsets.zero,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(12), AppSpace.s(12), AppSpace.s(10)),
             child: metaAsync.when(
-              loading: () => const SizedBox(
-                height: 40,
+              loading: () => SizedBox(
+                height: AppSpace.row(40),
                 child: Center(
                   child: SizedBox(
                     width: 18,
@@ -65,12 +66,12 @@ class CurriculumDashboardSection extends ConsumerWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.picture_as_pdf,
                           color: AppColors.error,
                           size: 22,
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: AppSpace.s(8)),
                         Expanded(
                           child: Text(
                             hasPdf
@@ -82,8 +83,9 @@ class CurriculumDashboardSection extends ConsumerWidget {
                               color: hasPdf
                                   ? AppColors.textPrimary
                                   : AppColors.textSecondary,
-                              fontWeight:
-                                  hasPdf ? FontWeight.w600 : FontWeight.w400,
+                              fontWeight: hasPdf
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -91,7 +93,7 @@ class CurriculumDashboardSection extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: AppSpace.s(10)),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
@@ -100,7 +102,7 @@ class CurriculumDashboardSection extends ConsumerWidget {
                             : null,
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(36),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
                           textStyle: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,

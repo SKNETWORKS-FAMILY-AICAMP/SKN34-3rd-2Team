@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 이력서 섹션 sticky 탭 — 탭 시 해당 섹션으로 스크롤
 class ResumeSectionNav extends StatelessWidget {
@@ -21,16 +22,16 @@ class ResumeSectionNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
+      height: AppSpace.row(44),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12)),
         itemCount: sections.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 4),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpace.s(4)),
         itemBuilder: (_, i) {
           final key = sections[i];
           final label = AppConstants.resumeSectionLabels[key] ?? key;
@@ -40,7 +41,7 @@ class ResumeSectionNav extends StatelessWidget {
             onTap: () => onSelected(key),
             borderRadius: BorderRadius.circular(10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(8)),
               decoration: BoxDecoration(
                 color: selected ? AppColors.primaryLight : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
@@ -52,16 +53,24 @@ class ResumeSectionNav extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (done)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 4),
-                      child: Icon(Icons.check, size: 12, color: AppColors.success),
+                    Padding(
+                      padding: EdgeInsets.only(right: AppSpace.s(4)),
+                      child: Icon(
+                        Icons.check,
+                        size: 12,
+                        color: AppColors.success,
+                      ),
                     ),
                   Text(
                     label,
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                      color: selected ? AppColors.primary : AppColors.textPrimary,
+                      fontWeight: selected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                      color: selected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
                     ),
                   ),
                 ],
@@ -91,7 +100,7 @@ class ResumeProgressHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(8), AppSpace.s(16), AppSpace.s(0)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -109,7 +118,7 @@ class ResumeProgressHeader extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: AppSpace.s(6)),
           LinearProgressIndicator(
             value: total == 0 ? 0 : completed / total,
             color: AppColors.primary,

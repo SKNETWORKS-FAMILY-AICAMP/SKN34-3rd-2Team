@@ -7,6 +7,7 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/qual_exam_providers.dart';
 import '../utils/qual_exam_utils.dart';
 import 'widgets/qual_exam_timeline.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 자격 시험 일정 전체 — 타임라인 + 검색
 class QualExamSchedulesScreen extends ConsumerStatefulWidget {
@@ -36,8 +37,8 @@ class _QualExamSchedulesScreenState
       child: schedules.when(
         loading: () => ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(height: 120),
+          children: [
+            SizedBox(height: AppSpace.s(120)),
             Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ],
         ),
@@ -55,7 +56,7 @@ class _QualExamSchedulesScreenState
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(AppSpace.s(16)),
             children: [
               Center(
                 child: ConstrainedBox(
@@ -72,7 +73,7 @@ class _QualExamSchedulesScreenState
                         ),
                         onChanged: (_) => setState(() {}),
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: AppSpace.s(10)),
                       Text(
                         '${result.year}년 · 다가오는 ${filtered.length}건',
                         style: TextStyle(
@@ -80,10 +81,10 @@ class _QualExamSchedulesScreenState
                           color: AppColors.textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: AppSpace.s(16)),
                       if (filtered.isEmpty)
                         Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
+                          padding: EdgeInsets.symmetric(vertical: AppSpace.s(48)),
                           child: Center(
                             child: Text(
                               '조건에 맞는 시험 일정이 없습니다',
@@ -95,12 +96,12 @@ class _QualExamSchedulesScreenState
                         ...monthKeys.map((month) {
                           final items = grouped[month]!;
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
+                            padding: EdgeInsets.only(bottom: AppSpace.s(20)),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Padding(
-                                  padding: const EdgeInsets.only(bottom: 10),
+                                  padding: EdgeInsets.only(bottom: AppSpace.s(10)),
                                   child: Text(
                                     month,
                                     style: TextStyle(
@@ -112,11 +113,11 @@ class _QualExamSchedulesScreenState
                                 ),
                                 Card(
                                   child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      12,
-                                      16,
-                                      16,
-                                      12,
+                                    padding: EdgeInsets.fromLTRB(
+                                      AppSpace.s(12),
+                                      AppSpace.s(16),
+                                      AppSpace.s(16),
+                                      AppSpace.s(12),
                                     ),
                                     child: QualExamTimeline(items: items),
                                   ),
@@ -126,7 +127,7 @@ class _QualExamSchedulesScreenState
                           );
                         }),
                       if (result.syncedAt != null) ...[
-                        const SizedBox(height: 8),
+                        SizedBox(height: AppSpace.s(8)),
                         Text(
                           '출처: 한국산업인력공단 공공데이터 · '
                           '갱신 ${AppDateUtils.formatDateTime(result.syncedAt!)}',

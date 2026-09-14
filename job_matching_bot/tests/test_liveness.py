@@ -90,11 +90,12 @@ class LivenessTest(unittest.TestCase):
         self.assertEqual(live.alive([a, b]), [a])
         self.calls.clear()
         self.states.clear()  # 지금 다시 열면 살아 있다고 답할 것이다 — 하지만 열지 않아야 한다
-        self.now = T0 + timedelta(hours=23)
-        self.assertEqual(live.alive([a, b]), [a], "하루 안이면 기록을 믿는다")
+        self.now = T0 + timedelta(minutes=59)
+        self.assertEqual(live.alive([a, b]), [a], "한 시간 안이면 기록을 믿는다")
         self.assertEqual(self.calls, [])
-        self.now = T0 + timedelta(hours=25)
-        self.assertEqual(live.alive([a, b]), [a, b], "하루가 지나면 다시 열어 본다")
+        # 하루였을 때는 어제 열려 있던 공고가 오늘 조기 마감돼도 그대로 나갔다.
+        self.now = T0 + timedelta(minutes=61)
+        self.assertEqual(live.alive([a, b]), [a, b], "한 시간이 지나면 다시 열어 본다")
         self.assertEqual(sorted(self.calls), sorted([self.rec(a), self.rec(b)]))
 
     # 3

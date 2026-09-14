@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/models/submission_model.dart';
 import 'record_status_badge.dart';
+import '../../../../core/theme/app_space.dart';
 
 Future<String?> showSubmissionDetailSheet({
   required BuildContext context,
@@ -85,15 +86,15 @@ class _SubmissionDetailBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(4), AppSpace.s(20), AppSpace.s(8)),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     '제출 상세',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 RecordStatusBadge(status: s.status),
@@ -103,10 +104,10 @@ class _SubmissionDetailBody extends StatelessWidget {
           const Divider(height: 1),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(12), AppSpace.s(20), AppSpace.s(16)),
               children: [
                 _chip(s.typeLabel),
-                const SizedBox(height: 10),
+                SizedBox(height: AppSpace.s(10)),
                 Text(
                   s.title,
                   style: const TextStyle(
@@ -115,7 +116,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                     height: 1.3,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 if (isAdmin || s.userDisplayName.isNotEmpty)
                   _row('제출자', s.userDisplayName),
                 if (s.submittedAt != null)
@@ -142,7 +143,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                   ),
                 if (s.weekLabel != null) _row('주차', s.weekLabel!),
                 if (s.link != null && s.link!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  SizedBox(height: AppSpace.s(4)),
                   Text(
                     '링크',
                     style: TextStyle(
@@ -151,12 +152,12 @@ class _SubmissionDetailBody extends StatelessWidget {
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: AppSpace.s(4)),
                   InkWell(
                     onTap: () => _openUrl(context, s.link!),
                     child: Text(
                       s.link!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: AppColors.primary,
                         decoration: TextDecoration.underline,
@@ -164,12 +165,11 @@ class _SubmissionDetailBody extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (s.mileageAmount > 0)
-                  _row('적립', '${s.mileageAmount}M'),
+                if (s.mileageAmount > 0) _row('적립', '${s.mileageAmount}M'),
                 if (s.reviewComment != null && s.reviewComment!.isNotEmpty)
                   _row('리뷰 코멘트', s.reviewComment!),
                 if (s.fileUrls.isNotEmpty) ...[
-                  const SizedBox(height: 14),
+                  SizedBox(height: AppSpace.s(14)),
                   Text(
                     '증빙 파일 (${s.fileUrls.length})',
                     style: const TextStyle(
@@ -177,13 +177,13 @@ class _SubmissionDetailBody extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                   ...s.fileUrls.asMap().entries.map((e) {
                     final i = e.key;
                     final url = e.value;
                     final isImage = _looksLikeImage(url);
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
+                      padding: EdgeInsets.only(bottom: AppSpace.s(10)),
                       child: Material(
                         color: AppColors.surfaceVariant,
                         borderRadius: BorderRadius.circular(10),
@@ -218,7 +218,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                                       );
                                     },
                                     errorBuilder: (_, _, _) => Padding(
-                                      padding: const EdgeInsets.all(16),
+                                      padding: EdgeInsets.all(AppSpace.s(16)),
                                       child: Column(
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
@@ -227,7 +227,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                                             Icons.broken_image_outlined,
                                             color: AppColors.textHint,
                                           ),
-                                          const SizedBox(height: 8),
+                                          SizedBox(height: AppSpace.s(8)),
                                           TextButton.icon(
                                             onPressed: () =>
                                                 _openUrl(context, url),
@@ -244,7 +244,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                                 )
                               else
                                 Padding(
-                                  padding: const EdgeInsets.all(14),
+                                  padding: EdgeInsets.all(AppSpace.s(14)),
                                   child: Row(
                                     children: [
                                       Icon(
@@ -254,7 +254,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                                         size: 20,
                                         color: AppColors.textSecondary,
                                       ),
-                                      const SizedBox(width: 8),
+                                      SizedBox(width: AppSpace.s(8)),
                                       Expanded(
                                         child: Text(
                                           url.startsWith('demo://')
@@ -283,7 +283,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                     (s.link == null || s.link!.isEmpty) &&
                     s.type != RecordTypes.blog)
                   Padding(
-                    padding: EdgeInsets.only(top: 8),
+                    padding: EdgeInsets.only(top: AppSpace.s(8)),
                     child: Text(
                       '첨부된 증빙이 없습니다.',
                       style: TextStyle(
@@ -297,7 +297,7 @@ class _SubmissionDetailBody extends StatelessWidget {
           ),
           if (isAdmin && s.isPending)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(8), AppSpace.s(16), AppSpace.s(12)),
               child: Row(
                 children: [
                   Expanded(
@@ -306,7 +306,7 @@ class _SubmissionDetailBody extends StatelessWidget {
                       child: const Text('반려'),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: AppSpace.s(10)),
                   Expanded(
                     child: FilledButton(
                       onPressed: () => Navigator.pop(context, 'approved'),
@@ -328,7 +328,7 @@ class _SubmissionDetailBody extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(3)),
         decoration: BoxDecoration(
           color: AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(6),
@@ -340,7 +340,7 @@ class _SubmissionDetailBody extends StatelessWidget {
 
   Widget _row(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -356,7 +356,10 @@ class _SubmissionDetailBody extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 13, height: 1.35)),
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, height: 1.35),
+            ),
           ),
         ],
       ),

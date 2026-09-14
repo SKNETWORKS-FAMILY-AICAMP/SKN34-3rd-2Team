@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
@@ -12,34 +13,34 @@ import '../models/seating_room_model.dart';
 final seatingRoomsProvider =
     StreamProvider.autoDispose<List<SeatingRoomModel>>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value([]);
+  if (cohortId == null || DemoConfig.enabled) return Stream.value([]);
   return ref.watch(seatingRepositoryProvider).watchRooms(cohortId);
 });
 
 final projectTeamsProvider =
     StreamProvider.autoDispose<List<ProjectTeamModel>>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value([]);
+  if (cohortId == null || DemoConfig.enabled) return Stream.value([]);
   return ref.watch(seatingRepositoryProvider).watchProjectTeams(cohortId);
 });
 
 final seatingMetaProvider = StreamProvider.autoDispose<SeatingMetaModel>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value(const SeatingMetaModel());
+  if (cohortId == null || DemoConfig.enabled) return Stream.value(const SeatingMetaModel());
   return ref.watch(seatingRepositoryProvider).watchMeta(cohortId);
 });
 
 final seatingRoomProvider =
     StreamProvider.autoDispose.family<SeatingRoomModel?, String>((ref, roomId) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value(null);
+  if (cohortId == null || DemoConfig.enabled) return Stream.value(null);
   return ref.watch(seatingRepositoryProvider).watchRoom(cohortId, roomId);
 });
 
 final seatingRoomAssignmentProvider = StreamProvider.autoDispose
     .family<SeatingAssignmentModel?, String>((ref, roomId) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value(null);
+  if (cohortId == null || DemoConfig.enabled) return Stream.value(null);
   return ref.watch(seatingRepositoryProvider).watchAssignment(cohortId, roomId);
 });
 
@@ -47,7 +48,7 @@ final seatingRoomAssignmentProvider = StreamProvider.autoDispose
 final publishedSeatingLayoutProvider =
     StreamProvider.autoDispose<SeatingLayoutModel?>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value(null);
+  if (cohortId == null || DemoConfig.enabled) return Stream.value(null);
   return ref.watch(seatingRepositoryProvider).watchPublishedLayout(cohortId);
 });
 
@@ -55,7 +56,7 @@ final publishedSeatingLayoutProvider =
 final publishedSeatingAssignmentProvider =
     StreamProvider.autoDispose<SeatingAssignmentModel?>((ref) {
   final cohortId = ref.watch(effectiveCohortIdProvider);
-  if (cohortId == null) return Stream.value(null);
+  if (cohortId == null || DemoConfig.enabled) return Stream.value(null);
   return ref.watch(seatingRepositoryProvider).watchPublishedAssignment(cohortId);
 });
 

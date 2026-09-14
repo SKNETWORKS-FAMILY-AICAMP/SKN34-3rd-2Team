@@ -22,6 +22,7 @@ import 'widgets/feedback_bell.dart';
 import 'widgets/resume_edit_feedback_panel.dart';
 import 'widgets/resume_section_nav.dart';
 import 'widgets/tech_stack_editor.dart';
+import '../../../core/theme/app_space.dart';
 
 enum _ResumeViewMode { edit, doc }
 
@@ -377,19 +378,21 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     if (arrived <= 0 || _bannerDismissed) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
-      decoration: const BoxDecoration(
+      padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(9), AppSpace.s(8), AppSpace.s(9)),
+      decoration: BoxDecoration(
         color: AppColors.primaryLight,
-        border: Border(bottom: BorderSide(color: Color(0xFFC9DBFF))),
+        border: Border(
+          bottom: BorderSide(color: AppColors.tint(const Color(0xFFC9DBFF))),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.notifications, size: 16, color: AppColors.primary),
-          const SizedBox(width: 8),
+          Icon(Icons.notifications, size: 16, color: AppColors.primary),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: Text(
               '새 피드백 $arrived건이 도착했습니다. 종을 눌러 확인하세요.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 color: AppColors.primaryDark,
               ),
@@ -400,7 +403,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
             visualDensity: VisualDensity.compact,
             iconSize: 18,
             onPressed: () => setState(() => _bannerDismissed = true),
-            icon: const Icon(Icons.close, color: AppColors.textSecondary),
+            icon: Icon(Icons.close, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -715,9 +718,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     onGoToSection: _goToFeedbackSection,
                     openOnStart: widget.openFeedback,
                   ),
-                const SizedBox(width: 8),
-                if (!resume.isApproved || isReviewer)
-                  _ModeToggle(
+                SizedBox(width: AppSpace.s(8)),
+                // 승인된 이력서도 학생이 편집·문서 보기를 오갈 수 있다. 승인은
+                // "여기까지 봤다"는 표시일 뿐 잠금이 아니다.
+                _ModeToggle(
                     isEdit: _viewMode == _ResumeViewMode.edit,
                     onEdit: () =>
                         setState(() => _viewMode = _ResumeViewMode.edit),
@@ -725,7 +729,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                         setState(() => _viewMode = _ResumeViewMode.doc),
                   ),
                 if (_viewMode == _ResumeViewMode.doc) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   IconButton(
                     tooltip: 'PDF 내보내기',
                     onPressed: () => _exportPdf(resume),
@@ -735,13 +739,13 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (!isReviewer &&
                     resume.canStudentEdit &&
                     _viewMode == _ResumeViewMode.edit) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   OutlinedButton(
                     onPressed: _isSaving ? null : () => _save(resume: resume),
                     child: const Text('저장'),
                   ),
                   if (!resume.isSubmitted) ...[
-                    const SizedBox(width: 8),
+                    SizedBox(width: AppSpace.s(8)),
                     FilledButton.icon(
                       onPressed: _isSaving
                           ? null
@@ -750,7 +754,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       label: const Text('피드백 요청'),
                     ),
                   ],
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                 ],
                 if (isReviewer && resume.isSubmitted && !resume.isApproved) ...[
                   FilledButton.icon(
@@ -758,11 +762,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     icon: const Icon(Icons.check_circle_outline, size: 16),
                     label: const Text('승인'),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                 ],
                 if (_isSaving)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 12),
+                  Padding(
+                    padding: EdgeInsets.only(right: AppSpace.s(12)),
                     child: SizedBox(
                       width: 18,
                       height: 18,
@@ -784,12 +788,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (resume.isSubmitted && !resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(16),
+                      vertical: AppSpace.s(8),
                     ),
                     color: AppColors.primaryLight,
-                    child: const Text(
+                    child: Text(
                       '피드백 요청됨 — 계속 수정할 수 있습니다.',
                       style: TextStyle(
                         fontSize: 12,
@@ -797,16 +801,17 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       ),
                     ),
                   ),
-                if (resume.isApproved)
+                // 학생에게 하는 안내다. 강사·관리자는 위 진행 줄의 "승인 완료"로 충분하다.
+                if (resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(16),
+                      vertical: AppSpace.s(8),
                     ),
                     color: AppColors.success.withValues(alpha: 0.12),
-                    child: const Text(
-                      '승인 완료 — 더 이상 수정할 수 없습니다.',
+                    child: Text(
+                      '승인 완료 — 계속 수정할 수 있습니다.',
                       style: TextStyle(fontSize: 12, color: AppColors.success),
                     ),
                   ),
@@ -825,7 +830,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
                       final resumeScroll = SingleChildScrollView(
                         controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(AppSpace.s(16)),
                         child: Center(
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
@@ -845,7 +850,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     _scheduleDerivedRefresh();
                                   },
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'basicInfo',
                                   _BasicInfoSection(
@@ -880,7 +885,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                           },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'coreCompetencies',
                                   _CoreCompetenciesSection(
@@ -896,7 +901,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'experience',
                                   _ExperienceSection(
@@ -910,7 +915,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'education',
                                   _EducationSection(
@@ -924,7 +929,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'techStack',
                                   _TechStackSection(
@@ -938,7 +943,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'certifications',
                                   _CertificationsSection(
@@ -954,7 +959,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'awards',
                                   _AwardsSection(
@@ -968,7 +973,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'trainingExperience',
                                   _TrainingSection(
@@ -984,7 +989,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'otherActivities',
                                   _ActivitiesSection(
@@ -1000,7 +1005,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'projects',
                                   _ProjectsSection(
@@ -1014,7 +1019,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: AppSpace.s(24)),
                                 _sectionOf()(
                                   'selfIntroduction',
                                   _SelfIntroSection(
@@ -1030,7 +1035,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 32),
+                                SizedBox(height: AppSpace.s(32)),
                               ],
                             ),
                           ),
@@ -1371,7 +1376,7 @@ class _CoachEdgeToggleState extends State<_CoachEdgeToggle> {
       opacity: 1,
       duration: const Duration(milliseconds: 120),
       child: Material(
-        color: Colors.white,
+        color: AppColors.surface,
         elevation: _hovered ? 4 : 1,
         shape: RoundedRectangleBorder(
           side: BorderSide(
@@ -1384,7 +1389,7 @@ class _CoachEdgeToggleState extends State<_CoachEdgeToggle> {
           borderRadius: BorderRadius.circular(9),
           child: SizedBox(
             width: 28,
-            height: 56,
+            height: AppSpace.row(56),
             child: Icon(
               widget.expanded
                   ? Icons.chevron_right_rounded
@@ -1444,7 +1449,7 @@ class _ToggleChip extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(8)),
         decoration: BoxDecoration(
           color: selected ? AppColors.primaryLight : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
@@ -1475,9 +1480,9 @@ class _FlatSection extends StatelessWidget {
           title,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: 8),
-        const Divider(height: 1, color: AppColors.border),
-        const SizedBox(height: 16),
+        SizedBox(height: AppSpace.s(8)),
+        Divider(height: 1, color: AppColors.border),
+        SizedBox(height: AppSpace.s(16)),
         child,
       ],
     );
@@ -1545,19 +1550,19 @@ class _FieldState extends State<_Field> {
     if (widget.readOnly) {
       final empty = widget.value.trim().isEmpty;
       return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: EdgeInsets.only(bottom: AppSpace.s(8)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.label.isNotEmpty)
               Text(
                 widget.label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
                 ),
               ),
-            if (widget.label.isNotEmpty) const SizedBox(height: 2),
+            if (widget.label.isNotEmpty) SizedBox(height: AppSpace.s(2)),
             Text(
               empty ? '미작성' : widget.value,
               style: TextStyle(
@@ -1572,7 +1577,7 @@ class _FieldState extends State<_Field> {
 
     if (widget.boxed) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: EdgeInsets.only(bottom: AppSpace.s(8)),
         child: TextField(
           controller: _controller,
           decoration: InputDecoration(
@@ -1591,7 +1596,7 @@ class _FieldState extends State<_Field> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: TextField(
         controller: _controller,
         decoration: InputDecoration(
@@ -1603,7 +1608,7 @@ class _FieldState extends State<_Field> {
             borderSide: BorderSide(color: AppColors.border),
           ),
           filled: false,
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(8)),
         ),
         maxLines: widget.maxLines,
         minLines: minLines,
@@ -1651,8 +1656,8 @@ class _ItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+      padding: EdgeInsets.all(AppSpace.s(12)),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(8),
@@ -1753,7 +1758,7 @@ class _TitleSectionState extends State<_TitleSection> {
                 '이력서 제목',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               if (widget.readOnly)
                 Text(
                   widget.title.isEmpty ? '새 이력서' : widget.title,
@@ -1782,7 +1787,7 @@ class _TitleSectionState extends State<_TitleSection> {
         if (!widget.readOnly)
           Text(
             '${widget.title.length}/100',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
             ),
@@ -1823,7 +1828,7 @@ class _BasicInfoSection extends StatelessWidget {
             onChanged: (v) => onChanged(info.copyWith(name: v)),
           ),
         if (onPrefill != null) ...[
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           TextButton.icon(
             onPressed: onPrefill,
             style: TextButton.styleFrom(
@@ -1838,7 +1843,7 @@ class _BasicInfoSection extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         Wrap(
           spacing: 24,
           runSpacing: 8,
@@ -1932,7 +1937,7 @@ class _NameFieldState extends State<_NameField> {
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         hintText: '이름을 입력하세요',
         hintStyle: TextStyle(
           fontSize: 20,
@@ -1944,7 +1949,7 @@ class _NameFieldState extends State<_NameField> {
         focusedBorder: InputBorder.none,
         filled: false,
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(vertical: 4),
+        contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(4)),
       ),
       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
       onChanged: widget.onChanged,
@@ -2020,7 +2025,7 @@ class _IconFieldState extends State<_IconField> {
       child: Row(
         children: [
           Icon(widget.icon, size: 18, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: widget.readOnly
                 ? Column(
@@ -2028,7 +2033,7 @@ class _IconFieldState extends State<_IconField> {
                     children: [
                       Text(
                         widget.label,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textHint,
                         ),
@@ -2070,19 +2075,19 @@ class _CoreCompetenciesSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '채용 담당자들이 가장 먼저 읽게 되는 글입니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const Text(
+          Text(
             '경력을 기반으로 나의 역량과 강점을 소개해 주세요.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const Text(
+          Text(
             '5줄 이내로 간결하게 작성하는 것을 권장합니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textHint),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           _Field(
             label: '',
             hint: '역량과 강점을 입력하세요',
@@ -2719,7 +2724,7 @@ class _SelfIntroSection extends StatelessWidget {
           final section = data.sectionByKey(key);
           final label = ResumeSelfIntroLabels.labels[key]!;
           return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.only(bottom: AppSpace.s(16)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2727,7 +2732,7 @@ class _SelfIntroSection extends StatelessWidget {
                   label,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 _Field(
                   label: '부제목',
                   hint: '부제목을 작성하세요',

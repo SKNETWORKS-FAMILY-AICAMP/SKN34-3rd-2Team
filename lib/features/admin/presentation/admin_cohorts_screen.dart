@@ -11,6 +11,7 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/cohort_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 기수 목록 / 선택 / 상태 관리
 class AdminCohortsScreen extends ConsumerStatefulWidget {
@@ -131,7 +132,7 @@ class _CohortList extends ConsumerWidget {
       onRefresh: () async => ref.invalidate(allCohortsAdminProvider),
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(AppSpace.s(16)),
         itemCount: cohorts.length,
         itemBuilder: (_, i) {
           final c = cohorts[i];
@@ -141,7 +142,7 @@ class _CohortList extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: AppLayout.listConstraints(),
               child: Card(
-                margin: const EdgeInsets.only(bottom: 10),
+                margin: EdgeInsets.only(bottom: AppSpace.s(10)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
@@ -155,7 +156,7 @@ class _CohortList extends ConsumerWidget {
                     RoutePaths.adminCohortEditPath(c.cohortId),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.all(AppSpace.s(16)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -170,11 +171,11 @@ class _CohortList extends ConsumerWidget {
                                     children: [
                                       _StatusChip(status: c.status),
                                       if (isSelected) ...[
-                                        const SizedBox(width: 8),
+                                        SizedBox(width: AppSpace.s(8)),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: AppSpace.s(8),
+                                            vertical: AppSpace.s(2),
                                           ),
                                           decoration: BoxDecoration(
                                             color: AppColors.primaryLight,
@@ -192,7 +193,7 @@ class _CohortList extends ConsumerWidget {
                                       ],
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: AppSpace.s(8)),
                                   Text(
                                     c.name,
                                     style: const TextStyle(
@@ -200,7 +201,7 @@ class _CohortList extends ConsumerWidget {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  SizedBox(height: AppSpace.s(4)),
                                   Text(
                                     c.periodLabel,
                                     style: TextStyle(
@@ -231,7 +232,7 @@ class _CohortList extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: AppSpace.s(12)),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -283,7 +284,7 @@ class _StatusChip extends StatelessWidget {
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(3)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),

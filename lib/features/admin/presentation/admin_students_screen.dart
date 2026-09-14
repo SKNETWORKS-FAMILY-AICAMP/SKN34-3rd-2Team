@@ -11,6 +11,7 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/student_intake_model.dart';
 import '../providers/student_admin_providers.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 등록 학생 목록 (재원 / 퇴소 필터)
 class AdminStudentsScreen extends ConsumerStatefulWidget {
@@ -66,18 +67,18 @@ class _AdminStudentsScreenState extends ConsumerState<AdminStudentsScreen> {
               onRefresh: () async =>
                   ref.invalidate(cohortStudentIntakesProvider),
               child: intakes.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => ErrorView(
                   message: e.toString(),
-                  onRetry: () =>
-                      ref.invalidate(cohortStudentIntakesProvider),
+                  onRetry: () => ref.invalidate(cohortStudentIntakesProvider),
                 ),
                 data: (list) {
-                  final activeList =
-                      list.where((s) => s.isActive).toList(growable: false);
-                  final inactiveList =
-                      list.where((s) => !s.isActive).toList(growable: false);
+                  final activeList = list
+                      .where((s) => s.isActive)
+                      .toList(growable: false);
+                  final inactiveList = list
+                      .where((s) => !s.isActive)
+                      .toList(growable: false);
 
                   if (_filter == 0) {
                     return _StudentList(
@@ -123,7 +124,7 @@ class _StudentList extends StatelessWidget {
         children: [
           adminPageWrapper(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 64),
+              padding: EdgeInsets.symmetric(vertical: AppSpace.s(64)),
               child: Column(
                 children: [
                   Icon(
@@ -133,13 +134,13 @@ class _StudentList extends StatelessWidget {
                     size: 48,
                     color: AppColors.textHint.withValues(alpha: 0.6),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   Text(
                     emptyMessage,
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                   if (showCreateButton) ...[
-                    const SizedBox(height: 16),
+                    SizedBox(height: AppSpace.s(16)),
                     OutlinedButton.icon(
                       onPressed: () =>
                           context.push(RoutePaths.adminStudentsCreate),
@@ -161,17 +162,19 @@ class _StudentList extends StatelessWidget {
         constraints: AppLayout.listConstraints(),
         child: ListView.builder(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(AppSpace.s(16)),
           itemCount: students.length,
           itemBuilder: (_, i) {
             final s = students[i];
             return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              color: isInactive ? const Color(0xFFF8F9FA) : null,
+              margin: EdgeInsets.only(bottom: AppSpace.s(10)),
+              color: isInactive
+                  ? AppColors.tint(const Color(0xFFF8F9FA))
+                  : null,
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: isInactive
-                      ? const Color(0xFFE5E7EB)
+                      ? AppColors.tint(const Color(0xFFE5E7EB))
                       : AppColors.primaryLight,
                   child: Text(
                     s.displayName.isNotEmpty ? s.displayName[0] : '?',
@@ -213,12 +216,11 @@ class _StudentList extends StatelessWidget {
                         visualDensity: VisualDensity.compact,
                       )
                     : s.passwordChanged
-                        ? const Chip(
-                            label:
-                                Text('PW 변경됨', style: TextStyle(fontSize: 10)),
-                            visualDensity: VisualDensity.compact,
-                          )
-                        : const Icon(Icons.chevron_right),
+                    ? const Chip(
+                        label: Text('PW 변경됨', style: TextStyle(fontSize: 10)),
+                        visualDensity: VisualDensity.compact,
+                      )
+                    : const Icon(Icons.chevron_right),
                 onTap: () =>
                     context.push(RoutePaths.adminStudentDetailPath(s.uid)),
               ),

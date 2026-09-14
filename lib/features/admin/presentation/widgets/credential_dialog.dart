@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 Future<void> showCredentialDialog(
   BuildContext context, {
@@ -26,13 +27,13 @@ Future<void> showCredentialDialog(
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpace.s(16)),
           _CopyTile(label: '아이디 (이메일)', value: email),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
           _CopyTile(label: '비밀번호', value: password),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(AppSpace.s(10)),
             decoration: BoxDecoration(
               color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
@@ -63,7 +64,7 @@ class _CopyTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(AppSpace.s(12)),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(8),
@@ -81,7 +82,7 @@ class _CopyTile extends StatelessWidget {
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 SelectableText(
                   value,
                   style: const TextStyle(

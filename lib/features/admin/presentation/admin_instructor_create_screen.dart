@@ -11,6 +11,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../data/instructor_admin_service.dart';
 import 'widgets/admin_page_layout.dart';
 import 'widgets/credential_dialog.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 강사 계정 생성 + 담당 기수 배정
 class AdminInstructorCreateScreen extends ConsumerStatefulWidget {
@@ -56,13 +57,14 @@ class _AdminInstructorCreateScreenState
 
     setState(() => _isSubmitting = true);
     try {
-      final result =
-          await ref.read(instructorAdminServiceProvider).createInstructor(
-                displayName: _displayName.text.trim(),
-                cohortId: cohortId,
-                cohortName: cohortName,
-                email: _email.text.trim(),
-              );
+      final result = await ref
+          .read(instructorAdminServiceProvider)
+          .createInstructor(
+            displayName: _displayName.text.trim(),
+            cohortId: cohortId,
+            cohortName: cohortName,
+            email: _email.text.trim(),
+          );
       if (!mounted) return;
       await showCredentialDialog(
         context,
@@ -102,7 +104,7 @@ class _AdminInstructorCreateScreenState
                     '담당 기수: ${cohortName.isEmpty ? '-' : cohortName}',
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   TextFormField(
                     controller: _displayName,
                     decoration: const InputDecoration(labelText: '이름'),
@@ -110,7 +112,7 @@ class _AdminInstructorCreateScreenState
                     validator: (v) =>
                         (v == null || v.trim().isEmpty) ? '이름을 입력하세요' : null,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   TextFormField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
@@ -125,11 +127,11 @@ class _AdminInstructorCreateScreenState
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               FilledButton(
                 onPressed: _isSubmitting ? null : _submit,
                 child: _isSubmitting
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(

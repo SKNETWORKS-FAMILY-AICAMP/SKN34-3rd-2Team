@@ -10,6 +10,7 @@ import '../../onboarding/domain/onboarding_target_registry.dart';
 import '../../onboarding/student/student_onboarding_keys.dart';
 import 'widgets/board_ui.dart';
 import 'widgets/notice_list_widgets.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 게시판 — 공지 + 소통 피드 탭 (학생용)
 class BoardScreen extends ConsumerStatefulWidget {
@@ -98,8 +99,8 @@ class _BoardSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      color: AppColors.surface,
+      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(12), AppSpace.s(20), AppSpace.s(12)),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
@@ -126,9 +127,9 @@ class _BoardSearchBar extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: AppColors.primary),
+            borderSide: BorderSide(color: AppColors.primary),
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+          contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(0)),
         ),
       ),
     );
@@ -154,19 +155,19 @@ class _NoticesTab extends ConsumerWidget {
           final filtered = q.isEmpty
               ? list
               : list
-                  .where(
-                    (n) =>
-                        n.title.toLowerCase().contains(q) ||
-                        n.content.toLowerCase().contains(q) ||
-                        n.authorName.toLowerCase().contains(q),
-                  )
-                  .toList();
+                    .where(
+                      (n) =>
+                          n.title.toLowerCase().contains(q) ||
+                          n.content.toLowerCase().contains(q) ||
+                          n.authorName.toLowerCase().contains(q),
+                    )
+                    .toList();
 
           if (filtered.isEmpty) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                SizedBox(height: 48),
+                SizedBox(height: AppSpace.s(48)),
                 EmptyView(
                   message: q.isEmpty ? '등록된 공지가 없습니다.' : '검색 결과가 없습니다.',
                   icon: q.isEmpty
@@ -183,15 +184,16 @@ class _NoticesTab extends ConsumerWidget {
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints:
-                  const BoxConstraints(maxWidth: BoardUi.contentMaxWidth),
+              constraints: const BoxConstraints(
+                maxWidth: BoardUi.contentMaxWidth,
+              ),
               child: KeyedSubtree(
                 key: OnboardingTargetRegistry.keyOf(
                   StudentOnboardingTargets.boardNotices,
                 ),
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                  padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(28)),
                   children: [
                     if (favorites.isNotEmpty) ...[
                       const _SectionHeader(
@@ -199,20 +201,20 @@ class _NoticesTab extends ConsumerWidget {
                         iconColor: BoardUi.favorite,
                         title: '중요 공지',
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: AppSpace.s(8)),
                       StudentNoticeRowList(
                         notices: favorites,
                         onTap: (notice) =>
                             NoticeDetailSheet.show(context, notice),
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: AppSpace.s(20)),
                     ],
                     if (regular.isNotEmpty) ...[
                       const _SectionHeader(
                         icon: Icons.campaign_outlined,
                         title: '전체 공지',
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: AppSpace.s(8)),
                       StudentNoticeRowList(
                         notices: regular,
                         onTap: (notice) =>
@@ -246,7 +248,7 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       children: [
         Icon(icon, size: 16, color: iconColor ?? AppColors.textSecondary),
-        const SizedBox(width: 6),
+        SizedBox(width: AppSpace.s(6)),
         Text(
           title,
           style: TextStyle(
@@ -272,8 +274,8 @@ class _FeedTab extends ConsumerWidget {
     return Column(
       children: [
         Container(
-          color: Colors.white,
-          padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+          color: AppColors.surface,
+          padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(12), AppSpace.s(12), AppSpace.s(12)),
           child: Row(
             children: [
               Expanded(
@@ -289,27 +291,29 @@ class _FeedTab extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(14),
+                      vertical: AppSpace.s(12),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               IconButton(
-                icon: const Icon(Icons.send_rounded, color: AppColors.primary),
+                icon: Icon(Icons.send_rounded, color: AppColors.primary),
                 onPressed: user == null
                     ? null
                     : () async {
                         final content = controller.text.trim();
                         if (content.isEmpty) return;
-                        await ref.read(lmsRepositoryProvider).createPost(
-                          cohortId: ref.read(effectiveCohortIdProvider)!,
-                          authorId: user.uid,
-                          authorName: user.displayName,
-                          content: content,
-                        );
+                        await ref
+                            .read(lmsRepositoryProvider)
+                            .createPost(
+                              cohortId: ref.read(effectiveCohortIdProvider)!,
+                              authorId: user.uid,
+                              authorName: user.displayName,
+                              content: content,
+                            );
                         controller.clear();
                       },
               ),
@@ -328,7 +332,7 @@ class _FeedTab extends ConsumerWidget {
                 );
               }
               return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(12), AppSpace.s(20), AppSpace.s(20)),
                 itemCount: list.length,
                 itemBuilder: (_, i) => _PostTile(post: list[i], ref: ref),
               );
@@ -352,10 +356,10 @@ class _PostTile extends StatelessWidget {
         user != null && (user.uid == post.authorId || user.isAdmin);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: EdgeInsets.only(bottom: AppSpace.s(10)),
       decoration: BoardUi.cardDecoration(),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(AppSpace.s(14)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -366,14 +370,14 @@ class _PostTile extends StatelessWidget {
                   backgroundColor: AppColors.primaryLight,
                   child: Text(
                     post.authorName.isNotEmpty ? post.authorName[0] : '?',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.primary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: AppSpace.s(10)),
                 Text(
                   post.authorName,
                   style: const TextStyle(fontWeight: FontWeight.w600),
@@ -384,14 +388,16 @@ class _PostTile extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.delete_outline, size: 18),
                     color: AppColors.textHint,
-                    onPressed: () => ref.read(lmsRepositoryProvider).deletePost(
-                      ref.read(effectiveCohortIdProvider)!,
-                      post.id,
-                    ),
+                    onPressed: () => ref
+                        .read(lmsRepositoryProvider)
+                        .deletePost(
+                          ref.read(effectiveCohortIdProvider)!,
+                          post.id,
+                        ),
                   ),
               ],
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: AppSpace.s(10)),
             Text(
               post.content,
               style: const TextStyle(fontSize: 14, height: 1.5),

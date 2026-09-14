@@ -8,6 +8,8 @@ import '../../../../shared/constants/ai_ops_types.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/services/ai_ops_service.dart';
 import '../data/resume_review_api_client.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 enum _ReviewBusyKind { review, answer, apply, undo }
 
@@ -871,7 +873,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     return PopScope(
       canPop: !_busy && !_mutationPending,
       child: Dialog(
-        insetPadding: const EdgeInsets.all(24),
+        insetPadding: EdgeInsets.all(AppSpace.s(24)),
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
           width: 1180,
@@ -969,11 +971,11 @@ class _ReviewDialogHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final jobLabel = '${job?['company'] ?? ''} ${job?['title'] ?? ''}'.trim();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(12), AppSpace.s(12), AppSpace.s(12)),
       child: Row(
         children: [
           const Icon(Icons.auto_awesome, color: Color(0xFF16A34A), size: 20),
-          const SizedBox(width: 8),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -983,18 +985,18 @@ class _ReviewDialogHeader extends StatelessWidget {
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                 ),
                 if (generalReview)
-                  const Text(
+                  Text(
                     '문장 표현과 이력서 근거를 검토해 수정안을 제시합니다.',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                   )
                 else if (jobLabel.isNotEmpty)
                   Text(
                     jobLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.textSecondary,
                     ),
                   ),
               ],
@@ -1042,14 +1044,14 @@ class _ResumeDraftPreview extends StatelessWidget {
     final map = content.toMap();
     final info = Map<String, dynamic>.from(map['basicInfo'] as Map);
     return ColoredBox(
-      color: const Color(0xFFF8FAFC),
+      color: AppColors.tint(const Color(0xFFF8FAFC)),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(AppSpace.s(20)),
         child: Container(
-          padding: const EdgeInsets.all(22),
+          padding: EdgeInsets.all(AppSpace.s(22)),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -1072,16 +1074,16 @@ class _ResumeDraftPreview extends StatelessWidget {
                 ],
               ),
               if ((info['email'] as String? ?? '').isNotEmpty) ...[
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   info['email'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
-              const SizedBox(height: 18),
+              SizedBox(height: AppSpace.s(18)),
               for (final entry in _labels.entries)
                 if (entry.key == 'selfIntroduction')
                   _SelfIntroductionPreview(
@@ -1248,14 +1250,14 @@ class _CompactItemsPreview extends StatelessWidget {
         .toList();
     if (filled.isEmpty) return const SizedBox.shrink();
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+      margin: EdgeInsets.only(bottom: AppSpace.s(18)),
+      padding: highlighted ? EdgeInsets.all(AppSpace.s(10)) : EdgeInsets.zero,
       decoration: highlighted ? _previewHighlightDecoration : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PreviewSectionTitle(title: title, highlighted: highlighted),
-          const SizedBox(height: 9),
+          SizedBox(height: AppSpace.s(9)),
           for (var index = 0; index < filled.length; index++) ...[
             _CompactItemRow(
               primary: _text(filled[index], config.primary),
@@ -1265,7 +1267,7 @@ class _CompactItemsPreview extends StatelessWidget {
               ].where((value) => value.isNotEmpty).toList(),
               description: _text(filled[index], config.description),
             ),
-            if (index != filled.length - 1) const SizedBox(height: 8),
+            if (index != filled.length - 1) SizedBox(height: AppSpace.s(8)),
           ],
         ],
       ),
@@ -1287,10 +1289,10 @@ class _CompactItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(11), vertical: AppSpace.s(9)),
     decoration: BoxDecoration(
-      color: const Color(0xFFF8FAFC),
-      border: Border.all(color: const Color(0xFFE5E7EB)),
+      color: AppColors.tint(const Color(0xFFF8FAFC)),
+      border: Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Column(
@@ -1309,14 +1311,14 @@ class _CompactItemRow extends StatelessWidget {
               ),
             ),
             if (metadata.isNotEmpty) ...[
-              const SizedBox(width: 10),
+              SizedBox(width: AppSpace.s(10)),
               Flexible(
                 child: Text(
                   metadata.join(' · '),
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -1324,7 +1326,7 @@ class _CompactItemRow extends StatelessWidget {
           ],
         ),
         if (description.isNotEmpty) ...[
-          const SizedBox(height: 5),
+          SizedBox(height: AppSpace.s(5)),
           Text(
             description,
             style: const TextStyle(fontSize: 11, height: 1.45),
@@ -1352,27 +1354,29 @@ class _TechStackPreview extends StatelessWidget {
     }).toList();
     if (filled.isEmpty) return const SizedBox.shrink();
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+      margin: EdgeInsets.only(bottom: AppSpace.s(18)),
+      padding: highlighted ? EdgeInsets.all(AppSpace.s(10)) : EdgeInsets.zero,
       decoration: highlighted ? _previewHighlightDecoration : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PreviewSectionTitle(title: '기술 스택', highlighted: highlighted),
-          const SizedBox(height: 9),
+          SizedBox(height: AppSpace.s(9)),
           Wrap(
             spacing: 7,
             runSpacing: 7,
             children: [
               for (final item in filled)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(10),
+                    vertical: AppSpace.s(6),
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                    color: AppColors.primaryLight,
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                    ),
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text.rich(
@@ -1385,7 +1389,7 @@ class _TechStackPreview extends StatelessWidget {
                         if ((item['level'] as String? ?? '').trim().isNotEmpty)
                           TextSpan(
                             text: '  ${(item['level'] as String).trim()}',
-                            style: const TextStyle(color: Color(0xFF6B7280)),
+                            style: TextStyle(color: AppColors.textSecondary),
                           ),
                       ],
                     ),
@@ -1400,8 +1404,8 @@ class _TechStackPreview extends StatelessWidget {
   }
 }
 
-const _previewHighlightDecoration = BoxDecoration(
-  color: Color(0xFFFFFBEA),
+BoxDecoration get _previewHighlightDecoration => BoxDecoration(
+  color: AppColors.tint(const Color(0xFFFFFBEA)),
   border: Border.fromBorderSide(
     BorderSide(color: Color(0xFFF59E0B), width: 1.5),
   ),
@@ -1419,14 +1423,14 @@ class _PreviewSectionTitle extends StatelessWidget {
     children: [
       Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF1D4ED8),
+          color: AppColors.primaryDark,
         ),
       ),
       if (highlighted) ...[
-        const SizedBox(width: 7),
+        SizedBox(width: AppSpace.s(7)),
         const Text(
           'AI 질문 대상',
           style: TextStyle(
@@ -1470,14 +1474,14 @@ class _SelfIntroductionPreview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: EdgeInsets.only(bottom: AppSpace.s(8)),
           child: Text(
             '자기소개서',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1D4ED8),
+              color: AppColors.primaryDark,
             ),
           ),
         ),
@@ -1503,9 +1507,9 @@ class _PreviewUpdatedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(3)),
     decoration: BoxDecoration(
-      color: const Color(0xFFDCFCE7),
+      color: AppColors.tint(const Color(0xFFDCFCE7)),
       borderRadius: BorderRadius.circular(99),
     ),
     child: const Text(
@@ -1529,11 +1533,11 @@ class _PreviewSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 18),
-    padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+    margin: EdgeInsets.only(bottom: AppSpace.s(18)),
+    padding: highlighted ? EdgeInsets.all(AppSpace.s(10)) : EdgeInsets.zero,
     decoration: highlighted
         ? BoxDecoration(
-            color: const Color(0xFFFFFBEA),
+            color: AppColors.tint(const Color(0xFFFFFBEA)),
             border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
             borderRadius: BorderRadius.circular(8),
           )
@@ -1545,14 +1549,14 @@ class _PreviewSection extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1D4ED8),
+                color: AppColors.primaryDark,
               ),
             ),
             if (highlighted) ...[
-              const SizedBox(width: 7),
+              SizedBox(width: AppSpace.s(7)),
               const Text(
                 'AI 질문 대상',
                 style: TextStyle(
@@ -1564,7 +1568,7 @@ class _PreviewSection extends StatelessWidget {
             ],
           ],
         ),
-        const SizedBox(height: 7),
+        SizedBox(height: AppSpace.s(7)),
         Text(text, style: const TextStyle(fontSize: 12, height: 1.55)),
       ],
     ),
@@ -1622,10 +1626,14 @@ class _ReviewChatPane extends StatelessWidget {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(20), vertical: AppSpace.s(14)),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border(
+              bottom: BorderSide(
+                color: AppColors.tint(const Color(0xFFE5E7EB)),
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -1634,38 +1642,38 @@ class _ReviewChatPane extends StatelessWidget {
                 size: 18,
                 color: Color(0xFF16A34A),
               ),
-              const SizedBox(width: 7),
+              SizedBox(width: AppSpace.s(7)),
               const Text(
                 'AI 첨삭 대화',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               Text(
                 generalReview
                     ? '문장 표현과 경험 근거를 함께 검토합니다.'
                     : '근거가 부족한 내용은 질문으로 확인합니다.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textSecondary,
                 ),
               ),
               const Spacer(),
               if (resultAvailable && remainingQuestionCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(9),
+                    vertical: AppSpace.s(4),
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
+                    color: AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text(
                     '남은 질문 약 $remainingQuestionCount개',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF2563EB),
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
@@ -1676,7 +1684,7 @@ class _ReviewChatPane extends StatelessWidget {
           child: SelectionArea(
             child: ListView(
               controller: scrollController,
-              padding: const EdgeInsets.all(18),
+              padding: EdgeInsets.all(AppSpace.s(18)),
               children: [
                 if (!resultAvailable && !busy && error == null)
                   _ChatIntro(onStart: onStart, generalReview: generalReview),
@@ -1690,7 +1698,7 @@ class _ReviewChatPane extends StatelessWidget {
                   ),
                 if (busy)
                   Padding(
-                    padding: const EdgeInsets.only(top: 10),
+                    padding: EdgeInsets.only(top: AppSpace.s(10)),
                     child: busyKind == _ReviewBusyKind.review
                         ? _InitialReviewProgress(
                             currentStage: busyStage,
@@ -1702,10 +1710,10 @@ class _ReviewChatPane extends StatelessWidget {
                   ),
                 if (error != null)
                   Container(
-                    margin: const EdgeInsets.only(top: 10),
-                    padding: const EdgeInsets.all(10),
+                    margin: EdgeInsets.only(top: AppSpace.s(10)),
+                    padding: EdgeInsets.all(AppSpace.s(10)),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEF2F2),
+                      color: AppColors.tint(const Color(0xFFFEF2F2)),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -1728,10 +1736,12 @@ class _ReviewChatPane extends StatelessWidget {
         ),
         if (resultAvailable && !reviewCompleted)
           Container(
-            padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+            padding: EdgeInsets.all(AppSpace.s(14)),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              border: Border(
+                top: BorderSide(color: AppColors.tint(const Color(0xFFE5E7EB))),
+              ),
             ),
             child: Focus(
               onKeyEvent: (_, event) {
@@ -1761,7 +1771,7 @@ class _ReviewChatPane extends StatelessWidget {
                   suffixIcon: IconButton(
                     tooltip: '답변 보내기',
                     onPressed: onAnswer,
-                    icon: const Icon(Icons.send, color: Color(0xFF2563EB)),
+                    icon: Icon(Icons.send, color: AppColors.primary),
                   ),
                 ),
               ),
@@ -1797,10 +1807,10 @@ class _InitialReviewProgress extends StatelessWidget {
             '확인 질문과 수정안 준비',
           ];
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpace.s(16)),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: AppColors.tint(const Color(0xFFF8FAFC)),
+        border: Border.all(color: AppColors.tint(const Color(0xFFE2E8F0))),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -1819,26 +1829,26 @@ class _InitialReviewProgress extends StatelessWidget {
               ),
               Text(
                 '${(currentStage + 1).clamp(1, steps.length)} / ${steps.length} 단계',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF94A3B8),
+                  color: AppColors.textHint,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           Text(
             generalReview
                 ? '이력서의 문장과 경험 근거를 문항별로 확인합니다.'
                 : '선택한 공고 기준으로 첨삭 항목을 준비하고 있어요.',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 2),
-          const Text(
+          SizedBox(height: AppSpace.s(2)),
+          Text(
             '보통 15초 정도 걸립니다. 창을 닫지 않고 잠시 기다려 주세요.',
-            style: TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
+            style: TextStyle(fontSize: 10.5, color: AppColors.textHint),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: AppSpace.s(14)),
           for (var index = 0; index < steps.length; index++)
             _ReviewProgressRow(
               label: steps[index],
@@ -1903,7 +1913,7 @@ class _CompactBusyCardState extends State<_CompactBusyCard>
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(13)),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(12),
@@ -1925,7 +1935,7 @@ class _CompactBusyCardState extends State<_CompactBusyCard>
                     child: Container(
                       width: 6,
                       height: 6,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      margin: EdgeInsets.symmetric(horizontal: AppSpace.s(2)),
                       decoration: BoxDecoration(
                         color: primary,
                         shape: BoxShape.circle,
@@ -1936,7 +1946,7 @@ class _CompactBusyCardState extends State<_CompactBusyCard>
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: AppSpace.s(10)),
           Expanded(
             child: Text(
               widget.label,
@@ -1969,7 +1979,7 @@ class _ReviewProgressRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = switch (state) {
       _ReviewStepState.done => const Color(0xFF16A34A),
-      _ReviewStepState.running => const Color(0xFF2563EB),
+      _ReviewStepState.running => AppColors.primary,
       _ReviewStepState.waiting => const Color(0xFF94A3B8),
     };
     return Row(
@@ -1986,8 +1996,8 @@ class _ReviewProgressRow extends StatelessWidget {
                   size: 16,
                   color: color,
                 ),
-                _ReviewStepState.running => const Padding(
-                  padding: EdgeInsets.all(1.5),
+                _ReviewStepState.running => Padding(
+                  padding: EdgeInsets.all(AppSpace.s(1.5)),
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 _ReviewStepState.waiting => Icon(
@@ -2001,17 +2011,17 @@ class _ReviewProgressRow extends StatelessWidget {
               Container(
                 width: 1.5,
                 height: 14,
-                margin: const EdgeInsets.symmetric(vertical: 2),
+                margin: EdgeInsets.symmetric(vertical: AppSpace.s(2)),
                 color: state == _ReviewStepState.done
                     ? const Color(0xFF86EFAC)
-                    : const Color(0xFFE2E8F0),
+                    : AppColors.tint(const Color(0xFFE2E8F0)),
               ),
           ],
         ),
-        const SizedBox(width: 11),
+        SizedBox(width: AppSpace.s(11)),
         Expanded(
           child: Padding(
-            padding: EdgeInsets.only(bottom: last ? 0 : 8),
+            padding: EdgeInsets.only(bottom: last ? AppSpace.s(0) : AppSpace.s(8)),
             child: Row(
               children: [
                 Flexible(
@@ -2023,28 +2033,28 @@ class _ReviewProgressRow extends StatelessWidget {
                       color: state == _ReviewStepState.done
                           ? const Color(0xFF16A34A)
                           : state == _ReviewStepState.waiting
-                          ? const Color(0xFF94A3B8)
-                          : const Color(0xFF2563EB),
+                          ? AppColors.textHint
+                          : AppColors.primary,
                     ),
                   ),
                 ),
                 if (state == _ReviewStepState.running) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(7),
+                      vertical: AppSpace.s(2),
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: AppColors.primaryLight,
                       borderRadius: BorderRadius.circular(99),
                     ),
-                    child: const Text(
+                    child: Text(
                       '진행 중',
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF2563EB),
+                        color: AppColors.primary,
                       ),
                     ),
                   ),
@@ -2069,17 +2079,17 @@ class _ReviewCompletedNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(top: 8),
-    padding: const EdgeInsets.all(14),
+    margin: EdgeInsets.only(top: AppSpace.s(8)),
+    padding: EdgeInsets.all(AppSpace.s(14)),
     decoration: BoxDecoration(
-      color: const Color(0xFFF0FDF4),
+      color: AppColors.tint(const Color(0xFFF0FDF4)),
       border: Border.all(color: const Color(0xFF86EFAC)),
       borderRadius: BorderRadius.circular(10),
     ),
     child: Row(
       children: [
         const Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 22),
-        const SizedBox(width: 9),
+        SizedBox(width: AppSpace.s(9)),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2091,7 +2101,7 @@ class _ReviewCompletedNotice extends StatelessWidget {
                   color: Color(0xFF166534),
                 ),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: AppSpace.s(2)),
               Text(
                 hasSuggestions
                     ? '추가 확인 질문이 없습니다. 표시된 수정안은 원하는 것만 반영한 뒤 마칠 수 있습니다.'
@@ -2105,7 +2115,7 @@ class _ReviewCompletedNotice extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: AppSpace.s(8)),
         FilledButton(
           onPressed: onClose,
           style: FilledButton.styleFrom(
@@ -2129,7 +2139,7 @@ class _ChatIntro extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
-      padding: const EdgeInsets.only(top: 72),
+      padding: EdgeInsets.only(top: AppSpace.s(72)),
       child: Column(
         children: [
           Icon(
@@ -2137,20 +2147,20 @@ class _ChatIntro extends StatelessWidget {
             size: 34,
             color: Theme.of(context).colorScheme.primary,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           Text(
             generalReview ? '이력서 문장과 경험 근거를 확인합니다.' : '선택 공고 기준으로 이력서를 확인합니다.',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: AppSpace.s(6)),
           Text(
             generalReview
                 ? '필요한 사실은 질문으로 확인하고, 맞춤법·문법·표현도 함께 다듬습니다.'
                 : '부족한 사실은 AI가 질문하고, 답변을 근거로 수정안을 제시합니다.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpace.s(16)),
           FilledButton.icon(
             onPressed: () => onStart(),
             icon: const Icon(Icons.play_arrow, size: 18),
@@ -2177,10 +2187,10 @@ class _ReviewChatBubble extends StatelessWidget {
   final ValueChanged<List<int>> onSkip;
   final ValueChanged<Map<String, dynamic>> onUndo;
 
-  static const _revisionTextStyle = TextStyle(
+  static TextStyle get _revisionTextStyle => TextStyle(
     fontSize: 12,
     height: 1.5,
-    color: Color(0xFF1F2937),
+    color: AppColors.textPrimary,
   );
 
   /// 수정안에 실제로 새로 들어간 글자만 굵게 표시한다.
@@ -2325,11 +2335,11 @@ class _ReviewChatBubble extends StatelessWidget {
       return Align(
         alignment: Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: EdgeInsets.only(bottom: AppSpace.s(12)),
           constraints: const BoxConstraints(maxWidth: 410),
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(AppSpace.s(12)),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surface,
             border: Border.all(color: const Color(0xFFBBF7D0)),
             borderRadius: BorderRadius.circular(12),
           ),
@@ -2342,14 +2352,14 @@ class _ReviewChatBubble extends StatelessWidget {
                     : '회사명을 $company, 직무명을 $title(으)로 변경할까요?',
                 style: const TextStyle(fontSize: 12.5, height: 1.45),
               ),
-              const SizedBox(height: 9),
+              SizedBox(height: AppSpace.s(9)),
               Row(
                 children: [
                   OutlinedButton(
                     onPressed: () => onSkip(indices),
                     child: const Text('건너뛰기'),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   FilledButton.icon(
                     onPressed: () => onApply(indices),
                     style: FilledButton.styleFrom(
@@ -2385,10 +2395,10 @@ class _ReviewChatBubble extends StatelessWidget {
         return const _AppliedSuggestionNotice(text: '수정안을 건너뛰었습니다.');
       }
       return Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        color: const Color(0xFFF0FDF4),
+        margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+        color: AppColors.tint(const Color(0xFFF0FDF4)),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(AppSpace.s(12)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2399,18 +2409,18 @@ class _ReviewChatBubble extends StatelessWidget {
                   color: Color(0xFF166534),
                 ),
               ),
-              const SizedBox(height: 7),
-              const Text(
+              SizedBox(height: AppSpace.s(7)),
+              Text(
                 '원문',
-                style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
-              const SizedBox(height: 3),
+              SizedBox(height: AppSpace.s(3)),
               Text(
                 item['original_quote'] as String? ?? '',
                 style: _revisionTextStyle,
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 9),
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpace.s(9)),
                 child: Divider(
                   height: 1,
                   thickness: 0.6,
@@ -2421,7 +2431,7 @@ class _ReviewChatBubble extends StatelessWidget {
                 '수정안',
                 style: TextStyle(fontSize: 11, color: Color(0xFF166534)),
               ),
-              const SizedBox(height: 3),
+              SizedBox(height: AppSpace.s(3)),
               Text.rich(
                 TextSpan(
                   style: _revisionTextStyle,
@@ -2432,23 +2442,23 @@ class _ReviewChatBubble extends StatelessWidget {
                 ),
               ),
               if ((item['reason'] as String? ?? '').isNotEmpty) ...[
-                const SizedBox(height: 5),
+                SizedBox(height: AppSpace.s(5)),
                 Text(
                   item['reason'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF4B5563),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
-              const SizedBox(height: 9),
+              SizedBox(height: AppSpace.s(9)),
               Row(
                 children: [
                   OutlinedButton(
                     onPressed: () => onSkip([index]),
                     child: const Text('건너뛰기'),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   FilledButton.icon(
                     onPressed: () => onApply([index]),
                     style: FilledButton.styleFrom(
@@ -2472,12 +2482,14 @@ class _ReviewChatBubble extends StatelessWidget {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: EdgeInsets.only(bottom: AppSpace.s(12)),
         constraints: const BoxConstraints(maxWidth: 410),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(10)),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFF2563EB) : Colors.white,
-          border: isUser ? null : Border.all(color: const Color(0xFFE5E7EB)),
+          color: isUser ? AppColors.primary : AppColors.surface,
+          border: isUser
+              ? null
+              : Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -2485,7 +2497,7 @@ class _ReviewChatBubble extends StatelessWidget {
           style: TextStyle(
             fontSize: 12.5,
             height: 1.45,
-            color: isUser ? Colors.white : const Color(0xFF1F2937),
+            color: isUser ? Colors.white : AppColors.textPrimary,
           ),
         ),
       ),
@@ -2503,10 +2515,10 @@ class _AppliedSuggestionNotice extends StatelessWidget {
   Widget build(BuildContext context) => Align(
     alignment: Alignment.centerLeft,
     child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(11), vertical: AppSpace.s(8)),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
+        color: AppColors.tint(const Color(0xFFF0FDF4)),
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
@@ -2523,12 +2535,12 @@ class _AppliedSuggestionNotice extends StatelessWidget {
             ),
           ),
           if (onUndo != null) ...[
-            const SizedBox(width: 8),
+            SizedBox(width: AppSpace.s(8)),
             TextButton.icon(
               onPressed: onUndo,
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
+                padding: EdgeInsets.symmetric(horizontal: AppSpace.s(6)),
                 foregroundColor: const Color(0xFF166534),
               ),
               icon: const Icon(Icons.undo, size: 14),

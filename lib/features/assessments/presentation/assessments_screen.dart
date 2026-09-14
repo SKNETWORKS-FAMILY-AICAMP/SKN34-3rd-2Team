@@ -9,6 +9,7 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/assessment_model.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'widgets/assessment_card.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 학생 — 성취도평가 목록
 class AssessmentsScreen extends ConsumerStatefulWidget {
@@ -54,7 +55,7 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(8)),
                   child: TextField(
                     controller: _search,
                     onChanged: (v) => setState(() => _query = v.trim()),
@@ -63,8 +64,8 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
                       prefixIcon: const Icon(Icons.search, size: 20),
                       isDense: true,
                       filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      fillColor: AppColors.surface,
+                      contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(10)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide(color: AppColors.border),
@@ -88,9 +89,9 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
                     data: (list) {
                       final filtered = list.where((a) {
                         if (_query.isEmpty) return true;
-                        return a.title
-                            .toLowerCase()
-                            .contains(_query.toLowerCase());
+                        return a.title.toLowerCase().contains(
+                          _query.toLowerCase(),
+                        );
                       }).toList();
                       if (filtered.isEmpty) {
                         return EmptyView(
@@ -101,9 +102,9 @@ class _AssessmentsScreenState extends ConsumerState<AssessmentsScreen> {
                         );
                       }
                       return ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(4), AppSpace.s(16), AppSpace.s(24)),
                         itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => SizedBox(height: AppSpace.s(8)),
                         itemBuilder: (context, i) {
                           final a = filtered[i];
                           final sub = subMap[a.id];

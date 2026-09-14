@@ -6,7 +6,7 @@ import '../../../../shared/models/resume_content.dart';
 /// - 맞춤 공고 추천: 조건 판정에 쓰는 항목이 있고, 직무 근거가 **하나라도** 있으면
 ///   실행한다. 근거 없는 순위를 내지 않으려는 것이지, 칸을 다 채우게 하려는 것이 아니다.
 /// - 이력서 첨삭: 첨삭할 내용이 하나라도 있으면 실행한다.
-/// - 채용공고 찾기: 이력서와 무관하게 언제나 실행한다.
+/// - 코치에게 묻기(채용공고 대화): 이력서와 무관하게 언제나 실행한다.
 enum AiCoachFeature { resumeAnalysis, jobRecommendation, jobSearch }
 
 /// 맞춤 공고 추천 전에 반드시 채워야 하는 섹션.
@@ -101,7 +101,7 @@ class ResumeReadiness {
   bool get canAnalyzeResume =>
       analyzableSections.any(filledSections.contains);
 
-  /// 채용공고 찾기는 이력서 상태와 무관하다.
+  /// 코치에게 묻기(채용공고 대화)는 이력서 상태와 무관하다.
   bool get canSearchJobs => true;
 
   bool canRun(AiCoachFeature feature) {

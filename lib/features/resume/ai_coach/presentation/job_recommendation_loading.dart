@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 part 'job_recommendation_error.dart';
 
@@ -120,10 +121,10 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
         : '${_steps[index].$2} 진행 중';
 
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: Alignment.center,
       heightFactor: 1,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 342),
+        constraints: const BoxConstraints(maxWidth: 385),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -132,11 +133,11 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
               child: Stack(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      48,
-                      22,
-                      5,
-                      16,
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpace.s(48),
+                      AppSpace.s(22),
+                      AppSpace.s(48),
+                      AppSpace.s(16),
                     ),
                     child: Stack(
                       clipBehavior: Clip.none,
@@ -144,7 +145,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                         Container(
                           // 글에 맞춰 줄어든다. 가장 긴 줄이 카드 너비를 정한다.
                           constraints: const BoxConstraints(minHeight: 244),
-                          padding: const EdgeInsets.fromLTRB(15, 25, 15, 17),
+                          padding: EdgeInsets.fromLTRB(AppSpace.s(15), AppSpace.s(25), AppSpace.s(15), AppSpace.s(17)),
                           decoration: BoxDecoration(
                             color: AppColors.surface,
                             border: Border.all(
@@ -152,7 +153,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(12),
-                            boxShadow: const [
+                            boxShadow: [
                               BoxShadow(
                                 color: AppColors.primaryLight,
                                 offset: Offset(4, 5),
@@ -168,13 +169,16 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                                     : widget.completed
                                     ? '추천 준비 완료!'
                                     : '공고를 고르고 있어요',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.sidebar,
+                                  // 사이드바 색은 어두워서 전체 다크의 카드 위에서는 묻힌다.
+                                  color: AppColors.isDark
+                                      ? AppColors.textPrimary
+                                      : AppColors.sidebar,
                                 ),
                               ),
-                              const SizedBox(height: 15),
+                              SizedBox(height: AppSpace.s(15)),
                               if (widget.errorMessage != null)
                                 _RecommendationError(
                                   message: widget.errorMessage!,
@@ -182,14 +186,14 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
                                 )
                               else ...[
                                 if (index < 0 && !widget.completed) ...[
-                                  const SizedBox(
+                                  SizedBox(
                                     width: 196,
                                     child: LinearProgressIndicator(
                                       minHeight: 2,
                                       color: AppColors.primary,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  SizedBox(height: AppSpace.s(12)),
                                 ],
                                 for (var i = 0; i < _steps.length; i++)
                                   _ChecklistStep(
@@ -279,7 +283,7 @@ class _JobRecommendationLoadingState extends State<JobRecommendationLoading>
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 43),
+              padding: EdgeInsets.zero,
               child: Semantics(
                 liveRegion: true,
                 child: Text(
@@ -367,39 +371,39 @@ class _ChecklistStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: last ? 0 : 13),
+    padding: EdgeInsets.only(bottom: last ? AppSpace.s(0) : AppSpace.s(13)),
     child: Row(
       // 카드가 글에 맞춰 줄어들어야 하므로 줄도 제 너비만 차지한다.
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 1),
+          padding: EdgeInsets.only(top: AppSpace.s(1)),
           child: SizedBox(
             width: 16,
             height: 16,
             child: done
-                ? const Icon(
+                ? Icon(
                     Icons.check_circle,
                     size: 16,
                     color: AppColors.primary,
                   )
                 : running
-                ? const Padding(
-                    padding: EdgeInsets.all(1),
+                ? Padding(
+                    padding: EdgeInsets.all(AppSpace.s(1)),
                     child: CircularProgressIndicator(
                       strokeWidth: 1.7,
                       color: AppColors.primary,
                     ),
                   )
-                : const Icon(
+                : Icon(
                     Icons.circle_outlined,
                     size: 9,
                     color: AppColors.textHint,
                   ),
           ),
         ),
-        const SizedBox(width: 9),
+        SizedBox(width: AppSpace.s(9)),
         Flexible(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -434,10 +438,10 @@ class _ChecklistStep extends StatelessWidget {
                 ],
               ),
               if (detail != null) ...[
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   detail!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
@@ -477,7 +481,15 @@ class _HangingRobotPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.7
       ..strokeCap = StrokeCap.round;
-    void shape(Rect rect, double radius, [Color color = AppColors.surface]) {
+    // 로봇은 어느 테마에서나 하얀 몸이다. 카드 바탕색·옅은 강조색을 따르면 전체
+    // 다크에서 몸이 카드에 묻히고, 어두운 얼굴 화면 위의 눈·입까지 어두워져
+    // 얼굴이 보이지 않았다.
+    const body = Colors.white;
+    final tint = AppColors.isDark
+        ? Color.alphaBlend(AppColors.primary.withValues(alpha: .22), body)
+        : AppColors.primaryLight;
+    void shape(Rect rect, double radius, [Color? color]) {
+      color ??= body;
       final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
       canvas.drawRRect(rrect, Paint()..color = color);
       canvas.drawRRect(rrect, outline);
@@ -488,7 +500,7 @@ class _HangingRobotPainter extends CustomPainter {
     canvas.translate(57, 0);
     canvas.rotate(.3 - release * .5);
     shape(const Rect.fromLTWH(-5, 0, 10, 63), 5);
-    shape(const Rect.fromLTWH(-6, -4, 13, 12), 5, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(-6, -4, 13, 12), 5, tint);
     canvas.drawLine(const Offset(0, 1), const Offset(5, 1), outline);
     canvas.restore();
 
@@ -498,7 +510,7 @@ class _HangingRobotPainter extends CustomPainter {
       canvas.rotate(
         completed ? (i == 0 ? -.25 : .33) : swing * (i == 0 ? .2 : -.2),
       );
-      shape(const Rect.fromLTWH(-5, 0, 10, 27), 5, AppColors.primaryLight);
+      shape(const Rect.fromLTWH(-5, 0, 10, 27), 5, tint);
       shape(const Rect.fromLTWH(-9, 23, 17, 8), 4);
       canvas.restore();
     }
@@ -506,14 +518,14 @@ class _HangingRobotPainter extends CustomPainter {
     canvas.translate(9, 64);
     canvas.rotate(completed ? release * 2.1 : .4 + swing * .12);
     shape(const Rect.fromLTWH(-5, 0, 10, 28), 5);
-    shape(const Rect.fromLTWH(-5, 24, 10, 10), 5, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(-5, 24, 10, 10), 5, tint);
     canvas.restore();
-    shape(const Rect.fromLTWH(19, 49, 13, 9), 3, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(19, 49, 13, 9), 3, tint);
     shape(const Rect.fromLTWH(10, 56, 33, 35), 10);
     canvas.drawCircle(
       const Offset(26, 71),
       7,
-      Paint()..color = AppColors.primaryLight,
+      Paint()..color = tint,
     );
     canvas.drawLine(const Offset(26, 67), const Offset(26, 75), outline);
     canvas.drawLine(const Offset(22, 71), const Offset(30, 71), outline);
@@ -527,8 +539,8 @@ class _HangingRobotPainter extends CustomPainter {
       3,
       Paint()..color = AppColors.primary,
     );
-    shape(const Rect.fromLTWH(-2, 28, 6, 12), 3, AppColors.primaryLight);
-    shape(const Rect.fromLTWH(46, 28, 6, 12), 3, AppColors.primaryLight);
+    shape(const Rect.fromLTWH(-2, 28, 6, 12), 3, tint);
+    shape(const Rect.fromLTWH(46, 28, 6, 12), 3, tint);
     shape(const Rect.fromLTWH(3, 18, 44, 34), 14);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -544,11 +556,11 @@ class _HangingRobotPainter extends CustomPainter {
           Rect.fromLTWH(x, 30, 4, blink ? 1 : 5),
           const Radius.circular(2),
         ),
-        Paint()..color = AppColors.surface,
+        Paint()..color = body,
       );
     }
     final mouth = Paint()
-      ..color = AppColors.surface
+      ..color = body
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.3;
     if (completed) {

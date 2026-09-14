@@ -449,6 +449,9 @@ class JobRecommendApiClient {
   /// - [lastAnswerJobIds]는 **직전 답이 다룬 공고**다. 위와 다르다. 위는 번호가 가리킬
   ///   목록이고 이쪽은 방금 이야기한 대상이라, 비교 답이면 견준 두 건이 들어간다.
   ///   이게 있어야 "두 공고의 자격요건만 간단히 비교해줘"에 답할 수 있다.
+  /// - [seenJobIds]는 **같은 조건으로 지금까지 보여 준 공고 전부**다. "이거 말고"를
+  ///   거듭하면 서버가 이것을 빼고 다음 공고를 준다. 직전 목록만 보내면 두 번째에 첫
+  ///   목록이 다시 나온다.
   Future<JobChatResponse> chat({
     required String message,
     JobChatFilters? filters,
@@ -458,6 +461,7 @@ class JobRecommendApiClient {
     String? resumeText,
     List<String> lastJobIds = const [],
     List<String> lastAnswerJobIds = const [],
+    List<String> seenJobIds = const [],
   }) async {
     final decoded = await _post('/api/v1/jobs/chat', {
       'message': message,
@@ -467,6 +471,7 @@ class JobRecommendApiClient {
       'resume_text': resumeText,
       'last_job_ids': lastJobIds,
       'last_answer_job_ids': lastAnswerJobIds,
+      'seen_job_ids': seenJobIds,
     });
     return JobChatResponse.fromMap(decoded);
   }

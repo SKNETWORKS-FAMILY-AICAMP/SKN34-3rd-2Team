@@ -1,23 +1,32 @@
-"""추천 서비스. 다섯 단계를 순서대로 실행한다.
+"""추천 서비스(`RecommendService`)와 공고 찾기 챗봇(`ChatService`).
 
-    ① LLM 구조화   이력서 → 검색 질의문
-    ② 벡터 검색     Pinecone Top-N (조건 필터 동시 적용)
+추천은 일곱 단계를 순서대로 실행한다.
+
+    ① LLM 구조화   이력서 → 검색 질의문 (앱이 미리 보낸 profile이 있으면 건너뜀)
+    ② 벡터 검색     Pinecone Top-25 (조건 필터 동시 적용)
     ③ 하드 필터     경력·학력·희망 조건으로 후보 좁히기
-    ④ LLM 재정렬    상위 N건의 적합도와 근거 문장
-    ⑤ 근거 검증     원문에 없는 인용 제거, 회사당 상한 적용
+    ④ 마감 확인     마감 시각이 지났거나 사이트에서 조기 마감된 공고 빼기
+    ⑤ 사전 순위     벡터 순위 + 기술 겹침으로 LLM에 보낼 12건 고르기
+    ⑥ LLM 재정렬    12건 병렬로 적합도와 근거 문장
+    ⑦ 근거 검증     원문에 없는 인용 제거, 회사당 상한 적용
 
 실패했을 때의 방침이 단계마다 다르다.
 
-- ①·④ 실패 → 이어서 진행한다. ①은 이력서 원문으로 검색하고, ④는 검색 순서를 쓴다.
-  결과 품질이 떨어질 뿐 엉뚱한 공고가 나오지는 않는다.
+- ①·④·⑥ 실패 → 이어서 진행한다. ①은 이력서 원문으로 검색하고, ④는 전부 열려 있다고
+  보며, ⑥은 ⑤의 순서를 쓰고 판정 못 받은 공고를 "낮음"으로 둔다. 결과 품질이 떨어질 뿐
+  엉뚱한 공고가 나오지는 않는다.
 - ②·③ 실패 → **추천하지 않는다.** 검색이 안 되면 근거가 없고, 하드 필터가 안 돌면
   조건 위반 공고가 나간다. 아무거나 보여 주는 것보다 실패를 알리는 편이 낫다.
+
+챗봇은 `ChatService`의 설명과 `docs/chatbot.md`에 있다.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import time
+from datetime import datetime
 from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -114,6 +123,63 @@ def _progress_reporter(
             pass
 
     return say
+
+
+class StageClock:
+    """단계마다 걸린 시간을 잰다.
+
+    요청 전체 시간만 로그에 남아서 "추천이 10초대"라는 말이 어느 단계 탓인지 가릴 수
+    없었다. `lap(이름)`은 직전 `lap`부터 지금까지를 그 이름으로 적는다.
+    """
+
+    def __init__(self, now: Callable[[], float] = time.perf_counter) -> None:
+        self._now = now
+        self._started = self._last = now()
+        self.laps: dict[str, int] = {}
+
+    def lap(self, name: str) -> None:
+        current = self._now()
+        self.laps[name] = self.laps.get(name, 0) + round((current - self._last) * 1000)
+        self._last = current
+
+    def timings(self) -> dict[str, int]:
+        return {**self.laps, "total": round((self._now() - self._started) * 1000)}
+
+
+# 로그에 찍을 단계 이름. 응답의 `timings_ms` 열쇠와 같다.
+STAGE_LABELS = {
+    "profile": "구조화",
+    "search": "검색",
+    "filter": "필터",
+    "liveness": "마감 확인",
+    "pre_rank": "사전 순위",
+    "rerank": "재정렬",
+    "verify": "근거 검증",
+    "total": "합계",
+}
+
+
+def format_timings(timings: dict[str, int], profile_source: str) -> str:
+    parts = [f"{STAGE_LABELS.get(k, k)} {v / 1000:.1f}" for k, v in timings.items()]
+    return f"[추천 시간] 구조화 출처={profile_source} · " + " · ".join(parts) + "초"
+
+
+# 챗봇 단계 이름. 갈래마다 지나는 단계가 달라 응답에는 지난 것만 실린다.
+CHAT_STAGE_LABELS = {
+    "route": "가르기",
+    "store": "공고 읽기",
+    "search": "조건 조회",
+    "meaning": "뜻으로 찾기",
+    "stats": "집계",
+    "liveness": "마감 확인",
+    "answer": "답 쓰기",
+    "total": "합계",
+}
+
+
+def format_chat_timings(timings: dict[str, int], mode: str) -> str:
+    parts = [f"{CHAT_STAGE_LABELS.get(k, k)} {v / 1000:.1f}" for k, v in timings.items()]
+    return f"[챗봇 시간] {mode} · " + " · ".join(parts) + "초"
 
 
 class StoreUnavailable(RuntimeError):
@@ -416,9 +482,25 @@ class RecommendService(_LivenessMixin):
         """
         say = _progress_reporter(progress)
         warnings: list[str] = []
+        clock = StageClock()
+        # 구조화가 0초면 앱이 보냈거나 캐시에서 꺼낸 것이다. 시간만 보고는 모르므로 같이 적는다.
+        if request.profile is not None:
+            profile_source = "앱"
+        elif request.resume_text in self._profiles:
+            profile_source = "캐시"
+        else:
+            profile_source = "LLM"
+
+        def finish(response: schemas.RecommendResponse) -> schemas.RecommendResponse:
+            timings = clock.timings()
+            print(format_timings(timings, profile_source))
+            return response.model_copy(
+                update={"timings_ms": timings, "profile_source": profile_source}
+            )
 
         say("resume")
         profile = self.build_profile(request, warnings)
+        clock.lap("profile")
         say("resume", f"기술 {len(profile.skills)}개 · 직무 {len(profile.target_roles)}개를 뽑았어요")
 
         say("search")
@@ -437,15 +519,16 @@ class RecommendService(_LivenessMixin):
             if not reason or len(reason) > 180:
                 reason = type(error).__name__
             raise SearchUnavailable(f"공고 검색에 실패했습니다: {reason}") from error
+        clock.lap("search")
         say("search", f"열린 공고에서 {len(hits)}건을 추렸어요")
         if not hits:
-            return schemas.RecommendResponse(
+            return finish(schemas.RecommendResponse(
                 recommendations=[],
                 search_query=profile.search_query,
                 profile_summary=profile.summary,
                 reranked=False,
                 warnings=[*warnings, "조건에 맞는 공고를 찾지 못했습니다."],
-            )
+            ))
 
         say("filter")
         resume_profile = self.to_resume_profile(request, profile)
@@ -458,14 +541,20 @@ class RecommendService(_LivenessMixin):
                 candidates.append((hit, job, result))
         except Exception as error:
             raise SearchUnavailable(f"조건 판정에 실패했습니다: {type(error).__name__}") from error
+        clock.lap("filter")
 
         # 판정 **전에** 거른다. 내려간 공고에 LLM을 쓸 이유가 없다. 자르기는 그
         # 다음이다 — 먼저 잘라 버리면 마감된 만큼 자리가 비고 뒤 후보가 올라오지
         # 못한다. 확인 대상이 늘지만(최대 25건) 한 번에 여는 요청이라 시간은 같다.
-        alive = self.drop_dead([hit.job_id for hit, _, _ in candidates])
+        # 마감 시각이 이미 지난 공고는 열어 볼 것 없이 뺀다(검색은 날짜만 견준다).
+        alive = self.drop_dead([
+            hit.job_id for hit, job, _ in candidates
+            if not store_search.deadline_passed(job.deadline)
+        ])
         if len(alive) < len(candidates):
             warnings.append(f"마감된 공고 {len(candidates) - len(alive)}건을 제외했습니다.")
             candidates = [c for c in candidates if c[0].job_id in alive]
+        clock.lap("liveness")
         # 벡터 순위와 기술 겹침을 섞어 다시 세운다. 벡터 유사도는 후보 안에서 거의
         # 평평해서(실측 폭 0.042~0.140) 그 순서만으로는 누구를 LLM에 보낼지 가리기
         # 어렵다. 기술 정보가 없는 공고는 제자리에 남는다 — `pre_ranker` 참고.
@@ -480,10 +569,12 @@ class RecommendService(_LivenessMixin):
             candidates, [hit.score for hit, _, _ in candidates], matches, preferred
         )
         candidates = candidates[:RERANK_TOP_K]
+        clock.lap("pre_rank")
         say("filter", f"조건을 통과한 {len(candidates)}건이 남았어요")
 
         say("judge")
         fits, reranked = self.rerank(request.resume_text, candidates, warnings)
+        clock.lap("rerank")
 
         # 같은 적합도 안에서는 다시 세운 순서를 쓴다. 예전에는 벡터 순위였는데,
         # 판정을 예측하는 힘이 더 약한 신호였다(+0.26 대 +0.42).
@@ -525,13 +616,14 @@ class RecommendService(_LivenessMixin):
         say("judge", f"{len(rows)}건의 근거를 맞대어 봤어요")
         rows.sort(key=lambda r: (r[0], r[1]))
         limited = _limit_per_company(row[2] for row in rows)
-        return schemas.RecommendResponse(
+        clock.lap("verify")
+        return finish(schemas.RecommendResponse(
             recommendations=limited[: request.top_k],
             search_query=profile.search_query,
             profile_summary=profile.summary,
             reranked=reranked,
             warnings=_deduplicate(warnings),
-        )
+        ))
 
 
 _WHITESPACE = re.compile(r"\s+")
@@ -684,9 +776,20 @@ class ChatService(_LivenessMixin):
         return self._store_path
 
     def chat(self, request: schemas.JobChatRequest) -> schemas.JobChatResponse:
+        """말 한 마디에 답한다. 지난 단계마다 걸린 시간을 로그와 응답에 남긴다.
+
+        갈래마다 LLM을 부르는 횟수가 달라(0~2번) 요청 전체 시간만으로는 어디가
+        느린지 알 수 없다.
+        """
         if not self.store_path.exists():
             raise StoreUnavailable("공고 저장소가 없습니다. 공유 파일을 먼저 받아 주세요.")
+        clock = StageClock()
+        response = self._chat(request, clock)
+        timings = clock.timings()
+        print(format_chat_timings(timings, response.mode))
+        return response.model_copy(update={"timings_ms": timings})
 
+    def _chat(self, request: schemas.JobChatRequest, clock: StageClock) -> schemas.JobChatResponse:
         previous = request.filters or schemas.ChatFilters()
 
         # 모델을 부르기 전에 막는 한 겹. 여기 걸리면 호출이 0이다.
@@ -702,7 +805,7 @@ class ChatService(_LivenessMixin):
 
         # 공고를 골라 물은 경우. 무슨 말이든 그 공고에 대한 물음이므로 의도를 가르지 않는다.
         if request.job_id:
-            return self._ask_job(request, previous)
+            return self._ask_job(request, previous, clock)
 
         turn = self.generator(
             {
@@ -710,6 +813,7 @@ class ChatService(_LivenessMixin):
                 "message": request.message,
             }
         )
+        clock.lap("route")
 
         # 여기가 문이다. **채용이라고 짚은 말만** 아래로 내려간다.
         #
@@ -733,10 +837,10 @@ class ChatService(_LivenessMixin):
         # 신호이고, LLM이 한 번 더 가를 일을 만들지 않는 편이 틀릴 여지가 적다.
         picked_many = _resolve_job_refs(turn.job_refs, request.last_job_ids)
         if len(picked_many) >= 2:
-            return self._compare_jobs(request, previous, picked_many[:2])
+            return self._compare_jobs(request, previous, picked_many[:2], clock)
         if picked_many:
             return self._ask_job(
-                request.model_copy(update={"job_id": picked_many[0]}), previous
+                request.model_copy(update={"job_id": picked_many[0]}), previous, clock
             )
         # "두 공고의 자격요건만" — 번호 없이 방금 이야기한 공고를 가리킨 말. 비교 뒤에
         # 이어지는 물음이 대부분 이 꼴이라, 여기서 못 받으면 챗봇이 스스로 내놓은
@@ -744,10 +848,10 @@ class ChatService(_LivenessMixin):
         if turn.refers_to_last_answer and request.last_answer_job_ids:
             discussed = list(request.last_answer_job_ids)
             if len(discussed) == 2:
-                return self._compare_jobs(request, previous, discussed)
+                return self._compare_jobs(request, previous, discussed, clock)
             if len(discussed) == 1:
                 return self._ask_job(
-                    request.model_copy(update={"job_id": discussed[0]}), previous
+                    request.model_copy(update={"job_id": discussed[0]}), previous, clock
                 )
             # 셋 이상이면 어느 것인지 고를 수 없다. 앞의 둘을 집으면 사용자가 생각한
             # 공고가 아닐 수 있고, 답은 그럴듯해서 틀린 줄도 모른다.
@@ -794,7 +898,7 @@ class ChatService(_LivenessMixin):
         filters = _to_job_filters(turn.filters)
 
         if turn.intent == "질문":
-            return self._advise(request, turn, filters)
+            return self._advise(request, turn, filters, clock)
 
         # 조건이 하나도 안 잡혔다고 바로 되묻지 않는다. "돈 다루는 일"처럼 조건으로
         # 옮길 말이 없는 경우가 있고, 그때는 뜻으로 찾으면 된다. 되묻는 것은 뜻으로
@@ -807,42 +911,63 @@ class ChatService(_LivenessMixin):
                 total=0,
             )
 
+        # "이거 말고" — 같은 조건에서 앱이 지금까지 보여 준 공고를 빼고 다음 것을 준다.
+        # 직전 한 쪽만 빼면 두 번째 "이거 말고"에 첫 목록이 다시 나오므로 전부 받는다.
+        more = turn.show_more and bool(request.seen_job_ids)
+        seen = request.seen_job_ids if more else []
+
         result = (
             store_search.SearchResult(jobs=[], total=0, scanned_cap=False, strong=0)
             if filters.is_empty
-            else store_search.search(self.store_path, filters, limit=request.top_k)
+            else store_search.search(
+                self.store_path, filters, limit=request.top_k, exclude_ids=seen
+            )
         )
+        clock.lap("search")
 
         # 조건으로 못 찾았으면 뜻으로 찾는다. 사용자가 말한 직무·기술이 공고에 그대로
         # 적히는 말이 아닐 때(예: "돈 다루는 일") 여기서만 답이 나온다.
         by_meaning = False
         if turn.requirement_query and self._needs_meaning(filters, result):
-            found = self._by_meaning(turn.requirement_query, filters, request.top_k)
+            found = self._by_meaning(turn.requirement_query, filters, request.top_k, seen)
             if found:
                 result = store_search.SearchResult(
                     jobs=found, total=len(found), scanned_cap=False, strong=0
                 )
                 by_meaning = True
+            clock.lap("meaning")
 
         # 보여 주기 직전에 내려간 공고를 뺀다. 저장소가 OPEN이라고 해도 사이트에서
         # 이미 마감됐을 수 있다 — 그건 열어 봐야만 안다.
+        #
+        # 보내기 직전에 두 가지를 본다. 마감 **시각**이 지났나(조회는 날짜만 견준다), 그리고
+        # 사이트에서 조기 마감됐나. 시각이 지난 공고는 페이지를 열 것도 없이 뺀다.
         shown = result.jobs
         if shown:
-            alive = self.drop_dead([hit.job_id for hit in shown])
-            if len(alive) < len(shown):
-                shown = [hit for hit in shown if hit.job_id in alive]
+            now = datetime.now(store_search.KST)
+            open_now = [hit for hit in shown if not store_search.deadline_passed(hit.deadline, now)]
+            alive = set(self.drop_dead([hit.job_id for hit in open_now]))
+            kept = [hit for hit in open_now if hit.job_id in alive]
+            if len(kept) < len(shown):
+                gone = [hit for hit in shown if hit.job_id not in alive]
                 result = store_search.SearchResult(
-                    jobs=shown,
-                    total=max(result.total - (len(result.jobs) - len(shown)), len(shown)),
+                    jobs=kept,
+                    total=max(result.total - len(gone), len(kept)),
                     scanned_cap=result.scanned_cap,
-                    strong=min(result.strong, len(shown)),
+                    # 빠진 것 중 직접 맞은 공고만큼 뺀다. 예전에는 보여 줄 수로 잘라
+                    # "247건"이 "4건"으로 줄어 답에 나갈 뻔했다.
+                    strong=max(result.strong - sum(1 for hit in gone if hit.relevance >= 2), 0),
+                    skipped=result.skipped,
                 )
+                shown = kept
+            clock.lap("liveness")
 
         return schemas.JobChatResponse(
-            reply=self._reply(turn.understood, filters, result, by_meaning),
+            reply=self._reply(turn.understood, filters, result, by_meaning, more=more),
             filters=turn.filters,
             jobs=[_to_chat_job(hit) for hit in shown],
-            total=result.total,
+            # 답이 말한 건수와 같게 둔다. 제목·태그에 직접 맞은 공고가 있으면 그 수다.
+            total=result.total if by_meaning else (result.strong or result.total),
             suggestions=_suggestions(filters, result),
         )
 
@@ -897,30 +1022,44 @@ class ChatService(_LivenessMixin):
             return False
         return result.total == 0 or result.strong == 0
 
-    def _by_meaning(self, query: str, filters, top_k: int) -> list:
+    def _by_meaning(self, query: str, filters, top_k: int, seen: list[str] = ()) -> list:
         """뜻이 가까운 공고. 인덱스에서 찾아 저장소에서 다시 읽는다.
 
         여기서 실패해도 대화를 끊지 않는다. 조건 검색 결과가 이미 있고, 없으면 없다고
         답하면 된다. 인덱스가 안 붙었다고 챗봇 전체가 멈출 이유가 없다.
+
+        `seen`은 "이거 말고"로 넘겨 보는 중에 이미 보여 준 공고다. 그만큼 더 가져와 뺀다.
         """
         from job_matching_bot.retrieval import search as retrieval
 
         try:
             condition = retrieval.build_filter(
-                regions=filters.regions,
+                # 인덱스 메타의 지역은 시·도다. "분당구"처럼 좁게 말한 지역은 여기서 못 걸고
+                # 아래에서 주소 글자로 거른다.
+                regions=[region for region in filters.regions if region in market_stats.SIDO],
                 employment_types=filters.employment_types,
                 # 신입이라고 했을 때만 경력 하한을 건다. 나머지는 걸지 않는다.
                 career_years=0 if filters.career == "신입" else 5,
             )
             # 마감된 것이 걸러져 줄어드므로 넉넉히 가져온다.
-            hits = self.finder(query, top_k=top_k * 3, filter=condition)
+            hits = self.finder(query, top_k=min(top_k * 3 + len(seen), 100), filter=condition)
         except Exception as error:
             print(f"[챗봇] 의미 검색 실패, 조건 결과로 답한다: {type(error).__name__}: {error}")
             return []
-        found = store_search.by_ids(self.store_path, [hit.job_id for hit in hits])
+        skip = set(seen)
+        found = store_search.by_ids(
+            self.store_path, [hit.job_id for hit in hits if hit.job_id not in skip]
+        )
+        if filters.regions:
+            # 조건 조회와 같은 잣대로 본다(`region LIKE %지역%`). 시·도만 걸린 벡터 검색이
+            # 판교를 물었는데 용인 공고를 가져와도 여기서 빠진다.
+            found = [
+                hit for hit in found
+                if "전국" in (hit.region or "") or any(r in (hit.region or "") for r in filters.regions)
+            ]
         return found[:top_k]
 
-    def _advise(self, request, turn, filters) -> schemas.JobChatResponse:
+    def _advise(self, request, turn, filters, clock: StageClock) -> schemas.JobChatResponse:
         """채용 질문에 답한다. 조건이 잡혔으면 그 조건의 공고를 세어 근거로 준다.
 
         "백엔드 신입은 뭘 준비해?"는 셀 수 있고 "자소서 어떻게 써?"는 셀 것이 없다.
@@ -935,6 +1074,7 @@ class ChatService(_LivenessMixin):
         stats = None
         if turn.counts_jobs:
             stats = market_stats.summarize(self.store_path, filters)
+            clock.lap("stats")
         grounded = bool(stats and stats.total)
 
         answer = self.adviser(
@@ -944,23 +1084,27 @@ class ChatService(_LivenessMixin):
                 "question": request.message,
             }
         )
+        clock.lap("answer")
+        # 근거 공고를 붙이지 않는다. 예전에는 숫자를 확인하라고 3건을 붙였는데, 사람이
+        # 답을 매겨 보니 "요즘 AI 공고는 뭘 요구해?" 같은 답에는 공고가 필요 없었다.
+        # 그 3건을 찾고 마감을 확인하느라 쓰던 시간도 줄어든다. 공고를 보고 싶으면
+        # 답의 이어 물을 말("이 조건으로 공고 보여줘")로 검색하면 된다.
         return schemas.JobChatResponse(
             mode="질문",
             reply=answer.answer,
             filters=turn.filters,
             total=stats.total if grounded else 0,
-            # 답의 근거가 된 공고를 몇 건 붙인다. 숫자만 있으면 확인할 길이 없다.
-            jobs=self._peek(filters, request.top_k) if grounded else [],
             suggestions=answer.followups[:3],
         )
 
-    def _ask_job(self, request, previous) -> schemas.JobChatResponse:
+    def _ask_job(self, request, previous, clock: StageClock) -> schemas.JobChatResponse:
         """공고 하나를 놓고 묻는다. 그 공고 원문만 근거로 쓴다."""
         from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
 
         with SqliteJobStore(self.store_path) as store:
             record = store.get(request.job_id)
             listing = None if record is not None else store.get_listing(request.job_id)
+        clock.lap("store")
         if record is None:
             # 목록에서만 본 공고다. 마감된 것이 아니라 아직 상세를 안 받은 것이므로
             # 그렇게 말하고 원문으로 보낸다. 없는 내용을 지어내지 않는다.
@@ -973,11 +1117,13 @@ class ChatService(_LivenessMixin):
                 total=0,
             )
 
-        # 마감됐는지 확인한다. 마감일이 남아 있어도 회사가 채용을 마치면 먼저 닫는다.
-        # 검색·질문·비교는 이미 확인하는데 여기만 안 했다. 대화 안에서 방금 본 공고면
-        # 24시간 캐시가 있어 요청이 안 나가고, 어제 띄워 둔 화면을 오늘 다시 눌렀을 때만
-        # 실제로 열어 본다.
-        if not self.drop_dead([request.job_id]):
+        # 마감됐는지 확인한다. 마감 시각이 지났으면 열어 볼 것도 없다. 시각이 남아 있어도
+        # 회사가 채용을 마치면 먼저 닫으므로 페이지를 본다. 방금 확인한 공고면 캐시가 있어
+        # 요청이 안 나간다(`liveness.TTL_HOURS`).
+        passed = store_search.deadline_passed(record.job.deadline)
+        alive = [] if passed else self.drop_dead([request.job_id])
+        clock.lap("liveness")
+        if not alive:
             return schemas.JobChatResponse(
                 mode="안내",
                 reply="그 공고는 접수가 마감됐어요. 다른 공고를 찾아 드릴까요?",
@@ -996,6 +1142,7 @@ class ChatService(_LivenessMixin):
                 "question": _without_ordinal(request.message),
             }
         )
+        clock.lap("answer")
         return schemas.JobChatResponse(
             mode="공고",
             reply=answer.answer,
@@ -1007,7 +1154,9 @@ class ChatService(_LivenessMixin):
             suggestions=answer.followups[:3],
         )
 
-    def _compare_jobs(self, request, previous, job_ids: list[str]) -> schemas.JobChatResponse:
+    def _compare_jobs(
+        self, request, previous, job_ids: list[str], clock: StageClock
+    ) -> schemas.JobChatResponse:
         """공고 둘을 맞대어 답한다. 두 공고 원문과 이력서만 근거로 쓴다.
 
         마감된 공고를 비교하면 답이 헛돈다. 사용자가 그 공고를 본 뒤 시간이 지났을 수
@@ -1018,13 +1167,18 @@ class ChatService(_LivenessMixin):
 
         with SqliteJobStore(self.store_path) as store:
             records = [store.get(job_id) for job_id in job_ids]
-        alive = self.drop_dead([r.job.job_id for r in records if r is not None])
+        clock.lap("store")
+        alive = self.drop_dead([
+            r.job.job_id for r in records
+            if r is not None and not store_search.deadline_passed(r.job.deadline)
+        ])
+        clock.lap("liveness")
         live = [r for r in records if r is not None and r.job.job_id in alive]
 
         if len(live) < 2:
             if len(live) == 1:
                 return self._ask_job(
-                    request.model_copy(update={"job_id": live[0].job.job_id}), previous
+                    request.model_copy(update={"job_id": live[0].job.job_id}), previous, clock
                 )
             return schemas.JobChatResponse(
                 mode="안내",
@@ -1042,6 +1196,7 @@ class ChatService(_LivenessMixin):
                 "question": request.message,
             }
         )
+        clock.lap("answer")
         return schemas.JobChatResponse(
             mode="비교",
             reply=answer.answer,
@@ -1083,22 +1238,16 @@ class ChatService(_LivenessMixin):
             total=1,
         )
 
-    def _peek(self, filters, top_k: int) -> list[schemas.JobChatJob]:
-        """센 조건에 맞는 공고 몇 건. 답에 붙여 숫자를 눈으로 확인하게 한다.
-
-        여기도 내려간 공고를 뺀다. 저장소가 OPEN이라고 해도 사이트에서는 이미
-        접수마감일 수 있고, 근거로 붙인 공고가 마감이면 답의 숫자까지 못 믿게 된다.
-        빠진 자리를 채우려고 보여 줄 것보다 넉넉히 가져온 뒤 자른다.
-        """
-        want = min(top_k, 3)
-        result = store_search.search(self.store_path, filters, limit=want * 2)
-        alive = self.drop_dead([hit.job_id for hit in result.jobs])
-        return [_to_chat_job(hit) for hit in result.jobs if hit.job_id in alive][:want]
-
     @staticmethod
-    def _reply(understood: str, filters, result, by_meaning: bool = False) -> str:
-        """실제 결과로 답을 만든다. 건수를 모르는 채로 LLM이 쓰면 틀린 말을 하게 된다."""
+    def _reply(understood: str, filters, result, by_meaning: bool = False, more: bool = False) -> str:
+        """실제 결과로 답을 만든다. 건수를 모르는 채로 LLM이 쓰면 틀린 말을 하게 된다.
+
+        **넘겨 보는 중(`more`)이면 모델이 쓴 한 줄을 붙이지 않는다.** 같은 목록을 다시
+        찾아 놓고도 "기존 공고는 제외하고 다른 공고를 찾아보겠습니다"라고 쓴 적이 있다.
+        몇 번째 공고인지는 서버만 알므로 서버가 쓴다.
+        """
         condition = filters.summary()
+        shown = len(result.jobs)
         if result.total == 0:
             return (
                 f"{condition} 조건으로는 열려 있는 공고를 찾지 못했어요. "
@@ -1106,21 +1255,50 @@ class ChatService(_LivenessMixin):
             )
         if by_meaning:
             # 어떻게 찾았는지 밝힌다. 조건에 맞는 공고를 센 것처럼 보이면 안 된다.
+            if more:
+                return f"앞에서 보여드린 공고 말고, 뜻이 가까운 공고를 {shown}건 더 찾았어요."
             head = understood.strip() or "찾아볼게요."
-            found = f"뜻이 가까운 공고를 {len(result.jobs)}건 찾았어요."
+            found = f"뜻이 가까운 공고를 {shown}건 찾았어요."
             if filters.is_empty:
                 return f"{head}\n말씀하신 말이 공고에 그대로 적히는 말은 아니라서, {found}"
             return f"{head}\n{condition} 조건 그대로는 걸리는 공고가 없어서, {found}"
+
+        # 말하는 건수는 제목·태그에 직접 맞은 공고다. 본문에 말이 스친 범용 공고까지
+        # 세면 실제보다 훨씬 많아 보인다. 직접 맞은 것이 없을 때만 전체를 말한다.
+        # "직무가 맞는 건", "관련도" 같은 말은 쓰지 않는다 — 사용자가 알 필요 없는 구분이다.
+        count = result.strong or result.total
+        capped = result.scanned_cap and not result.strong
+        found = (
+            f"{condition} 공고가 {count:,}건이 넘어요." if capped
+            else f"{condition} 공고 {count:,}건을 찾았어요."
+        )
+
+        if more:
+            if not shown:
+                return (
+                    f"{condition} 공고는 앞에서 보여드린 {result.skipped:,}건이 전부예요. "
+                    "조건을 바꿔서 찾아볼까요?"
+                )
+            start, end = result.skipped + 1, result.skipped + shown
+            strong = result.strong
+            if not strong or end <= strong:
+                return f"{condition} 공고 {count:,}건 중 {start:,}~{end:,}번째예요."
+            # 직접 맞은 공고를 다 보고 본문에만 스친 공고로 넘어가는 자리. 정렬이 직접
+            # 맞은 것을 먼저 세우므로 몇 번째부터인지 셀 수 있다.
+            if result.skipped < strong:
+                return (
+                    f"{condition} 공고 {strong:,}건 중 {start:,}~{strong:,}번째이고, "
+                    "그 뒤는 본문에만 언급된 공고예요."
+                )
+            return (
+                f"{condition} 공고 {strong:,}건은 다 보여드렸어요. "
+                f"본문에만 언급된 공고 {result.total - strong:,}건 중 "
+                f"{start - strong:,}~{end - strong:,}번째예요."
+            )
+
         head = understood.strip() or f"{condition} 조건으로 찾았어요."
-        # 제목·태그에 직접 맞은 건수를 따로 말한다. 본문에 말이 스친 범용 공고까지
-        # 뭉뚱그려 세면 실제보다 훨씬 많아 보인다.
-        if result.strong and result.strong < result.total:
-            counted = f"{result.total}건 중 {_matched_what(filters)} 맞는 건 {result.strong}건이에요"
-        else:
-            counted = f"{result.total}건" + ("이 넘어요" if result.scanned_cap else "이에요")
-        shown = len(result.jobs)
-        tail = f" 관련도 순으로 {shown}건 보여드릴게요." if result.total > shown else ""
-        return f"{head}" + "\n" + f"{condition} · {counted}.{tail}"
+        tail = f" 가까운 순으로 {shown}건 보여드릴게요." if count > shown else ""
+        return f"{head}\n{found}{tail}"
 
 
 # 모으지 않는 것들. 왜 못 하는지까지 말한다. 실측에 근거한 숫자를 그대로 쓴다.
@@ -1151,20 +1329,6 @@ _UNAVAILABLE_NEXT = {
     "합격 가능성": ["내 이력서로 추천해줘", "신입도 되는 공고"],
     "회사 평판": ["대기업 공고만", "서울 공고 보여줘"],
 }
-
-
-def _matched_what(filters) -> str:
-    """무엇이 맞았다고 말할지. 찾은 것이 직무냐 기술이냐에 따라 다르다.
-
-    늘 "직무가 맞는 건"이라고 썼다. "Spring Boot 쓰는 회사 있어?"에도 그랬는데
-    Spring Boot는 직무가 아니라 기술이다. 조건을 둘 다 걸었거나 자유 키워드로 찾았으면
-    무엇이라 부를지 정할 수 없으니 걸린 자리를 그대로 말한다.
-    """
-    if filters.roles and not filters.skills:
-        return "직무가"
-    if filters.skills and not filters.roles:
-        return "기술이"
-    return "제목·태그에"
 
 
 def _to_chat_job(hit) -> schemas.JobChatJob:

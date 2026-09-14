@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_layout.dart';
 import '../../../../shared/models/user_model.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 기록실 페이지 최대 너비
 abstract final class RecordLayout {
@@ -34,13 +35,15 @@ class RecordPageScaffold extends StatelessWidget {
         Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: RecordLayout.maxContentWidth),
+            constraints: const BoxConstraints(
+              maxWidth: RecordLayout.maxContentWidth,
+            ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 RecordLayout.horizontalPadding,
                 RecordLayout.verticalPadding,
                 RecordLayout.horizontalPadding,
-                12,
+                AppSpace.s(12),
               ),
               child: RecordPageHeader(user: user, cohortName: cohortName),
             ),
@@ -50,7 +53,9 @@ class RecordPageScaffold extends StatelessWidget {
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: RecordLayout.maxContentWidth),
+              constraints: const BoxConstraints(
+                maxWidth: RecordLayout.maxContentWidth,
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: RecordLayout.horizontalPadding,
@@ -64,11 +69,13 @@ class RecordPageScaffold extends StatelessWidget {
           Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: RecordLayout.maxContentWidth),
+              constraints: const BoxConstraints(
+                maxWidth: RecordLayout.maxContentWidth,
+              ),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
+                padding: EdgeInsets.fromLTRB(
                   RecordLayout.horizontalPadding,
-                  0,
+                  AppSpace.s(0),
                   RecordLayout.horizontalPadding,
                   RecordLayout.verticalPadding,
                 ),
@@ -111,7 +118,7 @@ class RecordPageHeader extends StatelessWidget {
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               Text(
                 '블로그, 스터디, 자격증 기록을 제출하고 관리하세요.',
                 style: TextStyle(
@@ -123,9 +130,9 @@ class RecordPageHeader extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 16),
+        SizedBox(width: AppSpace.s(16)),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(8)),
           decoration: BoxDecoration(
             color: AppColors.surfaceVariant,
             borderRadius: BorderRadius.circular(10),
@@ -139,14 +146,14 @@ class RecordPageHeader extends StatelessWidget {
                 backgroundColor: AppColors.primaryLight,
                 child: Text(
                   initial,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -192,7 +199,7 @@ class RecordFormPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(AppSpace.s(24)),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -216,10 +223,10 @@ class RecordFormPanel extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: AppSpace.s(20)),
           child,
           if (actions != null) ...[
-            const SizedBox(height: 28),
+            SizedBox(height: AppSpace.s(28)),
             actions!,
           ],
         ],
@@ -238,7 +245,7 @@ class RecordInfoBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(12)),
       decoration: BoxDecoration(
         color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(10),
@@ -246,12 +253,12 @@ class RecordInfoBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
-          const SizedBox(width: 10),
+          Icon(Icons.info_outline, size: 18, color: AppColors.primary),
+          SizedBox(width: AppSpace.s(10)),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 color: AppColors.primaryDark,
                 height: 1.45,
@@ -295,7 +302,7 @@ class RecordFormActions extends StatelessWidget {
           child: const Text('이전'),
         ),
         if (onSubmit != null) ...[
-          const SizedBox(width: 10),
+          SizedBox(width: AppSpace.s(10)),
           FilledButton(
             onPressed: (submitting || !submitEnabled) ? null : onSubmit,
             style: FilledButton.styleFrom(
@@ -329,7 +336,7 @@ class RecordFieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: Text(
         text,
         style: const TextStyle(
@@ -342,16 +349,16 @@ class RecordFieldLabel extends StatelessWidget {
 }
 
 InputDecoration recordInputDecoration({String? hint}) => InputDecoration(
-      hintText: hint,
-      filled: true,
-      fillColor: AppColors.surfaceVariant,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppColors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppColors.border),
-      ),
-    );
+  hintText: hint,
+  filled: true,
+  fillColor: AppColors.surfaceVariant,
+  contentPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(12)),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(10),
+    borderSide: BorderSide(color: AppColors.border),
+  ),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(10),
+    borderSide: BorderSide(color: AppColors.border),
+  ),
+);

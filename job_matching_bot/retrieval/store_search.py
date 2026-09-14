@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
+from typing import Collection
 
 from job_matching_bot.matching.hard_filter import ENTRY_ONLY_MAX_YEARS
 from job_matching_bot.matching.skill_normalize import canonical_skill
@@ -196,6 +197,7 @@ class SearchResult:
     total: int          # 조건에 맞는 전체 건수 (보여 준 것보다 많을 수 있다)
     scanned_cap: bool   # 상한에 걸려 세다 만 경우
     strong: int         # 그중 제목·태그에 직접 맞은 건수
+    skipped: int = 0    # 이미 보여 줘서 뺀 건수. "이거 말고"로 넘겨 보는 중이면 0보다 크다
 
 
 # 공고 한 건을 만드는 데 필요한 컬럼. 조건 검색과 의미 검색이 같은 것을 읽는다.
@@ -223,6 +225,28 @@ def _to_hit(row, relevance: int, has_detail: bool = True) -> JobHit:
     )
 
 
+def deadline_passed(deadline: str | None, now: datetime | None = None) -> bool:
+    """마감 시각이 지났나. **보내기 직전에** 본다.
+
+    조회 조건은 날짜만 견준다(`substr(deadline, 1, 10) >= 오늘`). 그래서 밤 11시에 받은
+    "오늘 23:59 마감" 공고를 자정이 지나 눌러 보면 이미 닫혀 있었다. 시각이 적힌 마감은
+    시각까지 보고, 날짜만 적힌 마감은 그날 끝까지 열린 것으로 본다. 못 읽으면 지나지
+    않은 것으로 둔다 — 잘못 빼는 것보다 낫다.
+    """
+    if not deadline:
+        return False
+    now = now or datetime.now(KST)
+    try:
+        when = datetime.fromisoformat(deadline)
+    except ValueError:
+        return False
+    if when.tzinfo is None:
+        if len(deadline) <= 10:
+            return when.date() < now.date()
+        when = when.replace(tzinfo=KST)
+    return when <= now
+
+
 def _career_label(career_type: str, min_years: int | None) -> str:
     if career_type == "ENTRY":
         return "신입"
@@ -233,14 +257,23 @@ def _career_label(career_type: str, min_years: int | None) -> str:
     return "미기재"
 
 
-def _terms(filters: JobFilters) -> list[str]:
-    """공고 글에서 찾을 말. 직무·기술·자유 키워드를 합친다."""
+def _dedupe(terms: list[str]) -> list[str]:
     seen: list[str] = []
-    for term in [*filters.roles, *filters.skills, *filters.keywords]:
+    for term in terms:
         term = term.strip()
         if term and term not in seen:
             seen.append(term)
     return seen
+
+
+def _role_terms(filters: JobFilters) -> list[str]:
+    """직무·기술 말. 이 중 하나만 맞아도 된다."""
+    return _dedupe([*filters.roles, *filters.skills])
+
+
+def _terms(filters: JobFilters) -> list[str]:
+    """공고 글에서 찾을 말 전부. 관련도(어디서 걸렸나)를 셀 때 쓴다."""
+    return _dedupe([*filters.roles, *filters.skills, *filters.keywords])
 
 
 def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[object]]:
@@ -248,6 +281,11 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
 
     조건이 여럿이면 **모두 만족**해야 한다. 직무·기술 말은 그중 하나만 맞아도 된다 —
     "백엔드 파이썬"이라고 하면 둘 다 적힌 공고만 남기는 것보다 하나라도 걸리는 편이 낫다.
+
+    **키워드(재택·공기업·비전공자 …)는 직무·기술과 따로 묶어 함께 만족해야 한다.** 예전에는
+    한 묶음으로 OR였다. "재택 가능한 QA"가 QA 공고 전부에 "재택"이 스친 공고까지 3,000건
+    넘게 걸렸고, "공기업 IT"에 일반 기업 IT 공고가 나갔다. 키워드는 좁히는 말이다.
+    키워드끼리는 하나만 맞아도 된다("공기업이나 공공기관").
 
     두 곳이 같은 함수를 쓰는 것이 중요하다. "412건 중 Spring 61%"라고 말해 놓고 목록에는
     다른 모수의 공고가 나오면 답이 거짓말이 된다.
@@ -288,10 +326,12 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
         params.append(until)
 
     # 직무·기술은 제목·분류 태그·기술 태그·본문 어디에 있어도 맞은 것으로 본다.
-    terms = _terms(filters)
-    if terms:
+    # 직무·기술 묶음과 키워드 묶음을 따로 걸어 둘 다 만족하게 한다(위 설명).
+    for group in (_role_terms(filters), _dedupe(filters.keywords)):
+        if not group:
+            continue
         clauses = []
-        for term in terms:
+        for term in group:
             parts = []
             for column in ("title", "keywords", "tech_stack", "description"):
                 sql, values = _match(column, term)
@@ -304,9 +344,18 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
 
 
 def search(
-    store_path: Path, filters: JobFilters, limit: int = 5, as_of: datetime | None = None
+    store_path: Path,
+    filters: JobFilters,
+    limit: int = 5,
+    as_of: datetime | None = None,
+    exclude_ids: Collection[str] = (),
 ) -> SearchResult:
-    """조건에 맞는 공고를 관련도 순으로. (보여 줄 것, 전체 건수)."""
+    """조건에 맞는 공고를 관련도 순으로. (보여 줄 것, 전체 건수).
+
+    `exclude_ids`는 **이미 보여 준 공고**다. "이거 말고"를 거듭하면 앱이 본 것을 모아
+    보내고, 여기서 빼고 다음 공고를 준다. 서버는 대화를 저장하지 않으므로 몇 쪽째인지
+    대신 무엇을 봤는지를 받는다. 전체 건수(`total`)는 빼기 전 그대로다.
+    """
     as_of = as_of or datetime.now(KST)
     where, params = conditions(filters, as_of)
 
@@ -356,9 +405,13 @@ def search(
     )
     sql = (
         f"SELECT * FROM ({body}) "
+        # 제목·태그에 직접 맞은 공고(관련도 2 이상)를 먼저 전부 세운다. 답이 말하는 건수가
+        # 이 묶음이라, 넘겨 보다 보면 그 건수만큼 본 뒤에 본문에만 스친 공고로 넘어가야
+        # 말과 목록이 맞는다. 묶음 안에서는 본문이 있는 공고가 먼저다.
         # 관련도가 같으면 태그를 적게 단 공고를 먼저. 직무 태그를 열 개씩 달아 둔
         # "전 직군 공개채용"은 무엇을 물어도 걸리므로, 그 일에 특화된 공고에 자리를 내준다.
-        " ORDER BY has_detail DESC, relevance DESC, LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
+        " ORDER BY (relevance >= 2) DESC, has_detail DESC, relevance DESC,"
+        " LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
     )
 
     # 값은 UNION 두 쪽에 똑같이 들어간다. 순서는 SELECT → WHERE 를 두 번, 그다음 LIMIT.
@@ -369,13 +422,16 @@ def search(
     finally:
         connection.close()
 
+    seen = set(exclude_ids)
+    remaining = [row for row in rows if row["job_id"] not in seen]
     jobs = [_to_hit(row, int(row["relevance"] or 0), bool(row["has_detail"]))
-            for row in rows[:limit]]
+            for row in remaining[:limit]]
     return SearchResult(
         jobs=jobs,
         total=len(rows),
         scanned_cap=len(rows) >= SCAN_LIMIT,
         strong=sum(1 for row in rows if int(row["relevance"] or 0) >= 2),
+        skipped=len(rows) - len(remaining),
     )
 
 

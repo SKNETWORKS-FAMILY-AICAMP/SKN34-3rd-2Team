@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/models/tech_skill_level.dart';
 import 'skill_catalog.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 기술스택을 태그로 고르고, 숙련도를 설명이 달린 단계로 정하는 편집기.
 ///
@@ -84,16 +85,17 @@ class _TechStackEditorState extends State<TechStackEditor> {
     }
 
     final active = filled.cast<ResumeTechStackItem?>().firstWhere(
-          (item) => item!.id == _activeId,
-          orElse: () => null,
-        );
+      (item) => item!.id == _activeId,
+      orElse: () => null,
+    );
     // 검색 결과 전체를 페이지로 나눈다. 검색어가 바뀌면 첫 페이지로 돌아간다.
     final matches = SkillCatalog.search(_query).toList();
     final pageCount = matches.isEmpty ? 1 : (matches.length / _pageSize).ceil();
     final page = _page.clamp(0, pageCount - 1);
     final suggestions = matches.skip(page * _pageSize).take(_pageSize).toList();
     final trimmedQuery = _query.trim();
-    final canAddCustom = trimmedQuery.isNotEmpty &&
+    final canAddCustom =
+        trimmedQuery.isNotEmpty &&
         !_has(trimmedQuery) &&
         !matches.any((s) => SkillCatalog.sameSkill(s, trimmedQuery));
 
@@ -101,7 +103,7 @@ class _TechStackEditorState extends State<TechStackEditor> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _Label('선택한 기술'),
-        const SizedBox(height: 6),
+        SizedBox(height: AppSpace.s(6)),
         if (filled.isEmpty)
           Text(
             '아래에서 태그를 고르거나 직접 입력해 추가하세요.',
@@ -124,15 +126,15 @@ class _TechStackEditorState extends State<TechStackEditor> {
             ],
           ),
         if (active != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           _LevelPicker(
             item: active,
             onChanged: (level) => _setLevel(active, level),
           ),
         ],
-        const SizedBox(height: 18),
+        SizedBox(height: AppSpace.s(18)),
         const _Label('기술 추가'),
-        const SizedBox(height: 6),
+        SizedBox(height: AppSpace.s(6)),
         TextField(
           controller: _search,
           decoration: InputDecoration(
@@ -161,7 +163,7 @@ class _TechStackEditorState extends State<TechStackEditor> {
             _add(SkillCatalog.sameSkill(match, value) ? match : value);
           },
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: AppSpace.s(10)),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -197,21 +199,25 @@ class _TechStackEditorState extends State<TechStackEditor> {
         ),
         if (matches.length > _pageSize)
           Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: EdgeInsets.only(top: AppSpace.s(6)),
             child: Row(
               children: [
                 TextButton.icon(
-                  onPressed: page > 0 ? () => setState(() => _page = page - 1) : null,
+                  onPressed: page > 0
+                      ? () => setState(() => _page = page - 1)
+                      : null,
                   icon: const Icon(Icons.chevron_left, size: 18),
                   label: const Text('이전'),
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
-                const SizedBox(width: 4),
+                SizedBox(width: AppSpace.s(4)),
                 Text(
                   '${page + 1} / $pageCount 페이지 · 전체 ${matches.length}개',
                   style: TextStyle(fontSize: 11, color: AppColors.textHint),
                 ),
-                const SizedBox(width: 4),
+                SizedBox(width: AppSpace.s(4)),
                 TextButton.icon(
                   onPressed: page < pageCount - 1
                       ? () => setState(() => _page = page + 1)
@@ -220,7 +226,9 @@ class _TechStackEditorState extends State<TechStackEditor> {
                   label: const Text('다음'),
                   // 아이콘을 글자 뒤에 두려고 방향을 뒤집는다.
                   iconAlignment: IconAlignment.end,
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
               ],
             ),
@@ -247,7 +255,9 @@ class _SkillTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final level = item.level.trim();
-    final label = level.isEmpty ? item.name.trim() : '${item.name.trim()} · $level';
+    final label = level.isEmpty
+        ? item.name.trim()
+        : '${item.name.trim()} · $level';
     if (onTap == null && onDeleted == null) {
       return Chip(
         label: Text(label),
@@ -271,7 +281,7 @@ class _SkillTag extends StatelessWidget {
         height: 1.35,
         color: selected ? Colors.white : AppColors.textPrimary,
       ),
-      labelPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      labelPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(6), vertical: AppSpace.s(3)),
       selected: selected,
       showCheckmark: false,
       selectedColor: AppColors.primary,
@@ -298,7 +308,7 @@ class _LevelPicker extends StatelessWidget {
     final known = techSkillLevelOf(current);
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(AppSpace.s(12)),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(8),
@@ -310,9 +320,12 @@ class _LevelPicker extends StatelessWidget {
             children: [
               Text(
                 '${item.name.trim()} 숙련도',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               Text(
                 '(선택) 같은 단계를 다시 누르면 지워집니다',
                 style: TextStyle(fontSize: 11, color: AppColors.textHint),
@@ -321,13 +334,13 @@ class _LevelPicker extends StatelessWidget {
           ),
           if (current.isNotEmpty && known == null)
             Padding(
-              padding: const EdgeInsets.only(top: 4),
+              padding: EdgeInsets.only(top: AppSpace.s(4)),
               child: Text(
                 "기존 값 '$current'은(는) 단계 목록에 없습니다. 아래에서 다시 고르면 바뀝니다.",
-                style: const TextStyle(fontSize: 11, color: AppColors.warning),
+                style: TextStyle(fontSize: 11, color: AppColors.warning),
               ),
             ),
-          const SizedBox(height: 10),
+          SizedBox(height: AppSpace.s(10)),
           LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 560;
@@ -350,7 +363,7 @@ class _LevelPicker extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       for (var i = 0; i < tiles.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 6),
+                        if (i > 0) SizedBox(width: AppSpace.s(6)),
                         Expanded(child: tiles[i]),
                       ],
                     ],
@@ -360,7 +373,7 @@ class _LevelPicker extends StatelessWidget {
               return Column(
                 children: [
                   for (var i = 0; i < tiles.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 6),
+                    if (i > 0) SizedBox(height: AppSpace.s(6)),
                     tiles[i],
                   ],
                 ],
@@ -413,7 +426,7 @@ class _LevelTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(9)),
           decoration: BoxDecoration(
             border: Border.all(
               color: selected ? AppColors.primary : AppColors.border,
@@ -424,13 +437,13 @@ class _LevelTile extends StatelessWidget {
               ? Row(
                   children: [
                     SizedBox(width: 48, child: label),
-                    const SizedBox(width: 8),
+                    SizedBox(width: AppSpace.s(8)),
                     Expanded(child: description),
                   ],
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [label, const SizedBox(height: 3), description],
+                  children: [label, SizedBox(height: AppSpace.s(3)), description],
                 ),
         ),
       ),
