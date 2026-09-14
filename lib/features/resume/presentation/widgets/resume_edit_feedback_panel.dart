@@ -13,8 +13,9 @@ import '../../../../shared/providers/lms_providers.dart';
 class ResumeEditFeedbackPanel extends ConsumerStatefulWidget {
   const ResumeEditFeedbackPanel({
     super.key,
-    required this.resumeId,
+    required this.resume,
     required this.isAdmin,
+    required this.isVisible,
     this.selectedSectionKey,
     this.completedSections = const {},
     this.isSidebar = false,
@@ -23,8 +24,9 @@ class ResumeEditFeedbackPanel extends ConsumerStatefulWidget {
     this.onClose,
   });
 
-  final String resumeId;
+  final ResumeModel resume;
   final bool isAdmin;
+  final bool isVisible;
   final String? selectedSectionKey;
   final Map<String, bool> completedSections;
   final bool isSidebar;
@@ -47,6 +49,7 @@ class _ResumeEditFeedbackPanelState
   bool _isSubmitting = false;
   ResumeFeedbackModel? _replyTo;
   final _composerFocus = FocusNode();
+  final Set<String> _markedReadIds = {};
 
   @override
   void initState() {
@@ -82,7 +85,7 @@ class _ResumeEditFeedbackPanelState
 
   Future<void> _submit() async {
     final text = _contentController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || (!widget.isAdmin && _replyTo == null)) return;
 
     final user = ref.read(currentUserSyncProvider);
     final cohortId = ref.read(effectiveCohortIdProvider);
@@ -94,7 +97,7 @@ class _ResumeEditFeedbackPanelState
           .read(lmsRepositoryProvider)
           .addResumeFeedback(
             cohortId: cohortId,
-            resumeId: widget.resumeId,
+            resumeId: widget.resume.id,
             feedback: ResumeFeedbackModel(
               id: '',
               sectionKey: _sectionKey,
@@ -108,7 +111,7 @@ class _ResumeEditFeedbackPanelState
           );
       _contentController.clear();
       if (mounted) setState(() => _replyTo = null);
-      ref.invalidate(resumeFeedbackProvider(widget.resumeId));
+      ref.invalidate(resumeFeedbackProvider(widget.resume.id));
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
@@ -126,9 +129,27 @@ class _ResumeEditFeedbackPanelState
     widget.onSectionChanged?.call(sectionKey);
   }
 
+  Future<void> _markRead(List<ResumeFeedbackModel> unread) async {
+    final ids = [
+      for (final item in unread)
+        if (_markedReadIds.add(item.id)) item.id,
+    ];
+    if (ids.isEmpty) return;
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (cohortId == null) return;
+    await ref
+        .read(lmsRepositoryProvider)
+        .markResumeFeedbackRead(
+          cohortId: cohortId,
+          resumeId: widget.resume.id,
+          feedbackIds: ids,
+          asReviewer: widget.isAdmin,
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final feedback = ref.watch(resumeFeedbackProvider(widget.resumeId));
+    final feedback = ref.watch(resumeFeedbackProvider(widget.resume.id));
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -160,6 +181,18 @@ class _ResumeEditFeedbackPanelState
               ),
             ),
             data: (list) {
+              final viewerId = ref.watch(currentUserSyncProvider)?.uid;
+              final unread = unreadFeedback(
+                list,
+                widget.resume,
+                asReviewer: widget.isAdmin,
+                viewerId: viewerId,
+              );
+              if (widget.isVisible && unread.isNotEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _markRead(unread);
+                });
+              }
               final visible = widget.isAdmin
                   ? list
                         .where((item) => item.sectionKey == _sectionKey)
@@ -204,10 +237,15 @@ class _ResumeEditFeedbackPanelState
                     children: [
                       _FeedbackCommentBubble(
                         feedback: root,
-                        onReply: () {
-                          setState(() => _replyTo = root);
-                          _composerFocus.requestFocus();
-                        },
+                        onReply: widget.isAdmin || root.authorId != viewerId
+                            ? () {
+                                setState(() {
+                                  _sectionKey = root.sectionKey;
+                                  _replyTo = root;
+                                });
+                                _composerFocus.requestFocus();
+                              }
+                            : null,
                       ),
                       for (final reply in threadRepliesTo(sorted, root.id))
                         Padding(
@@ -221,7 +259,7 @@ class _ResumeEditFeedbackPanelState
             },
           ),
         ),
-        if (widget.isAdmin)
+        if (widget.isAdmin || _replyTo != null)
           _FeedbackComposer(
             sectionKey: _sectionKey,
             controller: _contentController,
