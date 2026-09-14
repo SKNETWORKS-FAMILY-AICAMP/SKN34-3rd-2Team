@@ -6,8 +6,10 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/firebase_providers.dart';
+import '../data/demo_student_chatbot_api_client.dart';
 import '../data/student_chatbot_api_client.dart';
 import 'robot_head_icon.dart';
 import '../../../core/theme/app_space.dart';
@@ -144,10 +146,12 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
     _ownsApi = widget.apiClient == null;
     _api =
         widget.apiClient ??
-        StudentChatbotApiClient(
-          token: () async =>
-              await ref.read(firebaseAuthProvider).currentUser?.getIdToken(),
-        );
+        (DemoConfig.enabled
+            ? DemoStudentChatbotApiClient()
+            : StudentChatbotApiClient(
+                token: () async =>
+                    await ref.read(firebaseAuthProvider).currentUser?.getIdToken(),
+              ));
     if (widget.user.isStudent) _initialize();
   }
 

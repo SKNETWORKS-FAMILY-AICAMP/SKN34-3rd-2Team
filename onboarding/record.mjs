@@ -9,10 +9,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
-import { serveBuild, waitForApp, accounts, go, outRoot, deliverRoot, sleep } from './lib/app.mjs';
+import { serveBuild, waitForApp, go, outRoot, deliverRoot, sleep } from './lib/app.mjs';
+import {
+  size, installCursor, resetMouse, moveTo, tap, tapIf, hover, typeInto, btn, btnLike, openMenu, login, walkTour, themeOption,
+  scrollCoachPanelToTop,
+} from './lib/actions.mjs';
 
 const only = process.argv[2];
-const size = { width: 1440, height: 900 };
 const barHeight = 100;
 // 첫 1.5초는 앱 로딩 흰 화면이라 잘라낸다.
 const trimSec = 1.5;
@@ -26,35 +29,6 @@ fs.mkdirSync(fontDir, { recursive: true });
 for (const f of ['malgun.ttf', 'malgunbd.ttf']) {
   const src = path.join(process.env.WINDIR ?? 'C:\\Windows', 'Fonts', f);
   if (fs.existsSync(src) && !fs.existsSync(path.join(fontDir, f))) fs.copyFileSync(src, path.join(fontDir, f));
-}
-
-async function installCursor(page) {
-  await page.evaluate(() => {
-    if (document.getElementById('demo-cursor')) return;
-    const style = document.createElement('style');
-    style.textContent = `
-      #demo-cursor { position: fixed; left: 0; top: 0; width: 22px; height: 22px; z-index: 2147483647;
-        pointer-events: none; transform: translate(-3px, -2px); transition: transform .02s; }
-      #demo-cursor svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
-      #demo-cursor.down::after { content: ''; position: absolute; left: -12px; top: -12px; width: 28px; height: 28px;
-        border-radius: 50%; background: rgba(11,87,208,.28); animation: ripple .45s ease-out; }
-      @keyframes ripple { from { transform: scale(.3); opacity: 1 } to { transform: scale(1.4); opacity: 0 } }
-    `;
-    document.head.appendChild(style);
-    const cursor = document.createElement('div');
-    cursor.id = 'demo-cursor';
-    cursor.innerHTML =
-      '<svg width="22" height="22" viewBox="0 0 24 24"><path d="M3 2l7.5 19 2.6-7.9L21 10.5z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
-    document.body.appendChild(cursor);
-    const move = (e) => (cursor.style.transform = `translate(${e.clientX - 3}px, ${e.clientY - 2}px)`);
-    window.addEventListener('pointermove', move, true);
-    window.addEventListener('mousemove', move, true);
-    window.addEventListener('pointerdown', () => {
-      cursor.classList.remove('down');
-      void cursor.offsetWidth;
-      cursor.classList.add('down');
-    }, true);
-  });
 }
 
 // ── 자막 ────────────────────────────────────────────────────────────
@@ -131,93 +105,10 @@ ${lines.join('\n')}
   fs.writeFileSync(file, '﻿' + ass, 'utf8');
 }
 
-// ── 조작 ────────────────────────────────────────────────────────────
-let mouse = { x: size.width / 2, y: size.height / 2 };
-async function moveTo(page, x, y) {
-  const steps = Math.max(8, Math.round(Math.hypot(x - mouse.x, y - mouse.y) / 25));
-  await page.mouse.move(x, y, { steps });
-  mouse = { x, y };
-}
-
-/// 사람이 누르는 것처럼 커서를 옮긴 뒤 누른다.
-async function tap(page, locator, { pause = 700 } = {}) {
-  const target = locator.first();
-  await target.waitFor({ state: 'attached', timeout: 15_000 });
-  const box = await target.boundingBox();
-  if (!box) throw new Error('누를 위치를 찾지 못했습니다');
-  await moveTo(page, box.x + box.width / 2, box.y + box.height / 2);
-  await sleep(250);
-  await page.mouse.down();
-  await page.mouse.up();
-  await sleep(pause);
-}
-
-/// 있으면 누르고, 없으면 넘어간다.
-async function tapIf(page, locator, opts) {
-  if (await locator.count()) {
-    await tap(page, locator, opts);
-    return true;
-  }
-  return false;
-}
-
-/// 누르지 않고 커서만 올린다.
-async function hover(page, locator, holdMs = 800) {
-  if (!(await locator.count())) return;
-  const box = await locator.first().boundingBox();
-  if (box) await moveTo(page, box.x + box.width / 2, box.y + box.height / 2);
-  await sleep(holdMs);
-}
-
-async function typeInto(page, locator, text) {
-  // 누른 직후 바로 치면 앞 글자가 빠진다(포커스 전환 전). 잠깐 기다린다.
-  await tap(page, locator, { pause: 450 });
-  // 한 글자씩 keyboard.type 하면 녹화 중에는 키마다 한참 걸려 로그인만 20초가 넘는다.
-  // 두세 글자씩 끊어 넣어 타이핑처럼 보이게 한다.
-  for (let i = 0; i < text.length; i += 3) {
-    await page.keyboard.insertText(text.slice(i, i + 3));
-    await sleep(70);
-  }
-  await sleep(300);
-}
-
-const btn = (page, name) => page.getByRole('button', { name, exact: true });
-const btnLike = (page, re) => page.getByRole('button', { name: re });
-
-/// 사이드바 메뉴를 누른다. 라벨이 semantics에 없으면 hash 이동으로 대신한다.
-async function openMenu(page, label, fallbackRoute) {
-  if (!(await tapIf(page, btn(page, label), { pause: 1800 }))) await go(page, fallbackRoute, 1800);
-}
-
-async function login(page, role) {
-  const { email, password } = accounts[role];
-  await typeInto(page, page.getByRole('textbox').nth(0), email);
-  await typeInto(page, page.getByRole('textbox').nth(1), password);
-  await tap(page, btn(page, '로그인'), { pause: 3500 });
-  await installCursor(page);
-}
-
-/// 앱의 이용 안내 투어를 끝까지 넘긴다.
-async function walkTour(page, perStepMs = 1900) {
-  for (let i = 0; i < 30; i++) {
-    const done = btn(page, '완료');
-    if (await done.count()) {
-      await sleep(perStepMs);
-      await tap(page, done, { pause: 1200 });
-      return;
-    }
-    const next = btn(page, '다음');
-    if (!(await next.count())) return;
-    await sleep(perStepMs);
-    await tap(page, next, { pause: 900 });
-  }
-}
-
 /// 화면 설정에서 테마를 바꿔 보이고 라이트로 되돌린다.
 async function showThemes(page, settingsLabel, settingsRoute) {
   await openMenu(page, settingsLabel, settingsRoute);
-  // 테마 항목은 "라벨 + 설명"이 한 버튼이라 라벨로 시작하는 이름으로 찾는다.
-  const theme = (label) => btnLike(page, new RegExp(`^${label} `));
+  const theme = (label) => themeOption(page, label);
   await tapIf(page, theme('사이드바 다크'), { pause: 600 });
   await caption('사이드바 다크', '본문은 밝게, 사이드바만 어둡게', 1600);
   await tapIf(page, theme('전체 다크'), { pause: 600 });
@@ -245,18 +136,25 @@ const scripts = {
     // 이력서
     await step('이력서 작성', '항목을 채우고 「저장」, 다 쓰면 강사·매니저에게 피드백을 요청합니다');
     await openMenu(page, '이력서 관리', '/resume');
-    await go(page, '/resume/r-demo-1/edit', 2200);
+    if (!(await tapIf(page, btn(page, '이어서 작성'), { pause: 2200 }))) await go(page, '/resume/r-demo-1/edit', 2200);
     await typeInto(page, page.getByRole('textbox', { name: '연락처' }), '010-1234-5678');
-    await typeInto(
-      page,
-      page.getByRole('textbox', { name: '역량과 강점을 입력하세요' }),
-      'SQL과 Pandas로 데이터를 정리하고 시각화하는 일을 즐깁니다.',
-    );
     await tapIf(page, btn(page, '저장'), { pause: 1500 });
-    await caption('오른쪽 AI 코치', '「이력서 첨삭」으로 문장을 다듬고 「맞춤 공고 추천」으로 공고를 찾습니다', 1400);
-    await hover(page, btn(page, '이력서 첨삭'), 1400);
-    await caption('피드백이 오면 위의 종 아이콘에 표시됩니다', '「Doc」을 누르면 완성된 문서 모양으로 봅니다', 1200);
-    await tapIf(page, btn(page, 'Doc'), { pause: 2200 });
+
+    // AI 코치 — 맞춤 공고 추천 · 공고 맞춤 첨삭 (데모에서는 예시 결과)
+    await step('AI 맞춤 공고 추천', '이력서의 기술·직무를 읽고 지원 조건과 근거를 비교해 공고를 추천합니다 (화면의 공고는 예시)');
+    await tapIf(page, btn(page, '맞춤 공고 추천'), { pause: 6800 });
+    await caption('「추천 근거 보기」', '내 이력서 문장과 공고 문장을 나란히 비교합니다', 600);
+    await tapIf(page, btn(page, '추천 근거 보기'), { pause: 2000 });
+    await step('AI 공고 맞춤 첨삭', '지원할 공고에 맞춰 이력서 문장을 다듬은 수정안을 받습니다');
+    await tapIf(page, btnLike(page, /공고 맞춤 첨삭/), { pause: 1600 });
+    await tapIf(page, btnLike(page, /첨삭 시작/), { pause: 4800 });
+    await caption('「이 문장으로 바꾸기」로 반영, 「되돌리기」로 되돌리기', '이력서에 없는 내용은 지어내지 않습니다', 1200);
+    await tapIf(page, btn(page, '이 문장으로 바꾸기'), { pause: 3200 });
+    await tapIf(page, btn(page, '첨삭 완료'), { pause: 1200 });
+    await tapIf(page, btn(page, '닫기'), { pause: 600 });
+    await caption('공고와 관계없이 문장만 다듬을 때는 「이력서 첨삭」', '피드백이 오면 위의 종 아이콘에 표시됩니다', 600);
+    await scrollCoachPanelToTop(page);
+    await hover(page, btn(page, '이력서 첨삭'), 1600);
 
     // 기록실
     await step('기록실에 기록 제출', '블로그 · 스터디 · 자격증 기록을 올리면 승인 후 마일리지가 적립됩니다');
@@ -309,6 +207,17 @@ const scripts = {
     await tapIf(page, btnLike(page, /네이버페이 포인트/), { pause: 1400 });
     await tapIf(page, btn(page, '장바구니에 담기'), { pause: 1400 });
     await caption('장바구니에서 구매를 요청하면 매니저가 승인할 때 차감됩니다', '', 2200);
+
+    // 학생 챗봇
+    await step('학생 챗봇', '오른쪽 아래 로봇을 누르면 LMS 정책 · 공지 · 출결 · 프로젝트를 물어볼 수 있습니다');
+    await go(page, '/', 1400);
+    await tapIf(page, btn(page, '학생 챗봇 열기'), { pause: 1400 });
+    await caption('「자주 묻는 질문」 버튼으로 바로 답 보기', '출결 기준 · 공가 사용 방법 · 훈련장려금 등', 600);
+    await tapIf(page, page.getByRole('checkbox', { name: '공가 사용 방법' }), { pause: 2200 });
+    await caption('궁금한 내용은 직접 입력해도 됩니다', '기수 · 단위기간 같은 조건을 함께 적으면 더 정확합니다', 600);
+    await typeInto(page, page.getByRole('textbox', { name: /메시지를 입력하세요/ }), '3단위기간 출석률 85%면 훈련장려금 받을 수 있어?');
+    await tapIf(page, btn(page, '질문 보내기'), { pause: 5200 });
+    await tapIf(page, btn(page, '챗봇 닫기'), { pause: 600 });
 
     // 마이페이지 · 화면 설정
     await step('마이페이지 · 화면 설정', '프로필과 비밀번호를 관리하고, 이용 안내를 다시 볼 수 있습니다');
@@ -482,7 +391,7 @@ try {
     videoStartedAt = Date.now();
     cues = [];
     stepNo = 0;
-    mouse = { x: size.width / 2, y: size.height / 2 };
+    resetMouse();
     await page.goto(server.url);
     await waitForApp(page);
     await installCursor(page);
