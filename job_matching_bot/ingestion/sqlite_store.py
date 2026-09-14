@@ -32,7 +32,12 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from job_matching_bot.config import now
-from job_matching_bot.ingestion.job_store import REQUIRED_FIELDS, _is_expired, resolve_status
+from job_matching_bot.ingestion.job_store import (
+    REQUIRED_FIELDS,
+    _is_expired,
+    keep_listing_fields,
+    resolve_status,
+)
 from job_matching_bot.ingestion.detail_quality import has_requirement_text
 from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
 from job_matching_bot.schemas.job_posting import Job
@@ -354,7 +359,8 @@ class SqliteJobStore:
             marks = ", ".join("(?, ?)" for _ in chunk)
             params = [v for key in chunk for v in key]
             rows = self.conn.execute(
-                "SELECT source, source_job_id, content_hash, first_seen_at, revisions "
+                "SELECT source, source_job_id, content_hash, first_seen_at, revisions, "
+                "company, title, deadline "
                 f"FROM jobs WHERE (source, source_job_id) IN (VALUES {marks})",
                 params,
             )
@@ -370,7 +376,8 @@ class SqliteJobStore:
             params = [v for key in chunk for v in key]
             rows = self.conn.execute(
                 "SELECT source, source_job_id, content_hash, first_seen_at, last_seen_at, "
-                f"status, missing_runs, revisions FROM jobs WHERE (source, source_job_id) IN (VALUES {marks})",
+                "status, missing_runs, revisions, company, title, deadline "
+                f"FROM jobs WHERE (source, source_job_id) IN (VALUES {marks})",
                 params,
             )
             for row in rows:
@@ -405,6 +412,7 @@ class SqliteJobStore:
                 if previous is None:
                     result["unknown"].append(job.job_id)
                     continue
+                job = keep_listing_fields(job, previous["company"], previous["title"], previous["deadline"])
                 changed = previous["content_hash"] != job.content_hash
                 self._write_record(
                     JobRecord(
@@ -442,13 +450,15 @@ class SqliteJobStore:
             for job in collected:
                 key = (job.source, job.source_job_id)
                 seen.add(key)
+                previous = existing.get(key)
+                if previous is not None:
+                    job = keep_listing_fields(job, previous["company"], previous["title"], previous["deadline"])
                 status = resolve_status(job, as_of)
                 missing = [name for name in REQUIRED_FIELDS if not getattr(job, name, None)]
                 if missing:
                     report.missing_fields[job.job_id] = missing
                 report.parser_versions[job.parser_version] = report.parser_versions.get(job.parser_version, 0) + 1
 
-                previous = existing.get(key)
                 if previous is None:
                     record = JobRecord(job=job, first_seen_at=timestamp, last_seen_at=timestamp, status=status)
                     report.new.append(job.job_id)
@@ -469,6 +479,9 @@ class SqliteJobStore:
                     "content_hash": job.content_hash,
                     "first_seen_at": record.first_seen_at,
                     "revisions": record.revisions,
+                    "company": job.company,
+                    "title": job.title,
+                    "deadline": job.deadline,
                 }
 
             # ② 이번에 안 보인 같은 소스의 공고: 만료 / 목록에서 봄 / 미관측 누적 / 삭제
