@@ -195,7 +195,8 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
                       color: switch (f) {
                         _ResumeFilter.all => AppColors.textPrimary,
                         _ResumeFilter.writing => AppColors.warning,
-                        _ResumeFilter.requested => AppColors.primary,
+                        // 강조색을 회색 등으로 바꿔도 피드백 요청은 늘 파랑이다. 상태 색은 뜻이라 따라가지 않는다.
+                        _ResumeFilter.requested => AppColors.info,
                         _ResumeFilter.approved => AppColors.success,
                       },
                     ),
@@ -313,7 +314,8 @@ void _openResume(BuildContext context, WidgetRef ref, ResumeModel resume, {Strin
 
 StatusBadge _statusBadge(ResumeModel resume) {
   if (resume.isApproved) return StatusBadge.success(resume.statusLabel);
-  if (resume.isSubmitted) return StatusBadge.info(resume.statusLabel);
+  // StatusBadge.info는 강조색을 따라간다. 피드백 요청은 강조색과 상관없이 파랑으로 둔다.
+  if (resume.isSubmitted) return StatusBadge(label: resume.statusLabel, color: AppColors.info);
   return StatusBadge.warning(resume.statusLabel);
 }
 
@@ -382,7 +384,15 @@ class _FilterTabs extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: tabs[i].selected ? AppColors.surface : tabs[i].color,
+                              // 색으로 채운 배지는 흰 숫자. 전체(글자색으로 채움)는 바탕색 숫자,
+                              // 주황은 흰 글자가 안 읽혀 짙은 숫자.
+                              color: !tabs[i].selected
+                                  ? tabs[i].color
+                                  : tabs[i].color == AppColors.textPrimary
+                                  ? AppColors.surface
+                                  : tabs[i].color == AppColors.warning
+                                  ? const Color(0xFF1F2328)
+                                  : Colors.white,
                             ),
                           ),
                         ),
