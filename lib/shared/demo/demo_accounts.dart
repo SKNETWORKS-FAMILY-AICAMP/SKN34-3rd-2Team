@@ -2,9 +2,10 @@ import '../../core/constants/role.dart';
 import '../models/user_model.dart';
 
 /// 로컬 데모 모드 — Firebase 없이 테스트 계정으로 UI 확인
-/// flutterfire configure 완료 — 실제 Firebase 사용
+/// 기본은 실제 Firebase를 쓴다. 온보딩 캡처·녹화처럼 실데이터가 나오면 안 될 때만
+/// `--dart-define=DEMO_MODE=true`로 켠다.
 abstract final class DemoConfig {
-  static const enabled = false;
+  static const enabled = bool.fromEnvironment('DEMO_MODE');
 
   static const cohortId = 'cohort_34';
   static const cohortName = 'SK네트웍스 Family AI 캠프 34기';
