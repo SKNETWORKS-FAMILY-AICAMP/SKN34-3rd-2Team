@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings, get_settings
 from app.main import app, get_context_gateway, get_resume_review_service
 from app.matching_handoff import load_selected_job, JobStoreUnavailable
-from app.models import FirestoreResumeReviewRequest, ResumeReviewGeneration, ReviewQuestion
+from app.models import FirestoreResumeReviewRequest, ResumeReviewGeneration, ReviewQuestion, SentenceReview
 from app.resume_review import ResumeReviewService
 from app.review_workflow import ReviewConflict, ReviewInputError, apply_selected_job_identity_revisions, digest, job_role_title
 from test_resume_review import FakeFirebase, SAMPLE_CONTENT
