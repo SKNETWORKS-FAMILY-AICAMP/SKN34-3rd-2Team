@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/demo/demo_accounts.dart';
 import '../../../../shared/models/job_preferences.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/services/ai_ops_service.dart';
 import '../../../../shared/constants/ai_ops_types.dart';
+import '../data/demo_ai_coach_clients.dart';
 import '../data/resume_review_api_client.dart';
 import 'job_resume_review_dialog.dart';
 import 'job_recommendation_loading.dart';
@@ -133,11 +135,18 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (!mounted) return;
     final cohort = ref.read(effectiveCohortIdProvider);
     final user = ref.read(firebaseAuthProvider).currentUser;
-    if (cohort == null || user == null) {
+    if (cohort == null || (user == null && !DemoConfig.enabled)) {
       setState(() => _error = '첨삭에는 실제 Firebase 로그인이 필요합니다.');
       return;
     }
-    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    // 데모 모드에는 첨삭 서버가 없다. 온보딩 캡처용 예시 수정안을 돌려준다.
+    final ResumeReviewApiClient client = DemoConfig.enabled
+        ? DemoResumeReviewApiClient(
+            draft: widget.draftContent,
+            jobCompany: job.company,
+            jobTitle: job.title,
+          )
+        : ResumeReviewApiClient(token: () => user!.getIdToken());
     // 이 추천을 받아 첨삭까지 갔다는 표시. 추천이 실제로 쓰였는지를 이걸로 센다.
     // 기다리지 않는다 — 로그 때문에 대화창이 늦게 뜨면 안 된다.
     final recommendLogId = _recommendLogId;
@@ -162,7 +171,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         builder: (_) => JobResumeReviewDialog(
           client: client,
           cohortId: cohort,
-          aiOps: ref.read(aiOpsServiceProvider),
+          aiOps: DemoConfig.enabled ? null : ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           jobId: job.jobId,
           jobCompany: job.company,
@@ -282,11 +291,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     if (!mounted) return;
     final cohort = ref.read(effectiveCohortIdProvider);
     final user = ref.read(firebaseAuthProvider).currentUser;
-    if (cohort == null || user == null) {
+    if (cohort == null || (user == null && !DemoConfig.enabled)) {
       setState(() => _error = '첨삭에는 실제 Firebase 로그인이 필요합니다.');
       return;
     }
-    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    final ResumeReviewApiClient client = DemoConfig.enabled
+        ? DemoResumeReviewApiClient(draft: widget.draftContent)
+        : ResumeReviewApiClient(token: () => user!.getIdToken());
     try {
       await showDialog<void>(
         context: context,
@@ -294,7 +305,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
         builder: (_) => JobResumeReviewDialog(
           client: client,
           cohortId: cohort,
-          aiOps: ref.read(aiOpsServiceProvider),
+          aiOps: DemoConfig.enabled ? null : ref.read(aiOpsServiceProvider),
           resumeId: widget.resumeId,
           draft: widget.draftContent,
           generalReview: true,
@@ -587,7 +598,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     // 무엇이 나왔고 얼마나 걸렸는지 남긴다. 원문은 안 보내고 메타만 보낸다.
     // 기수를 모르면(로그인 전) 남길 곳이 없으므로 건너뛴다. 로그가 실패해도
     // 추천은 막지 않는다 — `recordCoachLog`가 실패 시 null을 돌려준다.
-    final cohort = ref.read(effectiveCohortIdProvider);
+    // 데모 모드는 예시 결과라 남기지 않는다.
+    final cohort = DemoConfig.enabled ? null : ref.read(effectiveCohortIdProvider);
     final ops = ref.read(aiOpsServiceProvider);
     final watch = Stopwatch()..start();
     setState(() {
