@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/shell_chrome.dart';
 import '../providers/side_rail_theme_provider.dart';
+import '../../core/theme/app_space.dart';
 
 class AppSideRailItem {
   const AppSideRailItem({
@@ -93,17 +95,18 @@ class SideRailStyle extends InheritedWidget {
         child: child,
       );
     }
+    final light = darkPalette ?? kSideRailDarkPalettes.first;
     return SideRailStyle(
       isDark: false,
       background: AppColors.surface,
       border: AppColors.border,
       textPrimary: AppColors.textPrimary,
       textSecondary: AppColors.textSecondary,
-      selectedBg: AppColors.primaryLight,
-      selectedFg: AppColors.primary,
+      selectedBg: light.actionLight,
+      selectedFg: light.action,
       danger: AppColors.error,
-      avatarBg: AppColors.primaryLight,
-      avatarFg: AppColors.primary,
+      avatarBg: light.actionLight,
+      avatarFg: light.action,
       child: child,
     );
   }
@@ -126,7 +129,7 @@ class AppSideRail extends ConsumerWidget {
     this.onLogout,
     this.profile,
     this.isSelected,
-    this.width = 208,
+    this.width = ShellChrome.railWidth,
   });
 
   /// 평탄 목록 (기존 셸용). [sections]가 있으면 무시됨.
@@ -175,33 +178,19 @@ class AppSideRail extends ConsumerWidget {
             width: width,
             decoration: BoxDecoration(
               color: style.background,
-              border: Border(
-                right: BorderSide(color: style.border),
-              ),
+              // 어두운 사이드바는 한 색으로 칠한다. 가장자리에 팔레트 테두리색으로
+              // 선을 그으면 톤이 달라 사이드바가 두 색으로 보였다. 밝은 사이드바는
+              // 흰 칸이 연회색 본문에 묻히지 않게 선을 남긴다.
+              border: style.isDark
+                  ? null
+                  : Border(right: BorderSide(color: style.border)),
             ),
             child: SafeArea(
               right: false,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                    child: _RailThemeToggle(
-                      isDark: isDark,
-                      onToggle: () =>
-                          ref.read(sideRailDarkModeProvider.notifier).toggle(),
-                    ),
-                  ),
-                  if (isDark)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                      child: _RailPaletteSwitcher(
-                        palette: darkPalette,
-                        onCycle: () => ref
-                            .read(sideRailDarkPaletteIndexProvider.notifier)
-                            .cycle(),
-                      ),
-                    ),
+                  SizedBox(height: AppSpace.s(8)),
                   Expanded(
                     child: _SideRailSectionList(
                       sections: _resolvedSections,
@@ -212,12 +201,22 @@ class AppSideRail extends ConsumerWidget {
                   ),
                   if (profile != null)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpace.s(8),
+                        AppSpace.s(0),
+                        AppSpace.s(8),
+                        AppSpace.s(4),
+                      ),
                       child: profile,
                     ),
                   if (onLogout != null)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpace.s(8),
+                        AppSpace.s(0),
+                        AppSpace.s(8),
+                        AppSpace.s(10),
+                      ),
                       child: _RailNavTile(
                         icon: Icons.logout_rounded,
                         label: '로그아웃',
@@ -327,7 +326,10 @@ class _SideRailSectionListState extends State<_SideRailSectionList> {
     // 메뉴를 가리키려고 자리를 물어도 답이 없어 그냥 건너뛴다. 메뉴는 많아야
     // 스무 줄이라 다 만들어도 값이 싸다.
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      padding: EdgeInsets.symmetric(
+        vertical: AppSpace.s(6),
+        horizontal: AppSpace.s(8),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -348,7 +350,7 @@ class _SideRailSectionListState extends State<_SideRailSectionList> {
                   selected: widget.isPathSelected(item.path),
                   onTap: () => widget.onNavigate(item.path),
                 ),
-            if (section.isGroup) const SizedBox(height: 4),
+            if (section.isGroup) SizedBox(height: AppSpace.s(4)),
           ],
         ],
       ),
@@ -373,7 +375,7 @@ class _RailSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = SideRailStyle.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 6, bottom: 2),
+      padding: EdgeInsets.only(top: AppSpace.s(6), bottom: AppSpace.s(2)),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
@@ -381,7 +383,10 @@ class _RailSectionHeader extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpace.s(10),
+              vertical: AppSpace.s(6),
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -408,113 +413,6 @@ class _RailSectionHeader extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RailThemeToggle extends StatelessWidget {
-  const _RailThemeToggle({
-    required this.isDark,
-    required this.onToggle,
-  });
-
-  final bool isDark;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = SideRailStyle.of(context);
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onToggle,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                size: 18,
-                color: style.textSecondary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isDark ? '밝은 사이드바' : '어두운 사이드바',
-                  style: TextStyle(
-                    color: style.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.swap_horiz_rounded,
-                size: 16,
-                color: style.textSecondary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 다크 팔레트 후보 순환 (테스트용)
-class _RailPaletteSwitcher extends StatelessWidget {
-  const _RailPaletteSwitcher({
-    required this.palette,
-    required this.onCycle,
-  });
-
-  final SideRailDarkPalette palette;
-  final VoidCallback onCycle;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = SideRailStyle.of(context);
-    return Material(
-      color: Colors.white.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onCycle,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: palette.background,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: palette.accent, width: 2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  palette.label,
-                  style: TextStyle(
-                    color: style.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.palette_outlined,
-                size: 16,
-                color: palette.accent,
-              ),
-            ],
           ),
         ),
       ),
@@ -555,7 +453,7 @@ class _RailNavTile extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: EdgeInsets.symmetric(vertical: AppSpace.s(2)),
       child: Material(
         color: selected ? style.selectedBg : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
@@ -563,11 +461,14 @@ class _RailNavTile extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpace.s(10),
+              vertical: AppSpace.s(10),
+            ),
             child: Row(
               children: [
                 Icon(icon, size: 20, color: iconColor),
-                const SizedBox(width: 10),
+                SizedBox(width: AppSpace.s(10)),
                 Expanded(
                   child: Text(
                     label,
@@ -616,7 +517,10 @@ class SideRailProfileTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(10),
+            vertical: AppSpace.s(10),
+          ),
           child: Row(
             children: [
               leading ??
@@ -632,7 +536,7 @@ class SideRailProfileTile extends StatelessWidget {
                       ),
                     ),
                   ),
-              const SizedBox(width: 10),
+              SizedBox(width: AppSpace.s(10)),
               Expanded(
                 child: Text(
                   label,

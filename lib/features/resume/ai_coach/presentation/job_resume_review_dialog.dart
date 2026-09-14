@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -8,8 +9,32 @@ import '../../../../shared/constants/ai_ops_types.dart';
 import '../../../../shared/models/resume_content.dart';
 import '../../../../shared/services/ai_ops_service.dart';
 import '../data/resume_review_api_client.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
+import 'review_dock.dart';
 
 enum _ReviewBusyKind { review, answer, apply, undo }
+
+const _generalReviewSteps = [
+  '기본 이력서 불러오기',
+  '이력서 항목 확인',
+  '경험 근거 비교',
+  '수정안과 확인 질문 준비',
+];
+
+const _jobReviewSteps = [
+  '선택 공고 원문 확인',
+  '이력서 문항별 비교',
+  '부족한 근거 선별',
+  '확인 질문과 수정안 준비',
+];
+
+String _busyLabel(_ReviewBusyKind kind) => switch (kind) {
+  _ReviewBusyKind.answer => '답변을 검토하고 다음 보완 항목을 준비하고 있어요',
+  _ReviewBusyKind.undo => '변경 내용을 되돌리고 있어요',
+  _ReviewBusyKind.review => '이력서를 분석하고 있어요',
+  _ReviewBusyKind.apply => '수정안을 반영하고 있어요',
+};
 
 class JobResumeReviewDialog extends StatefulWidget {
   const JobResumeReviewDialog({
@@ -23,6 +48,7 @@ class JobResumeReviewDialog extends StatefulWidget {
     this.jobCompany = '',
     this.jobTitle = '',
     this.tailoredResumeId = '',
+    this.initialReviewSession = const {},
     this.generalReview = false,
     this.aiOps,
   });
@@ -38,12 +64,14 @@ class JobResumeReviewDialog extends StatefulWidget {
   final ResumeContent draft;
   final ValueChanged<ResumeContent> onChanged;
   final bool generalReview;
+  final Map<String, dynamic> initialReviewSession;
 
   @override
   State<JobResumeReviewDialog> createState() => _JobResumeReviewDialogState();
 }
 
 class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
+  static const int _maxReviewQuestions = 7;
   Map<String, dynamic>? _result, _reviewRequest, _applyRequest;
   final Set<int> _selected = {};
   final Set<int> _appliedSuggestionIndices = {};
@@ -65,10 +93,13 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   bool _gapAuditScheduled = false;
   bool _gapAuditStarted = false;
   bool _gapAuditFinished = false;
+  bool _manuallyCompleted = false;
   Map<String, dynamic>? _pendingQuestion;
   String? _error;
   String? _focusedFieldPath;
   String? _tailoredResumeId;
+  Future<void> _sessionSaveChain = Future<void>.value();
+  final ValueNotifier<double> _previewFraction = ValueNotifier(0.5);
   late ResumeContent _preview;
   String _id() =>
       '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 30)}';
@@ -84,6 +115,168 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _tailoredResumeId = widget.tailoredResumeId.isEmpty
         ? null
         : widget.tailoredResumeId;
+    // 새 공고는 창을 열어보는 것만으로 맞춤 이력서를 만들지 않는다.
+    // 사용자가 실제로 첨삭을 시작할 때 _reviewOnce에서 분기하고,
+    // 기존 맞춤 이력서로 재진입한 경우에만 전달받은 세션을 복원한다.
+    if (!widget.generalReview &&
+        _tailoredResumeId != null &&
+        widget.initialReviewSession.isNotEmpty) {
+      _restoreSession(widget.initialReviewSession);
+    }
+  }
+
+  void _restoreSession(Map<String, dynamic> state) {
+    if (state['version'] != 1 || state['result'] is! Map) return;
+    final savedResumeId = state['resume_id'] as String?;
+    final savedJobId = state['job_id'] as String?;
+    final savedResult = Map<String, dynamic>.from(state['result'] as Map);
+    final savedJobSource = Map<String, dynamic>.from(
+      savedResult['job_source'] as Map? ?? const {},
+    );
+    final sourceJobId = savedJobSource['job_id'] as String?;
+    final sourceCompany = (savedJobSource['company'] as String? ?? '').trim();
+    final sourceTitle = (savedJobSource['title'] as String? ?? '').trim();
+    if ((savedResumeId != null && savedResumeId != widget.resumeId) ||
+        (savedJobId != null && savedJobId != widget.jobId) ||
+        (sourceJobId != null &&
+            sourceJobId.isNotEmpty &&
+            sourceJobId != widget.jobId) ||
+        ((sourceJobId == null || sourceJobId.isEmpty) &&
+            sourceCompany.isNotEmpty &&
+            widget.jobCompany.isNotEmpty &&
+            sourceCompany != widget.jobCompany) ||
+        ((sourceJobId == null || sourceJobId.isEmpty) &&
+            sourceTitle.isNotEmpty &&
+            widget.jobTitle.isNotEmpty &&
+            sourceTitle != widget.jobTitle)) {
+      return;
+    }
+    _result = savedResult;
+    _messages
+      ..clear()
+      ..addAll(
+        (state['messages'] as List? ?? const []).whereType<Map>().map(
+          (item) => _ReviewChatMessage.fromMap(item),
+        ),
+      );
+    _questionQueue
+      ..clear()
+      ..addAll(
+        (state['question_queue'] as List? ?? const []).whereType<Map>().map(
+          (item) => Map<String, dynamic>.from(item),
+        ),
+      );
+    _suggestionQueue
+      ..clear()
+      ..addAll(
+        (state['suggestion_queue'] as List? ?? const []).whereType<Map>().map(
+          (item) => _ReviewChatMessage.fromMap(item),
+        ),
+      );
+    _pendingQuestion = state['pending_question'] is Map
+        ? Map<String, dynamic>.from(state['pending_question'] as Map)
+        : null;
+    _answeredQuestionIds
+      ..clear()
+      ..addAll(
+        (state['answered_question_ids'] as List? ?? const [])
+            .whereType<String>(),
+      );
+    _appliedSuggestionIndices
+      ..clear()
+      ..addAll(
+        (state['applied_indices'] as List? ?? const []).whereType<int>(),
+      );
+    _gapAuditStarted = state['gap_audit_started'] == true;
+    _gapAuditFinished = state['gap_audit_finished'] == true;
+    _manuallyCompleted = state['manually_completed'] == true;
+    _changed = state['changed'] == true;
+    _trimQuestionBacklog();
+  }
+
+  Map<String, dynamic> _sessionState() => {
+    'version': 1,
+    'resume_id': widget.resumeId,
+    'job_id': widget.jobId,
+    'tailored_resume_id': _tailoredResumeId,
+    // 원문 전체가 든 input_fields와 진단 결과를 다시 복제하지 않는다.
+    // 이어하기에는 서버 review ID, 현재 hash, 선택 공고 정보만 필요하다.
+    'result': _compactSessionResult(),
+    'messages': _messages.map((message) => message.toMap()).toList(),
+    'question_queue': _questionQueue,
+    'suggestion_queue': _suggestionQueue
+        .map((message) => message.toMap())
+        .toList(),
+    'pending_question': _pendingQuestion,
+    'answered_question_ids': _answeredQuestionIds.toList(),
+    'applied_indices': _appliedSuggestionIndices.toList(),
+    'gap_audit_started': _gapAuditStarted,
+    'gap_audit_finished': _gapAuditFinished,
+    'manually_completed': _manuallyCompleted,
+    'changed': _changed,
+    'completed': _sessionCompleted,
+  };
+
+  Map<String, dynamic> _compactSessionResult() {
+    final result = _result ?? const <String, dynamic>{};
+    return {
+      for (final key in [
+        'review_id',
+        'input_hash',
+        'job_source',
+        'summary',
+        'grounding_warnings',
+      ])
+        if (result.containsKey(key)) key: result[key],
+    };
+  }
+
+  bool get _sessionCompleted {
+    if (_manuallyCompleted) return _result != null;
+    final hasActiveQuestion = _messages.any((message) {
+      final id = message.question?['question_id'] as String?;
+      return message.question != null &&
+          (id == null || !_answeredQuestionIds.contains(id));
+    });
+    final hasActiveSuggestion = _messages.any(
+      (message) =>
+          (message.suggestion != null &&
+              message.suggestion!['_applied'] != true &&
+              message.suggestion!['_skipped'] != true) ||
+          (message.identitySuggestion != null &&
+              message.identitySuggestion!['_applied'] != true &&
+              message.identitySuggestion!['_skipped'] != true),
+    );
+    return _result != null &&
+        !hasActiveQuestion &&
+        !hasActiveSuggestion &&
+        _pendingQuestion == null &&
+        _questionQueue.isEmpty &&
+        _suggestionQueue.isEmpty &&
+        !_gapAuditScheduled &&
+        (!_gapAuditStarted || _gapAuditFinished);
+  }
+
+  Future<void> _persistSession() {
+    final tailoredId = _tailoredResumeId;
+    if (widget.generalReview || tailoredId == null || _result == null) {
+      return Future<void>.value();
+    }
+    final state = _sessionState();
+    _sessionSaveChain = _sessionSaveChain.then((_) async {
+      try {
+        await widget.client.saveTailoredSession(
+          widget.cohortId,
+          widget.resumeId,
+          tailoredId,
+          state,
+        );
+      } catch (_) {
+        // 이력서 적용 자체는 이미 원자 저장됐다. 세션 저장 실패로 적용을
+        // 실패처럼 보이게 하지 않고 다음 사용자 동작에서 다시 저장한다.
+      }
+    });
+    return _sessionSaveChain;
   }
 
   @override
@@ -104,6 +297,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     }
     _answerController.dispose();
     _chatScrollController.dispose();
+    _previewFraction.dispose();
     super.dispose();
   }
 
@@ -117,6 +311,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       _busyStage = 0;
       _error = null;
     });
+    _reportDock();
     try {
       await action();
     } catch (error) {
@@ -128,12 +323,52 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           _busyKind = null;
           _busyStage = 0;
         });
+        _reportDock();
       }
     }
   }
 
   void _setBusyStage(int stage) {
     if (mounted) setState(() => _busyStage = stage);
+    _reportDock();
+  }
+
+  /// 앱 맨 위 층에 떠 있으면 내려둔 막대가 보여줄 상태를 알린다.
+  void _reportDock() {
+    if (!mounted) return;
+    final dock = ReviewDockScope.read(context);
+    if (dock == null) return;
+    final kind = _busyKind;
+    final staged = kind == _ReviewBusyKind.review && _result == null;
+    final steps = widget.generalReview ? _generalReviewSteps : _jobReviewSteps;
+    final stage = _busyStage.clamp(0, steps.length - 1);
+    dock.report(
+      ReviewDockStatus(
+        title: widget.generalReview ? '이력서 첨삭' : '공고 맞춤 첨삭',
+        subtitle: widget.generalReview
+            ? ''
+            : '${widget.jobCompany} ${widget.jobTitle}'.trim(),
+        busy: _busy,
+        stageLabel: kind == null
+            ? null
+            : staged
+            ? steps[stage]
+            : _busyLabel(kind),
+        stageIndex: staged ? stage : null,
+        stageCount: staged ? steps.length : null,
+        failed: _error != null,
+      ),
+    );
+  }
+
+  /// 대화 상자면 경로를 닫고, 앱 맨 위 층에 떠 있으면 층에서 내린다.
+  void _closeWith([Object? result]) {
+    final dock = ReviewDockScope.read(context);
+    if (dock != null) {
+      dock.close(result);
+    } else {
+      Navigator.pop(context, result);
+    }
   }
 
   Future<void> _review() => _run(() async {
@@ -210,6 +445,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _result = await widget.client.review(_reviewRequest!);
     _setBusyStage(4);
     _appendReview(_result!, isFirstReview: _messages.isEmpty);
+    await _persistSession();
   }
 
   Future<void> _ensureTailoredResume() async {
@@ -228,8 +464,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       Map<String, dynamic>.from(rawContent),
     );
     _tailoredResumeId = tailoredId;
+    final session = Map<String, dynamic>.from(
+      tailored['review_session'] as Map? ?? const {},
+    );
     if (mounted) {
-      setState(() => _preview = tailoredContent);
+      setState(() {
+        _preview = tailoredContent;
+        _restoreSession(session);
+      });
     } else {
       _preview = tailoredContent;
     }
@@ -406,7 +648,38 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         );
   }
 
+  Set<String> _acceptedQuestionKeys() => {
+    for (final message in _messages)
+      if (message.question != null) _questionKey(message.question!),
+    for (final question in _questionQueue) _questionKey(question),
+    if (_pendingQuestion != null) _questionKey(_pendingQuestion!),
+  };
+
+  void _trimQuestionBacklog() {
+    final accepted = <String>{};
+    for (final message in _messages) {
+      if (message.question != null)
+        accepted.add(_questionKey(message.question!));
+    }
+    if (_pendingQuestion != null) {
+      final key = _questionKey(_pendingQuestion!);
+      if (accepted.length >= _maxReviewQuestions && !accepted.contains(key)) {
+        _pendingQuestion = null;
+      } else {
+        accepted.add(key);
+      }
+    }
+    _questionQueue.removeWhere((question) {
+      final key = _questionKey(question);
+      if (accepted.contains(key)) return true;
+      if (accepted.length >= _maxReviewQuestions) return true;
+      accepted.add(key);
+      return false;
+    });
+  }
+
   void _enqueueQuestions(List<Map> questions) {
+    final acceptedKeys = _acceptedQuestionKeys();
     for (final rawQuestion in questions) {
       final question = Map<String, dynamic>.from(rawQuestion);
       final questionId = question['question_id'] as String?;
@@ -428,10 +701,66 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       } else if (_pendingQuestion != null &&
           _questionKey(_pendingQuestion!) == key) {
         _pendingQuestion = question;
-      } else if (!_hasQuestionKey(key)) {
+      } else if (!_hasQuestionKey(key) &&
+          acceptedKeys.length < _maxReviewQuestions) {
         _questionQueue.add(question);
+        acceptedKeys.add(key);
       }
     }
+  }
+
+  Future<void> _completeReview() async {
+    if (_busy || _result == null) return;
+    final shouldComplete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('첨삭을 완료할까요?'),
+        content: const Text(
+          '현재까지 적용한 내용은 유지됩니다. 남은 질문과 적용하지 않은 수정안은 건너뛰고 첨삭을 완료합니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('계속 첨삭'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('첨삭 완료'),
+          ),
+        ],
+      ),
+    );
+    if (shouldComplete != true || !mounted) return;
+    setState(() {
+      _manuallyCompleted = true;
+      _questionQueue.clear();
+      _pendingQuestion = null;
+      _suggestionQueue.clear();
+      for (final message in _messages) {
+        final questionId = message.question?['question_id'] as String?;
+        if (questionId != null) _answeredQuestionIds.add(questionId);
+        message.suggestion?['_skipped'] = true;
+        message.identitySuggestion?['_skipped'] = true;
+      }
+    });
+    await _run(() async {
+      _mutationPending = true;
+      try {
+        await _persistSession();
+        await _sessionSaveChain;
+        String? workspaceResumeId;
+        if (!widget.generalReview && _tailoredResumeId != null) {
+          workspaceResumeId = await widget.client.promoteTailoredResume(
+            widget.cohortId,
+            widget.resumeId,
+            _tailoredResumeId!,
+          );
+        }
+        if (mounted) _closeWith(workspaceResumeId);
+      } finally {
+        _mutationPending = false;
+      }
+    }, kind: _ReviewBusyKind.apply);
   }
 
   Map<String, dynamic>? _takeNextQuestion() {
@@ -504,6 +833,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _result = await widget.client.review(request);
         _gapAuditFinished = true;
         _appendReview(_result!, isFirstReview: false, isGapAudit: true);
+        await _persistSession();
       }, kind: _ReviewBusyKind.answer);
     });
   }
@@ -577,6 +907,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           nextSuggestion.suggestion?['field_path'] as String? ??
           nextSuggestion.identitySuggestion?['field_path'] as String?;
       _focusPreviewField(fieldPath);
+      unawaited(_persistSession());
       return;
     }
     if (_pendingQuestion != null) {
@@ -586,9 +917,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _messages.add(_ReviewChatMessage.question(question));
       });
       _focusPreviewField(question['field_path'] as String?);
+      unawaited(_persistSession());
       return;
     }
     _scheduleGapAudit();
+    unawaited(_persistSession());
   }
 
   bool _isIdentityPlaceholderSuggestion(Map<String, dynamic> sentence) {
@@ -676,6 +1009,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         isFirstReview: false,
         answeredFieldPath: question['field_path'] as String?,
       );
+      await _persistSession();
     }, kind: _ReviewBusyKind.answer);
   }
 
@@ -747,6 +1081,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           nextSuggestion.suggestion?['field_path'] as String? ??
           nextSuggestion.identitySuggestion?['field_path'] as String?;
       _focusPreviewField(fieldPath);
+      await _persistSession();
       return;
     }
     if (_pendingQuestion != null) {
@@ -756,9 +1091,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _messages.add(_ReviewChatMessage.question(question));
       });
       _focusPreviewField(question['field_path'] as String?);
+      await _persistSession();
       return;
     }
     _scheduleGapAudit();
+    await _persistSession();
   }, kind: _ReviewBusyKind.apply);
 
   Future<void> _undoSuggestion(Map<String, dynamic> item) async {
@@ -809,6 +1146,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           item['_undo_available'] = false;
         });
       }
+      await _persistSession();
     }, kind: _ReviewBusyKind.undo);
   }
 
@@ -868,10 +1206,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _questionQueue.isEmpty &&
         !_gapAuditScheduled &&
         (!_gapAuditStarted || _gapAuditFinished);
+    final dock = ReviewDockScope.watch(context);
     return PopScope(
       canPop: !_busy && !_mutationPending,
       child: Dialog(
-        insetPadding: const EdgeInsets.all(24),
+        insetPadding: EdgeInsets.all(AppSpace.s(24)),
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
           width: 1180,
@@ -888,7 +1227,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                           },
                 generalReview: widget.generalReview,
                 busy: _busy,
-                onClose: () => Navigator.pop(context),
+                canComplete: _result != null,
+                onComplete: _completeReview,
+                // 기다리는 동안에만 내려둔다. 앱 맨 위 층에 떠 있을 때만 된다.
+                onMinimize: dock != null && _busy ? dock.minimize : null,
+                onClose: _closeWith,
               ),
               const Divider(height: 1),
               Expanded(
@@ -923,7 +1266,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       onApply: _applySuggestion,
                       onSkip: _skipSuggestion,
                       onUndo: _undoSuggestion,
-                      onClose: () => Navigator.pop(context),
+                      canMinimize: dock != null,
+                      onClose: _closeWith,
                     );
                     if (!horizontal) {
                       return Column(
@@ -934,12 +1278,45 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                         ],
                       );
                     }
-                    return Row(
-                      children: [
-                        Expanded(child: preview),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: chat),
-                      ],
+                    const handleWidth = 14.0;
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _previewFraction,
+                      builder: (_, fraction, _) => Row(
+                        children: [
+                          SizedBox(
+                            width:
+                                (constraints.maxWidth - handleWidth) * fraction,
+                            child: preview,
+                          ),
+                          MouseRegion(
+                            cursor: SystemMouseCursors.resizeColumn,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragUpdate: (details) {
+                                final available =
+                                    constraints.maxWidth - handleWidth;
+                                _previewFraction.value =
+                                    (_previewFraction.value +
+                                            details.delta.dx / available)
+                                        .clamp(0.3, 0.7)
+                                        .toDouble();
+                              },
+                              onDoubleTap: () => _previewFraction.value = 0.5,
+                              child: SizedBox(
+                                width: handleWidth,
+                                child: Center(
+                                  child: Container(
+                                    width: 2,
+                                    height: double.infinity,
+                                    color: AppColors.border,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(child: chat),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -957,23 +1334,34 @@ class _ReviewDialogHeader extends StatelessWidget {
     required this.job,
     required this.generalReview,
     required this.busy,
+    required this.canComplete,
+    required this.onComplete,
+    required this.onMinimize,
     required this.onClose,
   });
 
   final Map? job;
   final bool generalReview;
   final bool busy;
+  final bool canComplete;
+  final VoidCallback onComplete;
+  final VoidCallback? onMinimize;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final jobLabel = '${job?['company'] ?? ''} ${job?['title'] ?? ''}'.trim();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+      padding: EdgeInsets.fromLTRB(
+        AppSpace.s(20),
+        AppSpace.s(12),
+        AppSpace.s(12),
+        AppSpace.s(12),
+      ),
       child: Row(
         children: [
           const Icon(Icons.auto_awesome, color: Color(0xFF16A34A), size: 20),
-          const SizedBox(width: 8),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -983,23 +1371,47 @@ class _ReviewDialogHeader extends StatelessWidget {
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                 ),
                 if (generalReview)
-                  const Text(
+                  Text(
                     '문장 표현과 이력서 근거를 검토해 수정안을 제시합니다.',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   )
                 else if (jobLabel.isNotEmpty)
                   Text(
                     jobLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.textSecondary,
                     ),
                   ),
               ],
             ),
           ),
+          if (canComplete) ...[
+            SizedBox(width: AppSpace.s(8)),
+            OutlinedButton.icon(
+              onPressed: busy ? null : onComplete,
+              icon: const Icon(Icons.check, size: 16),
+              label: const Text('첨삭 완료'),
+            ),
+          ],
+          if (onMinimize != null) ...[
+            SizedBox(width: AppSpace.s(8)),
+            OutlinedButton.icon(
+              onPressed: onMinimize,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                backgroundColor: AppColors.primaryLight,
+                side: BorderSide(color: AppColors.primary),
+              ),
+              icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+              label: const Text('내려두기'),
+            ),
+          ],
           IconButton(
             tooltip: '닫기',
             onPressed: busy ? null : onClose,
@@ -1042,14 +1454,14 @@ class _ResumeDraftPreview extends StatelessWidget {
     final map = content.toMap();
     final info = Map<String, dynamic>.from(map['basicInfo'] as Map);
     return ColoredBox(
-      color: const Color(0xFFF8FAFC),
+      color: AppColors.tint(const Color(0xFFF8FAFC)),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(AppSpace.s(20)),
         child: Container(
-          padding: const EdgeInsets.all(22),
+          padding: EdgeInsets.all(AppSpace.s(22)),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -1072,16 +1484,16 @@ class _ResumeDraftPreview extends StatelessWidget {
                 ],
               ),
               if ((info['email'] as String? ?? '').isNotEmpty) ...[
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   info['email'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
-              const SizedBox(height: 18),
+              SizedBox(height: AppSpace.s(18)),
               for (final entry in _labels.entries)
                 if (entry.key == 'selfIntroduction')
                   _SelfIntroductionPreview(
@@ -1248,14 +1660,14 @@ class _CompactItemsPreview extends StatelessWidget {
         .toList();
     if (filled.isEmpty) return const SizedBox.shrink();
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+      margin: EdgeInsets.only(bottom: AppSpace.s(18)),
+      padding: highlighted ? EdgeInsets.all(AppSpace.s(10)) : EdgeInsets.zero,
       decoration: highlighted ? _previewHighlightDecoration : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PreviewSectionTitle(title: title, highlighted: highlighted),
-          const SizedBox(height: 9),
+          SizedBox(height: AppSpace.s(9)),
           for (var index = 0; index < filled.length; index++) ...[
             _CompactItemRow(
               primary: _text(filled[index], config.primary),
@@ -1265,7 +1677,7 @@ class _CompactItemsPreview extends StatelessWidget {
               ].where((value) => value.isNotEmpty).toList(),
               description: _text(filled[index], config.description),
             ),
-            if (index != filled.length - 1) const SizedBox(height: 8),
+            if (index != filled.length - 1) SizedBox(height: AppSpace.s(8)),
           ],
         ],
       ),
@@ -1287,10 +1699,13 @@ class _CompactItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+    padding: EdgeInsets.symmetric(
+      horizontal: AppSpace.s(11),
+      vertical: AppSpace.s(9),
+    ),
     decoration: BoxDecoration(
-      color: const Color(0xFFF8FAFC),
-      border: Border.all(color: const Color(0xFFE5E7EB)),
+      color: AppColors.tint(const Color(0xFFF8FAFC)),
+      border: Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Column(
@@ -1309,14 +1724,14 @@ class _CompactItemRow extends StatelessWidget {
               ),
             ),
             if (metadata.isNotEmpty) ...[
-              const SizedBox(width: 10),
+              SizedBox(width: AppSpace.s(10)),
               Flexible(
                 child: Text(
                   metadata.join(' · '),
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -1324,7 +1739,7 @@ class _CompactItemRow extends StatelessWidget {
           ],
         ),
         if (description.isNotEmpty) ...[
-          const SizedBox(height: 5),
+          SizedBox(height: AppSpace.s(5)),
           Text(
             description,
             style: const TextStyle(fontSize: 11, height: 1.45),
@@ -1352,27 +1767,29 @@ class _TechStackPreview extends StatelessWidget {
     }).toList();
     if (filled.isEmpty) return const SizedBox.shrink();
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+      margin: EdgeInsets.only(bottom: AppSpace.s(18)),
+      padding: highlighted ? EdgeInsets.all(AppSpace.s(10)) : EdgeInsets.zero,
       decoration: highlighted ? _previewHighlightDecoration : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PreviewSectionTitle(title: '기술 스택', highlighted: highlighted),
-          const SizedBox(height: 9),
+          SizedBox(height: AppSpace.s(9)),
           Wrap(
             spacing: 7,
             runSpacing: 7,
             children: [
               for (final item in filled)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(10),
+                    vertical: AppSpace.s(6),
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                    color: AppColors.primaryLight,
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                    ),
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text.rich(
@@ -1385,7 +1802,7 @@ class _TechStackPreview extends StatelessWidget {
                         if ((item['level'] as String? ?? '').trim().isNotEmpty)
                           TextSpan(
                             text: '  ${(item['level'] as String).trim()}',
-                            style: const TextStyle(color: Color(0xFF6B7280)),
+                            style: TextStyle(color: AppColors.textSecondary),
                           ),
                       ],
                     ),
@@ -1400,8 +1817,8 @@ class _TechStackPreview extends StatelessWidget {
   }
 }
 
-const _previewHighlightDecoration = BoxDecoration(
-  color: Color(0xFFFFFBEA),
+BoxDecoration get _previewHighlightDecoration => BoxDecoration(
+  color: AppColors.tint(const Color(0xFFFFFBEA)),
   border: Border.fromBorderSide(
     BorderSide(color: Color(0xFFF59E0B), width: 1.5),
   ),
@@ -1419,14 +1836,14 @@ class _PreviewSectionTitle extends StatelessWidget {
     children: [
       Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF1D4ED8),
+          color: AppColors.primaryDark,
         ),
       ),
       if (highlighted) ...[
-        const SizedBox(width: 7),
+        SizedBox(width: AppSpace.s(7)),
         const Text(
           'AI 질문 대상',
           style: TextStyle(
@@ -1470,14 +1887,14 @@ class _SelfIntroductionPreview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: EdgeInsets.only(bottom: AppSpace.s(8)),
           child: Text(
             '자기소개서',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1D4ED8),
+              color: AppColors.primaryDark,
             ),
           ),
         ),
@@ -1503,9 +1920,12 @@ class _PreviewUpdatedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    padding: EdgeInsets.symmetric(
+      horizontal: AppSpace.s(7),
+      vertical: AppSpace.s(3),
+    ),
     decoration: BoxDecoration(
-      color: const Color(0xFFDCFCE7),
+      color: AppColors.tint(const Color(0xFFDCFCE7)),
       borderRadius: BorderRadius.circular(99),
     ),
     child: const Text(
@@ -1529,11 +1949,11 @@ class _PreviewSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 18),
-    padding: highlighted ? const EdgeInsets.all(10) : EdgeInsets.zero,
+    margin: EdgeInsets.only(bottom: AppSpace.s(18)),
+    padding: highlighted ? EdgeInsets.all(AppSpace.s(10)) : EdgeInsets.zero,
     decoration: highlighted
         ? BoxDecoration(
-            color: const Color(0xFFFFFBEA),
+            color: AppColors.tint(const Color(0xFFFFFBEA)),
             border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
             borderRadius: BorderRadius.circular(8),
           )
@@ -1545,14 +1965,14 @@ class _PreviewSection extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1D4ED8),
+                color: AppColors.primaryDark,
               ),
             ),
             if (highlighted) ...[
-              const SizedBox(width: 7),
+              SizedBox(width: AppSpace.s(7)),
               const Text(
                 'AI 질문 대상',
                 style: TextStyle(
@@ -1564,7 +1984,7 @@ class _PreviewSection extends StatelessWidget {
             ],
           ],
         ),
-        const SizedBox(height: 7),
+        SizedBox(height: AppSpace.s(7)),
         Text(text, style: const TextStyle(fontSize: 12, height: 1.55)),
       ],
     ),
@@ -1592,6 +2012,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.onApply,
     required this.onSkip,
     required this.onUndo,
+    required this.canMinimize,
     required this.onClose,
   });
 
@@ -1614,6 +2035,7 @@ class _ReviewChatPane extends StatelessWidget {
   final ValueChanged<List<int>> onApply;
   final ValueChanged<List<int>> onSkip;
   final ValueChanged<Map<String, dynamic>> onUndo;
+  final bool canMinimize;
   final VoidCallback onClose;
 
   @override
@@ -1622,10 +2044,17 @@ class _ReviewChatPane extends StatelessWidget {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(20),
+            vertical: AppSpace.s(14),
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border(
+              bottom: BorderSide(
+                color: AppColors.tint(const Color(0xFFE5E7EB)),
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -1634,38 +2063,38 @@ class _ReviewChatPane extends StatelessWidget {
                 size: 18,
                 color: Color(0xFF16A34A),
               ),
-              const SizedBox(width: 7),
+              SizedBox(width: AppSpace.s(7)),
               const Text(
                 'AI 첨삭 대화',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               Text(
                 generalReview
                     ? '문장 표현과 경험 근거를 함께 검토합니다.'
                     : '근거가 부족한 내용은 질문으로 확인합니다.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textSecondary,
                 ),
               ),
               const Spacer(),
               if (resultAvailable && remainingQuestionCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(9),
+                    vertical: AppSpace.s(4),
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
+                    color: AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text(
                     '남은 질문 약 $remainingQuestionCount개',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF2563EB),
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
@@ -1676,7 +2105,7 @@ class _ReviewChatPane extends StatelessWidget {
           child: SelectionArea(
             child: ListView(
               controller: scrollController,
-              padding: const EdgeInsets.all(18),
+              padding: EdgeInsets.all(AppSpace.s(18)),
               children: [
                 if (!resultAvailable && !busy && error == null)
                   _ChatIntro(onStart: onStart, generalReview: generalReview),
@@ -1690,23 +2119,23 @@ class _ReviewChatPane extends StatelessWidget {
                   ),
                 if (busy)
                   Padding(
-                    padding: const EdgeInsets.only(top: 10),
+                    padding: EdgeInsets.only(top: AppSpace.s(10)),
                     child: busyKind == _ReviewBusyKind.review
                         ? _InitialReviewProgress(
                             currentStage: busyStage,
                             generalReview: generalReview,
+                            canMinimize: canMinimize,
                           )
                         : _ReviewInlineProgress(
                             kind: busyKind ?? _ReviewBusyKind.answer,
-                            currentStage: busyStage,
                           ),
                   ),
                 if (error != null)
                   Container(
-                    margin: const EdgeInsets.only(top: 10),
-                    padding: const EdgeInsets.all(10),
+                    margin: EdgeInsets.only(top: AppSpace.s(10)),
+                    padding: EdgeInsets.all(AppSpace.s(10)),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEF2F2),
+                      color: AppColors.tint(const Color(0xFFFEF2F2)),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -1729,10 +2158,12 @@ class _ReviewChatPane extends StatelessWidget {
         ),
         if (resultAvailable && !reviewCompleted)
           Container(
-            padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+            padding: EdgeInsets.all(AppSpace.s(14)),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              border: Border(
+                top: BorderSide(color: AppColors.tint(const Color(0xFFE5E7EB))),
+              ),
             ),
             child: Focus(
               onKeyEvent: (_, event) {
@@ -1762,7 +2193,7 @@ class _ReviewChatPane extends StatelessWidget {
                   suffixIcon: IconButton(
                     tooltip: '답변 보내기',
                     onPressed: onAnswer,
-                    icon: const Icon(Icons.send, color: Color(0xFF2563EB)),
+                    icon: Icon(Icons.send, color: AppColors.primary),
                   ),
                 ),
               ),
@@ -1777,31 +2208,21 @@ class _InitialReviewProgress extends StatelessWidget {
   const _InitialReviewProgress({
     required this.currentStage,
     required this.generalReview,
+    this.canMinimize = false,
   });
 
   final int currentStage;
   final bool generalReview;
+  final bool canMinimize;
 
   @override
   Widget build(BuildContext context) {
-    final steps = generalReview
-        ? const [
-            '기본 이력서 불러오기',
-            '이력서 항목 확인',
-            '경험 근거 비교',
-            '수정안과 확인 질문 준비',
-          ]
-        : const [
-            '선택 공고 원문 확인',
-            '이력서 문항별 비교',
-            '부족한 근거 선별',
-            '확인 질문과 수정안 준비',
-          ];
+    final steps = generalReview ? _generalReviewSteps : _jobReviewSteps;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpace.s(16)),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: AppColors.tint(const Color(0xFFF8FAFC)),
+        border: Border.all(color: AppColors.tint(const Color(0xFFE2E8F0))),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -1820,26 +2241,33 @@ class _InitialReviewProgress extends StatelessWidget {
               ),
               Text(
                 '${(currentStage + 1).clamp(1, steps.length)} / ${steps.length} 단계',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF94A3B8),
+                  color: AppColors.textHint,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           Text(
             generalReview
                 ? '이력서의 문장과 경험 근거를 문항별로 확인합니다.'
                 : '선택한 공고 기준으로 첨삭 항목을 준비하고 있어요.',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 2),
-          const Text(
-            '보통 15초 정도 걸립니다. 창을 닫지 않고 잠시 기다려 주세요.',
-            style: TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
+          SizedBox(height: AppSpace.s(2)),
+          // 2026-09-14 기록으로 첫 첨삭은 33~71초였다. "15초"라고 하면 더 답답하다.
+          Text(
+            canMinimize
+                ? '보통 1분 안팎 걸립니다. 내려두기를 누르고 다른 화면을 봐도 첨삭은 계속됩니다.'
+                : '보통 1분 안팎 걸립니다. 창을 닫지 않고 잠시 기다려 주세요.',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: canMinimize ? AppColors.primary : AppColors.textHint,
+              fontWeight: canMinimize ? FontWeight.w600 : null,
+            ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: AppSpace.s(14)),
           for (var index = 0; index < steps.length; index++)
             _ReviewProgressRow(
               label: steps[index],
@@ -1857,102 +2285,97 @@ class _InitialReviewProgress extends StatelessWidget {
 }
 
 class _ReviewInlineProgress extends StatelessWidget {
-  const _ReviewInlineProgress({required this.kind, required this.currentStage});
+  const _ReviewInlineProgress({required this.kind});
 
   final _ReviewBusyKind kind;
-  final int currentStage;
 
   @override
   Widget build(BuildContext context) {
-    if (kind != _ReviewBusyKind.apply) {
-      final label = switch (kind) {
-        _ReviewBusyKind.answer => '답변을 검토하고 다음 보완 항목을 준비하고 있어요',
-        _ReviewBusyKind.undo => '변경 내용을 되돌리고 있어요',
-        _ReviewBusyKind.review => '이력서를 분석하고 있어요',
-        _ReviewBusyKind.apply => '',
-      };
-      return _CompactBusyCard(label: label);
-    }
-
-    const steps = ['수정안 저장', '변경 내용 확인', '다음 보완 항목 준비'];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
-        border: Border.all(color: const Color(0xFFBBF7D0)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  '수정안 반영 중',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF166534),
-                  ),
-                ),
-              ),
-              Text(
-                '${(currentStage + 1).clamp(1, steps.length)} / ${steps.length} 단계',
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFF65A30D),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          for (var index = 0; index < steps.length; index++)
-            _ReviewProgressRow(
-              label: steps[index],
-              state: index < currentStage
-                  ? _ReviewStepState.done
-                  : index == currentStage
-                  ? _ReviewStepState.running
-                  : _ReviewStepState.waiting,
-              last: index == steps.length - 1,
-              compact: true,
-            ),
-        ],
-      ),
-    );
+    return _CompactBusyCard(label: _busyLabel(kind));
   }
 }
 
-class _CompactBusyCard extends StatelessWidget {
+class _CompactBusyCard extends StatefulWidget {
   const _CompactBusyCard({required this.label});
   final String label;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    decoration: BoxDecoration(
-      color: const Color(0xFFEFF6FF),
-      border: Border.all(color: const Color(0xFFBFDBFE)),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      children: [
-        const SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+  State<_CompactBusyCard> createState() => _CompactBusyCardState();
+}
+
+class _CompactBusyCardState extends State<_CompactBusyCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(14),
+        vertical: AppSpace.s(13),
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Semantics(
+            label: '처리 중',
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(3, (index) {
+                  final wave = sin(
+                    (_controller.value * pi * 2) - (index * 0.8),
+                  );
+                  return Transform.translate(
+                    offset: Offset(0, -3 * wave),
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      margin: EdgeInsets.symmetric(horizontal: AppSpace.s(2)),
+                      decoration: BoxDecoration(
+                        color: primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+          SizedBox(width: AppSpace.s(10)),
+          Expanded(
+            child: Text(
+              widget.label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 enum _ReviewStepState { done, running, waiting }
@@ -1962,19 +2385,17 @@ class _ReviewProgressRow extends StatelessWidget {
     required this.label,
     required this.state,
     required this.last,
-    this.compact = false,
   });
 
   final String label;
   final _ReviewStepState state;
   final bool last;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final color = switch (state) {
       _ReviewStepState.done => const Color(0xFF16A34A),
-      _ReviewStepState.running => const Color(0xFF2563EB),
+      _ReviewStepState.running => AppColors.primary,
       _ReviewStepState.waiting => const Color(0xFF94A3B8),
     };
     return Row(
@@ -1991,8 +2412,8 @@ class _ReviewProgressRow extends StatelessWidget {
                   size: 16,
                   color: color,
                 ),
-                _ReviewStepState.running => const Padding(
-                  padding: EdgeInsets.all(1.5),
+                _ReviewStepState.running => Padding(
+                  padding: EdgeInsets.all(AppSpace.s(1.5)),
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 _ReviewStepState.waiting => Icon(
@@ -2005,18 +2426,20 @@ class _ReviewProgressRow extends StatelessWidget {
             if (!last)
               Container(
                 width: 1.5,
-                height: compact ? 10 : 14,
-                margin: const EdgeInsets.symmetric(vertical: 2),
+                height: 14,
+                margin: EdgeInsets.symmetric(vertical: AppSpace.s(2)),
                 color: state == _ReviewStepState.done
                     ? const Color(0xFF86EFAC)
-                    : const Color(0xFFE2E8F0),
+                    : AppColors.tint(const Color(0xFFE2E8F0)),
               ),
           ],
         ),
-        const SizedBox(width: 11),
+        SizedBox(width: AppSpace.s(11)),
         Expanded(
           child: Padding(
-            padding: EdgeInsets.only(bottom: last ? 0 : (compact ? 4 : 8)),
+            padding: EdgeInsets.only(
+              bottom: last ? AppSpace.s(0) : AppSpace.s(8),
+            ),
             child: Row(
               children: [
                 Flexible(
@@ -2028,28 +2451,28 @@ class _ReviewProgressRow extends StatelessWidget {
                       color: state == _ReviewStepState.done
                           ? const Color(0xFF16A34A)
                           : state == _ReviewStepState.waiting
-                          ? const Color(0xFF94A3B8)
-                          : const Color(0xFF2563EB),
+                          ? AppColors.textHint
+                          : AppColors.primary,
                     ),
                   ),
                 ),
                 if (state == _ReviewStepState.running) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(7),
+                      vertical: AppSpace.s(2),
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: AppColors.primaryLight,
                       borderRadius: BorderRadius.circular(99),
                     ),
-                    child: const Text(
+                    child: Text(
                       '진행 중',
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF2563EB),
+                        color: AppColors.primary,
                       ),
                     ),
                   ),
@@ -2074,17 +2497,17 @@ class _ReviewCompletedNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(top: 8),
-    padding: const EdgeInsets.all(14),
+    margin: EdgeInsets.only(top: AppSpace.s(8)),
+    padding: EdgeInsets.all(AppSpace.s(14)),
     decoration: BoxDecoration(
-      color: const Color(0xFFF0FDF4),
+      color: AppColors.tint(const Color(0xFFF0FDF4)),
       border: Border.all(color: const Color(0xFF86EFAC)),
       borderRadius: BorderRadius.circular(10),
     ),
     child: Row(
       children: [
         const Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 22),
-        const SizedBox(width: 9),
+        SizedBox(width: AppSpace.s(9)),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2096,7 +2519,7 @@ class _ReviewCompletedNotice extends StatelessWidget {
                   color: Color(0xFF166534),
                 ),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: AppSpace.s(2)),
               Text(
                 hasSuggestions
                     ? '추가 확인 질문이 없습니다. 표시된 수정안은 원하는 것만 반영한 뒤 마칠 수 있습니다.'
@@ -2110,7 +2533,7 @@ class _ReviewCompletedNotice extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: AppSpace.s(8)),
         FilledButton(
           onPressed: onClose,
           style: FilledButton.styleFrom(
@@ -2134,30 +2557,30 @@ class _ChatIntro extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
-      padding: const EdgeInsets.only(top: 72),
+      padding: EdgeInsets.only(top: AppSpace.s(72)),
       child: Column(
         children: [
-          const Icon(Icons.auto_awesome, size: 34, color: Color(0xFF16A34A)),
-          const SizedBox(height: 12),
+          Icon(
+            Icons.auto_awesome,
+            size: 34,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          SizedBox(height: AppSpace.s(12)),
           Text(
             generalReview ? '이력서 문장과 경험 근거를 확인합니다.' : '선택 공고 기준으로 이력서를 확인합니다.',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: AppSpace.s(6)),
           Text(
             generalReview
                 ? '필요한 사실은 질문으로 확인하고, 맞춤법·문법·표현도 함께 다듬습니다.'
                 : '부족한 사실은 AI가 질문하고, 답변을 근거로 수정안을 제시합니다.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpace.s(16)),
           FilledButton.icon(
             onPressed: () => onStart(),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-            ),
             icon: const Icon(Icons.play_arrow, size: 18),
             label: const Text('첨삭 시작'),
           ),
@@ -2182,10 +2605,10 @@ class _ReviewChatBubble extends StatelessWidget {
   final ValueChanged<List<int>> onSkip;
   final ValueChanged<Map<String, dynamic>> onUndo;
 
-  static const _revisionTextStyle = TextStyle(
+  static TextStyle get _revisionTextStyle => TextStyle(
     fontSize: 12,
     height: 1.5,
-    color: Color(0xFF1F2937),
+    color: AppColors.textPrimary,
   );
 
   /// 수정안에 실제로 새로 들어간 글자만 굵게 표시한다.
@@ -2330,11 +2753,11 @@ class _ReviewChatBubble extends StatelessWidget {
       return Align(
         alignment: Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: EdgeInsets.only(bottom: AppSpace.s(12)),
           constraints: const BoxConstraints(maxWidth: 410),
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(AppSpace.s(12)),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surface,
             border: Border.all(color: const Color(0xFFBBF7D0)),
             borderRadius: BorderRadius.circular(12),
           ),
@@ -2347,14 +2770,14 @@ class _ReviewChatBubble extends StatelessWidget {
                     : '회사명을 $company, 직무명을 $title(으)로 변경할까요?',
                 style: const TextStyle(fontSize: 12.5, height: 1.45),
               ),
-              const SizedBox(height: 9),
+              SizedBox(height: AppSpace.s(9)),
               Row(
                 children: [
                   OutlinedButton(
                     onPressed: () => onSkip(indices),
                     child: const Text('건너뛰기'),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   FilledButton.icon(
                     onPressed: () => onApply(indices),
                     style: FilledButton.styleFrom(
@@ -2390,10 +2813,10 @@ class _ReviewChatBubble extends StatelessWidget {
         return const _AppliedSuggestionNotice(text: '수정안을 건너뛰었습니다.');
       }
       return Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        color: const Color(0xFFF0FDF4),
+        margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+        color: AppColors.tint(const Color(0xFFF0FDF4)),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(AppSpace.s(12)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2404,18 +2827,18 @@ class _ReviewChatBubble extends StatelessWidget {
                   color: Color(0xFF166534),
                 ),
               ),
-              const SizedBox(height: 7),
-              const Text(
+              SizedBox(height: AppSpace.s(7)),
+              Text(
                 '원문',
-                style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
-              const SizedBox(height: 3),
+              SizedBox(height: AppSpace.s(3)),
               Text(
                 item['original_quote'] as String? ?? '',
                 style: _revisionTextStyle,
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 9),
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpace.s(9)),
                 child: Divider(
                   height: 1,
                   thickness: 0.6,
@@ -2426,7 +2849,7 @@ class _ReviewChatBubble extends StatelessWidget {
                 '수정안',
                 style: TextStyle(fontSize: 11, color: Color(0xFF166534)),
               ),
-              const SizedBox(height: 3),
+              SizedBox(height: AppSpace.s(3)),
               Text.rich(
                 TextSpan(
                   style: _revisionTextStyle,
@@ -2437,23 +2860,23 @@ class _ReviewChatBubble extends StatelessWidget {
                 ),
               ),
               if ((item['reason'] as String? ?? '').isNotEmpty) ...[
-                const SizedBox(height: 5),
+                SizedBox(height: AppSpace.s(5)),
                 Text(
                   item['reason'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF4B5563),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
-              const SizedBox(height: 9),
+              SizedBox(height: AppSpace.s(9)),
               Row(
                 children: [
                   OutlinedButton(
                     onPressed: () => onSkip([index]),
                     child: const Text('건너뛰기'),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   FilledButton.icon(
                     onPressed: () => onApply([index]),
                     style: FilledButton.styleFrom(
@@ -2477,12 +2900,17 @@ class _ReviewChatBubble extends StatelessWidget {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: EdgeInsets.only(bottom: AppSpace.s(12)),
         constraints: const BoxConstraints(maxWidth: 410),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpace.s(12),
+          vertical: AppSpace.s(10),
+        ),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFF2563EB) : Colors.white,
-          border: isUser ? null : Border.all(color: const Color(0xFFE5E7EB)),
+          color: isUser ? AppColors.primary : AppColors.surface,
+          border: isUser
+              ? null
+              : Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -2490,7 +2918,7 @@ class _ReviewChatBubble extends StatelessWidget {
           style: TextStyle(
             fontSize: 12.5,
             height: 1.45,
-            color: isUser ? Colors.white : const Color(0xFF1F2937),
+            color: isUser ? Colors.white : AppColors.textPrimary,
           ),
         ),
       ),
@@ -2508,10 +2936,13 @@ class _AppliedSuggestionNotice extends StatelessWidget {
   Widget build(BuildContext context) => Align(
     alignment: Alignment.centerLeft,
     child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(11),
+        vertical: AppSpace.s(8),
+      ),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
+        color: AppColors.tint(const Color(0xFFF0FDF4)),
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
@@ -2528,12 +2959,12 @@ class _AppliedSuggestionNotice extends StatelessWidget {
             ),
           ),
           if (onUndo != null) ...[
-            const SizedBox(width: 8),
+            SizedBox(width: AppSpace.s(8)),
             TextButton.icon(
               onPressed: onUndo,
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
+                padding: EdgeInsets.symmetric(horizontal: AppSpace.s(6)),
                 foregroundColor: const Color(0xFF166534),
               ),
               icon: const Icon(Icons.undo, size: 14),
@@ -2578,4 +3009,28 @@ class _ReviewChatMessage {
   final Map<String, dynamic>? question;
   final Map<String, dynamic>? suggestion;
   final Map<String, dynamic>? identitySuggestion;
+
+  factory _ReviewChatMessage.fromMap(Map<dynamic, dynamic> raw) {
+    final map = Map<String, dynamic>.from(raw);
+    final payload = map['payload'] is Map
+        ? Map<String, dynamic>.from(map['payload'] as Map)
+        : <String, dynamic>{};
+    return switch (map['type']) {
+      'user' => _ReviewChatMessage.user(map['text'] as String? ?? ''),
+      'question' => _ReviewChatMessage.question(payload),
+      'suggestion' => _ReviewChatMessage.suggestion(payload),
+      'identity' => _ReviewChatMessage.identityConfirmation(payload),
+      _ => _ReviewChatMessage.assistant(map['text'] as String? ?? ''),
+    };
+  }
+
+  Map<String, dynamic> toMap() {
+    if (question != null) return {'type': 'question', 'payload': question};
+    if (suggestion != null)
+      return {'type': 'suggestion', 'payload': suggestion};
+    if (identitySuggestion != null) {
+      return {'type': 'identity', 'payload': identitySuggestion};
+    }
+    return {'type': isUser ? 'user' : 'assistant', 'text': text};
+  }
 }

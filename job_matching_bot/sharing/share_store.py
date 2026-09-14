@@ -3,6 +3,7 @@
     python -m job_matching_bot.sharing.share_store --export            # 슬림 파일 만들기
     python -m job_matching_bot.sharing.share_store --export --upload   # 만들어서 올리기
     python -m job_matching_bot.sharing.share_store --download          # 받아서 제자리에 놓기 (팀원용)
+    python -m job_matching_bot.sharing.share_store --download-if-newer # 새 generation만 안전 교체
     python -m job_matching_bot.sharing.share_store --info              # 올라가 있는 파일 정보
 
 ## 왜 필요한가
@@ -35,10 +36,14 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import json
+import os
 import shutil
 import sqlite3
 import sys
+import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from job_matching_bot.config import ARTIFACTS_DIR
@@ -64,6 +69,7 @@ SHARE_COLUMNS = (
 )
 # 값은 필요 없지만 컬럼은 있어야 하는 것. 받는 쪽 `SqliteJobStore`가 찾는다.
 EMPTY_COLUMNS = {"field_provenance": "'{}'"}
+REQUIRED_DOWNLOAD_COLUMNS = frozenset({*SHARE_COLUMNS, *EMPTY_COLUMNS})
 
 
 def export(source: Path, destination: Path) -> Path:
@@ -168,6 +174,111 @@ def download(bucket_name: str, destination: Path, remote: str = REMOTE_PATH) -> 
     return destination
 
 
+def _download_state_path(destination: Path) -> Path:
+    return destination.with_name(f"{destination.stem}.remote.json")
+
+
+def _remote_version(blob) -> dict[str, str | int]:
+    updated = blob.updated
+    if hasattr(updated, "isoformat"):
+        updated = updated.isoformat()
+    return {
+        "generation": str(blob.generation or ""),
+        "updated": str(updated or ""),
+        "size": int(blob.size or 0),
+    }
+
+
+def _read_download_state(destination: Path) -> dict:
+    try:
+        return json.loads(_download_state_path(destination).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def validate_download(path: Path) -> int:
+    """받은 파일이 추천·첨삭 서버에서 읽을 수 있는 SQLite인지 검사한다."""
+    connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        integrity = connection.execute("PRAGMA quick_check").fetchone()
+        if not integrity or integrity[0] != "ok":
+            raise ValueError(f"SQLite 무결성 검사 실패: {integrity}")
+        tables = {
+            row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if "jobs" not in tables:
+            raise ValueError("공유 DB에 jobs 테이블이 없습니다")
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(jobs)")}
+        missing = sorted(REQUIRED_DOWNLOAD_COLUMNS - columns)
+        if missing:
+            raise ValueError(f"공유 DB 필수 컬럼 누락: {', '.join(missing)}")
+        count = int(connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
+        if count <= 0:
+            raise ValueError("공유 DB에 공고가 없습니다")
+        return count
+    finally:
+        connection.close()
+
+
+def download_if_newer(
+    bucket_name: str, destination: Path, remote: str = REMOTE_PATH,
+) -> bool:
+    """원격 generation이 바뀐 경우에만 검증된 SQLite로 원자 교체한다."""
+    blob = bucket(bucket_name).blob(remote)
+    if not blob.exists():
+        raise FileNotFoundError(f"버킷에 파일이 없습니다: gs://{bucket_name}/{remote}")
+    blob.reload()
+    version = _remote_version(blob)
+    previous = _read_download_state(destination)
+    if destination.is_file() and previous.get("generation") == version["generation"]:
+        print(f"  최신 공유 DB를 이미 사용 중입니다 (generation {version['generation']})")
+        return False
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    archive_fd, archive_name = tempfile.mkstemp(
+        prefix=f".{destination.stem}-", suffix=".sqlite.gz", dir=destination.parent,
+    )
+    database_fd, database_name = tempfile.mkstemp(
+        prefix=f".{destination.stem}-", suffix=".sqlite", dir=destination.parent,
+    )
+    os.close(archive_fd)
+    os.close(database_fd)
+    archive = Path(archive_name)
+    database = Path(database_name)
+    started = time.time()
+    try:
+        blob.download_to_filename(str(archive))
+        decompress(archive, database)
+        count = validate_download(database)
+        os.replace(database, destination)
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(f"{destination}{suffix}")
+            if sidecar.exists():
+                sidecar.unlink()
+        state = {
+            **version,
+            "downloaded_at": datetime.now(timezone.utc).isoformat(),
+            "job_count": count,
+        }
+        state_path = _download_state_path(destination)
+        temporary_state = state_path.with_suffix(state_path.suffix + ".tmp")
+        temporary_state.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        os.replace(temporary_state, state_path)
+        print(
+            f"  최신 공유 DB로 교체했습니다: 공고 {count:,}건 · "
+            f"{_mb(destination):.1f} MB · {time.time() - started:.0f}초"
+        )
+        print(f"  원격 갱신 시각: {version['updated']}")
+        return True
+    finally:
+        archive.unlink(missing_ok=True)
+        database.unlink(missing_ok=True)
+
+
 def info(bucket_name: str, remote: str = REMOTE_PATH) -> int:
     blob = bucket(bucket_name).blob(remote)
     if not blob.exists():
@@ -191,6 +302,11 @@ def main() -> int:
     parser.add_argument("--export", action="store_true", help="나눠 줄 슬림 파일을 만든다")
     parser.add_argument("--upload", action="store_true", help="만든 파일을 Storage에 올린다")
     parser.add_argument("--download", action="store_true", help="Storage에서 받아 제자리에 놓는다")
+    parser.add_argument(
+        "--download-if-newer",
+        action="store_true",
+        help="원격 파일이 바뀐 경우에만 검증 후 원자적으로 교체",
+    )
     parser.add_argument("--info", action="store_true", help="올라가 있는 파일 정보")
     parser.add_argument("--store", type=Path, default=DEFAULT_STORE)
     parser.add_argument("--out", type=Path, default=EXPORT_PATH)
@@ -203,6 +319,10 @@ def main() -> int:
     if args.download:
         # 받는 쪽은 이 파일을 저장소 자리에 놓는다. 첨삭 서버가 기본으로 그 경로를 본다.
         download(args.bucket, args.store)
+        return 0
+
+    if args.download_if_newer:
+        download_if_newer(args.bucket, args.store)
         return 0
 
     if args.export:

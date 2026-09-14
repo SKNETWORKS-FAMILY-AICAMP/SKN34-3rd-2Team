@@ -402,6 +402,86 @@ def _merge_original_with_confirmed_answer(original: str, confirmed: str) -> str:
     return ' '.join(dict.fromkeys(part for part in parts if part))
 
 
+def _fallback_edit_scope(original: str, confirmed: str) -> tuple[str, str] | None:
+    """Build a fallback edit for one uniquely identifiable paragraph.
+
+    A field may contain several paragraphs. Rewriting that whole field makes a
+    small answer look like a large edit and used to collapse its blank lines.
+    Prefer the paragraph sharing the most confirmed facts; when the answer is a
+    genuinely new topic, append it after the final unique paragraph. If no
+    paragraph can be located unambiguously, skip the fallback rather than risk
+    applying it to the wrong place.
+    """
+    paragraphs = [
+        part.strip()
+        for part in re.split(r'\r?\n[ \t]*\r?\n', original)
+        if part.strip()
+    ]
+    if not paragraphs:
+        return None
+
+    answer_stable, answer_content = _answer_reflection_anchors(confirmed)
+
+    def relevance(paragraph: str) -> tuple[int, int]:
+        stable, content = _answer_reflection_anchors(paragraph)
+        return len(stable & answer_stable), len(content & answer_content)
+
+    ranked = sorted(
+        enumerate(paragraphs),
+        key=lambda item: (*relevance(item[1]), item[0]),
+        reverse=True,
+    )
+    _, target = ranked[0]
+    if original.count(target) != 1:
+        return None
+
+    if relevance(target) == (0, 0):
+        # There is no defensible existing paragraph to rewrite. Add a separate
+        # paragraph next to the final unique paragraph and leave all others byte
+        # for byte unchanged.
+        target = paragraphs[-1]
+        if original.count(target) != 1:
+            return None
+        return target, f'{target}\n\n{confirmed}'
+
+    return target, _merge_original_with_confirmed_answer(target, confirmed)
+
+
+def _concise_company_fit_answer(path: str, question: str, confirmed: str) -> str:
+    """Keep a motivation fallback focused on company duty and one evidence sentence."""
+    if path != 'selfIntroduction.motivation.body' or not re.search(
+        r'주요\s*업무|지원\s*회사|직무.*연결', question,
+    ):
+        return confirmed
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r'(?<=[.!?])\s+', confirmed)
+        if sentence.strip()
+    ]
+    if not sentences:
+        return confirmed
+    selected = [sentences[0]]
+    evidence = next(
+        (
+            sentence for sentence in sentences[1:]
+            if re.search(r'(구현|개발|설계|분석|처리|검증|운영|구축|적용)', sentence)
+        ),
+        None,
+    )
+    if evidence:
+        selected.append(evidence)
+
+    company_match = re.search(r'^(.{1,80}?)의\s*주요\s*업무', question.strip())
+    if company_match and re.match(r'^주요\s*업무', selected[0]):
+        selected[0] = re.sub(
+            r'^주요\s*업무',
+            f'{company_match.group(1)}의 주요 업무',
+            selected[0],
+            count=1,
+        )
+    return ' '.join(selected)
+
+
 def add_substantive_answer_fallback(generation, fields, answers):
     """Add a safe proposal if the model drops a substantive confirmed answer."""
     warnings = []
@@ -411,7 +491,9 @@ def add_substantive_answer_fallback(generation, fields, answers):
     for answer_index, answer in enumerate(answers):
         path = answer.field_path
         original = fields.get(path, '').strip()
-        confirmed = answer.answer.strip()
+        confirmed = _concise_company_fit_answer(
+            path, answer.question, answer.answer.strip(),
+        )
         already_present = bool(original) and (
             re.sub(r'\s+', '', confirmed) in re.sub(r'\s+', '', original)
         )
@@ -437,22 +519,26 @@ def add_substantive_answer_fallback(generation, fields, answers):
         )
         if not has_action or (not stable and len(content) < 6):
             continue
-        revision = _merge_original_with_confirmed_answer(original, confirmed)
+        scoped = _fallback_edit_scope(original, confirmed)
+        if scoped is None:
+            warnings.append(f'ambiguous_fallback_scope:{path}')
+            continue
+        original_quote, revision = scoped
         if re.sub(r'\s+', '', revision) == re.sub(r'\s+', '', original):
             warnings.append(f'answer_already_present:{path}')
             continue
         generation.sentence_reviews.append(
             SentenceReview(
                 field_path=path,
-                original_quote=original,
+                original_quote=original_quote,
                 reason='사용자가 확인한 직접 행동과 결과를 기존 내용에 보완했습니다.',
                 suggested_revision=revision,
-                evidence_quotes=[original, confirmed],
+                evidence_quotes=[original_quote, confirmed],
                 status='improved',
                 edit_type='content',
                 evidence_sources=[path, f'answer:{answer_index}'],
-                fact_anchors=_fact_anchors(original),
-                change_rate=_change_rate(original, revision),
+                fact_anchors=_fact_anchors(original_quote),
+                change_rate=_change_rate(original_quote, revision),
             )
         )
     return warnings

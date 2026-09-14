@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import 'instructor_assessments_screen.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 강사 — 평가 상세 (결과 목록 + 수정/삭제)
 class InstructorAssessmentDetailScreen extends ConsumerWidget {
@@ -49,7 +50,7 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
               );
               if (deleted && context.mounted) context.pop();
             },
-            icon: const Icon(Icons.delete_outline, color: AppColors.error),
+            icon: Icon(Icons.delete_outline, color: AppColors.error),
           ),
         ],
       ),
@@ -59,13 +60,13 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
           assessment.when(
             loading: () => const LinearProgressIndicator(),
             error: (e, _) => Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(AppSpace.s(16)),
               child: Text('$e'),
             ),
             data: (a) {
               if (a == null) return const SizedBox.shrink();
               return Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(8)),
                 child: Text(
                   '${a.statusLabel} · ${a.questionCount}문제 · ${a.maxScore}점 · ${a.periodLabel}',
                   style: TextStyle(color: AppColors.textSecondary),
@@ -73,8 +74,8 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
               );
             },
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          Padding(
+            padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(8), AppSpace.s(16), AppSpace.s(4)),
             child: Text(
               '응시 결과',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
@@ -97,11 +98,12 @@ class InstructorAssessmentDetailScreen extends ConsumerWidget {
                 }
                 final sorted = [...list]
                   ..sort(
-                    (a, b) => (b.submittedAt ?? DateTime(0))
-                        .compareTo(a.submittedAt ?? DateTime(0)),
+                    (a, b) => (b.submittedAt ?? DateTime(0)).compareTo(
+                      a.submittedAt ?? DateTime(0),
+                    ),
                   );
                 return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(8), AppSpace.s(16), AppSpace.s(24)),
                   itemCount: sorted.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, i) {

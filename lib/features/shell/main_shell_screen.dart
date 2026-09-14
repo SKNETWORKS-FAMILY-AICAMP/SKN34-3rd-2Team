@@ -21,6 +21,7 @@ import '../onboarding/student/student_onboarding_keys.dart';
 import 'widgets/alert_popup_host.dart';
 import 'widgets/app_shell_header.dart';
 import '../../core/theme/shell_chrome.dart';
+import '../../core/theme/app_space.dart';
 
 class _StudentNavItem {
   const _StudentNavItem(this.icon, this.label, this.path, this.targetId);
@@ -112,6 +113,7 @@ class MainShellScreen extends ConsumerWidget {
         ref.watch(onboardingTourProvider)?.active == true &&
         ref.watch(onboardingTourProvider)?.tourId == 'student';
     final railDark = ref.watch(sideRailDarkModeProvider);
+    final railPalette = ref.watch(sideRailDarkPaletteProvider);
 
     final railItems = [
       for (final item in _kStudentNavItems)
@@ -121,6 +123,11 @@ class MainShellScreen extends ConsumerWidget {
           path: item.path,
           itemKey: wide ? OnboardingTargetRegistry.keyOf(item.targetId) : null,
         ),
+      const AppSideRailItem(
+        icon: Icons.settings_outlined,
+        label: '설정',
+        path: RoutePaths.settings,
+      ),
     ];
 
     void navigate(String path) {
@@ -132,7 +139,7 @@ class MainShellScreen extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
-          backgroundColor: ShellChrome.appBarBackground(railDark),
+          backgroundColor: ShellChrome.appBarBackground(railDark, railPalette),
           foregroundColor: ShellChrome.appBarForeground(railDark),
           surfaceTintColor: Colors.transparent,
           elevation: 0,
@@ -140,7 +147,13 @@ class MainShellScreen extends ConsumerWidget {
           iconTheme: IconThemeData(
             color: ShellChrome.appBarForeground(railDark),
           ),
-          title: const AppShellHeader(),
+          flexibleSpace: wide
+              ? ShellChrome.railCorner(
+                  railDark: railDark,
+                  palette: railPalette,
+                )
+              : null,
+          title: AppShellHeader(overRail: wide),
           automaticallyImplyLeading: !wide,
           actions: [
             KeyedSubtree(
@@ -155,7 +168,17 @@ class MainShellScreen extends ConsumerWidget {
                         mode: LaunchMode.externalApplication,
                       ),
                 style: TextButton.styleFrom(
-                  foregroundColor: ShellChrome.actionForeground(railDark),
+                  foregroundColor: ShellChrome.actionForeground(
+                    railDark,
+                    railPalette,
+                  ),
+                  // 투어 중에는 눌리지 않게 막는데, 그러면 글씨가 기본 흐림색으로
+                  // 바뀐다. 어두운 앱바 위에서는 그 색이 배경에 묻혀 "출결 폼"을
+                  // 설명하는 단계에서 정작 글씨가 사라진다. 잠겨도 색은 그대로 둔다.
+                  disabledForegroundColor: ShellChrome.actionForeground(
+                    railDark,
+                    railPalette,
+                  ),
                 ),
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: const Text('출결 폼'),
@@ -164,7 +187,7 @@ class MainShellScreen extends ConsumerWidget {
             if (user != null)
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 12),
+                  padding: EdgeInsets.only(right: AppSpace.s(12)),
                   child: KeyedSubtree(
                     key: OnboardingTargetRegistry.keyOf(
                       StudentOnboardingTargets.navMyPage,
@@ -263,6 +286,11 @@ class _AppDrawer extends ConsumerWidget {
         label: '마이페이지',
         path: RoutePaths.myPage,
       ),
+      const AppSideRailItem(
+        icon: Icons.settings_outlined,
+        label: '설정',
+        path: RoutePaths.settings,
+      ),
     ];
 
     return Drawer(
@@ -272,7 +300,7 @@ class _AppDrawer extends ConsumerWidget {
             bottom: false,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(16)),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 border: Border(bottom: BorderSide(color: AppColors.border)),
@@ -287,15 +315,15 @@ class _AppDrawer extends ConsumerWidget {
                         context.go(RoutePaths.myPage);
                       },
                     )
-                  : const Padding(
-                      padding: EdgeInsets.all(8),
+                  : Padding(
+                      padding: EdgeInsets.all(AppSpace.s(8)),
                       child: Text('게스트'),
                     ),
             ),
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(8)),
               children: menuItems.map((item) {
                 final isSelected =
                     GoRouterState.of(context).matchedLocation == item.path;
@@ -334,8 +362,8 @@ class _AppDrawer extends ConsumerWidget {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: AppColors.error),
-            title: const Text(
+            leading: Icon(Icons.logout, color: AppColors.error),
+            title: Text(
               '로그아웃',
               style: TextStyle(color: AppColors.error),
             ),
@@ -346,7 +374,7 @@ class _AppDrawer extends ConsumerWidget {
                     await ref.read(authRepositoryProvider).signOut();
                   },
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpace.s(8)),
         ],
       ),
     );

@@ -2,7 +2,10 @@ import 'dart:async';
 
 import '../../core/constants/attendance_status.dart';
 import '../../core/constants/cohort_status.dart';
+import '../../core/constants/record_types.dart';
+import '../../core/constants/role.dart';
 import '../../core/utils/class_period_utils.dart';
+import '../../features/resume/ai_coach/data/generated/resume_mocks.g.dart';
 import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
 import '../models/curriculum_sheet_model.dart';
@@ -65,8 +68,77 @@ class DemoLmsRepository {
     _todos = [];
     _posts = [];
     _notices = [];
-    _submissions = [];
-    _resumes = [];
+    // 관리자 시연에서 승인·반려 흐름을 보여 줄 대기 기록. 이름은 예시다.
+    final now = DateTime.now();
+    _submissions = [
+      SubmissionModel(
+        id: 'sub-demo-1',
+        userId: 'demo-student-002',
+        userDisplayName: '김하늘',
+        title: 'PCCP Lv.2 취득',
+        type: RecordTypes.certification,
+        status: 'pending',
+        certType: 'PCCP',
+        submittedAt: now.subtract(const Duration(hours: 3)),
+      ),
+      SubmissionModel(
+        id: 'sub-demo-2',
+        userId: 'demo-student-003',
+        userDisplayName: '이도윤',
+        title: 'Pandas groupby 정리',
+        type: RecordTypes.blog,
+        status: 'pending',
+        link: 'https://velog.io/@example/pandas-groupby',
+        submittedAt: now.subtract(const Duration(hours: 20)),
+      ),
+      SubmissionModel(
+        id: 'sub-demo-3',
+        userId: DemoAccounts.studentUid,
+        userDisplayName: DemoAccounts.student.displayName,
+        title: 'SQL 스터디 3주차',
+        type: RecordTypes.study,
+        status: 'pending',
+        weekNumber: 3,
+        weekLabel: '3주차',
+        isTeamStudy: true,
+        submittedAt: now.subtract(const Duration(days: 1, hours: 2)),
+      ),
+      SubmissionModel(
+        id: 'sub-demo-4',
+        userId: 'demo-student-004',
+        userDisplayName: '박서연',
+        title: 'SQLD 합격',
+        type: RecordTypes.certification,
+        status: 'approved',
+        certType: 'SQLD',
+        mileageGranted: true,
+        submittedAt: now.subtract(const Duration(days: 3)),
+      ),
+    ];
+    // AI 코치(맞춤 공고 추천·첨삭)를 보여 줄 수 있도록 데이터 직무 목업 이력서로 채운다.
+    // 연락처는 비워 두어 시연에서 직접 입력하는 모습을 보인다.
+    final demoResumeContent = resumeMockPersonas
+        .firstWhere((p) => p.key == 'data_entry_junior_college')
+        .toContent(
+          name: DemoAccounts.student.displayName,
+          email: DemoAccounts.student.personalEmail ?? '',
+        );
+    final seededContent = demoResumeContent.copyWith(
+      basicInfo: demoResumeContent.basicInfo.copyWith(phone: ''),
+    );
+    _resumes = [
+      ResumeModel(
+        id: 'r-demo-1',
+        userId: DemoAccounts.studentUid,
+        title: '데이터 분석가 지원 이력서',
+        status: 'submitted',
+        content: seededContent,
+        sections: seededContent.computeSections(),
+        isBaseResume: true,
+        revisionCount: 1,
+        updatedAt: now.subtract(const Duration(hours: 5)),
+      ),
+    ];
     _attendances = [];
     _mileageTx = [];
     _assessments = [
@@ -363,7 +435,15 @@ class DemoLmsRepository {
     }
   }
 
-  Stream<List<TodoModel>> watchTodos(String uid) => _todoController.stream;
+  /// broadcast 스트림은 구독 전에 보낸 값을 다시 주지 않는다. 화면이 늦게 구독해도
+  /// 로딩에 멈추지 않도록 현재 값을 앞에 붙인다.
+  Stream<T> _startWith<T>(T current, Stream<T> updates) async* {
+    yield current;
+    yield* updates;
+  }
+
+  Stream<List<TodoModel>> watchTodos(String uid) =>
+      _startWith(List.of(_todos), _todoController.stream);
 
   Future<void> addTodo(String uid, String title) async {
     _todos.insert(
@@ -397,7 +477,7 @@ class DemoLmsRepository {
   }
 
   Stream<List<PostModel>> watchPosts(String cohortId, {int limit = 20}) =>
-      _postController.stream;
+      _startWith(List.of(_posts), _postController.stream);
 
   Future<void> createPost({
     required String cohortId,
@@ -523,12 +603,12 @@ class DemoLmsRepository {
     String cohortId,
     String userId,
   ) {
-    return _submissionController.stream
+    return _startWith(List.of(_submissions), _submissionController.stream)
         .map((list) => list.where((s) => s.userId == userId).toList());
   }
 
   Stream<List<SubmissionModel>> watchAllSubmissions(String cohortId) {
-    return _submissionController.stream;
+    return _startWith(List.of(_submissions), _submissionController.stream);
   }
 
   Future<String> createSubmission({
@@ -866,6 +946,20 @@ class DemoLmsRepository {
   Stream<List<UserModel>> watchCohortStudents(String cohortId) async* {
     yield [
       DemoAccounts.student,
+      // 자리 확인·출석부 시연용 예시 학생. 기록실 예시 기록의 제출자와 같다.
+      for (final (uid, name) in const [
+        ('demo-student-002', '김하늘'),
+        ('demo-student-003', '이도윤'),
+        ('demo-student-004', '박서연'),
+      ])
+        UserModel(
+          uid: uid,
+          email: '$uid@playdata.co.kr',
+          displayName: name,
+          role: UserRole.student,
+          cohortId: DemoConfig.cohortId,
+          cohortName: DemoConfig.cohortName,
+        ),
     ];
   }
 
@@ -887,15 +981,19 @@ class DemoLmsRepository {
   String _rollCallKey(String cohortId, String dateKey, String periodId) =>
       '$cohortId|$dateKey|$periodId';
 
+  /// 확인·보류를 누르면 화면의 집계가 바로 바뀌도록 변경을 알린다.
+  final _rollCallChanges = StreamController<void>.broadcast();
+
   Stream<Set<String>> watchRollCallConfirmed(
     String cohortId,
     String dateKey,
     String periodId,
   ) async* {
-    yield Set.of(
-      _rollCallConfirmed[_rollCallKey(cohortId, dateKey, periodId)] ??
-          const {},
-    );
+    final key = _rollCallKey(cohortId, dateKey, periodId);
+    yield Set.of(_rollCallConfirmed[key] ?? const {});
+    await for (final _ in _rollCallChanges.stream) {
+      yield Set.of(_rollCallConfirmed[key] ?? const {});
+    }
   }
 
   Stream<Set<String>> watchRollCallHeld(
@@ -903,9 +1001,11 @@ class DemoLmsRepository {
     String dateKey,
     String periodId,
   ) async* {
-    yield Set.of(
-      _rollCallHeld[_rollCallKey(cohortId, dateKey, periodId)] ?? const {},
-    );
+    final key = _rollCallKey(cohortId, dateKey, periodId);
+    yield Set.of(_rollCallHeld[key] ?? const {});
+    await for (final _ in _rollCallChanges.stream) {
+      yield Set.of(_rollCallHeld[key] ?? const {});
+    }
   }
 
   Future<void> ensureRollCallCarriedForward({
@@ -955,6 +1055,7 @@ class DemoLmsRepository {
     } else {
       set.remove(userId);
     }
+    _rollCallChanges.add(null);
   }
 
   Future<void> setRollCallHeld({
@@ -981,6 +1082,7 @@ class DemoLmsRepository {
     } else {
       heldSet.remove(userId);
     }
+    _rollCallChanges.add(null);
   }
 
   Future<int> seedDemoAttendances({
@@ -1158,13 +1260,15 @@ class DemoLmsRepository {
   }
 
   Stream<List<InflearnPackageModel>> watchInflearnPackages(String cohortId) {
-    return _inflearnPackageController.stream;
+    return _startWith(
+        List.of(_inflearnPackages), _inflearnPackageController.stream);
   }
 
   Stream<List<InflearnPackageModel>> watchPublishedInflearnPackages(
     String cohortId,
   ) {
-    return _inflearnPackageController.stream
+    return _startWith(
+            List.of(_inflearnPackages), _inflearnPackageController.stream)
         .map((list) => list.where((p) => p.isPublished).toList());
   }
 
@@ -1270,7 +1374,8 @@ class DemoLmsRepository {
   Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
     String cohortId,
   ) {
-    return _youtubeRecommendationController.stream;
+    return _startWith(List.of(_youtubeRecommendations),
+        _youtubeRecommendationController.stream);
   }
 
   Stream<List<YoutubeRecommendationModel>> watchPublishedYoutubeRecommendations(
@@ -1351,11 +1456,11 @@ class DemoLmsRepository {
   }
 
   Stream<List<AssessmentModel>> watchAssessments(String cohortId) {
-    return _assessmentController.stream;
+    return _startWith(List.of(_assessments), _assessmentController.stream);
   }
 
   Stream<List<AssessmentModel>> watchPublishedAssessments(String cohortId) {
-    return _assessmentController.stream
+    return _startWith(List.of(_assessments), _assessmentController.stream)
         .map((list) => list.where((a) => a.published).toList());
   }
 
@@ -1471,7 +1576,8 @@ class DemoLmsRepository {
     String cohortId,
     String userId,
   ) {
-    return _assessmentSubmissionController.stream
+    return _startWith(List.of(_assessmentSubmissions),
+            _assessmentSubmissionController.stream)
         .map((list) => list.where((s) => s.userId == userId).toList());
   }
 
@@ -1479,7 +1585,8 @@ class DemoLmsRepository {
     String cohortId,
     String assessmentId,
   ) {
-    return _assessmentSubmissionController.stream
+    return _startWith(List.of(_assessmentSubmissions),
+            _assessmentSubmissionController.stream)
         .map((list) => list.where((s) => s.assessmentId == assessmentId).toList());
   }
 
@@ -1604,20 +1711,23 @@ class DemoLmsRepository {
   }
 
   Stream<List<CurriculumSheetModel>> watchCurriculumSheets(String cohortId) {
-    return _curriculumSheetController.stream;
+    return _startWith(
+        List.of(_curriculumSheets), _curriculumSheetController.stream);
   }
 
   Stream<CurriculumSheetModel?> watchLatestCurriculumSheet(String cohortId) {
-    return _curriculumSheetController.stream.map(
-      (list) => list.isEmpty ? null : list.first,
-    );
+    return _startWith(
+            List.of(_curriculumSheets), _curriculumSheetController.stream)
+        .map((list) => list.isEmpty ? null : list.first);
   }
 
   Stream<CurriculumSheetModel?> watchCurriculumSheet(
     String cohortId,
     String sheetId,
   ) {
-    return _curriculumSheetController.stream.map(
+    return _startWith(
+            List.of(_curriculumSheets), _curriculumSheetController.stream)
+        .map(
       (list) => list.where((s) => s.id == sheetId).firstOrNull,
     );
   }

@@ -4,6 +4,7 @@ import '../../../../core/constants/mileage_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/mileage_models.dart';
 import '../../theme/mileage_theme.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 고정가 상품 — 수량 선택 후 장바구니
 Future<void> showFixedProductDialog(
@@ -23,13 +24,13 @@ Future<void> showFixedProductDialog(
           children: [
             Text(
               formatMileageM(product.fixedPrice ?? 0),
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: MileageColors.primary,
                 fontSize: 18,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppSpace.s(16)),
             Row(
               children: [
                 const Text('수량'),
@@ -137,7 +138,7 @@ class _CustomProductDialogState extends State<_CustomProductDialog> {
         children: [
           Container(
             width: 40,
-            height: 40,
+            height: AppSpace.row(40),
             decoration: BoxDecoration(
               color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
@@ -149,7 +150,7 @@ class _CustomProductDialogState extends State<_CustomProductDialog> {
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: AppSpace.s(12)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,7 +159,7 @@ class _CustomProductDialogState extends State<_CustomProductDialog> {
                   product.name,
                   style: const TextStyle(fontSize: 16),
                 ),
-                const Text(
+                Text(
                   '가격 직접 입력',
                   style: TextStyle(
                     color: MileageColors.primary,
@@ -184,7 +185,7 @@ class _CustomProductDialogState extends State<_CustomProductDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(AppSpace.s(12)),
                 decoration: BoxDecoration(
                   color: MileageColors.infoBanner,
                   borderRadius: BorderRadius.circular(8),
@@ -192,8 +193,8 @@ class _CustomProductDialogState extends State<_CustomProductDialog> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, size: 18, color: AppColors.info),
-                    const SizedBox(width: 8),
+                    Icon(Icons.info_outline, size: 18, color: AppColors.info),
+                    SizedBox(width: AppSpace.s(8)),
                     Expanded(
                       child: Text(
                         '${usage.categoryLabel} 잔여 한도: '
@@ -204,7 +205,7 @@ class _CustomProductDialogState extends State<_CustomProductDialog> {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: AppSpace.s(16)),
               TextFormField(
                 controller: _linkController,
                 decoration: InputDecoration(
@@ -220,7 +221,7 @@ class _CustomProductDialogState extends State<_CustomProductDialog> {
                   return null;
                 },
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               TextFormField(
                 controller: _priceController,
                 keyboardType: TextInputType.number,

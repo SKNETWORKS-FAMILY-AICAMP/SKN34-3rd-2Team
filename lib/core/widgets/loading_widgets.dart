@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../../core/theme/app_space.dart';
 
 /// Shimmer 로딩 박스 — Firestore 데이터 로딩 중 표시
 class ShimmerBox extends StatefulWidget {
@@ -77,13 +78,13 @@ class LoadingOverlay extends StatelessWidget {
       child: Center(
         child: Card(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(AppSpace.s(24)),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: AppColors.primary),
+                CircularProgressIndicator(color: AppColors.primary),
                 if (message != null) ...[
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpace.s(16)),
                   Text(message!, style: const TextStyle(fontSize: 14)),
                 ],
               ],
@@ -106,19 +107,19 @@ class ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(AppSpace.s(24)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
+            Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            SizedBox(height: AppSpace.s(12)),
             Text(
               message,
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textSecondary),
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: AppSpace.s(16)),
               FilledButton(onPressed: onRetry, child: const Text('다시 시도')),
             ],
           ],
@@ -147,12 +148,16 @@ class EmptyView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(AppSpace.s(24)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: AppColors.textHint.withValues(alpha: 0.7)),
-            const SizedBox(height: 12),
+            Icon(
+              icon,
+              size: 48,
+              color: AppColors.textHint.withValues(alpha: 0.7),
+            ),
+            SizedBox(height: AppSpace.s(12)),
             Text(
               message,
               textAlign: TextAlign.center,
@@ -162,7 +167,7 @@ class EmptyView extends StatelessWidget {
               ),
             ),
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: AppSpace.s(16)),
               FilledButton(onPressed: onAction, child: Text(actionLabel!)),
             ],
           ],
@@ -184,7 +189,7 @@ class InlineErrorCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s(16), vertical: AppSpace.s(18)),
         child: Column(
           children: [
             Icon(
@@ -192,7 +197,7 @@ class InlineErrorCard extends StatelessWidget {
               size: 22,
               color: AppColors.error.withValues(alpha: 0.85),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             Text(
               friendlyErrorMessage(error),
               textAlign: TextAlign.center,
@@ -203,7 +208,7 @@ class InlineErrorCard extends StatelessWidget {
               ),
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               TextButton(
                 onPressed: onRetry,
                 style: TextButton.styleFrom(
@@ -240,14 +245,14 @@ class CohortBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(4)),
       decoration: BoxDecoration(
         color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         cohortName,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppColors.primary,
           fontSize: 12,
           fontWeight: FontWeight.w600,

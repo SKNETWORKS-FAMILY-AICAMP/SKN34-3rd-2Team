@@ -10,6 +10,7 @@ import '../providers/profile_photo_providers.dart';
 import '../providers/side_rail_theme_provider.dart';
 import 'profile_avatar.dart';
 import 'profile_avatar_editor.dart';
+import '../../core/theme/app_space.dart';
 
 enum ProfileNavChipStyle { appBar, drawer }
 
@@ -33,16 +34,16 @@ class ProfileNavChip extends ConsumerWidget {
 
     return switch (style) {
       ProfileNavChipStyle.appBar => _AppBarProfileChip(
-          user: user,
-          preview: preview,
-          onTap: onTap,
-          isDark: railDark,
-        ),
+        user: user,
+        preview: preview,
+        onTap: onTap,
+        isDark: railDark,
+      ),
       ProfileNavChipStyle.drawer => _DrawerProfileHeader(
-          user: user,
-          preview: preview,
-          onTap: onTap,
-        ),
+        user: user,
+        preview: preview,
+        onTap: onTap,
+      ),
     };
   }
 }
@@ -65,7 +66,7 @@ class _AppBarProfileChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final showCohort = width >= 720;
-    final textMaxWidth = showCohort ? 148.0 : 96.0;
+    final textMaxWidth = showCohort ? 184.0 : 112.0;
 
     return Material(
       color: Colors.transparent,
@@ -73,8 +74,12 @@ class _AppBarProfileChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: Container(
-          constraints: BoxConstraints(maxWidth: showCohort ? 220 : 160),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          constraints: BoxConstraints(maxWidth: showCohort ? 264 : 184),
+          // 모서리가 둥글어 좌우 여백이 좁으면 글씨가 테두리에 붙어 보인다.
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(14),
+            vertical: AppSpace.s(6),
+          ),
           decoration: BoxDecoration(
             color: ShellChrome.chipFill(isDark),
             borderRadius: BorderRadius.circular(24),
@@ -91,7 +96,7 @@ class _AppBarProfileChip extends StatelessWidget {
                   photoStoragePath: user.photoStoragePath,
                   previewBytes: preview,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: AppSpace.s(8)),
               ],
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: textMaxWidth),
@@ -111,7 +116,7 @@ class _AppBarProfileChip extends StatelessWidget {
                       ),
                     ),
                     if (showCohort) ...[
-                      const SizedBox(height: 1),
+                      SizedBox(height: AppSpace.s(1)),
                       Text(
                         user.cohortName,
                         maxLines: 1,
@@ -155,7 +160,7 @@ class _DrawerProfileHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(AppSpace.s(14)),
           decoration: BoxDecoration(
             color: AppColors.surfaceVariant.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(12),
@@ -172,7 +177,7 @@ class _DrawerProfileHeader extends StatelessWidget {
                   photoStoragePath: user.photoStoragePath,
                   previewBytes: preview,
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: AppSpace.s(14)),
               ],
               Expanded(
                 child: Column(
@@ -188,7 +193,7 @@ class _DrawerProfileHeader extends StatelessWidget {
                         height: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: AppSpace.s(4)),
                     Text(
                       user.cohortName,
                       maxLines: 2,
@@ -199,15 +204,15 @@ class _DrawerProfileHeader extends StatelessWidget {
                         height: 1.25,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    const Row(
+                    SizedBox(height: AppSpace.s(6)),
+                    Row(
                       children: [
                         Icon(
                           Icons.person_outline,
                           size: 13,
                           color: AppColors.primary,
                         ),
-                        SizedBox(width: 4),
+                        SizedBox(width: AppSpace.s(4)),
                         Text(
                           '마이페이지',
                           style: TextStyle(
@@ -266,7 +271,7 @@ class ProfileSummaryRow extends StatelessWidget {
                   photoUrl: user.photoUrl,
                   photoStoragePath: user.photoStoragePath,
                 ),
-          const SizedBox(width: 14),
+          SizedBox(width: AppSpace.s(14)),
         ],
         Expanded(
           child: Column(
@@ -281,7 +286,7 @@ class ProfileSummaryRow extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: AppSpace.s(4)),
               Text(
                 user.cohortName,
                 maxLines: 2,

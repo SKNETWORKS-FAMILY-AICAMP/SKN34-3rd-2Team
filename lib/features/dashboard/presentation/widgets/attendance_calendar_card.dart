@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../../core/constants/attendance_status.dart';
+import '../../../../core/constants/korean_holidays.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../core/widgets/app_dropdown.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../../../shared/providers/cohort_providers.dart';
 import '../../../../shared/providers/lms_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 출석 캘린더 — 상태 색상 (외출 포함)
 class AttendanceCalendarCard extends ConsumerStatefulWidget {
@@ -26,7 +28,8 @@ class AttendanceCalendarCard extends ConsumerStatefulWidget {
       _AttendanceCalendarCardState();
 }
 
-class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard> {
+class _AttendanceCalendarCardState
+    extends ConsumerState<AttendanceCalendarCard> {
   DateTime _focusedDay = DateTime.now();
   CalendarFormat _format = CalendarFormat.month;
 
@@ -93,13 +96,17 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
 
     try {
       if (picked == '__clear__') {
-        await ref.read(lmsRepositoryProvider).clearAttendanceStatus(
+        await ref
+            .read(lmsRepositoryProvider)
+            .clearAttendanceStatus(
               cohortId: cohortId,
               userId: _targetUserId,
               dateKey: AppDateUtils.toDateKey(day),
             );
       } else {
-        await ref.read(lmsRepositoryProvider).upsertAttendanceStatus(
+        await ref
+            .read(lmsRepositoryProvider)
+            .upsertAttendanceStatus(
               cohortId: cohortId,
               userId: _targetUserId,
               userDisplayName: _targetDisplayName,
@@ -124,7 +131,9 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
-    final statusMapAsync = ref.watch(attendanceStatusMapProvider(_targetUserId));
+    final statusMapAsync = ref.watch(
+      attendanceStatusMapProvider(_targetUserId),
+    );
     final statusMap = statusMapAsync.asData?.value ?? {};
     final monthLabel =
         '${_focusedDay.year}.${_focusedDay.month.toString().padLeft(2, '0')}';
@@ -139,10 +148,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-          compact ? 10 : 14,
-          compact ? 10 : 14,
-          compact ? 10 : 14,
-          compact ? 8 : 10,
+          compact ? AppSpace.s(10) : AppSpace.s(14),
+          compact ? AppSpace.s(10) : AppSpace.s(14),
+          compact ? AppSpace.s(10) : AppSpace.s(14),
+          compact ? AppSpace.s(8) : AppSpace.s(10),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -155,7 +164,9 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                 ),
                 const Spacer(),
                 if (isAdmin && !compact)
-                  ref.watch(cohortStudentsProvider).when(
+                  ref
+                      .watch(cohortStudentsProvider)
+                      .when(
                         loading: () => const SizedBox(
                           width: 16,
                           height: 16,
@@ -179,8 +190,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                             onChanged: (uid) {
                               if (uid != null) {
                                 ref
-                                    .read(adminAttendanceTargetUserIdProvider
-                                        .notifier)
+                                    .read(
+                                      adminAttendanceTargetUserIdProvider
+                                          .notifier,
+                                    )
                                     .select(uid);
                               }
                             },
@@ -190,8 +203,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
               ],
             ),
             if (isAdmin && compact) ...[
-              const SizedBox(height: 6),
-              ref.watch(cohortStudentsProvider).when(
+              SizedBox(height: AppSpace.s(6)),
+              ref
+                  .watch(cohortStudentsProvider)
+                  .when(
                     loading: () => const SizedBox(
                       width: 16,
                       height: 16,
@@ -227,10 +242,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                   ),
             ],
             if (statusMapAsync.hasError) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               Text(
                 '출석 불러오기 실패: ${statusMapAsync.error}',
-                style: const TextStyle(fontSize: 11, color: AppColors.error),
+                style: TextStyle(fontSize: 11, color: AppColors.error),
               ),
             ],
             SizedBox(height: compact ? 4 : 8),
@@ -239,7 +254,10 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                 IconButton(
                   icon: const Icon(Icons.chevron_left, size: 20),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   onPressed: () => setState(() {
                     _focusedDay = DateTime(
                       _focusedDay.year,
@@ -265,19 +283,22 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                           : CalendarFormat.month;
                     }),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: Text(
-                      _format == CalendarFormat.month ? 'Month' : '2 weeks',
+                      _format == CalendarFormat.month ? '한 달' : '2주',
                       style: const TextStyle(fontSize: 11),
                     ),
                   ),
                 IconButton(
                   icon: const Icon(Icons.chevron_right, size: 20),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   onPressed: () => setState(() {
                     _focusedDay = DateTime(
                       _focusedDay.year,
@@ -293,8 +314,8 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
               focusedDay: _focusedDay,
               calendarFormat: _format,
               availableCalendarFormats: const {
-                CalendarFormat.month: 'Month',
-                CalendarFormat.twoWeeks: '2 weeks',
+                CalendarFormat.month: '한 달',
+                CalendarFormat.twoWeeks: '2주',
               },
               onFormatChanged: (f) => setState(() => _format = f),
               headerVisible: false,
@@ -320,6 +341,19 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                   }
                 }
               },
+              // 요일을 지정하지 않으면 기기 언어를 따라 영어로 나온다. 그마저
+              // 폭에 따라 Mo·We처럼 두 글자로 잘려 들쭉날쭉했다. 한 글자로 못박는다.
+              daysOfWeekStyle: DaysOfWeekStyle(
+                dowTextFormatter: (date, locale) => _dayNames[date.weekday % 7],
+                weekdayStyle: TextStyle(
+                  fontSize: compact ? 11 : 12,
+                  color: AppColors.textSecondary,
+                ),
+                weekendStyle: TextStyle(
+                  fontSize: compact ? 11 : 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               calendarStyle: CalendarStyle(
                 outsideDaysVisible: !compact,
                 defaultTextStyle: TextStyle(fontSize: compact ? 11 : 12),
@@ -336,7 +370,7 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
-                selectedDecoration: const BoxDecoration(
+                selectedDecoration: BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
@@ -351,11 +385,70 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
                     compact: compact,
                   );
                 },
+                defaultBuilder: (context, day, focusedDay) =>
+                    _plainDayCell(day, compact: compact, outside: false),
+                outsideBuilder: (context, day, focusedDay) =>
+                    _plainDayCell(day, compact: compact, outside: true),
+                todayBuilder: (context, day, focusedDay) =>
+                    _todayCell(day, compact: compact),
               ),
             ),
             SizedBox(height: compact ? 4 : 6),
-            _AttendanceStatusLegend(compact: compact),
+            AttendanceStatusLegend(compact: compact),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 일요일부터. `DateTime.weekday`는 월요일이 1, 일요일이 7이라 7로 나눈 나머지를 쓴다.
+  static const _dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+  /// 종이 달력을 따른다. 공휴일과 일요일은 빨강, 토요일은 파랑.
+  static Color _dayColor(DateTime day, {required bool outside}) {
+    if (outside) return AppColors.textHint;
+    if (koreanHolidays.containsKey(_dateKeyOf(day))) return AppColors.error;
+    if (day.weekday == DateTime.sunday) return AppColors.error;
+    if (day.weekday == DateTime.saturday) return AppColors.primary;
+    return AppColors.textPrimary;
+  }
+
+  static Widget _plainDayCell(
+    DateTime day, {
+    required bool compact,
+    required bool outside,
+  }) => Center(
+    child: Text(
+      '${day.day}',
+      style: TextStyle(
+        fontSize: compact ? 11 : 12,
+        color: _dayColor(day, outside: outside),
+      ),
+    ),
+  );
+
+  /// 오늘 표시. 동그라미 지름을 줄 높이 안으로 못박는다.
+  ///
+  /// 예전에는 칸 전체를 채우는 장식을 썼는데, 줄 높이가 26~34밖에 안 되어 원이
+  /// 칸 밖으로 밀려났다. 달의 첫 칸에서는 왼쪽이 잘려 숫자까지 가렸다.
+  static Widget _todayCell(DateTime day, {required bool compact}) {
+    final diameter = compact ? 20.0 : 26.0;
+    return Center(
+      child: Container(
+        width: diameter,
+        height: diameter,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.textPrimary, width: 1.5),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '${day.day}',
+          style: TextStyle(
+            fontSize: compact ? 10 : 12,
+            fontWeight: FontWeight.bold,
+            color: _dayColor(day, outside: false),
+          ),
         ),
       ),
     );
@@ -376,7 +469,7 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
     final color = AttendanceStatus.colorOf(status);
     final isToday = isSameDay(day, DateTime.now());
     return Container(
-      margin: EdgeInsets.all(compact ? 2 : 4),
+      margin: EdgeInsets.all(compact ? AppSpace.s(2) : AppSpace.s(4)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.2),
         shape: BoxShape.circle,
@@ -398,39 +491,52 @@ class _AttendanceCalendarCardState extends ConsumerState<AttendanceCalendarCard>
   }
 }
 
-class _AttendanceStatusLegend extends StatelessWidget {
-  const _AttendanceStatusLegend({required this.compact});
+/// 출결 색 설명. 달력 아래에 한 줄로 놓인다.
+class AttendanceStatusLegend extends StatelessWidget {
+  const AttendanceStatusLegend({super.key, required this.compact});
 
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: compact ? 6 : 10,
-      runSpacing: compact ? 4 : 4,
-      children: AttendanceStatus.all.map((s) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: compact ? 7 : 8,
-              height: compact ? 7 : 8,
-              decoration: BoxDecoration(
-                color: AttendanceStatus.colorOf(s),
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              AttendanceStatus.labelOf(s),
-              style: TextStyle(
-                fontSize: compact ? 9 : 10,
-                color: AppColors.textSecondary,
-              ),
-            ),
+    // 범례는 한 줄이어야 한다. 여섯 가지가 두 줄로 갈라지면 어느 색이 어느 줄의
+    // 설명인지 눈이 한 번 더 헤맨다. 칸이 좁으면 줄바꿈 대신 통째로 줄인다.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (i, s) in AttendanceStatus.all.indexed) ...[
+            if (i > 0) SizedBox(width: compact ? 6 : 10),
+            _legendItem(s),
           ],
-        );
-      }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendItem(String s) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: compact ? 7 : 8,
+          height: compact ? 7 : 8,
+          decoration: BoxDecoration(
+            color: AttendanceStatus.colorOf(s),
+            shape: BoxShape.circle,
+          ),
+        ),
+        SizedBox(width: AppSpace.s(4)),
+        Text(
+          AttendanceStatus.labelOf(s),
+          style: TextStyle(
+            fontSize: compact ? 9 : 10,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -25,6 +25,7 @@ abstract final class RoutePaths {
   static const mileageCart = '/mileage/shop/cart';
   static const assessments = '/assessments';
   static const myPage = '/my-page';
+  static const settings = '/settings';
   static const forms = '/forms';
   static const qualExams = '/qual-exams';
   static const resumeEdit = '/resume/:resumeId/edit';
@@ -39,6 +40,7 @@ abstract final class RoutePaths {
   static const adminBoardAlertPopupCreate = '/admin/board/alert-popups/create';
   static const adminStudyRoom = '/admin/study-room';
   static const adminMyPage = '/admin/my-page';
+  static const adminSettings = '/admin/settings';
   static const adminStudyRoomCreate = '/admin/study-room/create';
   static const adminStudents = '/admin/students';
   static const adminStudentsCreate = '/admin/students/create';
@@ -69,6 +71,7 @@ abstract final class RoutePaths {
   static const instructorAssessmentsCreate = '/instructor/assessments/create';
   static const instructorCurriculum = '/instructor/curriculum';
   static const instructorMyPage = '/instructor/my-page';
+  static const instructorSettings = '/instructor/settings';
 
   static String assessmentTakePath(String assessmentId) =>
       '/assessments/$assessmentId/take';
@@ -84,22 +87,20 @@ abstract final class RoutePaths {
   static String instructorAssessmentSubmissionPath(
     String assessmentId,
     String submissionId,
-  ) =>
-      '/instructor/assessments/$assessmentId/submissions/$submissionId';
+  ) => '/instructor/assessments/$assessmentId/submissions/$submissionId';
 
   static String adminAssessmentDetailPath(String assessmentId) =>
       '/admin/assessments/$assessmentId';
   static String adminAssessmentSubmissionPath(
     String assessmentId,
     String submissionId,
-  ) =>
-      '/admin/assessments/$assessmentId/submissions/$submissionId';
+  ) => '/admin/assessments/$assessmentId/submissions/$submissionId';
 
   static String homeFor(UserRole role) => switch (role) {
-        UserRole.admin => admin,
-        UserRole.instructor => instructor,
-        UserRole.student => dashboard,
-      };
+    UserRole.admin => admin,
+    UserRole.instructor => instructor,
+    UserRole.student => dashboard,
+  };
 
   static String adminMileageProductEditPath(String productId) =>
       '/admin/mileage/products/$productId/edit';

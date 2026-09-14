@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../models/seat_drag_payload.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 미배정 학생 목록 (드래그 소스 + 드롭 타겟)
 class UnassignedStudentList extends StatelessWidget {
@@ -25,21 +26,21 @@ class UnassignedStudentList extends StatelessWidget {
         return Card(
           color: isHover ? AppColors.primaryLight : null,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(AppSpace.s(12)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
                     const Icon(Icons.people_outline, size: 18),
-                    const SizedBox(width: 6),
+                    SizedBox(width: AppSpace.s(6)),
                     Text(
                       '미배정 (${students.length}명)',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   '학생을 좌석으로 드래그하세요',
                   style: TextStyle(
@@ -48,8 +49,8 @@ class UnassignedStudentList extends StatelessWidget {
                   ),
                 ),
                 if (isHover) ...[
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: AppSpace.s(8)),
+                  Text(
                     '여기에 놓으면 배정 해제',
                     style: TextStyle(
                       fontSize: 11,
@@ -58,10 +59,10 @@ class UnassignedStudentList extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 if (students.isEmpty)
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
+                    padding: EdgeInsets.symmetric(vertical: AppSpace.s(24)),
                     child: Center(
                       child: Text(
                         '미배정 학생이 없습니다',
@@ -73,7 +74,7 @@ class UnassignedStudentList extends StatelessWidget {
                   Expanded(
                     child: ListView.separated(
                       itemCount: students.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 6),
+                      separatorBuilder: (_, _) => SizedBox(height: AppSpace.s(6)),
                       itemBuilder: (_, i) {
                         final s = students[i];
                         return Draggable<SeatDragPayload>(
@@ -85,9 +86,9 @@ class UnassignedStudentList extends StatelessWidget {
                             elevation: 4,
                             borderRadius: BorderRadius.circular(8),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: AppSpace.s(12),
+                                vertical: AppSpace.s(8),
                               ),
                               decoration: BoxDecoration(
                                 color: AppColors.primaryLight,
@@ -127,9 +128,9 @@ class _StudentChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(8)),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: AppColors.tint(const Color(0xFFF8FAFC)),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
@@ -140,14 +141,14 @@ class _StudentChip extends StatelessWidget {
             backgroundColor: AppColors.primaryLight,
             child: Text(
               name.isNotEmpty ? name[0] : '?',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppColors.primary,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: Text(
               name,

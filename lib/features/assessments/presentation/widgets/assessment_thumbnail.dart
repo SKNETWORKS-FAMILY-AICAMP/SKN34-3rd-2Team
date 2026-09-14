@@ -133,9 +133,9 @@ class _AssessmentThumbnailState extends ConsumerState<AssessmentThumbnail> {
   }
 
   String? _cacheKey() => _cacheKeyFor(
-        path: widget.storagePath,
-        url: widget.url,
-      );
+    path: widget.storagePath,
+    url: widget.url,
+  );
 
   String? _cacheKeyFor({String? path, String? url}) {
     final p = path?.trim();
@@ -224,14 +224,14 @@ class _AssessmentThumbnailState extends ConsumerState<AssessmentThumbnail> {
   }
 
   Color _tintForTitle(String title) {
-    const palette = [
-      Color(0xFFDBEAFE),
-      Color(0xFFD1FAE5),
-      Color(0xFFEDE9FE),
-      Color(0xFFFFE4E6),
-      Color(0xFFFEF3C7),
-      Color(0xFFCCFBF1),
-      Color(0xFFE0E7FF),
+    final palette = [
+      AppColors.tint(const Color(0xFFDBEAFE)),
+      AppColors.tint(const Color(0xFFD1FAE5)),
+      AppColors.tint(const Color(0xFFEDE9FE)),
+      AppColors.tint(const Color(0xFFFFE4E6)),
+      AppColors.tint(const Color(0xFFFEF3C7)),
+      AppColors.tint(const Color(0xFFCCFBF1)),
+      AppColors.tint(const Color(0xFFE0E7FF)),
     ];
     if (title.isEmpty) return palette[0];
     return palette[title.hashCode.abs() % palette.length];
@@ -259,7 +259,7 @@ class _AssessmentThumbnailState extends ConsumerState<AssessmentThumbnail> {
       height: widget.height,
       color: title.isNotEmpty
           ? _tintForTitle(title)
-          : const Color(0xFFF3F4F6),
+          : AppColors.tint(const Color(0xFFF3F4F6)),
       alignment: Alignment.center,
       child: initial != null
           ? Text(
@@ -305,25 +305,22 @@ class _AssessmentThumbnailState extends ConsumerState<AssessmentThumbnail> {
                 gaplessPlayback: true,
                 errorBuilder: (_, __, ___) => _placeholder(),
               )
-            : (!_failed &&
-                    !kIsWeb &&
-                    (widget.url?.startsWith('http') ?? false))
-                ? Image.network(
-                    widget.url!.trim(),
-                    fit: BoxFit.cover,
-                    width: widget.width,
-                    height: widget.height,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, __, ___) => _placeholder(),
-                    frameBuilder:
-                        (context, child, frame, wasSynchronouslyLoaded) {
-                      if (wasSynchronouslyLoaded || frame != null) {
-                        return child;
-                      }
-                      return _placeholder();
-                    },
-                  )
-                : _placeholder(),
+            : (!_failed && !kIsWeb && (widget.url?.startsWith('http') ?? false))
+            ? Image.network(
+                widget.url!.trim(),
+                fit: BoxFit.cover,
+                width: widget.width,
+                height: widget.height,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => _placeholder(),
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded || frame != null) {
+                    return child;
+                  }
+                  return _placeholder();
+                },
+              )
+            : _placeholder(),
       ),
     );
   }

@@ -144,6 +144,21 @@ def test_followup_prompt_is_limited_to_the_answered_resume_item():
     ) == 'projects[0] 첫 프로젝트: 2025.01 ~ 2025.02 (이력서 기록값)'
 
 
+def test_followup_job_prompt_keeps_bounded_job_context_for_motivation():
+    from app.review_workflow import followup_job_prompt_text
+
+    text = '주요업무: AI 서비스 개발 및 데이터 처리 API 개발'
+    prompt = followup_job_prompt_text(text, {
+        'company': '(주)토마토에이아이',
+        'title': 'AI 엔지니어 채용',
+        'role_title': 'AI 엔지니어',
+    })
+
+    assert text in prompt
+    assert '회사·직무 맥락에만 사용' in prompt
+    assert '지원자의 경험으로 쓰지 마세요' in prompt
+
+
 def test_legacy_ids_block_answers_and_reordering_changes_version():
     content = deepcopy(SAMPLE_CONTENT)
     del content['projects'][0]['id']
@@ -239,6 +254,44 @@ def test_missing_job_technology_becomes_a_confirmation_question():
 
     assert result.questions[0].field_path == 'projects[0].description'
     assert 'FastAPI' in result.questions[0].question
+
+
+def test_missing_job_technology_question_lists_projects_for_user_selection():
+    result = ResumeReviewGeneration(summary='검토', section_reviews=[])
+    fields = {
+        'projects[0].name': '쇼핑몰 API',
+        'projects[0].description': '상품 API를 구현했습니다.',
+        'projects[1].name': 'AI 취업 코치',
+        'projects[1].description': '이력서 첨삭 기능을 구현했습니다.',
+    }
+
+    add_missing_job_technology_question(result, fields, '필수 요건: Docker 경험')
+
+    question = result.questions[0].question
+    assert '1번 쇼핑몰 API' in question
+    assert '2번 AI 취업 코치' in question
+    assert '프로젝트 번호 또는 이름' in question
+
+
+def test_missing_technology_answer_resolves_selected_project_by_number_or_name():
+    from app.review_workflow import resolve_missing_technology_project
+
+    fields = {
+        'projects[0].name': '쇼핑몰 API',
+        'projects[0].description': '상품 API를 구현했습니다.',
+        'projects[1].name': 'AI 취업 코치',
+        'projects[1].description': '이력서 첨삭 기능을 구현했습니다.',
+    }
+
+    assert resolve_missing_technology_project(
+        '2번 프로젝트에서 Dockerfile을 작성했습니다.', fields,
+    ) == 'projects[1].description'
+    assert resolve_missing_technology_project(
+        'AI 취업 코치에서 Dockerfile을 작성했습니다.', fields,
+    ) == 'projects[1].description'
+    assert resolve_missing_technology_project(
+        'Dockerfile을 작성했습니다.', fields,
+    ) is None
 
 
 def test_followup_reissues_unanswered_questions_on_its_latest_snapshot():

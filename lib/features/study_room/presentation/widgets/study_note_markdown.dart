@@ -3,6 +3,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/study_source_model.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 학생이 볼 노트에서 git 커밋·빈 메타 문구를 가린다.
 String sanitizeStudyNoteMarkdown(String raw) {
@@ -43,7 +44,7 @@ class StudyNoteMarkdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final cleaned = sanitizeStudyNoteMarkdown(data);
     if (cleaned.isEmpty) {
-      return const Text(
+      return Text(
         '표시할 노트 내용이 없습니다.',
         style: TextStyle(color: AppColors.textSecondary),
       );
@@ -53,85 +54,85 @@ class StudyNoteMarkdown extends StatelessWidget {
       selectable: true,
       softLineBreak: true,
       styleSheet: MarkdownStyleSheet(
-        p: const TextStyle(
+        p: TextStyle(
           fontSize: 15,
           height: 1.7,
           color: AppColors.textPrimary,
         ),
-        pPadding: const EdgeInsets.only(bottom: 10),
-        h1: const TextStyle(
+        pPadding: EdgeInsets.only(bottom: AppSpace.s(10)),
+        h1: TextStyle(
           fontSize: 24,
           fontWeight: FontWeight.w800,
           height: 1.3,
           color: AppColors.textPrimary,
         ),
-        h1Padding: const EdgeInsets.only(top: 8, bottom: 16),
-        h2: const TextStyle(
+        h1Padding: EdgeInsets.only(top: AppSpace.s(8), bottom: AppSpace.s(16)),
+        h2: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w800,
           height: 1.35,
           color: AppColors.textPrimary,
         ),
-        h2Padding: const EdgeInsets.only(top: 28, bottom: 10),
-        h3: const TextStyle(
+        h2Padding: EdgeInsets.only(top: AppSpace.s(28), bottom: AppSpace.s(10)),
+        h3: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
           height: 1.4,
           color: AppColors.textPrimary,
         ),
-        h3Padding: const EdgeInsets.only(top: 18, bottom: 8),
-        strong: const TextStyle(
+        h3Padding: EdgeInsets.only(top: AppSpace.s(18), bottom: AppSpace.s(8)),
+        strong: TextStyle(
           fontWeight: FontWeight.w800,
           color: AppColors.textPrimary,
         ),
-        em: const TextStyle(
+        em: TextStyle(
           fontStyle: FontStyle.italic,
           color: AppColors.textPrimary,
         ),
-        listBullet: const TextStyle(
+        listBullet: TextStyle(
           fontSize: 15,
           color: AppColors.primary,
         ),
         listIndent: 22,
-        listBulletPadding: const EdgeInsets.only(right: 8),
-        code: const TextStyle(
+        listBulletPadding: EdgeInsets.only(right: AppSpace.s(8)),
+        code: TextStyle(
           fontSize: 13,
           fontFamily: 'Consolas',
           backgroundColor: AppColors.surfaceVariant,
           color: AppColors.textPrimary,
         ),
-        codeblockPadding: const EdgeInsets.all(14),
+        codeblockPadding: EdgeInsets.all(AppSpace.s(14)),
         codeblockDecoration: BoxDecoration(
           color: AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.border),
         ),
-        blockquote: const TextStyle(
+        blockquote: TextStyle(
           fontSize: 15,
           height: 1.6,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),
-        blockquotePadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        blockquotePadding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(12)),
         blockquoteDecoration: BoxDecoration(
           color: AppColors.primaryLight,
           borderRadius: BorderRadius.circular(10),
-          border: const Border(
+          border: Border(
             left: BorderSide(color: AppColors.primary, width: 3),
           ),
         ),
-        horizontalRuleDecoration: const BoxDecoration(
+        horizontalRuleDecoration: BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.border)),
         ),
-        tableHead: const TextStyle(
+        tableHead: TextStyle(
           fontWeight: FontWeight.w700,
           color: AppColors.textPrimary,
         ),
-        tableBody: const TextStyle(color: AppColors.textPrimary),
+        tableBody: TextStyle(color: AppColors.textPrimary),
         tableBorder: TableBorder.all(color: AppColors.border, width: 0.6),
-        tableCellsPadding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 8,
+        tableCellsPadding: EdgeInsets.symmetric(
+          horizontal: AppSpace.s(10),
+          vertical: AppSpace.s(8),
         ),
       ),
     );
@@ -165,26 +166,26 @@ class StudyNoteReader extends StatelessWidget {
         ),
         Text(
           note.displayTitle,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,
             height: 1.3,
             color: AppColors.textPrimary,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: AppSpace.s(6)),
         Text(
           [
             if (sourceTitle != null && sourceTitle!.isNotEmpty) sourceTitle,
             note.displaySubtitle,
           ].whereType<String>().join(' · '),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             color: AppColors.textSecondary,
           ),
         ),
         if (note.files.isNotEmpty) ...[
-          const SizedBox(height: 14),
+          SizedBox(height: AppSpace.s(14)),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -193,8 +194,8 @@ class StudyNoteReader extends StatelessWidget {
                 Chip(
                   visualDensity: VisualDensity.compact,
                   backgroundColor: AppColors.surfaceVariant,
-                  side: const BorderSide(color: AppColors.border),
-                  avatar: const Icon(
+                  side: BorderSide(color: AppColors.border),
+                  avatar: Icon(
                     Icons.description_outlined,
                     size: 16,
                     color: AppColors.primary,
@@ -207,14 +208,14 @@ class StudyNoteReader extends StatelessWidget {
             ],
           ),
         ],
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpace.s(20)),
         Container(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(22), AppSpace.s(20), AppSpace.s(22), AppSpace.s(28)),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.border),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
                 color: AppColors.shadow,
                 blurRadius: 18,
@@ -224,7 +225,7 @@ class StudyNoteReader extends StatelessWidget {
           ),
           child: StudyNoteMarkdown(data: note.reportMarkdown),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: AppSpace.s(16)),
         StudyReviewPanel(markdown: note.reviewMarkdown),
       ],
     );
@@ -249,16 +250,16 @@ class StudyReviewPanel extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+          tilePadding: EdgeInsets.symmetric(horizontal: AppSpace.s(18), vertical: AppSpace.s(6)),
+          childrenPadding: EdgeInsets.fromLTRB(AppSpace.s(18), AppSpace.s(0), AppSpace.s(18), AppSpace.s(20)),
           leading: Container(
             width: 40,
-            height: 40,
+            height: AppSpace.row(40),
             decoration: BoxDecoration(
               color: AppColors.primaryLight,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.quiz_outlined,
               color: AppColors.primary,
               size: 22,
@@ -268,7 +269,7 @@ class StudyReviewPanel extends StatelessWidget {
             '복습 문제로 확인하기',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
-          subtitle: const Text(
+          subtitle: Text(
             '개념·코드 흐름·응용 문제와 해설',
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),

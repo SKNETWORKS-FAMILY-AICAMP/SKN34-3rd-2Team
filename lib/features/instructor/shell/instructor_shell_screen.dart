@@ -14,6 +14,7 @@ import '../../onboarding/presentation/instructor_onboarding_host.dart';
 import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../shell/widgets/app_shell_header.dart';
 import '../../../core/theme/shell_chrome.dart';
+import '../../../core/theme/app_space.dart';
 
 class _NavItem {
   const _NavItem(this.icon, this.label, this.path, this.targetId);
@@ -85,6 +86,7 @@ class InstructorShellScreen extends ConsumerWidget {
     final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
     final tourActive = ref.watch(onboardingTourProvider)?.active == true;
     final railDark = ref.watch(sideRailDarkModeProvider);
+    final railPalette = ref.watch(sideRailDarkPaletteProvider);
 
     final railItems = [
       for (final item in _kInstructorNavItems)
@@ -92,10 +94,13 @@ class InstructorShellScreen extends ConsumerWidget {
           icon: item.icon,
           label: item.label,
           path: item.path,
-          itemKey: wide
-              ? OnboardingTargetRegistry.keyOf(item.targetId)
-              : null,
+          itemKey: wide ? OnboardingTargetRegistry.keyOf(item.targetId) : null,
         ),
+      const AppSideRailItem(
+        icon: Icons.settings_outlined,
+        label: '설정',
+        path: RoutePaths.instructorSettings,
+      ),
     ];
 
     void navigate(String path) {
@@ -108,7 +113,7 @@ class InstructorShellScreen extends ConsumerWidget {
         backgroundColor: AppColors.background,
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: ShellChrome.appBarBackground(railDark),
+          backgroundColor: ShellChrome.appBarBackground(railDark, railPalette),
           foregroundColor: ShellChrome.appBarForeground(railDark),
           surfaceTintColor: Colors.transparent,
           elevation: 0,
@@ -116,12 +121,18 @@ class InstructorShellScreen extends ConsumerWidget {
           iconTheme: IconThemeData(
             color: ShellChrome.appBarForeground(railDark),
           ),
-          title: const AppShellHeader(homePath: RoutePaths.instructor),
+          flexibleSpace: wide
+              ? ShellChrome.railCorner(
+                  railDark: railDark,
+                  palette: railPalette,
+                )
+              : null,
+          title: AppShellHeader(homePath: RoutePaths.instructor, overRail: wide),
           actions: [
             if (user != null)
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: EdgeInsets.only(right: AppSpace.s(8)),
                   child: ProfileNavChip(
                     user: user,
                     style: ProfileNavChipStyle.appBar,
@@ -139,7 +150,7 @@ class InstructorShellScreen extends ConsumerWidget {
                     : () => ref.read(authRepositoryProvider).signOut(),
                 icon: const Icon(Icons.logout, size: 20),
               ),
-            const SizedBox(width: 4),
+            SizedBox(width: AppSpace.s(4)),
           ],
         ),
         body: Row(
@@ -210,8 +221,8 @@ class _InstructorTopNav extends StatelessWidget {
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.symmetric(
-                horizontal: compact ? 8 : 16,
-                vertical: 8,
+                horizontal: compact ? AppSpace.s(8) : AppSpace.s(16),
+                vertical: AppSpace.s(8),
               ),
               child: Row(
                 children: [
@@ -225,9 +236,7 @@ class _InstructorTopNav extends StatelessWidget {
                         label: item.label,
                         selected: _isNavSelected(currentLocation, item.path),
                         compact: compact,
-                        onTap: tourActive
-                            ? () {}
-                            : () => context.go(item.path),
+                        onTap: tourActive ? () {} : () => context.go(item.path),
                       ),
                     ),
                   ],
@@ -269,8 +278,8 @@ class _NavChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: compact ? 12 : 14,
-            vertical: compact ? 8 : 10,
+            horizontal: compact ? AppSpace.s(12) : AppSpace.s(14),
+            vertical: compact ? AppSpace.s(8) : AppSpace.s(10),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

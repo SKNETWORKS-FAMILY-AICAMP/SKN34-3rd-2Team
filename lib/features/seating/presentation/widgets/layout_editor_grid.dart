@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../models/layout_drag_payload.dart';
 import '../../models/seat_group_helper.dart';
 import '../../models/seating_layout_model.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 관리자 — 드래그로 테이블·강사석·출입문 배치
 class LayoutEditorGrid extends StatelessWidget {
@@ -27,7 +28,7 @@ class LayoutEditorGrid extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _PaletteBar(),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         Center(
           child: Text(
             '▲ 강사석 방향',
@@ -38,10 +39,10 @@ class LayoutEditorGrid extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpace.s(8)),
         ...List.generate(layout.rows, (row) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.only(bottom: AppSpace.s(8)),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(layout.cols, (col) {
@@ -62,8 +63,8 @@ class LayoutEditorGrid extends StatelessWidget {
     final hPadLeft = col > 0 && sameCellGroup(layout, cell, row, col - 1)
         ? 0.0
         : 4.0;
-    final hPadRight = col < layout.cols - 1 &&
-            sameCellGroup(layout, cell, row, col + 1)
+    final hPadRight =
+        col < layout.cols - 1 && sameCellGroup(layout, cell, row, col + 1)
         ? 0.0
         : 4.0;
 
@@ -76,7 +77,7 @@ class LayoutEditorGrid extends StatelessWidget {
         label: '강사석',
         icon: Icons.person,
         fixtureKind: 'instructor',
-        bg: const Color(0xFFF1F5F9),
+        bg: AppColors.tint(const Color(0xFFF1F5F9)),
         border: const Color(0xFF64748B),
       );
     } else if (cell.isDoor) {
@@ -87,7 +88,7 @@ class LayoutEditorGrid extends StatelessWidget {
         label: '출입문',
         icon: Icons.door_front_door_outlined,
         fixtureKind: 'door',
-        bg: const Color(0xFFFEF3C7),
+        bg: AppColors.tint(const Color(0xFFFEF3C7)),
         border: const Color(0xFFF59E0B),
       );
     } else if (cell.isSeat) {
@@ -112,10 +113,14 @@ class LayoutEditorGrid extends StatelessWidget {
           width: _cellW,
           height: _cellH,
           decoration: BoxDecoration(
-            color: hover ? AppColors.primaryLight : const Color(0xFFFAFAFA),
+            color: hover
+                ? AppColors.primaryLight
+                : AppColors.tint(const Color(0xFFFAFAFA)),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: hover ? AppColors.primary : const Color(0xFFE2E8F0),
+              color: hover
+                  ? AppColors.primary
+                  : AppColors.tint(const Color(0xFFE2E8F0)),
               width: hover ? 2 : 1,
             ),
           ),
@@ -153,7 +158,7 @@ class LayoutEditorGrid extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(icon, size: 18, color: border),
-                      const SizedBox(height: 2),
+                      SizedBox(height: AppSpace.s(2)),
                       Text(
                         label,
                         style: TextStyle(
@@ -168,7 +173,11 @@ class LayoutEditorGrid extends StatelessWidget {
                 const Positioned(
                   right: 2,
                   top: 2,
-                  child: Icon(Icons.drag_indicator, size: 12, color: Colors.grey),
+                  child: Icon(
+                    Icons.drag_indicator,
+                    size: 12,
+                    color: Colors.grey,
+                  ),
                 ),
               ],
             )
@@ -201,8 +210,11 @@ class LayoutEditorGrid extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(icon, size: 18, color: border),
-                const SizedBox(width: 6),
-                Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: border)),
+                SizedBox(width: AppSpace.s(6)),
+                Text(
+                  label,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: border),
+                ),
               ],
             ),
           ),
@@ -219,8 +231,9 @@ class LayoutEditorGrid extends StatelessWidget {
 
   Widget _seatWidget(SeatingCell cell) {
     final edges = computeGroupEdges(layout, cell);
-    final group =
-        cell.groupId != null ? layout.cellsInGroup(cell.groupId!) : [cell];
+    final group = cell.groupId != null
+        ? layout.cellsInGroup(cell.groupId!)
+        : [cell];
     group.sort((a, b) {
       final dr = a.row.compareTo(b.row);
       return dr != 0 ? dr : a.col.compareTo(b.col);
@@ -230,13 +243,14 @@ class LayoutEditorGrid extends StatelessWidget {
     final content = Container(
       width: _cellW,
       height: _cellH,
-      padding: const EdgeInsets.all(4),
+      padding: EdgeInsets.all(AppSpace.s(4)),
       decoration: BoxDecoration(
-        color:
-            edges.isGrouped ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+        color: edges.isGrouped
+            ? AppColors.primaryLight
+            : AppColors.tint(const Color(0xFFF8FAFC)),
         borderRadius: edges.borderRadius,
         border: edges.isGrouped
-            ? groupBorder(edges, const Color(0xFF93C5FD))
+            ? groupBorder(edges, AppColors.primary.withValues(alpha: 0.35))
             : Border.all(color: AppColors.border),
       ),
       child: Stack(
@@ -254,10 +268,14 @@ class LayoutEditorGrid extends StatelessWidget {
                 : null,
           ),
           if (edges.isGrouped && isGroupLeader)
-            const Positioned(
+            Positioned(
               right: 0,
               top: 0,
-              child: Icon(Icons.drag_indicator, size: 14, color: Color(0xFF64748B)),
+              child: Icon(
+                Icons.drag_indicator,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
             ),
         ],
       ),
@@ -284,30 +302,32 @@ class LayoutEditorGrid extends StatelessWidget {
         return dr != 0 ? dr : a.col.compareTo(b.col);
       });
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: EdgeInsets.all(AppSpace.s(8)),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
+        color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF93C5FD), width: 2),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < group.length; i++) ...[
-            if (i > 0) const SizedBox(width: 4),
+            if (i > 0) SizedBox(width: AppSpace.s(4)),
             Container(
               width: 56,
-              height: 48,
+              height: AppSpace.row(48),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFF93C5FD)),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
               ),
               child: Text(
                 group[i].label.isNotEmpty ? '${group[i].label}번' : '좌석',
-                style:
-                    const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -360,10 +380,18 @@ class LayoutEditorGrid extends StatelessWidget {
       next = switch (payload.paletteItem!) {
         LayoutPaletteItem.instructor => layout.placeInstructor(row, col),
         LayoutPaletteItem.door => layout.placeDoor(row, col),
-        LayoutPaletteItem.table2 =>
-          layout.placeTable(row, col, 2, newGroupId()),
-        LayoutPaletteItem.table3 =>
-          layout.placeTable(row, col, 3, newGroupId()),
+        LayoutPaletteItem.table2 => layout.placeTable(
+          row,
+          col,
+          2,
+          newGroupId(),
+        ),
+        LayoutPaletteItem.table3 => layout.placeTable(
+          row,
+          col,
+          3,
+          newGroupId(),
+        ),
       };
     } else if (payload.isFixtureMove) {
       final fixtureId = payload.fixtureKind == 'instructor'
@@ -429,9 +457,9 @@ class _PaletteBar extends StatelessWidget {
         elevation: 4,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(8)),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.border),
           ),
@@ -439,7 +467,7 @@ class _PaletteBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 18),
-              const SizedBox(width: 6),
+              SizedBox(width: AppSpace.s(6)),
               Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
@@ -455,9 +483,9 @@ class _PaletteBar extends StatelessWidget {
 
   Widget _chipBody(String label, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(8)),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
@@ -465,9 +493,9 @@ class _PaletteBar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 18, color: AppColors.textSecondary),
-          const SizedBox(width: 6),
+          SizedBox(width: AppSpace.s(6)),
           Text(label),
-          const SizedBox(width: 4),
+          SizedBox(width: AppSpace.s(4)),
           Icon(Icons.drag_indicator, size: 16, color: AppColors.textHint),
         ],
       ),

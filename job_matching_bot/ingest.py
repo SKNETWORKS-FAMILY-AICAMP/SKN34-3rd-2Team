@@ -21,10 +21,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from job_matching_bot.config import AS_OF, ARTIFACTS_DIR, DEFAULT_INPUT, DEFAULT_SARAMIN_INPUT
+from job_matching_bot.config import ARTIFACTS_DIR, DEFAULT_SARAMIN_INPUT, now
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records, record_ids
 from job_matching_bot.ingestion import raw_store
-from job_matching_bot.ingestion import jobkorea, saramin
+from job_matching_bot.ingestion import saramin
 from job_matching_bot.ingestion.job_store import open_store
 from job_matching_bot.schemas.job_posting import Job
 from job_matching_bot.schemas.job_record import CollectionReport
@@ -39,12 +39,6 @@ DEFAULT_REPORT = ARTIFACTS_DIR / "collection_report.json"
 SOURCES: dict[
     str, tuple[Callable[..., Job], str, Callable[[dict[str, Any]], str], Path]
 ] = {
-    "JOBKOREA_POC": (
-        jobkorea.normalize_jobkorea,
-        jobkorea.PARSER_VERSION,
-        lambda record: str(record.get("job_id") or ""),
-        DEFAULT_INPUT,
-    ),
     "SARAMIN_POC": (
         saramin.normalize_saramin,
         saramin.PARSER_VERSION,
@@ -63,7 +57,7 @@ def ingest(
     source: str,
     store_path: Path = DEFAULT_STORE,
     raw_root: Path = DEFAULT_RAW_ROOT,
-    as_of: datetime = AS_OF,
+    as_of: datetime | None = None,
     observed_ids: set[str] | None = None,
     extract: bool = False,
     allow_llm: bool = True,
@@ -79,6 +73,7 @@ def ingest(
     `allow_llm=False`면 LLM을 부르지 않고 본문 제목(자격요건/우대사항) 구간의
     사전 매칭만 쓴다. 비용이 없고 결과가 결정적이다.
     """
+    as_of = as_of or now()
     if observed_ids is not None:
         observed_ids = set(observed_ids) | record_ids(records)
     if source not in SOURCES:
@@ -121,15 +116,13 @@ def ingest(
             fetched_at=as_of,
         )
 
-    store = open_store(store_path).load()
-    report = store.upsert(jobs, source=source, as_of=as_of, observed_ids=observed_ids)
-    store.save()
-    return report
+    with open_store(store_path) as store:
+        return store.upsert(jobs, source=source, as_of=as_of, observed_ids=observed_ids)
 
 
 def _print_report(report: CollectionReport, store_path: Path) -> None:
-    store = open_store(store_path).load()
-    stats = store.stats()
+    with open_store(store_path) as store:
+        stats = store.stats()
     print(f"수집 소스: {report.source}  기준시각: {report.collected_at}")
     print(
         f"  신규 {len(report.new)} / 갱신 {len(report.updated)} / "

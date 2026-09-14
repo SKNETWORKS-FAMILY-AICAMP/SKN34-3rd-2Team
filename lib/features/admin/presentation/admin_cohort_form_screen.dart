@@ -16,6 +16,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../curriculum/data/curriculum_repository.dart';
 import '../../curriculum/providers/curriculum_providers.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 기수 생성 / 수정
 class AdminCohortFormScreen extends ConsumerStatefulWidget {
@@ -138,7 +139,9 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
 
     setState(() => _isUploadingPdf = true);
     try {
-      await ref.read(curriculumRepositoryProvider).clearFullPdf(
+      await ref
+          .read(curriculumRepositoryProvider)
+          .clearFullPdf(
             cohortId: cohortId,
             updatedBy: uid,
           );
@@ -195,9 +198,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
     final initial = isStart
         ? (_startDate ?? DateTime.now())
         : (_endDate ?? _startDate ?? DateTime.now());
-    final firstDate = isStart
-        ? DateTime(2020)
-        : (_startDate ?? DateTime(2020));
+    final firstDate = isStart ? DateTime(2020) : (_startDate ?? DateTime(2020));
     var initialDate = initial;
     if (initialDate.isBefore(firstDate)) initialDate = firstDate;
     final picked = await showDatePicker(
@@ -236,7 +237,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
 
     final term = widget.isEditing
         ? (_existing != null ? _termOf(_existing!) : null) ??
-            int.tryParse(_termController.text.trim())
+              int.tryParse(_termController.text.trim())
         : int.tryParse(_termController.text.trim());
     if (term == null || term <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -250,7 +251,8 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
       final repo = ref.read(lmsRepositoryProvider);
       final description = _descriptionController.text.trim();
       final classroom = _classroomController.text.trim();
-      final base = _existing ??
+      final base =
+          _existing ??
           CohortModel(
             cohortId: 'cohort_$term',
             name: _nameController.text.trim(),
@@ -279,7 +281,9 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isEditing ? '기수 정보가 수정되었습니다.' : '기수가 생성되었습니다.'),
+            content: Text(
+              widget.isEditing ? '기수 정보가 수정되었습니다.' : '기수가 생성되었습니다.',
+            ),
           ),
         );
         context.go(RoutePaths.adminCohorts);
@@ -308,7 +312,9 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
           body: ErrorView(message: e.toString()),
         ),
         data: (list) {
-          final c = list.where((x) => x.cohortId == widget.cohortId).firstOrNull;
+          final c = list
+              .where((x) => x.cohortId == widget.cohortId)
+              .firstOrNull;
           if (c == null) {
             return Scaffold(
               appBar: AppBar(),
@@ -354,7 +360,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 TextFormField(
                   controller: _termController,
                   keyboardType: TextInputType.number,
@@ -375,7 +381,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppSpace.s(16)),
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -385,7 +391,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? '기수명을 입력하세요' : null,
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppSpace.s(16)),
                 TextFormField(
                   controller: _classroomController,
                   decoration: const InputDecoration(
@@ -393,7 +399,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     hintText: '예: 3층 A실',
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppSpace.s(16)),
                 TextFormField(
                   controller: _descriptionController,
                   maxLines: 2,
@@ -401,12 +407,12 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     labelText: '설명 (선택)',
                   ),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 const Text(
                   '운영 기간',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 Row(
                   children: [
                     Expanded(
@@ -416,7 +422,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                         onTap: () => _pickDate(isStart: true),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: AppSpace.s(12)),
                     Expanded(
                       child: _DateTile(
                         label: '종료일',
@@ -426,12 +432,12 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 const Text(
                   '운영 상태',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 SegmentedButton<CohortStatus>(
                   segments: const [
                     ButtonSegment(
@@ -450,14 +456,12 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                   selected: {_status},
                   onSelectionChanged: (s) => setState(() => _status = s.first),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 Text(
                   switch (_status) {
-                    CohortStatus.upcoming =>
-                      '예정: 학생 등록·세팅 가능, 드롭다운에서 선택 가능',
+                    CohortStatus.upcoming => '예정: 학생 등록·세팅 가능, 드롭다운에서 선택 가능',
                     CohortStatus.active => '진행중: 현재 운영 기수',
-                    CohortStatus.archived =>
-                      '종료: 조회 전용, 드롭다운에서 숨김',
+                    CohortStatus.archived => '종료: 조회 전용, 드롭다운에서 숨김',
                   },
                   style: TextStyle(
                     fontSize: 12,
@@ -465,7 +469,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                   ),
                 ),
                 if (widget.isEditing) ...[
-                  const SizedBox(height: 28),
+                  SizedBox(height: AppSpace.s(28)),
                   _CurriculumPdfSection(
                     cohortId: widget.cohortId!,
                     isBusy: _isUploadingPdf,
@@ -474,7 +478,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     onOpen: _openCurriculumPdf,
                   ),
                 ] else ...[
-                  const SizedBox(height: 28),
+                  SizedBox(height: AppSpace.s(28)),
                   Text(
                     '커리큘럼 PDF는 기수 생성 후 수정 화면에서 등록할 수 있습니다.',
                     style: TextStyle(
@@ -483,7 +487,7 @@ class _AdminCohortFormScreenState extends ConsumerState<AdminCohortFormScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 32),
+                SizedBox(height: AppSpace.s(32)),
                 if (_isSaving)
                   const Center(child: CircularProgressIndicator())
                 else
@@ -529,10 +533,10 @@ class _CurriculumPdfSection extends ConsumerWidget {
           '이 기수 학생 대시보드의 「PDF 보기」 버튼으로 열립니다.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         metaAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
+          loading: () => Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.s(12)),
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ),
           error: (e, _) => Text('불러오기 실패: $e'),
@@ -544,7 +548,7 @@ class _CurriculumPdfSection extends ConsumerWidget {
                 if (hasPdf) ...[
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(
+                    leading: Icon(
                       Icons.picture_as_pdf,
                       color: AppColors.error,
                     ),
@@ -559,18 +563,18 @@ class _CurriculumPdfSection extends ConsumerWidget {
                       icon: const Icon(Icons.open_in_new),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: AppSpace.s(8)),
                 ] else
                   Padding(
-                    padding: EdgeInsets.only(bottom: 12),
+                    padding: EdgeInsets.only(bottom: AppSpace.s(12)),
                     child: Text(
                       '아직 등록된 PDF가 없습니다.',
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                   ),
                 if (isBusy)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: AppSpace.s(8)),
                     child: Center(child: CircularProgressIndicator()),
                   )
                 else
@@ -626,7 +630,7 @@ class _DateTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(14)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -638,9 +642,7 @@ class _DateTile extends StatelessWidget {
                 ),
               ),
               Text(
-                value != null
-                    ? AppDateUtils.formatDisplay(value!)
-                    : '날짜 선택',
+                value != null ? AppDateUtils.formatDisplay(value!) : '날짜 선택',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: value != null

@@ -11,6 +11,7 @@ import '../../../shared/models/student_intake_model.dart';
 import '../data/student_admin_service.dart';
 import '../providers/student_admin_providers.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 학생 상담 정보 수정
 class AdminStudentEditScreen extends ConsumerStatefulWidget {
@@ -188,7 +189,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: AppSpace.s(6)),
                     Text(
                       '${intake.displayName} · ${intake.cohortName}',
                       style: TextStyle(
@@ -196,7 +197,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                         color: AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    SizedBox(height: AppSpace.s(20)),
                     AdminFormSection(
                       title: '기본 정보',
                       children: [
@@ -207,7 +208,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                               ? '이름을 입력하세요'
                               : null,
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: AppSpace.s(12)),
                         TextFormField(
                           controller: _personalEmail,
                           keyboardType: TextInputType.emailAddress,
@@ -217,7 +218,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                           ),
                           validator: Validators.email,
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: AppSpace.s(12)),
                         TextFormField(
                           controller: _seatNumber,
                           keyboardType: TextInputType.number,
@@ -270,7 +271,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                         _field(_slumpOvercome, '슬럼프 극복 경험 *', maxLines: 3),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: AppSpace.s(8)),
                     if (_isSubmitting)
                       const Center(child: CircularProgressIndicator())
                     else
@@ -282,7 +283,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
                           minimumSize: const Size.fromHeight(48),
                         ),
                       ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: AppSpace.s(24)),
                   ],
                 ),
               ),
@@ -299,7 +300,7 @@ class _AdminStudentEditScreenState extends ConsumerState<AdminStudentEditScreen>
     int maxLines = 1,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: AppSpace.s(12)),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,

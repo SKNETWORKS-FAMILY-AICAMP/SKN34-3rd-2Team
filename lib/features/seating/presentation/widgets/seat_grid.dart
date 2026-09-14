@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../models/seat_drag_payload.dart';
 import '../../models/seat_group_helper.dart';
 import '../../models/seating_layout_model.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 좌석 그리드 (배치 편집 / 학생 조회)
 class SeatGrid extends StatelessWidget {
@@ -38,6 +39,7 @@ class SeatGrid extends StatelessWidget {
   final Set<String> inactiveSeatIds;
   final Set<String> confirmedUserIds;
   final Set<String> heldUserIds;
+
   /// seatId → 팀 등 연한 배경색 (배치 확인용)
   final Map<String, Color> seatTintColors;
   final void Function(String seatId, SeatDragPayload payload)? onAssign;
@@ -51,14 +53,15 @@ class SeatGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment:
-          compact ? CrossAxisAlignment.center : CrossAxisAlignment.stretch,
+      crossAxisAlignment: compact
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         if (showInstructorHint)
           Center(
             child: Padding(
-              padding: EdgeInsets.only(bottom: compact ? 4 : 12),
+              padding: EdgeInsets.only(bottom: compact ? AppSpace.s(4) : AppSpace.s(12)),
               child: Text(
                 '▲ 강사석 방향',
                 style: TextStyle(
@@ -81,11 +84,12 @@ class SeatGrid extends StatelessWidget {
                   return SizedBox(width: _cellW, height: _cellH);
                 }
 
-                final hPadLeft = col > 0 &&
-                        sameCellGroup(layout, cell, row, col - 1)
+                final hPadLeft =
+                    col > 0 && sameCellGroup(layout, cell, row, col - 1)
                     ? 0.0
                     : _groupGap;
-                final hPadRight = col < layout.cols - 1 &&
+                final hPadRight =
+                    col < layout.cols - 1 &&
                         sameCellGroup(layout, cell, row, col + 1)
                     ? 0.0
                     : _groupGap;
@@ -97,7 +101,8 @@ class SeatGrid extends StatelessWidget {
                     cell: cell,
                     displayName: seatDisplayNames[cell.seatId] ?? '',
                     userId: seatUserIds[cell.seatId],
-                    isHighlighted: highlightUserId != null &&
+                    isHighlighted:
+                        highlightUserId != null &&
                         seatUserIds[cell.seatId] == highlightUserId,
                     isConfirmed: confirmedUserIds.contains(
                       seatUserIds[cell.seatId],
@@ -171,7 +176,9 @@ class _SeatCell extends StatelessWidget {
       return _fixtureCell(
         label: cell.isInstructor ? '강사' : '출입문',
         icon: cell.isInstructor ? Icons.person : Icons.door_front_door_outlined,
-        bg: cell.isInstructor ? const Color(0xFFF1F5F9) : const Color(0xFFFEF3C7),
+        bg: cell.isInstructor
+            ? AppColors.tint(const Color(0xFFF1F5F9))
+            : AppColors.tint(const Color(0xFFFEF3C7)),
         border: cell.isInstructor ? AppColors.border : const Color(0xFFF59E0B),
       );
     }
@@ -183,52 +190,53 @@ class _SeatCell extends StatelessWidget {
     Color bgColor;
     if (isHighlighted) {
       bgColor = pulseHighlight
-          ? const Color(0xFFFEF3C7)
+          ? AppColors.tint(const Color(0xFFFEF3C7))
           : AppColors.primary;
     } else if (isConfirmed) {
-      bgColor = const Color(0xFFDCFCE7);
+      bgColor = AppColors.tint(const Color(0xFFDCFCE7));
     } else if (isHeld) {
-      bgColor = const Color(0xFFFFEDD5);
+      bgColor = AppColors.tint(const Color(0xFFFFEDD5));
     } else if (isInactive) {
-      bgColor = const Color(0xFFFEE2E2);
+      bgColor = AppColors.tint(const Color(0xFFFEE2E2));
     } else if (teamTint != null) {
       bgColor = teamTint!;
     } else if (edges.isGrouped) {
-      bgColor = const Color(0xFFEFF6FF);
+      bgColor = AppColors.primaryLight;
     } else if (hasStudent) {
-      bgColor = Colors.white;
+      bgColor = AppColors.surface;
     } else {
-      bgColor = const Color(0xFFF8FAFC);
+      bgColor = AppColors.tint(const Color(0xFFF8FAFC));
     }
 
     final borderColor = isHighlighted
         ? (pulseHighlight ? const Color(0xFFF59E0B) : AppColors.primaryDark)
         : isConfirmed
-            ? const Color(0xFF22C55E)
-            : isHeld
-                ? const Color(0xFFF97316)
-                : isInactive
-                    ? const Color(0xFFEF4444)
-                    : teamTint != null
-                        ? Color.lerp(teamTint, Colors.black, 0.22)!
-                        : edges.isGrouped
-                            ? const Color(0xFF93C5FD)
-                            : AppColors.border;
+        ? const Color(0xFF22C55E)
+        : isHeld
+        ? const Color(0xFFF97316)
+        : isInactive
+        ? const Color(0xFFEF4444)
+        : teamTint != null
+        ? Color.lerp(teamTint, Colors.black, 0.22)!
+        : edges.isGrouped
+        ? AppColors.primary.withValues(alpha: 0.35)
+        : AppColors.border;
 
-    final borderWidth = isHighlighted ? (compact ? 2.0 : 2.5) : (compact ? 1.0 : 1.5);
+    final borderWidth = isHighlighted
+        ? (compact ? 2.0 : 2.5)
+        : (compact ? 1.0 : 1.5);
     final onMine = mineFill ? Colors.white : null;
     final labelColor = onMine ?? AppColors.textSecondary;
-    final nameColor = onMine ??
+    final nameColor =
+        onMine ??
         (isHighlighted
-            ? (pulseHighlight
-                ? const Color(0xFFB45309)
-                : AppColors.primaryDark)
+            ? (pulseHighlight ? const Color(0xFFB45309) : AppColors.primaryDark)
             : AppColors.textPrimary);
 
     Widget seatContent = Container(
       width: cellW,
       height: cellH,
-      padding: EdgeInsets.all(compact ? 1 : 4),
+      padding: EdgeInsets.all(compact ? AppSpace.s(1) : AppSpace.s(4)),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: edges.borderRadius,
@@ -238,10 +246,11 @@ class _SeatCell extends StatelessWidget {
         boxShadow: isHighlighted
             ? [
                 BoxShadow(
-                  color: (pulseHighlight
-                          ? const Color(0xFFF59E0B)
-                          : AppColors.primary)
-                      .withValues(alpha: 0.4),
+                  color:
+                      (pulseHighlight
+                              ? const Color(0xFFF59E0B)
+                              : AppColors.primary)
+                          .withValues(alpha: 0.4),
                   blurRadius: compact ? 5 : 10,
                   spreadRadius: compact ? 0.5 : 1.5,
                 ),
@@ -258,11 +267,13 @@ class _SeatCell extends StatelessWidget {
                 '${cell.label}번',
                 style: TextStyle(
                   fontSize: compact ? 7 : 10,
-                  color: labelColor.withValues(alpha: onMine != null ? 0.85 : 1),
+                  color: labelColor.withValues(
+                    alpha: onMine != null ? 0.85 : 1,
+                  ),
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if (!compact) const SizedBox(height: 2),
+              if (!compact) SizedBox(height: AppSpace.s(2)),
               Expanded(
                 child: Center(
                   child: Text(
@@ -272,8 +283,9 @@ class _SeatCell extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: compact ? 6 : 11,
-                      fontWeight:
-                          isHighlighted ? FontWeight.w800 : FontWeight.w500,
+                      fontWeight: isHighlighted
+                          ? FontWeight.w800
+                          : FontWeight.w500,
                       color: nameColor,
                     ),
                   ),
@@ -315,14 +327,14 @@ class _SeatCell extends StatelessWidget {
               right: -1,
               top: -1,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                padding: EdgeInsets.symmetric(horizontal: AppSpace.s(3), vertical: AppSpace.s(1)),
                 decoration: BoxDecoration(
                   color: pulseHighlight
                       ? const Color(0xFFF59E0B)
                       : AppColors.primaryDark,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text(
+                child: Text(
                   '나',
                   style: TextStyle(
                     fontSize: 6,
@@ -413,7 +425,7 @@ class _SeatCell extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, size: compact ? 10 : 16, color: border),
-                if (!compact) const SizedBox(height: 2),
+                if (!compact) SizedBox(height: AppSpace.s(2)),
                 Text(
                   label,
                   style: TextStyle(
@@ -429,7 +441,7 @@ class _SeatCell extends StatelessWidget {
 
   Widget _dragChip(String name) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(12), vertical: AppSpace.s(8)),
       decoration: BoxDecoration(
         color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(8),
@@ -472,7 +484,9 @@ class _PulseGlowState extends State<_PulseGlow>
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.25 + t * 0.45),
+                color: const Color(
+                  0xFFF59E0B,
+                ).withValues(alpha: 0.25 + t * 0.45),
                 blurRadius: 8 + t * 14,
                 spreadRadius: 1 + t * 3,
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../../core/theme/app_space.dart';
 
 /// 왼쪽 정렬 뷰 전환 칩 (재원/퇴소, 기수 상태, 좌석 탭 등)
 class FilterPill extends StatelessWidget {
@@ -27,7 +28,7 @@ class FilterPill extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(8)),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
@@ -73,7 +74,7 @@ class FilterPillHeader extends StatelessWidget {
         children: [
           if (title != null && title!.trim().isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(0)),
               child: Text(
                 title!,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -85,10 +86,10 @@ class FilterPillHeader extends StatelessWidget {
             ),
           Padding(
             padding: EdgeInsets.fromLTRB(
-              16,
-              title != null && title!.trim().isNotEmpty ? 10 : 12,
-              8,
-              12,
+              AppSpace.s(16),
+              title != null && title!.trim().isNotEmpty ? AppSpace.s(10) : AppSpace.s(12),
+              AppSpace.s(8),
+              AppSpace.s(12),
             ),
             child: Row(
               children: [
@@ -98,7 +99,7 @@ class FilterPillHeader extends StatelessWidget {
                     child: Row(
                       children: [
                         for (var i = 0; i < pills.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 8),
+                          if (i > 0) SizedBox(width: AppSpace.s(8)),
                           pills[i],
                         ],
                       ],
@@ -106,9 +107,9 @@ class FilterPillHeader extends StatelessWidget {
                   ),
                 ),
                 if (trailing != null) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   trailing!,
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                 ],
               ],
             ),

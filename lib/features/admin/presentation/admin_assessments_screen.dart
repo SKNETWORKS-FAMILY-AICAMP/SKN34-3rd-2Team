@@ -8,6 +8,7 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../assessments/presentation/widgets/assessment_card.dart';
 import '../../instructor/presentation/instructor_assessments_screen.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 성취도평가 결과 조회
 class AdminAssessmentsScreen extends ConsumerWidget {
@@ -32,9 +33,9 @@ class AdminAssessmentsScreen extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(24)),
             itemCount: list.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, __) => SizedBox(height: AppSpace.s(8)),
             itemBuilder: (context, i) {
               final a = list[i];
               return Center(

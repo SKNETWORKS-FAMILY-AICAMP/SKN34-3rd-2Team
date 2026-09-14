@@ -13,6 +13,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../onboarding/admin/admin_onboarding_keys.dart';
 import '../../onboarding/domain/onboarding_target_registry.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 기수별 당일 출석 전체 조회/수정
 class AdminAttendanceScreen extends ConsumerStatefulWidget {
@@ -47,15 +48,18 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
     if (cohortId == null) return;
     setState(() => _seeding = seed);
     try {
-      final n = await ref.read(lmsRepositoryProvider).seedDemoAttendances(
-            cohortId: cohortId,
-            dateKey: _dateKey,
-            students: students,
-            seed: seed,
-          ) as int;
+      final n =
+          await ref
+                  .read(lmsRepositoryProvider)
+                  .seedDemoAttendances(
+                    cohortId: cohortId,
+                    dateKey: _dateKey,
+                    students: students,
+                    seed: seed,
+                  )
+              as int;
       if (!mounted) return;
-      final label =
-          seed == DemoAttendanceSeed.checkIn ? '예시 입실' : '예시 퇴실';
+      final label = seed == DemoAttendanceSeed.checkIn ? '예시 입실' : '예시 퇴실';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$label $n건을 반영했습니다. (폼·수동 기록은 유지)')),
       );
@@ -76,11 +80,14 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
     setState(() => _ensuringNotice = true);
     try {
       final created =
-          await ref.read(lmsRepositoryProvider).ensureDailyAttendanceFormNotice(
-                cohortId: cohortId,
-                authorId: user.uid,
-                authorName: user.displayName,
-              ) as bool;
+          await ref
+                  .read(lmsRepositoryProvider)
+                  .ensureDailyAttendanceFormNotice(
+                    cohortId: cohortId,
+                    authorId: user.uid,
+                    authorName: user.displayName,
+                  )
+              as bool;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -108,7 +115,9 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
     try {
-      await ref.read(lmsRepositoryProvider).upsertAttendanceStatus(
+      await ref
+          .read(lmsRepositoryProvider)
+          .upsertAttendanceStatus(
             cohortId: cohortId,
             userId: student.uid,
             userDisplayName: student.displayName,
@@ -145,8 +154,7 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
           final filtered = students.where((s) {
             if (q.isEmpty) return true;
             return s.displayName.contains(q);
-          }).toList()
-            ..sort((a, b) => a.displayName.compareTo(b.displayName));
+          }).toList()..sort((a, b) => a.displayName.compareTo(b.displayName));
 
           final counts = <String, int>{
             for (final s in AttendanceStatus.all) s: 0,
@@ -174,140 +182,149 @@ class _AdminAttendanceScreenState extends ConsumerState<AdminAttendanceScreen> {
                   width: width,
                   height: constraints.maxHeight,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(28)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                    Text(
-                      cohortName ?? '기수를 먼저 선택하세요',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '고용24 입퇴실은 예시 데이터입니다. 지각·조퇴·외출·결석·공가는 당일 구글폼 선택값이 반영됩니다.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _ToolbarCard(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: _pickDate,
-                            icon: const Icon(Icons.calendar_today, size: 16),
-                            label: Text(_dateKey),
+                        Text(
+                          cohortName ?? '기수를 먼저 선택하세요',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
                           ),
-                          TextButton(
-                            onPressed: () =>
-                                setState(() => _day = DateTime.now()),
-                            child: const Text('오늘'),
+                        ),
+                        SizedBox(height: AppSpace.s(6)),
+                        Text(
+                          '고용24 입퇴실은 예시 데이터입니다. 지각·조퇴·외출·결석·공가는 당일 구글폼 선택값이 반영됩니다.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: AppColors.textSecondary,
                           ),
-                          const SizedBox(width: 4),
-                          FilledButton.icon(
-                            onPressed: _seeding != null || students.isEmpty
-                                ? null
-                                : () => _seedDemo(DemoAttendanceSeed.checkIn),
-                            icon: _seeding == DemoAttendanceSeed.checkIn
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.login_rounded, size: 16),
-                            label: const Text('예시 입실 채우기'),
-                          ),
-                          FilledButton.icon(
-                            onPressed: _seeding != null || students.isEmpty
-                                ? null
-                                : () =>
-                                    _seedDemo(DemoAttendanceSeed.checkOut),
-                            icon: _seeding == DemoAttendanceSeed.checkOut
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.logout_rounded, size: 16),
-                            label: const Text('예시 퇴실 채우기'),
-                          ),
-                          KeyedSubtree(
-                            key: OnboardingTargetRegistry.keyOf(
-                              AdminOnboardingTargets.attendanceDailyNotice,
-                            ),
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  _ensuringNotice ? null : _ensureNotice,
-                              icon: _ensuringNotice
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.campaign_outlined,
-                                      size: 16,
-                                    ),
-                              label: const Text('매일 08:30 공지 등록'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _ToolbarCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Wrap(
+                        ),
+                        SizedBox(height: AppSpace.s(16)),
+                        _ToolbarCard(
+                          child: Wrap(
                             spacing: 8,
                             runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              _CountChip(
-                                label: '전체 ${students.length}',
-                                color: AppColors.textPrimary,
-                              ),
-                              ...AttendanceStatus.all.map(
-                                (s) => _CountChip(
-                                  label:
-                                      '${AttendanceStatus.labelOf(s)} ${counts[s] ?? 0}',
-                                  color: AttendanceStatus.colorOf(s),
+                              OutlinedButton.icon(
+                                onPressed: _pickDate,
+                                icon: const Icon(
+                                  Icons.calendar_today,
+                                  size: 16,
                                 ),
+                                label: Text(_dateKey),
                               ),
-                              _CountChip(
-                                label: '미기록 ${counts['_none'] ?? 0}',
-                                color: AppColors.textHint,
+                              TextButton(
+                                onPressed: () =>
+                                    setState(() => _day = DateTime.now()),
+                                child: const Text('오늘'),
+                              ),
+                              SizedBox(width: AppSpace.s(4)),
+                              FilledButton.icon(
+                                onPressed: _seeding != null || students.isEmpty
+                                    ? null
+                                    : () =>
+                                          _seedDemo(DemoAttendanceSeed.checkIn),
+                                icon: _seeding == DemoAttendanceSeed.checkIn
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.login_rounded, size: 16),
+                                label: const Text('예시 입실 채우기'),
+                              ),
+                              FilledButton.icon(
+                                onPressed: _seeding != null || students.isEmpty
+                                    ? null
+                                    : () => _seedDemo(
+                                        DemoAttendanceSeed.checkOut,
+                                      ),
+                                icon: _seeding == DemoAttendanceSeed.checkOut
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.logout_rounded,
+                                        size: 16,
+                                      ),
+                                label: const Text('예시 퇴실 채우기'),
+                              ),
+                              KeyedSubtree(
+                                key: OnboardingTargetRegistry.keyOf(
+                                  AdminOnboardingTargets.attendanceDailyNotice,
+                                ),
+                                child: OutlinedButton.icon(
+                                  onPressed: _ensuringNotice
+                                      ? null
+                                      : _ensureNotice,
+                                  icon: _ensuringNotice
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.campaign_outlined,
+                                          size: 16,
+                                        ),
+                                  label: const Text('매일 08:30 공지 등록'),
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            decoration: const InputDecoration(
-                              prefixIcon: Icon(Icons.search, size: 20),
-                              hintText: '이름 검색',
-                              isDense: true,
-                            ),
-                            onChanged: (v) => setState(() => _query = v),
+                        ),
+                        SizedBox(height: AppSpace.s(12)),
+                        _ToolbarCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _CountChip(
+                                    label: '전체 ${students.length}',
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  ...AttendanceStatus.all.map(
+                                    (s) => _CountChip(
+                                      label:
+                                          '${AttendanceStatus.labelOf(s)} ${counts[s] ?? 0}',
+                                      color: AttendanceStatus.colorOf(s),
+                                    ),
+                                  ),
+                                  _CountChip(
+                                    label: '미기록 ${counts['_none'] ?? 0}',
+                                    color: AppColors.textHint,
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: AppSpace.s(12)),
+                              TextField(
+                                decoration: const InputDecoration(
+                                  prefixIcon: Icon(Icons.search, size: 20),
+                                  hintText: '이름 검색',
+                                  isDense: true,
+                                ),
+                                onChanged: (v) => setState(() => _query = v),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                        ),
+                        SizedBox(height: AppSpace.s(12)),
                         Expanded(
                           child: _AttendanceList(
                             attendancesAsync: attendancesAsync,
@@ -346,7 +363,8 @@ class _AttendanceList extends StatelessWidget {
   final Future<void> Function({
     required UserModel student,
     required String status,
-  }) onStatusChanged;
+  })
+  onStatusChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -409,7 +427,7 @@ class _AttendanceHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.surfaceVariant,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(16), vertical: AppSpace.s(12)),
       child: Row(
         children: [
           Expanded(flex: 2, child: Text('이름', style: _headerStyle)),
@@ -424,7 +442,7 @@ class _AttendanceHeader extends StatelessWidget {
   }
 }
 
-final _headerStyle = TextStyle(
+TextStyle get _headerStyle => TextStyle(
   fontSize: 12,
   fontWeight: FontWeight.w700,
   color: AppColors.textSecondary,
@@ -442,7 +460,8 @@ class _AttendanceRow extends StatelessWidget {
   final Future<void> Function({
     required UserModel student,
     required String status,
-  }) onStatusChanged;
+  })
+  onStatusChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -450,7 +469,7 @@ class _AttendanceRow extends StatelessWidget {
     final value = AttendanceStatus.all.contains(status) ? status : null;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(16), vertical: AppSpace.s(8)),
       child: Row(
         children: [
           Expanded(
@@ -501,7 +520,7 @@ class _AttendanceRow extends StatelessWidget {
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        SizedBox(width: AppSpace.s(6)),
                         Flexible(
                           child: Text(
                             AttendanceStatus.labelOf(s),
@@ -533,13 +552,12 @@ class _AttendanceRow extends StatelessWidget {
 }
 
 class _ToolbarCard extends StatelessWidget {
-  const _ToolbarCard({
-    required this.child,
-    this.padding = const EdgeInsets.all(14),
-  });
+  const _ToolbarCard({required this.child, EdgeInsetsGeometry? padding})
+    : _padding = padding;
 
   final Widget child;
-  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry? _padding;
+  EdgeInsetsGeometry get padding => _padding ?? EdgeInsets.all(AppSpace.s(14));
 
   @override
   Widget build(BuildContext context) {
@@ -564,7 +582,7 @@ class _CountChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(6)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),

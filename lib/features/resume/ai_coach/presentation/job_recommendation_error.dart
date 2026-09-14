@@ -10,20 +10,20 @@ class _RecommendationError extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Icon(Icons.error_outline, color: AppColors.error, size: 25),
-      const SizedBox(height: 12),
+      Icon(Icons.error_outline, color: AppColors.error, size: 25),
+      SizedBox(height: AppSpace.s(12)),
       Semantics(
         liveRegion: true,
         child: Text(
           message,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             height: 1.6,
             color: AppColors.textSecondary,
           ),
         ),
       ),
-      const SizedBox(height: 18),
+      SizedBox(height: AppSpace.s(18)),
       FilledButton(
         onPressed: onRetry,
         style: FilledButton.styleFrom(

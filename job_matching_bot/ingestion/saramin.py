@@ -30,7 +30,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Any
 
-from job_matching_bot.config import AS_OF
+from job_matching_bot.config import now
+from job_matching_bot.ingestion.company_name import clean_company_name, clean_listing_text
 from job_matching_bot.ingestion.detail_quality import is_image_only_detail
 from job_matching_bot.ingestion.saramin_tech_vocab import split_tags
 from job_matching_bot.schemas.job_posting import Job
@@ -146,11 +147,12 @@ def parse_tech_stack(description: str) -> tuple[list[str], dict[str, Any]]:
     }
 
 
-def parse_deadline(support_text: str, as_of: datetime = AS_OF) -> tuple[str | None, str]:
+def parse_deadline(support_text: str, as_of: datetime | None = None) -> tuple[str | None, str]:
     """지원 마감일. 사람인은 상대 표기를 섞어 쓴다.
 
     "~09.13(일)" / "D-6" / "내일마감" / "오늘마감" / "상시채용"
     """
+    as_of = as_of or now()
     text = _clean(support_text)
     if not text:
         return None, "미기재"
@@ -194,7 +196,7 @@ def _status(deadline: str | None, as_of: datetime) -> str:
 
 def normalize_saramin(
     record: dict[str, Any],
-    as_of: datetime = AS_OF,
+    as_of: datetime | None = None,
     requirements: dict[str, Any] | None = None,
 ) -> Job:
     """상세 수집 레코드 하나를 공통 스키마로 만든다.
@@ -202,6 +204,7 @@ def normalize_saramin(
     `requirements`는 `coach.skill_source.extract_requirements()` 결과다.
     주지 않으면 `job_sectors`만으로 채운다.
     """
+    as_of = as_of or now()
     listing = record.get("list_item") or {}
     conditions = record.get("conditions") or {}
     company_info = record.get("company_info") or {}
@@ -265,9 +268,10 @@ def normalize_saramin(
         source=SOURCE,
         source_job_id=source_job_id,
         source_url=str(record.get("source_url") or listing.get("source_url") or ""),
-        company=str(listing.get("company") or ""),
+        # 옛 수집본의 회사명에는 뱃지가 붙어 있다. 수집기를 고친 뒤에도 원본은 그대로라 여기서도 뗀다.
+        company=clean_company_name(listing.get("company")),
         company_type=_clean(company_info.get("기업형태", "")) or "미기재",
-        title=str(listing.get("title") or ""),
+        title=clean_listing_text(str(listing.get("title") or "")),
         description=description,
         required_skills=required,
         preferred_skills=preferred,
@@ -320,11 +324,12 @@ def normalize_saramin(
 
 def normalize_many(
     records: list[dict[str, Any]],
-    as_of: datetime = AS_OF,
+    as_of: datetime | None = None,
     extract: bool = False,
     cache_path: Any = None,
 ) -> list[Job]:
     """여러 건을 정규화한다. `extract=True`면 본문에 LLM 추출을 돌린다."""
+    as_of = as_of or now()
     jobs = []
     for record in records:
         requirements = None

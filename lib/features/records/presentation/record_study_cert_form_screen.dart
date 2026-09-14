@@ -11,6 +11,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../data/record_submission_helper.dart';
 import 'widgets/record_file_upload.dart';
 import 'widgets/record_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// Pre-course study certification (Jesus student challenge)
 class RecordStudyCertFormScreen extends ConsumerStatefulWidget {
@@ -118,7 +119,7 @@ class _RecordStudyCertFormScreenState
       user: user,
       cohortName: cohortName,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: EdgeInsets.only(bottom: AppSpace.s(24)),
         child: RecordFormPanel(
           title: '학습인증 제출',
           child: Column(
@@ -127,7 +128,7 @@ class _RecordStudyCertFormScreenState
               RecordInfoBanner(
                 message: RecordTypes.descriptions[RecordTypes.studyCert]!,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('학습일자'),
               OutlinedButton(
                 onPressed: _pickDate,
@@ -137,7 +138,7 @@ class _RecordStudyCertFormScreenState
                       : AppDateUtils.formatDisplay(_learningDate!),
                 ),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('학습한 내용'),
               TextField(
                 controller: _contentCtrl,
@@ -146,7 +147,7 @@ class _RecordStudyCertFormScreenState
                   hint: '오늘 학습한 주제 및 키워드',
                 ),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const RecordFieldLabel('학습 인증 사진'),
               RecordFileUpload(
                 files: _files,

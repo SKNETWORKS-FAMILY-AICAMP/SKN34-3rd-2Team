@@ -9,6 +9,7 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/seating_providers.dart';
 import 'widgets/seat_grid.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 학생 — 확정된 좌석 배치표 조회
 class SeatingScreen extends ConsumerWidget {
@@ -59,7 +60,7 @@ class SeatingScreen extends ConsumerWidget {
                     if (assignment == null || !assignment.isPublished) {
                       return Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(32),
+                          padding: EdgeInsets.all(AppSpace.s(32)),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -69,7 +70,7 @@ class SeatingScreen extends ConsumerWidget {
                                 color:
                                     AppColors.textHint.withValues(alpha: 0.6),
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppSpace.s(12)),
                               const Text(
                                 '좌석 배치 확정 대기 중',
                                 style: TextStyle(
@@ -77,7 +78,7 @@ class SeatingScreen extends ConsumerWidget {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              SizedBox(height: AppSpace.s(8)),
                               Text(
                                 '관리자가 배치를 확정하면 이곳에서 확인할 수 있습니다.',
                                 textAlign: TextAlign.center,
@@ -104,7 +105,7 @@ class SeatingScreen extends ConsumerWidget {
                     final myUid = currentUser.asData?.value?.uid;
 
                     return SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(AppSpace.s(16)),
                       child: Align(
                         alignment: Alignment.topCenter,
                         child: ConstrainedBox(

@@ -12,6 +12,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../assessments/data/assessment_functions_service.dart';
 import '../../assessments/presentation/widgets/assessment_question_view.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 강사 — 제출 상세 + 문항별 점수 수정
 class InstructorAssessmentSubmissionScreen extends ConsumerStatefulWidget {
@@ -61,7 +62,8 @@ class _InstructorAssessmentSubmissionScreenState
     for (final q in questions) {
       final entry = submission.answers[q.id];
       if (entry == null) continue;
-      final next = int.tryParse(_scoreCtrls[q.id]?.text.trim() ?? '') ??
+      final next =
+          int.tryParse(_scoreCtrls[q.id]?.text.trim() ?? '') ??
           entry.finalScore;
       if (next != entry.finalScore) {
         adjustments.add({'questionId': q.id, 'finalScore': next});
@@ -90,7 +92,9 @@ class _InstructorAssessmentSubmissionScreenState
           note: _note.text.trim().isEmpty ? null : _note.text.trim(),
         );
       } else {
-        await ref.read(assessmentFunctionsServiceProvider).adjustAssessmentScores(
+        await ref
+            .read(assessmentFunctionsServiceProvider)
+            .adjustAssessmentScores(
               cohortId: cohortId,
               submissionId: widget.submissionId,
               adjustments: adjustments,
@@ -118,10 +122,12 @@ class _InstructorAssessmentSubmissionScreenState
 
   @override
   Widget build(BuildContext context) {
-    final submissionAsync =
-        ref.watch(assessmentSubmissionProvider(widget.submissionId));
-    final questionsAsync =
-        ref.watch(assessmentQuestionsProvider(widget.assessmentId));
+    final submissionAsync = ref.watch(
+      assessmentSubmissionProvider(widget.submissionId),
+    );
+    final questionsAsync = ref.watch(
+      assessmentQuestionsProvider(widget.assessmentId),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.surfaceVariant,
@@ -154,11 +160,11 @@ class _InstructorAssessmentSubmissionScreenState
                 child: ConstrainedBox(
                   constraints: AppLayout.readingConstraints(),
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(16), AppSpace.s(16), AppSpace.s(32)),
                     children: [
                       Card(
                         elevation: 0,
-                        color: Colors.white,
+                        color: AppColors.surface,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(color: AppColors.border),
@@ -173,7 +179,7 @@ class _InstructorAssessmentSubmissionScreenState
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: AppSpace.s(16)),
                       ...questions.asMap().entries.map((e) {
                         final q = e.value;
                         final ans = submission.answers[q.id];
@@ -182,7 +188,7 @@ class _InstructorAssessmentSubmissionScreenState
                             ? ans!.value as int
                             : int.tryParse('${ans?.value ?? ''}');
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 20),
+                          padding: EdgeInsets.only(bottom: AppSpace.s(20)),
                           child: AssessmentQuestionView(
                             number: e.key + 1,
                             prompt: q.prompt,
@@ -195,8 +201,8 @@ class _InstructorAssessmentSubmissionScreenState
                             selectedIndex: selected,
                             shortAnswer:
                                 q.type == AssessmentQuestionType.shortAnswer
-                                    ? '${ans?.value ?? ''}'
-                                    : null,
+                                ? '${ans?.value ?? ''}'
+                                : null,
                             mode: AssessmentQuestionViewMode.review,
                             earnedScore: ans?.finalScore,
                             isCorrect: ans?.isCorrect,
@@ -232,23 +238,23 @@ class _InstructorAssessmentSubmissionScreenState
                       if (widget.canEditScores) ...[
                         TextField(
                           controller: _note,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '수정 사유 (선택)',
                             border: OutlineInputBorder(),
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: AppColors.surface,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: AppSpace.s(12)),
                         SizedBox(
                           width: double.infinity,
-                          height: 48,
+                          height: AppSpace.row(48),
                           child: FilledButton(
                             onPressed: _saving
                                 ? null
                                 : () => _save(submission, questions),
                             child: _saving
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(
@@ -261,7 +267,7 @@ class _InstructorAssessmentSubmissionScreenState
                         ),
                       ],
                       if (submission.scoreAdjustments.isNotEmpty) ...[
-                        const SizedBox(height: 24),
+                        SizedBox(height: AppSpace.s(24)),
                         const Text(
                           '수정 이력',
                           style: TextStyle(fontWeight: FontWeight.w700),

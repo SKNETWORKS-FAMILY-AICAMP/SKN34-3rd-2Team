@@ -12,6 +12,7 @@ import '../providers/curriculum_youtube_providers.dart';
 import 'widgets/inflearn_package_card.dart';
 import 'widgets/study_room_layout.dart';
 import 'widgets/youtube_recommendation_section.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 학습실 — 배정된 인프런 강의 패키지 (학생)
 class StudyRoomScreen extends ConsumerStatefulWidget {
@@ -60,11 +61,11 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                     cohortName: cohortName,
                     subtitle: '배정된 인프런 강의와 이번 주 커리큘럼 YouTube 추천을 확인하세요.',
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: AppSpace.s(20)),
                   const _StudyRoomEntryCard(),
-                  const SizedBox(height: 20),
+                  SizedBox(height: AppSpace.s(20)),
                   const YoutubeRecommendationSection(),
-                  const SizedBox(height: 28),
+                  SizedBox(height: AppSpace.s(28)),
                   Text(
                     '배정된 인프런 강의',
                     style: TextStyle(
@@ -73,16 +74,16 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   StudyRoomSearchBar(
                     controller: _searchController,
                     hintText: '교과목·강의명 검색',
                     onChanged: (v) => setState(() => _query = v.trim()),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpace.s(16)),
                   packages.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(40),
+                    loading: () => Padding(
+                      padding: EdgeInsets.all(AppSpace.s(40)),
                       child: Center(child: CircularProgressIndicator()),
                     ),
                     error: (e, _) => ErrorView(message: e.toString()),
@@ -109,7 +110,7 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
 
                       if (filtered.isEmpty) {
                         return Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
+                          padding: EdgeInsets.symmetric(vertical: AppSpace.s(48)),
                           child: Center(
                             child: Column(
                               children: [
@@ -118,14 +119,14 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                                   size: 48,
                                   color: AppColors.textHint,
                                 ),
-                                SizedBox(height: 12),
+                                SizedBox(height: AppSpace.s(12)),
                                 Text(
                                   '배정된 인프런 강의가 없습니다',
                                   style: TextStyle(
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
-                                SizedBox(height: 6),
+                                SizedBox(height: AppSpace.s(6)),
                                 Text(
                                   '강의 배정 후 이곳에 표시됩니다.',
                                   style: TextStyle(
@@ -143,7 +144,7 @@ class _StudyRoomScreenState extends ConsumerState<StudyRoomScreen> {
                         children: [
                           for (final p in filtered) ...[
                             InflearnPackageCard(package: p),
-                            const SizedBox(height: 16),
+                            SizedBox(height: AppSpace.s(16)),
                           ],
                         ],
                       );
@@ -165,7 +166,7 @@ class _StudyRoomEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpace.s(16)),
       decoration: BoxDecoration(
         color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(12),
@@ -173,7 +174,7 @@ class _StudyRoomEntryCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -185,15 +186,18 @@ class _StudyRoomEntryCard extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: AppSpace.s(4)),
                 Text(
                   '수업 저장소에서 날짜·폴더·파일을 골라 복습 노트를 만듭니다.',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: AppSpace.s(12)),
           FilledButton(
             onPressed: () => context.go(RoutePaths.studyRoomNotes),
             child: const Text('공부방 열기'),

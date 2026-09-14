@@ -15,6 +15,7 @@ import '../../../shared/services/storage_service.dart';
 import '../../../shared/utils/curriculum_csv_parser.dart';
 import '../../onboarding/domain/onboarding_target_registry.dart';
 import '../../onboarding/instructor/instructor_onboarding_keys.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 강사 — 커리큘럼 CSV 업로드 + 표 조회
 class InstructorCurriculumScreen extends ConsumerStatefulWidget {
@@ -77,7 +78,7 @@ class _InstructorCurriculumScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('${parsed.length}행 파싱됨. 상위 ${preview.length}행:'),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               SizedBox(
                 height: 220,
                 child: ListView.builder(
@@ -113,19 +114,19 @@ class _InstructorCurriculumScreenState
 
     setState(() => _uploading = true);
     try {
-      final rows = parsed
-          .map((m) => CurriculumRowModel.fromMap(m))
-          .toList();
+      final rows = parsed.map((m) => CurriculumRowModel.fromMap(m)).toList();
       var storagePath = '';
       if (!DemoConfig.enabled) {
-        final tempId = replaceSheetId ??
-            DateTime.now().millisecondsSinceEpoch.toString();
+        final tempId =
+            replaceSheetId ?? DateTime.now().millisecondsSinceEpoch.toString();
         storagePath = StorageService.curriculumSheetCsvPath(
           cohortId: cohortId,
           sheetId: tempId,
           fileName: file.name,
         );
-        await ref.read(storageServiceProvider).uploadAndGetUrl(
+        await ref
+            .read(storageServiceProvider)
+            .uploadAndGetUrl(
               storagePath: storagePath,
               bytes: bytes,
               contentType: 'text/csv',
@@ -134,7 +135,10 @@ class _InstructorCurriculumScreenState
 
       final sheet = CurriculumSheetModel(
         id: '',
-        title: file.name.replaceAll(RegExp(r'\.csv$', caseSensitive: false), ''),
+        title: file.name.replaceAll(
+          RegExp(r'\.csv$', caseSensitive: false),
+          '',
+        ),
         fileName: file.name,
         rows: rows,
         uploadedBy: user.uid,
@@ -142,7 +146,9 @@ class _InstructorCurriculumScreenState
         storagePath: storagePath.isEmpty ? null : storagePath,
       );
 
-      await ref.read(lmsRepositoryProvider).saveCurriculumSheet(
+      await ref
+          .read(lmsRepositoryProvider)
+          .saveCurriculumSheet(
             cohortId: cohortId,
             sheet: sheet,
             replaceSheetId: replaceSheetId,
@@ -175,8 +181,8 @@ class _InstructorCurriculumScreenState
           onPressed: _uploading
               ? null
               : () => _uploadCsv(
-                    replaceSheetId: sheetAsync.asData?.value?.id,
-                  ),
+                  replaceSheetId: sheetAsync.asData?.value?.id,
+                ),
           icon: _uploading
               ? const SizedBox(
                   width: 18,
@@ -198,8 +204,7 @@ class _InstructorCurriculumScreenState
         data: (sheet) {
           if (sheet == null) {
             return const EmptyView(
-              message:
-                  '등록된 커리큘럼이 없습니다.\n구글시트에서 CSV로 내려받은 파일을 업로드하세요.',
+              message: '등록된 커리큘럼이 없습니다.\n구글시트에서 CSV로 내려받은 파일을 업로드하세요.',
               icon: Icons.table_chart_outlined,
             );
           }
@@ -222,7 +227,7 @@ class _InstructorCurriculumScreenState
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(12), AppSpace.s(16), AppSpace.s(8)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -233,7 +238,7 @@ class _InstructorCurriculumScreenState
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        SizedBox(height: AppSpace.s(2)),
                         Text(
                           '${sheet.fileName} · ${sheet.rowCount}행'
                           '${sheet.uploadedAt != null ? ' · ${sheet.uploadedAt}' : ''}',
@@ -242,7 +247,7 @@ class _InstructorCurriculumScreenState
                             fontSize: 12,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppSpace.s(10)),
                         TextField(
                           onChanged: (v) => setState(() => _query = v),
                           decoration: InputDecoration(
@@ -250,9 +255,10 @@ class _InstructorCurriculumScreenState
                             prefixIcon: const Icon(Icons.search, size: 20),
                             isDense: true,
                             filled: true,
-                            fillColor: Colors.white,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 10),
+                            fillColor: AppColors.surface,
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: AppSpace.s(10),
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -263,9 +269,9 @@ class _InstructorCurriculumScreenState
                   ),
                   Expanded(
                     child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
+                      padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(4), AppSpace.s(16), AppSpace.s(88)),
                       itemCount: rows.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      separatorBuilder: (_, __) => SizedBox(height: AppSpace.s(6)),
                       itemBuilder: (context, i) {
                         final r = rows[i];
                         return Card(
@@ -282,15 +288,15 @@ class _InstructorCurriculumScreenState
                             child: ExpansionTile(
                               dense: true,
                               visualDensity: VisualDensity.compact,
-                              tilePadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 0,
+                              tilePadding: EdgeInsets.symmetric(
+                                horizontal: AppSpace.s(12),
+                                vertical: AppSpace.s(0),
                               ),
-                              childrenPadding: const EdgeInsets.fromLTRB(
-                                12,
-                                0,
-                                12,
-                                12,
+                              childrenPadding: EdgeInsets.fromLTRB(
+                                AppSpace.s(12),
+                                AppSpace.s(0),
+                                AppSpace.s(12),
+                                AppSpace.s(12),
                               ),
                               title: Text(
                                 '${r.dayIndex}. ${r.topic}',

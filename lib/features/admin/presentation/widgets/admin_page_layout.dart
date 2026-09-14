@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_layout.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_section_card.dart';
+import '../../../../core/theme/app_space.dart';
 
 abstract final class AdminPageLayout {
   static const maxWidth = AppLayout.list;
@@ -38,7 +39,7 @@ class AdminFormSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppSectionCard(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: EdgeInsets.only(bottom: AppSpace.s(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -50,7 +51,7 @@ class AdminFormSection extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           ...children,
         ],
       ),
@@ -72,7 +73,7 @@ class AdminDetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (value.trim().isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: AppSpace.s(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -84,7 +85,7 @@ class AdminDetailRow extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           Text(
             value,
             style: TextStyle(

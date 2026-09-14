@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/models/notice_model.dart';
 import 'board_ui.dart';
+import '../../../../core/theme/app_space.dart';
 
 String noticeTimeAgo(DateTime? dt) {
   if (dt == null) return '';
@@ -45,15 +46,17 @@ class StudentNoticeRow extends StatelessWidget {
     ].where((s) => s.isNotEmpty).join(' · ');
 
     return Material(
-      color: isFavorite ? const Color(0xFFFFFBEB) : Colors.transparent,
+      color: isFavorite
+          ? AppColors.tint(const Color(0xFFFFFBEB))
+          : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(11)),
           child: Row(
             children: [
               Icon(icon, size: 18, color: iconColor),
-              const SizedBox(width: 10),
+              SizedBox(width: AppSpace.s(10)),
               Expanded(
                 child: Text(
                   notice.title,
@@ -66,7 +69,7 @@ class StudentNoticeRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: AppSpace.s(8)),
               Text(
                 meta,
                 style: TextStyle(
@@ -100,11 +103,12 @@ class StudentNoticeRowList extends StatelessWidget {
 
   final List<NoticeModel> notices;
   final ValueChanged<NoticeModel> onTap;
+
   /// 지정 시 이 개수만큼만 박스 높이를 고정하고 내부 스크롤
   final int? maxVisibleRows;
   final Widget? Function(NoticeModel notice)? trailingBuilder;
 
-  static const _rowHeight = 42.0;
+  static double get _rowHeight => AppSpace.row(42);
   static const _dividerHeight = 1.0;
 
   double? get _maxHeight {
@@ -185,7 +189,9 @@ class StudentNoticeTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Ink(
           decoration: BoxDecoration(
-            color: isFavorite ? const Color(0xFFFFFBEB) : AppColors.surface,
+            color: isFavorite
+                ? AppColors.tint(const Color(0xFFFFFBEB))
+                : AppColors.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isFavorite ? BoardUi.favoriteBorder : AppColors.border,
@@ -199,12 +205,12 @@ class StudentNoticeTile extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(14), AppSpace.s(12), AppSpace.s(14)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _NoticeIconBadge(notice: notice),
-                const SizedBox(width: 12),
+                SizedBox(width: AppSpace.s(12)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,7 +232,7 @@ class StudentNoticeTile extends StatelessWidget {
                             ),
                           ),
                           if (isFavorite) ...[
-                            const SizedBox(width: 8),
+                            SizedBox(width: AppSpace.s(8)),
                             const BoardMetaChip(
                               label: '중요',
                               variant: BoardMetaChipVariant.favorite,
@@ -234,7 +240,7 @@ class StudentNoticeTile extends StatelessWidget {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: AppSpace.s(6)),
                       Text(
                         notice.content,
                         maxLines: 2,
@@ -245,7 +251,7 @@ class StudentNoticeTile extends StatelessWidget {
                           color: AppColors.textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: AppSpace.s(10)),
                       Row(
                         children: [
                           BoardMetaChip(
@@ -254,7 +260,7 @@ class StudentNoticeTile extends StatelessWidget {
                                 ? BoardMetaChipVariant.discord
                                 : BoardMetaChipVariant.neutral,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: AppSpace.s(8)),
                           Text(
                             noticeTimeAgo(notice.createdAt),
                             style: TextStyle(
@@ -268,9 +274,9 @@ class StudentNoticeTile extends StatelessWidget {
                   ),
                 ),
                 if (showChevron) ...[
-                  const SizedBox(width: 4),
+                  SizedBox(width: AppSpace.s(4)),
                   Padding(
-                    padding: EdgeInsets.only(top: 2),
+                    padding: EdgeInsets.only(top: AppSpace.s(2)),
                     child: Icon(
                       Icons.chevron_right_rounded,
                       size: 20,
@@ -299,25 +305,25 @@ class _NoticeIconBadge extends StatelessWidget {
 
     final (bg, fg, icon) = switch ((isFavorite, isDiscord)) {
       (true, _) => (
-          BoardUi.favoriteBadgeBg,
-          BoardUi.favorite,
-          Icons.star_rounded,
-        ),
+        BoardUi.favoriteBadgeBg,
+        BoardUi.favorite,
+        Icons.star_rounded,
+      ),
       (_, true) => (
-          BoardUi.discordChipBg,
-          BoardUi.discordChipText,
-          Icons.discord,
-        ),
+        BoardUi.discordChipBg,
+        BoardUi.discordChipText,
+        Icons.discord,
+      ),
       _ => (
-          AppColors.primaryLight,
-          AppColors.textSecondary,
-          Icons.campaign_outlined,
-        ),
+        AppColors.primaryLight,
+        AppColors.textSecondary,
+        Icons.campaign_outlined,
+      ),
     };
 
     return Container(
       width: 40,
-      height: 40,
+      height: AppSpace.row(40),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
@@ -346,7 +352,7 @@ class NoticeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (trailing == null) {
       return Padding(
-        padding: EdgeInsets.only(bottom: compact ? 8 : 10),
+        padding: EdgeInsets.only(bottom: compact ? AppSpace.s(8) : AppSpace.s(10)),
         child: StudentNoticeTile(
           notice: notice,
           onTap: onTap,
@@ -356,7 +362,7 @@ class NoticeCard extends StatelessWidget {
     }
 
     return Container(
-      margin: EdgeInsets.only(bottom: compact ? 10 : 12),
+      margin: EdgeInsets.only(bottom: compact ? AppSpace.s(10) : AppSpace.s(12)),
       decoration: BoardUi.cardDecoration(
         isFavorite: notice.isFavorite,
         isDiscord: notice.isFromDiscord,
@@ -367,7 +373,7 @@ class NoticeCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: EdgeInsets.all(compact ? 12 : 16),
+            padding: EdgeInsets.all(compact ? AppSpace.s(12) : AppSpace.s(16)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -416,7 +422,7 @@ class NoticeCard extends StatelessWidget {
                                 ? BoardMetaChipVariant.discord
                                 : BoardMetaChipVariant.neutral,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: AppSpace.s(8)),
                           Text(
                             _metaLine(notice),
                             style: TextStyle(
@@ -475,7 +481,7 @@ class NoticeDetailSheet extends StatelessWidget {
       maxChildSize: 0.95,
       builder: (context, scrollController) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          padding: EdgeInsets.fromLTRB(AppSpace.s(24), AppSpace.s(12), AppSpace.s(24), AppSpace.s(24)),
           child: ListView(
             controller: scrollController,
             children: [
@@ -489,12 +495,12 @@ class NoticeDetailSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _NoticeIconBadge(notice: notice),
-                  const SizedBox(width: 12),
+                  SizedBox(width: AppSpace.s(12)),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +513,7 @@ class NoticeDetailSheet extends StatelessWidget {
                             height: 1.35,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: AppSpace.s(8)),
                         Wrap(
                           spacing: 8,
                           runSpacing: 6,
@@ -530,7 +536,7 @@ class NoticeDetailSheet extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               Text(
                 '${notice.authorName}'
                 '${notice.createdAt != null ? ' · ${AppDateUtils.formatDateTime(notice.createdAt!)}' : ''}',
@@ -539,9 +545,9 @@ class NoticeDetailSheet extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               const Divider(height: 1),
-              const SizedBox(height: 20),
+              SizedBox(height: AppSpace.s(20)),
               Text(
                 notice.content,
                 style: TextStyle(

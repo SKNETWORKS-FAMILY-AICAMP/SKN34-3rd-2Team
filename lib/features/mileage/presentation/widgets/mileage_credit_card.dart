@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../theme/mileage_theme.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// ISO 7810 ID-1 신용카드 비율
 const kMileageCardAspectRatio = 1.586;
@@ -474,8 +475,8 @@ class _EmvChip extends StatelessWidget {
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(
-          horizontal: 5 * scale,
-          vertical: 6 * scale,
+          horizontal: AppSpace.s(5) * scale,
+          vertical: AppSpace.s(6) * scale,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,

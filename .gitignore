@@ -150,3 +150,7 @@ job_matching_bot/artifacts/raw/
 
 # Dart가 만든 이력서 평문 정답지. 파이썬 판과 대조할 때만 쓴다.
 test/tmp_dump/
+
+
+# ppt 산출물
+/presentation

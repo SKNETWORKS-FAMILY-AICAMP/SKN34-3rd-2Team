@@ -8,6 +8,7 @@ import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import 'widgets/study_room_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 class StudyRoomNotesScreen extends ConsumerWidget {
   const StudyRoomNotesScreen({super.key});
@@ -42,17 +43,17 @@ class StudyRoomNotesScreen extends ConsumerWidget {
                   title: '공부방',
                   subtitle: '수업 저장소를 고르고, 날짜·폴더·파일만 정리하세요.',
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppSpace.s(20)),
                 sources.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.all(40),
+                  loading: () => Padding(
+                    padding: EdgeInsets.all(AppSpace.s(40)),
                     child: Center(child: CircularProgressIndicator()),
                   ),
                   error: (e, _) => ErrorView(message: e.toString()),
                   data: (list) {
                     if (list.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 48),
+                      return Padding(
+                        padding: EdgeInsets.symmetric(vertical: AppSpace.s(48)),
                         child: Center(
                           child: Text(
                             '등록된 수업 저장소가 없습니다',
@@ -72,7 +73,7 @@ class StudyRoomNotesScreen extends ConsumerWidget {
                               RoutePaths.studyRoomNoteSource(source.id),
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: AppSpace.s(12)),
                         ],
                       ],
                     );
@@ -109,7 +110,7 @@ class _SourceCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(AppSpace.s(16)),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.border),
@@ -122,23 +123,26 @@ class _SourceCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(repo, style: const TextStyle(color: AppColors.textSecondary)),
-                    const SizedBox(height: 4),
+                    SizedBox(height: AppSpace.s(4)),
+                    Text(
+                      repo,
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                    SizedBox(height: AppSpace.s(4)),
                     Text(
                       prefixes,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textHint),
+                      style: TextStyle(fontSize: 12, color: AppColors.textHint),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textHint),
+              Icon(Icons.chevron_right, color: AppColors.textHint),
             ],
           ),
         ),

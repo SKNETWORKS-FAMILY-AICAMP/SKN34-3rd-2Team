@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/models/mission_models.dart';
 import '../../../../shared/providers/mission_providers.dart';
 import '../../../../shared/widgets/app_section_card.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 — 마일리지 미션 프로그레스 (LXP 1순위)
 class MissionProgressDashboardCard extends ConsumerWidget {
@@ -23,12 +24,13 @@ class MissionProgressDashboardCard extends ConsumerWidget {
     final async = ref.watch(missionProgressProvider);
     final items = ref.watch(missionGuidanceProvider);
 
-    final sorted = [...items]..sort((a, b) {
-      final aDone = a.maxEarn > 0 && a.earned >= a.maxEarn;
-      final bDone = b.maxEarn > 0 && b.earned >= b.maxEarn;
-      if (aDone == bDone) return 0;
-      return aDone ? 1 : -1;
-    });
+    final sorted = [...items]
+      ..sort((a, b) {
+        final aDone = a.maxEarn > 0 && a.earned >= a.maxEarn;
+        final bDone = b.maxEarn > 0 && b.earned >= b.maxEarn;
+        if (aDone == bDone) return 0;
+        return aDone ? 1 : -1;
+      });
     final visible = sorted.take(compact ? 3 : 4).toList();
 
     MissionGuidanceItem? nextFocus;
@@ -51,7 +53,7 @@ class MissionProgressDashboardCard extends ConsumerWidget {
             style: TextButton.styleFrom(
               foregroundColor: AppColors.primary,
               visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(6)),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -60,8 +62,8 @@ class MissionProgressDashboardCard extends ConsumerWidget {
         ),
         AppSectionCard(
           padding: compact
-              ? const EdgeInsets.fromLTRB(10, 10, 10, 10)
-              : const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              ? EdgeInsets.fromLTRB(AppSpace.s(10), AppSpace.s(10), AppSpace.s(10), AppSpace.s(10))
+              : EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(14), AppSpace.s(14)),
           child: async.when(
             loading: () => SizedBox(
               height: compact ? 56 : 72,
@@ -86,10 +88,10 @@ class MissionProgressDashboardCard extends ConsumerWidget {
                 if (nextFocus != null) ...[
                   Container(
                     padding: EdgeInsets.fromLTRB(
-                      compact ? 8 : 12,
-                      compact ? 8 : 10,
-                      compact ? 8 : 12,
-                      compact ? 8 : 10,
+                      compact ? AppSpace.s(8) : AppSpace.s(12),
+                      compact ? AppSpace.s(8) : AppSpace.s(10),
+                      compact ? AppSpace.s(8) : AppSpace.s(12),
+                      compact ? AppSpace.s(8) : AppSpace.s(10),
                     ),
                     decoration: BoxDecoration(
                       color: AppColors.primaryLight,
@@ -108,7 +110,7 @@ class MissionProgressDashboardCard extends ConsumerWidget {
                               size: 16,
                               color: AppColors.primary,
                             ),
-                            const SizedBox(width: 6),
+                            SizedBox(width: AppSpace.s(6)),
                             Expanded(
                               child: Text(
                                 compact
@@ -126,7 +128,7 @@ class MissionProgressDashboardCard extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: AppSpace.s(4)),
                         Text(
                           nextFocus.statusText,
                           maxLines: compact ? 2 : 2,
@@ -187,7 +189,7 @@ class _MissionProgressRow extends StatelessWidget {
     final done = item.maxEarn > 0 && item.earned >= item.maxEarn;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: compact ? 10 : 12),
+      padding: EdgeInsets.only(bottom: compact ? AppSpace.s(10) : AppSpace.s(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -201,7 +203,7 @@ class _MissionProgressRow extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: AppSpace.s(2)),
           Text(
             done ? '완료' : '${_fmt(item.earned)} / ${_fmt(item.maxEarn)}M',
             style: TextStyle(
@@ -210,18 +212,18 @@ class _MissionProgressRow extends StatelessWidget {
               color: done ? const Color(0xFF166534) : AppColors.primary,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               value: ratio,
               minHeight: compact ? 6 : 7,
-              backgroundColor: const Color(0xFFE5E7EB),
+              backgroundColor: AppColors.tint(const Color(0xFFE5E7EB)),
               color: done ? const Color(0xFF22C55E) : AppColors.primary,
             ),
           ),
           if (!compact) ...[
-            const SizedBox(height: 4),
+            SizedBox(height: AppSpace.s(4)),
             Text(
               item.progressLabel,
               style: TextStyle(

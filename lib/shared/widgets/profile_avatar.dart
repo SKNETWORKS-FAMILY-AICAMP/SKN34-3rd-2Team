@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../providers/firebase_providers.dart';
 import '../services/profile_photo_loader.dart';
+import '../../core/theme/app_space.dart';
 
 /// 프로필 사진 아바타 — 빈 상태 / 사진 / 수정 배지
 class ProfileAvatar extends StatelessWidget {
@@ -98,8 +99,8 @@ class ProfileAvatar extends StatelessWidget {
               color: Colors.black.withValues(alpha: 0.35),
               shape: BoxShape.circle,
             ),
-            child: const Padding(
-              padding: EdgeInsets.all(10),
+            child: Padding(
+              padding: EdgeInsets.all(AppSpace.s(10)),
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 color: Colors.white,
@@ -318,8 +319,9 @@ class _NetworkProfileImage extends StatelessWidget {
       height: diameter,
       fit: BoxFit.cover,
       gaplessPlayback: true,
-      webHtmlElementStrategy:
-          kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
+      webHtmlElementStrategy: kIsWeb
+          ? WebHtmlElementStrategy.prefer
+          : WebHtmlElementStrategy.never,
       errorBuilder: (context, error, stackTrace) => emptyPlaceholder,
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;

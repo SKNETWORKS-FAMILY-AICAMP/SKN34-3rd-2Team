@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 평가별 학생 점수 목록 (조회만)
 class AdminAssessmentDetailScreen extends ConsumerWidget {
@@ -45,7 +46,7 @@ class AdminAssessmentDetailScreen extends ConsumerWidget {
           final sorted = [...list]
             ..sort((a, b) => a.userDisplayName.compareTo(b.userDisplayName));
           return ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(AppSpace.s(16)),
             itemCount: sorted.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, i) {

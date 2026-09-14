@@ -16,12 +16,12 @@ import '../../../shared/providers/lms_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/basic_info_prefill.dart';
 import '../ai_coach/presentation/ai_job_coach_panel.dart';
-import '../ai_coach/presentation/resume_mock_menu.dart';
 import '../services/resume_pdf_exporter.dart';
 import 'widgets/feedback_bell.dart';
-import 'widgets/section_feedback_thread.dart';
+import 'widgets/resume_edit_feedback_panel.dart';
 import 'widgets/resume_section_nav.dart';
 import 'widgets/tech_stack_editor.dart';
+import '../../../core/theme/app_space.dart';
 
 enum _ResumeViewMode { edit, doc }
 
@@ -52,6 +52,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _dirty = false;
   bool _showAiCoach = false;
   bool _coachVisibilityInitialized = false;
+  bool _studentFeedbackMode = false;
 
   static const _coachVisibilityPreference = 'resume_ai_coach_open';
 
@@ -69,7 +70,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   Future<void> _restoreCoachVisibility() async {
     final preferences = await SharedPreferences.getInstance();
     final saved = preferences.getBool(_coachVisibilityPreference);
-    if (!mounted || saved == null) return;
+    if (!mounted || saved == null || _studentFeedbackMode) return;
     setState(() => _showAiCoach = saved);
   }
 
@@ -95,13 +96,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   /// 배너를 닫았나. 닫아도 배지는 그대로다 — 읽은 것이 아니기 때문이다.
   bool _bannerDismissed = false;
 
-  /// 댓글을 펼쳐 둔 항목. 종에서 넘어오면 그 항목이 여기 들어간다.
-  final Set<String> _openThreads = <String>{};
-
   /// 오른쪽 패널 너비. 왼쪽 가장자리를 끌어 바꾼다.
   /// 최소값은 첨삭 브랜치 쪽을 따른다 — 패널이 280이면 첨삭 대화가 접힌다.
   static const double _panelMinWidth = 360;
   static const double _panelDefaultWidth = 420;
+  static const double _reviewPanelMinWidth = 500;
+  static const double _reviewPanelDefaultWidth = 560;
 
   /// 이력서 본문에 남겨 둘 최소 폭. 이보다 좁아지면 입력칸이 읽기 어려워진다.
   static const double _minResumeWidth = 560;
@@ -153,6 +153,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _initialized = false;
   bool _pendingInitialScroll = false;
   bool _profilePrefillTried = false;
+  bool _reviewPanelWidthInitialized = false;
+  bool _programmaticSectionScroll = false;
+  bool _sectionSyncScheduled = false;
 
   late final ScrollController _scrollController;
   late final Map<String, GlobalKey> _sectionKeys;
@@ -168,6 +171,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _scrollController.addListener(_syncReviewerSectionFromScroll);
     _sectionKeys = {
       for (final k in AppConstants.resumeSections) k: GlobalKey(),
     };
@@ -183,6 +187,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   @override
   void dispose() {
     _derivedRefresh?.cancel();
+    _scrollController.removeListener(_syncReviewerSectionFromScroll);
     _scrollController.dispose();
     _panelWidth.dispose();
     _panelHeight.dispose();
@@ -195,8 +200,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     _content = resume.content;
     _initialized = true;
     // 검토자는 읽는 사람이라 문서 모드로 연다. 승인된 이력서라도 본인은 편집 모드다.
-    if (ref.read(canReviewResumesProvider)) {
+    final isReviewer = ref.read(canReviewResumesProvider);
+    _studentFeedbackMode = !isReviewer && resume.isFeedbackRequested;
+    if (isReviewer) {
       _viewMode = _ResumeViewMode.doc;
+    } else if (_studentFeedbackMode &&
+        MediaQuery.sizeOf(context).width >= 1000) {
+      // 피드백 요청 목록에서 연 이력서는 채용공고 코치 대신 댓글 패널을 바로 보여준다.
+      _showAiCoach = true;
     }
     if (_pendingInitialScroll && widget.initialSection != null) {
       _pendingInitialScroll = false;
@@ -312,8 +323,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   void _markDirty() {
     final resume = _resume;
-    if (resume == null || _isReadOnly(isReviewer: _isReviewer, resume: resume))
+    if (resume == null ||
+        _isReadOnly(isReviewer: _isReviewer, resume: resume)) {
       return;
+    }
     // 이미 고쳐진 상태면 다시 그릴 이유가 없다. 처음 한 번만 화면이 바뀐다.
     if (_dirty) return;
     setState(() => _dirty = true);
@@ -364,19 +377,26 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     if (arrived <= 0 || _bannerDismissed) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
-      decoration: const BoxDecoration(
+      padding: EdgeInsets.fromLTRB(
+        AppSpace.s(16),
+        AppSpace.s(9),
+        AppSpace.s(8),
+        AppSpace.s(9),
+      ),
+      decoration: BoxDecoration(
         color: AppColors.primaryLight,
-        border: Border(bottom: BorderSide(color: Color(0xFFC9DBFF))),
+        border: Border(
+          bottom: BorderSide(color: AppColors.tint(const Color(0xFFC9DBFF))),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.notifications, size: 16, color: AppColors.primary),
-          const SizedBox(width: 8),
+          Icon(Icons.notifications, size: 16, color: AppColors.primary),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: Text(
               '새 피드백 $arrived건이 도착했습니다. 종을 눌러 확인하세요.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 color: AppColors.primaryDark,
               ),
@@ -387,54 +407,87 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
             visualDensity: VisualDensity.compact,
             iconSize: 18,
             onPressed: () => setState(() => _bannerDismissed = true),
-            icon: const Icon(Icons.close, color: AppColors.textSecondary),
+            icon: Icon(Icons.close, color: AppColors.textSecondary),
           ),
         ],
       ),
     );
   }
 
-  void _scrollToSection(String key) {
+  void _syncReviewerSectionFromScroll() {
+    if ((!_isReviewer && !_studentFeedbackMode) ||
+        _programmaticSectionScroll ||
+        !_scrollController.hasClients ||
+        _sectionSyncScheduled) {
+      return;
+    }
+    _sectionSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sectionSyncScheduled = false;
+      if (!mounted ||
+          (!_isReviewer && !_studentFeedbackMode) ||
+          _programmaticSectionScroll) {
+        return;
+      }
+
+      const probeY = 180.0;
+      String? visibleSection;
+      var visibleTop = double.negativeInfinity;
+      String? nearestSection;
+      var nearestDistance = double.infinity;
+      for (final key in AppConstants.resumeSections) {
+        final renderObject = _sectionKeys[key]?.currentContext
+            ?.findRenderObject();
+        if (renderObject is! RenderBox || !renderObject.attached) continue;
+        final top = renderObject.localToGlobal(Offset.zero).dy;
+        final distance = (top - probeY).abs();
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestSection = key;
+        }
+        if (top <= probeY && top > visibleTop) {
+          visibleTop = top;
+          visibleSection = key;
+        }
+      }
+      final next = visibleSection ?? nearestSection;
+      if (next != null && next != _selectedSection) {
+        setState(() => _selectedSection = next);
+      }
+    });
+  }
+
+  Future<void> _scrollToSection(String key) async {
     setState(() => _selectedSection = key);
     final ctx = _sectionKeys[key]?.currentContext;
     if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.08,
-      );
+      _programmaticSectionScroll = true;
+      try {
+        await Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.08,
+        );
+      } finally {
+        _programmaticSectionScroll = false;
+      }
     }
   }
 
-  /// 항목 하나. 아래에 그 항목의 댓글을 붙인다. 여기 한 곳만 고치면 모든 항목에 붙는다.
-  Widget _section(String key, Widget child, ResumeModel resume) => KeyedSubtree(
+  /// 항목 하나. 피드백 작성 UI는 관리자 오른쪽 패널에서만 제공한다.
+  Widget _section(String key, Widget child) => KeyedSubtree(
     key: _sectionKeys[key],
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        child,
-        SectionFeedbackThread(
-          resume: resume,
-          sectionKey: key,
-          expanded: _openThreads.contains(key),
-          onToggle: () => setState(() {
-            _openThreads.contains(key)
-                ? _openThreads.remove(key)
-                : _openThreads.add(key);
-          }),
-        ),
-      ],
-    ),
+    child: child,
   );
 
-  /// 부르는 곳마다 resume 을 적지 않도록 한 번 묶어 둔다.
-  Widget Function(String, Widget) _sectionOf(ResumeModel resume) =>
-      (key, child) => _section(key, child, resume);
+  Widget Function(String, Widget) _sectionOf() => _section;
 
-  /// 종에서 넘어왔다. 그 항목으로 굴러가 댓글을 펼친다.
-  void _openThread(String key) {
-    setState(() => _openThreads.add(key));
+  /// 종에서 선택한 피드백의 이력서 항목으로 이동한다.
+  void _goToFeedbackSection(String key) {
+    if (_studentFeedbackMode && !_showAiCoach) {
+      _setCoachVisible(true);
+    }
     _scrollToSection(key);
   }
 
@@ -444,8 +497,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     bool incrementRevision = true,
   }) async {
     final isReviewer = ref.read(canReviewResumesProvider);
-    if (_isReadOnly(isReviewer: isReviewer, resume: resume) && status == null)
+    if (_isReadOnly(isReviewer: isReviewer, resume: resume) && status == null) {
       return;
+    }
     setState(() => _isSaving = true);
     try {
       final cohortId = ref.read(effectiveCohortIdProvider)!;
@@ -590,6 +644,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
         }
         _isReviewer = isReviewer;
         _resume = resume;
+        if (isReviewer && !_reviewPanelWidthInitialized) {
+          _reviewPanelWidthInitialized = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _panelWidth.value == _panelDefaultWidth) {
+              _panelWidth.value = _reviewPanelDefaultWidth;
+            }
+          });
+        }
         final readOnly = _isReadOnly(isReviewer: isReviewer, resume: resume);
         final liveSections = _content.computeSections();
         final completed = liveSections.values.where((v) => v).length;
@@ -619,53 +681,43 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
               ),
               leadingWidth: 110,
               actions: [
-                if (!isReviewer &&
-                    resume.canStudentEdit &&
-                    _viewMode == _ResumeViewMode.edit)
-                  ResumeMockMenu(
-                    onPick: (title, content) {
-                      setState(() {
-                        _title = title;
-                        // 기본정보는 사용자가 적었거나 프로필에서 채워진 값을 지키고,
-                        // 목업은 빈 칸과 그 아래 섹션만 채운다.
-                        _content = content.copyWith(
-                          basicInfo: mergeBasicInfo(
-                            _content.basicInfo,
-                            content.basicInfo,
-                          ),
-                        );
-                      });
-                      _markDirty();
-                    },
-                  ),
                 if (MediaQuery.sizeOf(context).width < 1000)
                   IconButton(
-                    tooltip: _showAiCoach ? 'AI 코치 접기' : 'AI 코치 열기',
+                    tooltip: _showAiCoach
+                        ? (isReviewer || resume.isFeedbackRequested
+                              ? '피드백 접기'
+                              : 'AI 코치 접기')
+                        : (isReviewer || resume.isFeedbackRequested
+                              ? '피드백 열기'
+                              : 'AI 코치 열기'),
                     onPressed: () => _setCoachVisible(!_showAiCoach),
                     icon: Icon(
                       _showAiCoach
                           ? Icons.keyboard_arrow_down
-                          : Icons.auto_awesome,
+                          : (isReviewer || resume.isFeedbackRequested
+                                ? Icons.chat_bubble_outline
+                                : Icons.auto_awesome),
                     ),
                   ),
                 // 종. 누르면 아래로 말풍선이 내려온다. 오른쪽 패널을 쓰지 않으므로
                 // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
-                FeedbackBell(
-                  resume: resume,
-                  onGoToSection: _openThread,
-                  openOnStart: widget.openFeedback,
-                ),
-                const SizedBox(width: 8),
-                if (!resume.isApproved || isReviewer)
-                  _ModeToggle(
-                    isEdit: _viewMode == _ResumeViewMode.edit,
-                    onEdit: () =>
-                        setState(() => _viewMode = _ResumeViewMode.edit),
-                    onDoc: () =>
-                        setState(() => _viewMode = _ResumeViewMode.doc),
+                if (!isReviewer)
+                  FeedbackBell(
+                    resume: resume,
+                    onGoToSection: _goToFeedbackSection,
+                    openOnStart: widget.openFeedback,
                   ),
+                SizedBox(width: AppSpace.s(8)),
+                // 승인된 이력서도 학생이 편집·문서 보기를 오갈 수 있다. 승인은
+                // "여기까지 봤다"는 표시일 뿐 잠금이 아니다.
+                _ModeToggle(
+                  isEdit: _viewMode == _ResumeViewMode.edit,
+                  onEdit: () =>
+                      setState(() => _viewMode = _ResumeViewMode.edit),
+                  onDoc: () => setState(() => _viewMode = _ResumeViewMode.doc),
+                ),
                 if (_viewMode == _ResumeViewMode.doc) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   IconButton(
                     tooltip: 'PDF 내보내기',
                     onPressed: () => _exportPdf(resume),
@@ -675,13 +727,13 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (!isReviewer &&
                     resume.canStudentEdit &&
                     _viewMode == _ResumeViewMode.edit) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   OutlinedButton(
                     onPressed: _isSaving ? null : () => _save(resume: resume),
                     child: const Text('저장'),
                   ),
                   if (!resume.isSubmitted) ...[
-                    const SizedBox(width: 8),
+                    SizedBox(width: AppSpace.s(8)),
                     FilledButton.icon(
                       onPressed: _isSaving
                           ? null
@@ -690,7 +742,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       label: const Text('피드백 요청'),
                     ),
                   ],
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                 ],
                 if (isReviewer && resume.isSubmitted && !resume.isApproved) ...[
                   FilledButton.icon(
@@ -698,11 +750,11 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                     icon: const Icon(Icons.check_circle_outline, size: 16),
                     label: const Text('승인'),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                 ],
                 if (_isSaving)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 12),
+                  Padding(
+                    padding: EdgeInsets.only(right: AppSpace.s(12)),
                     child: SizedBox(
                       width: 18,
                       height: 18,
@@ -724,12 +776,12 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                 if (resume.isSubmitted && !resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(16),
+                      vertical: AppSpace.s(8),
                     ),
                     color: AppColors.primaryLight,
-                    child: const Text(
+                    child: Text(
                       '피드백 요청됨 — 계속 수정할 수 있습니다.',
                       style: TextStyle(
                         fontSize: 12,
@@ -737,33 +789,36 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       ),
                     ),
                   ),
-                if (resume.isApproved)
+                // 학생에게 하는 안내다. 강사·관리자는 위 진행 줄의 "승인 완료"로 충분하다.
+                if (resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpace.s(16),
+                      vertical: AppSpace.s(8),
                     ),
                     color: AppColors.success.withValues(alpha: 0.12),
-                    child: const Text(
-                      '승인 완료 — 더 이상 수정할 수 없습니다.',
+                    child: Text(
+                      '승인 완료 — 계속 수정할 수 있습니다.',
                       style: TextStyle(fontSize: 12, color: AppColors.success),
                     ),
                   ),
-                ResumeSectionNav(
-                  sections: AppConstants.resumeSections,
-                  completedSections: liveSections,
-                  selectedKey: _selectedSection,
-                  onSelected: _scrollToSection,
-                ),
+                if (!isReviewer && !_studentFeedbackMode)
+                  ResumeSectionNav(
+                    sections: AppConstants.resumeSections,
+                    completedSections: liveSections,
+                    selectedKey: _selectedSection,
+                    onSelected: _scrollToSection,
+                  ),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 1000;
+                      final wide =
+                          constraints.maxWidth >= (isReviewer ? 1120 : 1000);
 
                       final resumeScroll = SingleChildScrollView(
                         controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(AppSpace.s(16)),
                         child: Center(
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
@@ -783,8 +838,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     _scheduleDerivedRefresh();
                                   },
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'basicInfo',
                                   _BasicInfoSection(
                                     info: _content.basicInfo,
@@ -818,8 +873,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                           },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'coreCompetencies',
                                   _CoreCompetenciesSection(
                                     data: _content.coreCompetencies,
@@ -834,8 +889,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'experience',
                                   _ExperienceSection(
                                     items: _content.experience,
@@ -848,8 +903,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'education',
                                   _EducationSection(
                                     items: _content.education,
@@ -862,8 +917,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'techStack',
                                   _TechStackSection(
                                     items: _content.techStack,
@@ -876,8 +931,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'certifications',
                                   _CertificationsSection(
                                     items: _content.certifications,
@@ -892,8 +947,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'awards',
                                   _AwardsSection(
                                     items: _content.awards,
@@ -906,8 +961,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'trainingExperience',
                                   _TrainingSection(
                                     items: _content.trainingExperience,
@@ -922,8 +977,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'otherActivities',
                                   _ActivitiesSection(
                                     items: _content.otherActivities,
@@ -938,8 +993,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'projects',
                                   _ProjectsSection(
                                     items: _content.projects,
@@ -952,8 +1007,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                _sectionOf(resume)(
+                                SizedBox(height: AppSpace.s(24)),
+                                _sectionOf()(
                                   'selfIntroduction',
                                   _SelfIntroSection(
                                     data: _content.selfIntroduction,
@@ -968,7 +1023,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 32),
+                                SizedBox(height: AppSpace.s(32)),
                               ],
                             ),
                           ),
@@ -993,10 +1048,17 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       // `Offstage`는 배치·그리기만 건너뛸 뿐 자식을 만들기는 한다.
                       // 그래서 숨어 있어도 키 입력마다 코치 화면이 다시 만들어졌다.
                       // 같은 위젯 객체를 넘기면 Flutter가 그 아래를 통째로 건너뛴다.
-                      if (_showAiCoach || _coachPanel == null) {
+                      final usesFeedbackPanel =
+                          isReviewer || resume.isFeedbackRequested;
+                      if (!usesFeedbackPanel &&
+                          (_showAiCoach || _coachPanel == null)) {
                         _coachPanel = AiJobCoachPanel(
                           key: _coachKey,
                           resumeId: widget.resumeId,
+                          resumeTitle: _title,
+                          baseResumeId: resume.baseResumeId,
+                          sourceTailoredResumeId: resume.sourceTailoredResumeId,
+                          linkedJobId: resume.linkedJobId,
                           draftContent: _content,
                           hasUnsavedChanges: _dirty || _isSaving,
                           onSaveRequested: isReviewer
@@ -1015,15 +1077,30 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                           onClose: () => _setCoachVisible(false),
                         );
                       }
-                      final rightPanel = Stack(
-                        fit: StackFit.passthrough,
-                        children: [
-                          Offstage(offstage: !_showAiCoach, child: _coachPanel),
-                        ],
-                      );
+                      final rightPanel = usesFeedbackPanel
+                          ? ResumeEditFeedbackPanel(
+                              key: ValueKey('review-feedback-${resume.id}'),
+                              resume: resume,
+                              isAdmin: isReviewer,
+                              isVisible: _showAiCoach,
+                              selectedSectionKey: _selectedSection,
+                              completedSections: liveSections,
+                              isSidebar: true,
+                              showSectionSidebar: wide,
+                              onSectionChanged: _scrollToSection,
+                            )
+                          : Stack(
+                              fit: StackFit.passthrough,
+                              children: [
+                                Offstage(
+                                  offstage: !_showAiCoach,
+                                  child: _coachPanel,
+                                ),
+                              ],
+                            );
 
-                      // 둘 다 닫혔으면 오른쪽 자리를 통째로 비운다. 이력서가 넓어진다.
-                      // 오른쪽은 이제 AI 코치만 쓴다. 피드백은 항목 아래 댓글로 옮겼다.
+                      // 작성 중인 학생은 AI 코치, 피드백 요청 상태의 학생과 검토자는
+                      // 같은 댓글 패널을 오른쪽에서 사용한다.
                       final hasRightPanel = _showAiCoach;
 
                       // 닫아도 트리에서 빼지 않는다. 빼면 상태가 버려져 받아 둔
@@ -1082,11 +1159,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
                       // 이력서 본문을 최소 560px 남기고, 오른쪽 패널은 최소 360px을 지킨다.
                       // 화면 크기가 달라져도 조절해 둔 폭을 안전한 범위 안에서만 쓴다.
+                      final panelMinWidth = usesFeedbackPanel
+                          ? _reviewPanelMinWidth
+                          : _panelMinWidth;
                       final panelMaxWidth =
                           (constraints.maxWidth -
                                   _minResumeWidth -
                                   _handleWidth)
-                              .clamp(_panelMinWidth, 900)
+                              .clamp(panelMinWidth, 900)
                               .toDouble();
 
                       return Row(
@@ -1102,7 +1182,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                             child: rightPanel,
                             builder: (context, raw, panel) {
                               final width = raw.clamp(
-                                _panelMinWidth,
+                                panelMinWidth,
                                 panelMaxWidth,
                               );
                               return Row(
@@ -1117,12 +1197,14 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                                         _panelWidth.value =
                                             ((_dragStartWidth ?? width) - dx)
                                                 .clamp(
-                                                  _panelMinWidth,
+                                                  panelMinWidth,
                                                   panelMaxWidth,
                                                 );
                                       },
-                                      onReset: () => _panelWidth.value =
-                                          _panelDefaultWidth,
+                                      onReset: () =>
+                                          _panelWidth.value = usesFeedbackPanel
+                                          ? _reviewPanelDefaultWidth
+                                          : _panelDefaultWidth,
                                       onToggle: () => _setCoachVisible(false),
                                     )
                                   else
@@ -1286,7 +1368,7 @@ class _CoachEdgeToggleState extends State<_CoachEdgeToggle> {
       opacity: 1,
       duration: const Duration(milliseconds: 120),
       child: Material(
-        color: Colors.white,
+        color: AppColors.surface,
         elevation: _hovered ? 4 : 1,
         shape: RoundedRectangleBorder(
           side: BorderSide(
@@ -1299,7 +1381,7 @@ class _CoachEdgeToggleState extends State<_CoachEdgeToggle> {
           borderRadius: BorderRadius.circular(9),
           child: SizedBox(
             width: 28,
-            height: 56,
+            height: AppSpace.row(56),
             child: Icon(
               widget.expanded
                   ? Icons.chevron_right_rounded
@@ -1359,7 +1441,10 @@ class _ToggleChip extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpace.s(14),
+          vertical: AppSpace.s(8),
+        ),
         decoration: BoxDecoration(
           color: selected ? AppColors.primaryLight : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
@@ -1390,9 +1475,9 @@ class _FlatSection extends StatelessWidget {
           title,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: 8),
-        const Divider(height: 1, color: AppColors.border),
-        const SizedBox(height: 16),
+        SizedBox(height: AppSpace.s(8)),
+        Divider(height: 1, color: AppColors.border),
+        SizedBox(height: AppSpace.s(16)),
         child,
       ],
     );
@@ -1460,19 +1545,19 @@ class _FieldState extends State<_Field> {
     if (widget.readOnly) {
       final empty = widget.value.trim().isEmpty;
       return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: EdgeInsets.only(bottom: AppSpace.s(8)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.label.isNotEmpty)
               Text(
                 widget.label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
                 ),
               ),
-            if (widget.label.isNotEmpty) const SizedBox(height: 2),
+            if (widget.label.isNotEmpty) SizedBox(height: AppSpace.s(2)),
             Text(
               empty ? '미작성' : widget.value,
               style: TextStyle(
@@ -1487,7 +1572,7 @@ class _FieldState extends State<_Field> {
 
     if (widget.boxed) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: EdgeInsets.only(bottom: AppSpace.s(8)),
         child: TextField(
           controller: _controller,
           decoration: InputDecoration(
@@ -1506,7 +1591,7 @@ class _FieldState extends State<_Field> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpace.s(8)),
       child: TextField(
         controller: _controller,
         decoration: InputDecoration(
@@ -1518,7 +1603,7 @@ class _FieldState extends State<_Field> {
             borderSide: BorderSide(color: AppColors.border),
           ),
           filled: false,
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(8)),
         ),
         maxLines: widget.maxLines,
         minLines: minLines,
@@ -1566,8 +1651,8 @@ class _ItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+      padding: EdgeInsets.all(AppSpace.s(12)),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(8),
@@ -1668,7 +1753,7 @@ class _TitleSectionState extends State<_TitleSection> {
                 '이력서 제목',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: AppSpace.s(8)),
               if (widget.readOnly)
                 Text(
                   widget.title.isEmpty ? '새 이력서' : widget.title,
@@ -1697,7 +1782,7 @@ class _TitleSectionState extends State<_TitleSection> {
         if (!widget.readOnly)
           Text(
             '${widget.title.length}/100',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
             ),
@@ -1738,7 +1823,7 @@ class _BasicInfoSection extends StatelessWidget {
             onChanged: (v) => onChanged(info.copyWith(name: v)),
           ),
         if (onPrefill != null) ...[
-          const SizedBox(height: 4),
+          SizedBox(height: AppSpace.s(4)),
           TextButton.icon(
             onPressed: onPrefill,
             style: TextButton.styleFrom(
@@ -1753,7 +1838,7 @@ class _BasicInfoSection extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: AppSpace.s(12)),
         Wrap(
           spacing: 24,
           runSpacing: 8,
@@ -1847,7 +1932,7 @@ class _NameFieldState extends State<_NameField> {
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         hintText: '이름을 입력하세요',
         hintStyle: TextStyle(
           fontSize: 20,
@@ -1859,7 +1944,7 @@ class _NameFieldState extends State<_NameField> {
         focusedBorder: InputBorder.none,
         filled: false,
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(vertical: 4),
+        contentPadding: EdgeInsets.symmetric(vertical: AppSpace.s(4)),
       ),
       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
       onChanged: widget.onChanged,
@@ -1935,7 +2020,7 @@ class _IconFieldState extends State<_IconField> {
       child: Row(
         children: [
           Icon(widget.icon, size: 18, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
+          SizedBox(width: AppSpace.s(8)),
           Expanded(
             child: widget.readOnly
                 ? Column(
@@ -1943,7 +2028,7 @@ class _IconFieldState extends State<_IconField> {
                     children: [
                       Text(
                         widget.label,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textHint,
                         ),
@@ -1985,19 +2070,19 @@ class _CoreCompetenciesSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '채용 담당자들이 가장 먼저 읽게 되는 글입니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const Text(
+          Text(
             '경력을 기반으로 나의 역량과 강점을 소개해 주세요.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const Text(
+          Text(
             '5줄 이내로 간결하게 작성하는 것을 권장합니다.',
             style: TextStyle(fontSize: 13, color: AppColors.textHint),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           _Field(
             label: '',
             hint: '역량과 강점을 입력하세요',
@@ -2634,7 +2719,7 @@ class _SelfIntroSection extends StatelessWidget {
           final section = data.sectionByKey(key);
           final label = ResumeSelfIntroLabels.labels[key]!;
           return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.only(bottom: AppSpace.s(16)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2642,7 +2727,7 @@ class _SelfIntroSection extends StatelessWidget {
                   label,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: AppSpace.s(8)),
                 _Field(
                   label: '부제목',
                   hint: '부제목을 작성하세요',

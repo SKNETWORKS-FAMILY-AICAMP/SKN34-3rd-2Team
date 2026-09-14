@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/record_types.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 블로그 주차 가로 선택 칩
 class RecordWeekPicker extends StatelessWidget {
@@ -25,7 +26,7 @@ class RecordWeekPicker extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: weeks.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => SizedBox(width: AppSpace.s(8)),
         itemBuilder: (_, i) {
           final w = weeks[i];
           final disabled = approvedWeekNumbers.contains(w.weekNumber);
@@ -35,16 +36,16 @@ class RecordWeekPicker extends StatelessWidget {
             color: disabled
                 ? AppColors.surfaceVariant
                 : selected
-                    ? const Color(0xFFEFF6FF)
-                    : AppColors.surface,
+                ? AppColors.primaryLight
+                : AppColors.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
               side: BorderSide(
                 color: selected
                     ? AppColors.info
                     : disabled
-                        ? AppColors.border
-                        : AppColors.border,
+                    ? AppColors.border
+                    : AppColors.border,
                 width: selected ? 1.5 : 1,
               ),
             ),
@@ -54,9 +55,9 @@ class RecordWeekPicker extends StatelessWidget {
               child: SizedBox(
                 width: 96,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 10,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(8),
+                    vertical: AppSpace.s(10),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -71,7 +72,7 @@ class RecordWeekPicker extends StatelessWidget {
                               : AppColors.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: AppSpace.s(4)),
                       Text(
                         _shortRange(w),
                         textAlign: TextAlign.center,
@@ -83,7 +84,7 @@ class RecordWeekPicker extends StatelessWidget {
                         ),
                       ),
                       if (disabled)
-                        const Text(
+                        Text(
                           '승인됨',
                           style: TextStyle(
                             fontSize: 9,

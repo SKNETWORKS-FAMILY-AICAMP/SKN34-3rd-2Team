@@ -18,7 +18,8 @@ origins = [s.strip() for s in os.environ.get('CORS_ALLOW_ORIGINS', '').split(','
 regex = os.environ.get('CORS_ALLOW_ORIGIN_REGEX', '').strip() or None
 if origins or regex:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_origin_regex=regex,
-                       allow_methods=['GET', 'POST'], allow_headers=['Content-Type', 'Authorization'])
+                       allow_methods=['GET', 'POST', 'PUT', 'DELETE'],
+                       allow_headers=['Content-Type', 'Authorization'])
 
 # 학생 챗봇·공부방은 APIRouter라 mount가 아니라 include_router로 붙인다.
 # mount('/')보다 먼저 등록해야 /api/v1/student-chatbot/*, /api/v1/study-notes/* 가

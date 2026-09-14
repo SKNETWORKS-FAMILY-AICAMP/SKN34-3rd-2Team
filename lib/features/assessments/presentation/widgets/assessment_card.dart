@@ -5,6 +5,7 @@ import '../../../../core/widgets/app_dropdown.dart';
 import '../../../../shared/models/assessment_model.dart';
 import '../../../../shared/widgets/status_badge.dart';
 import 'assessment_thumbnail.dart';
+import '../../../../core/theme/app_space.dart';
 
 class AssessmentStatusChip extends StatelessWidget {
   const AssessmentStatusChip({super.key, required this.label});
@@ -61,7 +62,7 @@ class AssessmentCard extends StatelessWidget {
         onPublish != null && !assessment.published && !completed;
 
     return Material(
-      color: Colors.white,
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -72,7 +73,7 @@ class AssessmentCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(AppSpace.s(10)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -104,14 +105,14 @@ class AssessmentCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: AppSpace.s(12)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (assessment.tags.isNotEmpty)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
+                          padding: EdgeInsets.only(bottom: AppSpace.s(4)),
                           child: Wrap(
                             spacing: 4,
                             runSpacing: 4,
@@ -119,9 +120,9 @@ class AssessmentCard extends StatelessWidget {
                                 .take(3)
                                 .map(
                                   (t) => Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: AppSpace.s(6),
+                                      vertical: AppSpace.s(2),
                                     ),
                                     decoration: BoxDecoration(
                                       color: AppColors.surfaceVariant,
@@ -150,7 +151,7 @@ class AssessmentCard extends StatelessWidget {
                           height: 1.25,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: AppSpace.s(6)),
                       Row(
                         children: [
                           Expanded(
@@ -165,7 +166,7 @@ class AssessmentCard extends StatelessWidget {
                           if (completed) ...[
                             if (score != null)
                               Padding(
-                                padding: const EdgeInsets.only(right: 6),
+                                padding: EdgeInsets.only(right: AppSpace.s(6)),
                                 child: Text(
                                   '$score점',
                                   style: TextStyle(
@@ -183,21 +184,21 @@ class AssessmentCard extends StatelessWidget {
                   ),
                 ),
                 if (showPublish) ...[
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   FilledButton(
                     onPressed: publishing ? null : onPublish,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpace.s(14),
+                        vertical: AppSpace.s(10),
                       ),
                       minimumSize: const Size(0, 36),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: publishing
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(

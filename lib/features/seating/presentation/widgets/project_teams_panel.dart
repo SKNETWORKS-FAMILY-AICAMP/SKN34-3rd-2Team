@@ -9,6 +9,7 @@ import '../../data/seating_repository.dart';
 import '../../models/project_team_model.dart';
 import '../../providers/seating_providers.dart';
 import '../../utils/project_team_randomizer.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 좌석 배치 — 프로젝트 팀 구성 탭
 class ProjectTeamsPanel extends ConsumerStatefulWidget {
@@ -25,8 +26,8 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
   bool _busy = false;
 
   Map<String, UserModel> get _byId => {
-        for (final s in widget.students) s.uid: s,
-      };
+    for (final s in widget.students) s.uid: s,
+  };
 
   Future<void> _createTeam(List<ProjectTeamModel> existing) async {
     final cohortId = ref.read(effectiveCohortIdProvider);
@@ -36,7 +37,9 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
     final nextNum = existing.length + 1;
     setState(() => _busy = true);
     try {
-      await ref.read(seatingRepositoryProvider).createProjectTeam(
+      await ref
+          .read(seatingRepositoryProvider)
+          .createProjectTeam(
             cohortId: cohortId,
             name: '$nextNum팀',
             sortOrder: existing.length,
@@ -86,7 +89,9 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
     final cohortId = ref.read(effectiveCohortIdProvider);
     final uid = ref.read(currentUserSyncProvider)?.uid;
     if (cohortId == null || uid == null) return;
-    await ref.read(seatingRepositoryProvider).updateProjectTeam(
+    await ref
+        .read(seatingRepositoryProvider)
+        .updateProjectTeam(
           cohortId: cohortId,
           team: team.copyWith(name: name),
           updatedBy: uid,
@@ -115,7 +120,9 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
     if (ok != true) return;
     final cohortId = ref.read(effectiveCohortIdProvider);
     if (cohortId == null) return;
-    await ref.read(seatingRepositoryProvider).deleteProjectTeam(
+    await ref
+        .read(seatingRepositoryProvider)
+        .deleteProjectTeam(
           cohortId: cohortId,
           teamId: team.id,
         );
@@ -125,7 +132,9 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
     final cohortId = ref.read(effectiveCohortIdProvider);
     final uid = ref.read(currentUserSyncProvider)?.uid;
     if (cohortId == null || uid == null) return;
-    await ref.read(seatingRepositoryProvider).updateProjectTeam(
+    await ref
+        .read(seatingRepositoryProvider)
+        .updateProjectTeam(
           cohortId: cohortId,
           team: team,
           updatedBy: uid,
@@ -217,7 +226,9 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
 
     setState(() => _busy = true);
     try {
-      await ref.read(seatingRepositoryProvider).replaceProjectTeams(
+      await ref
+          .read(seatingRepositoryProvider)
+          .replaceProjectTeams(
             cohortId: cohortId,
             upserts: upserts,
             deleteTeamIds: deleteIds,
@@ -251,14 +262,11 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
         final assigned = <String>{
           for (final t in teams) ...t.memberIds,
         };
-        final unassigned = widget.students
-            .where((s) => !assigned.contains(s.uid))
-            .where((s) {
+        final unassigned =
+            widget.students.where((s) => !assigned.contains(s.uid)).where((s) {
               if (_query.isEmpty) return true;
               return s.displayName.toLowerCase().contains(_query.toLowerCase());
-            })
-            .toList()
-          ..sort((a, b) => a.displayName.compareTo(b.displayName));
+            }).toList()..sort((a, b) => a.displayName.compareTo(b.displayName));
 
         final completeCount = teams.where((t) => t.isComplete).length;
 
@@ -288,7 +296,7 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(4), AppSpace.s(20), AppSpace.s(12)),
                       child: Text(
                         '${student.displayName} 팀 선택',
                         style: const TextStyle(
@@ -300,8 +308,9 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
                     for (final t in incomplete)
                       ListTile(
                         leading: CircleAvatar(
-                          backgroundColor:
-                              ProjectTeamColors.softOf(t.colorIndex),
+                          backgroundColor: ProjectTeamColors.softOf(
+                            t.colorIndex,
+                          ),
                           child: Text(
                             t.name.isNotEmpty ? t.name[0] : 'T',
                             style: TextStyle(
@@ -327,14 +336,14 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
         );
 
         final boards = teams.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
+            ? Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpace.s(48)),
                 child: _EmptyTeamsHint(),
               )
             : Column(
                 children: [
                   for (var i = 0; i < teams.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 12),
+                    if (i > 0) SizedBox(height: AppSpace.s(12)),
                     _TeamCard(
                       team: teams[i],
                       members: [
@@ -343,10 +352,8 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
                       ],
                       onRename: () => _renameTeam(teams[i]),
                       onDelete: () => _deleteTeam(teams[i]),
-                      onRemoveMember: (uid) =>
-                          _removeMember(teams[i], uid),
-                      onAcceptStudent: (uid) =>
-                          _addMember(teams[i], uid),
+                      onRemoveMember: (uid) => _removeMember(teams[i], uid),
+                      onAcceptStudent: (uid) => _addMember(teams[i], uid),
                     ),
                   ],
                 ],
@@ -356,32 +363,30 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 960;
             return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(28)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _HeroBanner(
                     teamCount: teams.length,
                     completeCount: completeCount,
-                    unassignedCount:
-                        widget.students.length - assigned.length,
+                    unassignedCount: widget.students.length - assigned.length,
                     onAddTeam: _busy ? null : () => _createTeam(teams),
-                    onRandomize:
-                        _busy ? null : () => _randomizeTeams(teams),
+                    onRandomize: _busy ? null : () => _randomizeTeams(teams),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpace.s(16)),
                   if (wide)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(width: 300, child: pool),
-                        const SizedBox(width: 16),
+                        SizedBox(width: AppSpace.s(16)),
                         Expanded(child: boards),
                       ],
                     )
                   else ...[
                     pool,
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppSpace.s(12)),
                     boards,
                   ],
                 ],
@@ -412,13 +417,13 @@ class _HeroBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(AppSpace.s(18)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0B2A6F), Color(0xFF0055FF)],
+          colors: [AppColors.sidebar, AppColors.primary],
         ),
         boxShadow: [
           BoxShadow(
@@ -434,7 +439,7 @@ class _HeroBanner extends StatelessWidget {
           final text = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 '프로젝트 팀',
                 style: TextStyle(
                   color: Colors.white,
@@ -442,7 +447,7 @@ class _HeroBanner extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: AppSpace.s(6)),
               Text(
                 '팀당 4~5명으로 구성하세요. 배치 편집에서 팀끼리 앉힐 수 있습니다.',
                 style: TextStyle(
@@ -451,7 +456,7 @@ class _HeroBanner extends StatelessWidget {
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: AppSpace.s(14)),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -475,9 +480,9 @@ class _HeroBanner extends StatelessWidget {
                   side: BorderSide(
                     color: Colors.white.withValues(alpha: 0.7),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(14),
+                    vertical: AppSpace.s(14),
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -489,11 +494,11 @@ class _HeroBanner extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onAddTeam,
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
+                  backgroundColor: AppColors.surface,
                   foregroundColor: AppColors.primaryDark,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpace.s(16),
+                    vertical: AppSpace.s(14),
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -509,7 +514,7 @@ class _HeroBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 text,
-                const SizedBox(height: 14),
+                SizedBox(height: AppSpace.s(14)),
                 Align(alignment: Alignment.centerRight, child: buttons),
               ],
             );
@@ -517,7 +522,7 @@ class _HeroBanner extends StatelessWidget {
           return Row(
             children: [
               Expanded(child: text),
-              const SizedBox(width: 12),
+              SizedBox(width: AppSpace.s(12)),
               buttons,
             ],
           );
@@ -534,7 +539,7 @@ class _StatPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(10), vertical: AppSpace.s(5)),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
@@ -542,7 +547,7 @@ class _StatPill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.white,
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -585,15 +590,18 @@ class _UnassignedPool extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+            padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(14), AppSpace.s(14), AppSpace.s(8)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.person_search_rounded,
-                        size: 18, color: AppColors.primary),
-                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.person_search_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    SizedBox(width: AppSpace.s(6)),
                     const Text(
                       '미배정 학생',
                       style: TextStyle(fontWeight: FontWeight.w700),
@@ -608,7 +616,7 @@ class _UnassignedPool extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: AppSpace.s(10)),
                 TextField(
                   onChanged: onQueryChanged,
                   decoration: InputDecoration(
@@ -629,7 +637,7 @@ class _UnassignedPool extends StatelessWidget {
           const Divider(height: 1),
           if (students.isEmpty)
             Padding(
-              padding: EdgeInsets.symmetric(vertical: 28),
+              padding: EdgeInsets.symmetric(vertical: AppSpace.s(28)),
               child: Center(
                 child: Text(
                   '모두 팀에 배정되었습니다',
@@ -639,7 +647,7 @@ class _UnassignedPool extends StatelessWidget {
             )
           else
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(8), AppSpace.s(8), AppSpace.s(8), AppSpace.s(12)),
               child: Column(
                 children: [
                   for (final s in students)
@@ -650,9 +658,9 @@ class _UnassignedPool extends StatelessWidget {
                         elevation: 6,
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: AppSpace.s(14),
+                            vertical: AppSpace.s(10),
                           ),
                           decoration: BoxDecoration(
                             color: AppColors.primary,
@@ -660,7 +668,7 @@ class _UnassignedPool extends StatelessWidget {
                           ),
                           child: Text(
                             s.displayName,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
                             ),
@@ -697,19 +705,19 @@ class _StudentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      margin: EdgeInsets.symmetric(vertical: AppSpace.s(4), horizontal: AppSpace.s(4)),
       elevation: 0,
       color: AppColors.surfaceVariant,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: ListTile(
         dense: true,
-        contentPadding: const EdgeInsets.only(left: 12, right: 4),
+        contentPadding: EdgeInsets.only(left: AppSpace.s(12), right: AppSpace.s(4)),
         leading: CircleAvatar(
           radius: 14,
           backgroundColor: AppColors.primaryLight,
           child: Text(
             name.isNotEmpty ? name[0] : '?',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppColors.primary,
               fontWeight: FontWeight.w700,
@@ -780,7 +788,7 @@ class _TeamCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+                padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(12), AppSpace.s(8), AppSpace.s(12)),
                 decoration: BoxDecoration(
                   color: soft,
                   borderRadius: const BorderRadius.vertical(
@@ -797,7 +805,7 @@ class _TeamCard extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: AppSpace.s(8)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -810,7 +818,7 @@ class _TeamCard extends StatelessWidget {
                               color: accent,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          SizedBox(height: AppSpace.s(2)),
                           Text(
                             team.sizeLabel,
                             style: TextStyle(
@@ -818,8 +826,8 @@ class _TeamCard extends StatelessWidget {
                               color: team.isComplete
                                   ? AppColors.success
                                   : team.isOverfull
-                                      ? AppColors.error
-                                      : AppColors.textSecondary,
+                                  ? AppColors.error
+                                  : AppColors.textSecondary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -841,11 +849,11 @@ class _TeamCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                padding: EdgeInsets.fromLTRB(AppSpace.s(12), AppSpace.s(10), AppSpace.s(12), AppSpace.s(12)),
                 child: members.isEmpty
                     ? Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 22),
+                        padding: EdgeInsets.symmetric(vertical: AppSpace.s(22)),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceVariant,
                           borderRadius: BorderRadius.circular(12),
@@ -937,7 +945,7 @@ class _EmptyTeamsHint extends StatelessWidget {
             size: 48,
             color: AppColors.textHint.withValues(alpha: 0.8),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: AppSpace.s(12)),
           const Text(
             '아직 팀이 없습니다',
             style: TextStyle(
@@ -945,7 +953,7 @@ class _EmptyTeamsHint extends StatelessWidget {
               fontSize: 16,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: AppSpace.s(6)),
           Text(
             '오른쪽 위 「팀 추가」로 시작해 보세요',
             style: TextStyle(color: AppColors.textSecondary),

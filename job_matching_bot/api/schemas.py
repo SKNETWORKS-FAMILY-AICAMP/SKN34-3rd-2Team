@@ -171,6 +171,10 @@ class RecommendResponse(StrictModel):
     prompt_version: str = ""
     model: str = ""
     reasoning_effort: str = ""
+    # 단계별 걸린 시간(ms). 열쇠는 profile·search·filter·liveness·pre_rank·rerank·verify·total.
+    # 검색 결과가 없으면 search까지만 있다.
+    timings_ms: dict[str, int] = Field(default_factory=dict)
+    profile_source: str = Field(default="", description="구조화를 어디서 얻었나. 앱·캐시·LLM")
 
 
 # ── 공고 찾아보기 챗봇 ──────────────────────────────────
@@ -200,6 +204,21 @@ class ChatFilters(StrictModel):
         default=None, description="마감 임박만 볼 때의 날짜 수. 아니면 null"
     )
     keywords: list[str] = Field(default_factory=list, description="위에 안 들어가는 말")
+    # 빼 달라는 말. **걸러 달라는 말과 따로 둔다.**
+    #
+    # "스타트업은 빼고 데이터 분석 신입"에 답이 "스타트업을 제외하고 찾아보겠습니다"라고 했지만
+    # 담을 칸이 없어 아무것도 빼지 않았다.
+    exclude_keywords: list[str] = Field(
+        default_factory=list,
+        description="빼 달라는 말. '스타트업은 빼고' → 스타트업, '파견은 싫어요' → 파견, '계약직 말고' → 계약직",
+    )
+    # 공고가 올라온 지 며칠 안 됐나. 마감(`deadline_within_days`)과 다른 방향이다.
+    #
+    # "오늘 새로 올라온 개발 공고"에 날짜로 거르지 않고 개발 공고 전체가 나갔다.
+    posted_within_days: int | None = Field(
+        default=None, ge=0, le=60,
+        description="최근 올라온 공고만 볼 때의 날짜 수. '오늘 올라온' → 0, '이번 주 새로 올라온' → 7. 아니면 null",
+    )
 
 
 class ChatTurnOut(StrictModel):
@@ -249,6 +268,15 @@ class ChatTurnOut(StrictModel):
             "번호를 대지 않고 직전 답이 다룬 공고를 가리키면 true. "
             "'두 공고의 자격요건만', '이 공고 마감일은', '둘 다 신입 가능해?'가 그렇다. "
             "새로 찾아 달라는 말이면 false"
+        ),
+    )
+    # "이거 말고"를 거듭하면 같은 조건에서 **안 본 공고**를 차례로 보여 준다. 없으면 같은
+    # 목록을 다시 찾아 놓고 답에는 "다른 공고를 찾았다"고 말했다.
+    show_more: bool = Field(
+        default=False,
+        description=(
+            "직전 목록 말고 같은 조건의 다른 공고를 더 보고 싶다는 말이면 true. "
+            "'이거 말고', '다른 거', '더 보여줘', '다음'. 조건을 바꾸는 말이면 false"
         ),
     )
     resume_scope: Literal["전체", "프로젝트", "기술스택", "자기소개서", "경력"] = Field(
@@ -319,6 +347,14 @@ class JobChatRequest(StrictModel):
         max_length=20,
         description="직전 답이 다룬 공고 id를 보여 준 순서대로. '두 공고', '이 공고'가 가리키는 것",
     )
+    # **같은 조건으로 지금까지 보여 준 공고 전부.** 위 `last_job_ids`는 직전 한 쪽뿐이라,
+    # 그것만 빼면 "이거 말고"를 두 번째 할 때 첫 목록이 다시 나온다. 앱이 조건이 바뀔
+    # 때까지 모아 보내고, 서버는 `show_more`일 때 이것을 빼고 다음 공고를 준다.
+    seen_job_ids: list[str] = Field(
+        default_factory=list,
+        max_length=3000,
+        description="같은 조건으로 이미 보여 준 공고 id 전부. '이거 말고'를 거듭할 때 뺀다",
+    )
     # 공고를 놓고 물을 때 "나한테 맞아?"는 이력서를 봐야 답할 수 있다. 없으면 서버는
     # 공고만 읽고 답하므로, 앱은 이력서 화면에서 물을 때 평문을 함께 보낸다.
     resume_text: str | None = Field(default=None, max_length=50_000)
@@ -347,13 +383,21 @@ class JobChatResponse(StrictModel):
     reply: str
     filters: ChatFilters
     jobs: list[JobChatJob] = Field(default_factory=list)
-    total: int = Field(description="조건에 맞는 전체 건수. jobs는 그중 일부")
+    total: int = Field(
+        description=(
+            "답이 말한 건수. 검색이면 제목·태그에 직접 맞은 공고 수(없으면 조건에 맞는 전체). "
+            "jobs는 그중 일부"
+        )
+    )
     suggestions: list[str] = Field(
         default_factory=list, description="다음에 더 좁힐 거리. 그대로 눌러 보낼 수 있는 말"
     )
     prompt_version: str = ""
     model: str = ""
     reasoning_effort: str = ""
+    # 지난 단계별 시간(ms). 갈래마다 지나는 단계가 달라 열쇠가 다르다.
+    # route·store·search·meaning·stats·liveness·answer 중 지난 것과 total.
+    timings_ms: dict[str, int] = Field(default_factory=dict)
 
 
 class HealthResponse(StrictModel):

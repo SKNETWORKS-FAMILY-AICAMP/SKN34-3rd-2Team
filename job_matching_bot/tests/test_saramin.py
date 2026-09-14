@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records
-from job_matching_bot.config import ARTIFACTS_DIR, AS_OF, REPO_ROOT
+from job_matching_bot.config import ARTIFACTS_DIR, REPO_ROOT
+from job_matching_bot.ingestion.company_name import clean_company_name
+from job_matching_bot.tests import AS_OF, SARAMIN_SAMPLE
 from job_matching_bot.ingestion.saramin import (
     normalize_many,
     normalize_saramin,
@@ -21,25 +23,7 @@ from job_matching_bot.ingestion.saramin import (
     parse_tech_stack,
 )
 
-SAMPLE = {
-    "source_job_id": "54845055",
-    "source_url": "https://www.saramin.co.kr/zf_user/jobs/view?rec_idx=54845055",
-    "conditions": {
-        "경력": "신입·경력",
-        "학력": "대졸(4년제) 이상",
-        "근무형태": "정규직 수습기간 3개월",
-        "근무지역": "서울 마포구 지도보기",
-    },
-    "company_info": {"기업형태": "중소기업, 1000대기업, 주식회사"},
-    "description": "Python과 FastAPI로 백엔드 API를 개발합니다.",
-    "needs_human_review": False,
-    "list_item": {
-        "company": "주식회사 아이티에스코",
-        "title": "솔루션 개발팀 신입•경력 채용",
-        "job_sectors": ["백엔드/서버개발", "데이터엔지니어"],
-        "support_text": "입사지원 D-6 7일 전 등록",
-    },
-}
+SAMPLE = SARAMIN_SAMPLE
 
 
 class CareerTest(unittest.TestCase):
@@ -118,6 +102,17 @@ class DeadlineTest(unittest.TestCase):
 
 
 class NormalizeTest(unittest.TestCase):
+    def test_removes_company_ui_noise(self):
+        record = json.loads(json.dumps(SAMPLE))
+        record["list_item"]["company"] = "(주)엣지크로스 관심기업 등록"
+        self.assertEqual("(주)엣지크로스", normalize_saramin(record).company)
+
+    def test_only_removes_company_noise_at_the_end(self):
+        self.assertEqual(
+            "관심기업 등록 연구소",
+            clean_company_name("관심기업 등록 연구소"),
+        )
+
     def test_maps_to_common_schema(self):
         job = normalize_saramin(SAMPLE)
         self.assertEqual("SARAMIN-54845055", job.job_id)

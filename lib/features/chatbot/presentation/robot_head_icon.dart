@@ -2,14 +2,24 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
-
 /// The default robot head briefly stretches wide whenever [bounce] changes.
 class RobotHeadIcon extends StatefulWidget {
-  const RobotHeadIcon({super.key, this.size = 40, this.bounce = 0});
+  const RobotHeadIcon({
+    super.key,
+    this.size = 40,
+    this.bounce = 0,
+    this.inverted = false,
+  });
 
   final double size;
   final int bounce;
+
+  /// 몸과 얼굴 화면의 색을 맞바꾼 머리. 이력서 화면의 AI 코치가 쓴다.
+  ///
+  /// 학생 챗봇은 흰 몸에 남색 얼굴 화면이다. 같은 화면 오른쪽 아래에 학생
+  /// 챗봇이 떠 있어서, 코치까지 같은 머리면 어느 쪽과 대화하는지 헷갈린다.
+  /// 모양은 두고 색만 뒤집는다: 강조색 몸, 흰 얼굴 화면, 강조색 눈과 입.
+  final bool inverted;
 
   @override
   State<RobotHeadIcon> createState() => _RobotHeadIconState();
@@ -44,21 +54,39 @@ class _RobotHeadIconState extends State<RobotHeadIcon>
   }
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) => CustomPaint(
-        size: Size.square(widget.size),
-        painter: _RobotHeadPainter(progress: _controller.value),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => CustomPaint(
+          size: Size.square(widget.size),
+          painter: _RobotHeadPainter(
+            progress: _controller.value,
+            primary: scheme.primary,
+            primaryLight: scheme.primaryContainer,
+            inverted: widget.inverted,
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _RobotHeadPainter extends CustomPainter {
-  const _RobotHeadPainter({required this.progress});
+  const _RobotHeadPainter({
+    required this.progress,
+    required this.primary,
+    required this.primaryLight,
+    this.inverted = false,
+  });
 
   final double progress;
+  final Color primary;
+  final Color primaryLight;
+  final bool inverted;
+
+  static const _navy = Color(0xFF0B2A6F);
 
   double get _stretch {
     const stops = [0.0, .28, .45, .70, .86, 1.0];
@@ -91,7 +119,7 @@ class _RobotHeadPainter extends CustomPainter {
       morph(55, 48),
     );
     final stroke = Paint()
-      ..color = AppColors.primary
+      ..color = primary
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.2
       ..strokeCap = StrokeCap.round;
@@ -111,7 +139,7 @@ class _RobotHeadPainter extends CustomPainter {
           7 * earVisibility,
           18,
         );
-        shape(ear, 4, AppColors.primaryLight);
+        shape(ear, 4, primaryLight);
       }
     }
     final antennaTop = head.top - morph(14, 10);
@@ -119,16 +147,19 @@ class _RobotHeadPainter extends CustomPainter {
     canvas.drawCircle(
       Offset(52, antennaTop - 2),
       4,
-      Paint()..color = AppColors.primary,
+      Paint()..color = primary,
     );
-    shape(head, morph(20, 17), AppColors.surface);
+    final shell = inverted ? primary : Colors.white;
+    final screen = inverted ? Colors.white : _navy;
+    final face = inverted ? primary : Colors.white;
+    shape(head, morph(20, 17), shell);
     final mask = Rect.fromLTRB(
       head.left + 9,
       head.top + morph(10, 9),
       head.right - 9,
       head.bottom - morph(10, 9),
     );
-    shape(mask, morph(13, 11), AppColors.sidebar, outline: false);
+    shape(mask, morph(13, 11), screen, outline: false);
     for (final right in [false, true]) {
       final x = right
           ? mask.right - morph(12, 17) - 6
@@ -136,7 +167,7 @@ class _RobotHeadPainter extends CustomPainter {
       shape(
         Rect.fromLTWH(x, mask.top + morph(10, 8), 6, morph(8, 7)),
         3,
-        AppColors.surface,
+        face,
         outline: false,
       );
     }
@@ -152,9 +183,9 @@ class _RobotHeadPainter extends CustomPainter {
       3.141592653589793,
       false,
       Paint()
-        ..color = AppColors.surface
+        ..color = face
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
+        ..strokeWidth = inverted ? 2.2 : 2
         ..strokeCap = StrokeCap.round,
     );
     canvas.restore();
@@ -162,5 +193,8 @@ class _RobotHeadPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RobotHeadPainter oldDelegate) =>
-      progress != oldDelegate.progress;
+      progress != oldDelegate.progress ||
+      primary != oldDelegate.primary ||
+      primaryLight != oldDelegate.primaryLight ||
+      inverted != oldDelegate.inverted;
 }

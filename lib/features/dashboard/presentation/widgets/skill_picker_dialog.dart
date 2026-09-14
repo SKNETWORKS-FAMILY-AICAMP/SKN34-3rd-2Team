@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/skill_catalog.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/providers/lms_providers.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 스킬 선택 모달 — 검색 · 페이지 · 저장
 Future<void> showSkillPickerDialog(
@@ -71,7 +72,9 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await ref.read(lmsRepositoryProvider).updateProfile(
+      await ref
+          .read(lmsRepositoryProvider)
+          .updateProfile(
             uid: widget.uid,
             skills: _selected.toList()..sort(),
           );
@@ -97,7 +100,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
     final pageItems = SkillCatalog.pageItems(_filtered, _page);
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      insetPadding: EdgeInsets.symmetric(horizontal: AppSpace.s(24), vertical: AppSpace.s(32)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560, maxHeight: 620),
@@ -105,7 +108,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(8), AppSpace.s(0)),
               child: Row(
                 children: [
                   const Text(
@@ -121,14 +124,14 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
               ),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(20)),
               child: Text(
                 '사용할 수 있는 스킬을 선택해 주세요.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(8)),
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
@@ -145,7 +148,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              padding: EdgeInsets.symmetric(horizontal: AppSpace.s(20), vertical: AppSpace.s(4)),
               child: Row(
                 children: [
                   Text(
@@ -158,9 +161,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.chevron_left, size: 20),
-                    onPressed: _page > 0
-                        ? () => setState(() => _page--)
-                        : null,
+                    onPressed: _page > 0 ? () => setState(() => _page--) : null,
                   ),
                   Text(
                     '${_page + 1} / $_totalPages',
@@ -184,7 +185,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
                       ),
                     )
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(20)),
                       child: Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -199,8 +200,9 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
                               color: selected
                                   ? AppColors.textPrimary
                                   : AppColors.textSecondary,
-                              fontWeight:
-                                  selected ? FontWeight.w600 : FontWeight.normal,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
                             ),
                             selectedColor: AppColors.primaryLight,
                             backgroundColor: AppColors.surface,
@@ -225,7 +227,10 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
             ),
             if (_selected.isNotEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpace.s(20),
+                  vertical: AppSpace.s(8),
+                ),
                 decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: AppColors.border)),
                 ),
@@ -238,7 +243,7 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(AppSpace.s(16)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -246,11 +251,11 @@ class _SkillPickerDialogState extends ConsumerState<_SkillPickerDialog> {
                     onPressed: _saving ? null : () => Navigator.pop(context),
                     child: const Text('취소'),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   FilledButton(
                     onPressed: _saving ? null : _save,
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(

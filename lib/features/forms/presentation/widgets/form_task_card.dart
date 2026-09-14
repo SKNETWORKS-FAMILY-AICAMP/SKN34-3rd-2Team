@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/models/form_task_model.dart';
+import '../../../../core/theme/app_space.dart';
 
 class FormTaskCard extends StatelessWidget {
   const FormTaskCard({
@@ -27,13 +28,13 @@ class FormTaskCard extends StatelessWidget {
             : AppColors.warning;
 
     return Card(
-      margin: compact ? EdgeInsets.zero : const EdgeInsets.only(bottom: 10),
+      margin: compact ? EdgeInsets.zero : EdgeInsets.only(bottom: AppSpace.s(10)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: EdgeInsets.all(compact ? 14 : 16),
+          padding: EdgeInsets.all(compact ? AppSpace.s(14) : AppSpace.s(16)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -52,7 +53,7 @@ class FormTaskCard extends StatelessWidget {
                           ),
                         ),
                         if (task.description.isNotEmpty && !compact) ...[
-                          const SizedBox(height: 4),
+                          SizedBox(height: AppSpace.s(4)),
                           Text(
                             task.description,
                             maxLines: 2,
@@ -66,11 +67,11 @@ class FormTaskCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: AppSpace.s(8)),
                   _StatusChip(label: item.statusLabel, color: statusColor),
                 ],
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: AppSpace.s(10)),
               Row(
                 children: [
                   Icon(
@@ -78,7 +79,7 @@ class FormTaskCard extends StatelessWidget {
                     size: 14,
                     color: item.isOverdue ? AppColors.error : AppColors.textHint,
                   ),
-                  const SizedBox(width: 4),
+                  SizedBox(width: AppSpace.s(4)),
                   Text(
                     '마감 ${AppDateUtils.formatDisplay(task.dueAt)}'
                     '${item.isCompleted ? '' : ' · D-${task.daysRemaining.clamp(0, 999)}'}',
@@ -89,7 +90,7 @@ class FormTaskCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -139,7 +140,7 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8), vertical: AppSpace.s(4)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),

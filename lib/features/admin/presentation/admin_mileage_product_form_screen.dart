@@ -9,6 +9,7 @@ import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/mileage_providers.dart';
 import '../../mileage/theme/mileage_theme.dart';
 import 'widgets/admin_page_layout.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 — 마일리지 상품 등록/수정 폼
 class AdminMileageProductFormScreen extends ConsumerStatefulWidget {
@@ -140,7 +141,7 @@ class _AdminMileageProductFormScreenState
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: AppSpace.s(12)),
             AdminFormSection(
               title: '기본 정보',
               children: [
@@ -150,13 +151,13 @@ class _AdminMileageProductFormScreenState
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? '상품명을 입력해 주세요.' : null,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _descriptionController,
                   decoration: const InputDecoration(labelText: '설명', border: OutlineInputBorder()),
                   maxLines: 2,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 TextFormField(
                   controller: _imageUrlController,
                   decoration: const InputDecoration(labelText: '이미지 URL', border: OutlineInputBorder()),
@@ -181,7 +182,7 @@ class _AdminMileageProductFormScreenState
                   ],
                   onChanged: (v) => setState(() => _category = v ?? _category),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppSpace.s(12)),
                 AppDropdownField<String>(
                   value: _pricingType,
                   decoration: const InputDecoration(
@@ -202,7 +203,7 @@ class _AdminMileageProductFormScreenState
                       setState(() => _pricingType = v ?? _pricingType),
                 ),
                 if (_pricingType == MileagePricingTypes.fixed) ...[
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   TextFormField(
                     controller: _fixedPriceController,
                     keyboardType: TextInputType.number,
@@ -237,7 +238,7 @@ class _AdminMileageProductFormScreenState
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppSpace.s(8)),
             FilledButton(
               style: mileagePrimaryButtonStyle(minHeight: 40),
               onPressed: _saving ? null : _save,

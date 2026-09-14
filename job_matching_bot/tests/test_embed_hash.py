@@ -12,7 +12,7 @@ from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
-from job_matching_bot.config import AS_OF
+from job_matching_bot.tests import AS_OF
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
 from job_matching_bot.retrieval import documents as doc

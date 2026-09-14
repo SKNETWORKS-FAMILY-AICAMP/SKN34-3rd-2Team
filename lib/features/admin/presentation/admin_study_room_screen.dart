@@ -12,6 +12,7 @@ import '../../study_room/presentation/widgets/inflearn_package_card.dart';
 import '../../study_room/presentation/widgets/study_room_layout.dart';
 import 'widgets/admin_study_source_panel.dart';
 import 'widgets/admin_youtube_recommendation_panel.dart';
+import '../../../core/theme/app_space.dart';
 
 /// 관리자 학습실 — 인프런 강의 패키지 관리
 class AdminStudyRoomScreen extends ConsumerStatefulWidget {
@@ -110,7 +111,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                           showProfile: false,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: AppSpace.s(12)),
                       FilledButton.icon(
                         onPressed: () =>
                             context.push(RoutePaths.adminStudyRoomCreate),
@@ -119,11 +120,11 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: AppSpace.s(24)),
                   const AdminYoutubeRecommendationPanel(),
-                  const SizedBox(height: 28),
+                  SizedBox(height: AppSpace.s(28)),
                   const AdminStudySourcePanel(),
-                  const SizedBox(height: 28),
+                  SizedBox(height: AppSpace.s(28)),
                   const Text(
                     '인프런 패키지',
                     style: TextStyle(
@@ -131,16 +132,16 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppSpace.s(12)),
                   StudyRoomSearchBar(
                     controller: _searchController,
                     hintText: '패키지·교과목 검색',
                     onChanged: (v) => setState(() => _query = v.trim()),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: AppSpace.s(20)),
                   packages.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(40),
+                    loading: () => Padding(
+                      padding: EdgeInsets.all(AppSpace.s(40)),
                       child: Center(child: CircularProgressIndicator()),
                     ),
                     error: (e, _) => ErrorView(message: e.toString()),
@@ -160,7 +161,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
 
                       if (filtered.isEmpty) {
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 48),
+                          padding: EdgeInsets.symmetric(vertical: AppSpace.s(48)),
                           child: Column(
                             children: [
                               Text(
@@ -169,7 +170,7 @@ class _AdminStudyRoomScreenState extends ConsumerState<AdminStudyRoomScreen> {
                                   color: AppColors.textSecondary,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppSpace.s(12)),
                               OutlinedButton.icon(
                                 onPressed: () => context
                                     .push(RoutePaths.adminStudyRoomCreate),

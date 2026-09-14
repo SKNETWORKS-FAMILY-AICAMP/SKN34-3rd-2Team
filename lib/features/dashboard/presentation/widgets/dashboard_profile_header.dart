@@ -5,6 +5,7 @@ import '../../../../shared/models/user_model.dart';
 import '../../../../shared/providers/mileage_providers.dart';
 import '../../../mileage/presentation/widgets/mileage_credit_card.dart';
 import 'dashboard_profile_card.dart';
+import '../../../../core/theme/app_space.dart';
 
 /// 대시보드 상단 — 프로필 카드 + 3D 마일리지 카드
 class DashboardProfileHeader extends ConsumerWidget {
@@ -35,7 +36,7 @@ class DashboardProfileHeader extends ConsumerWidget {
                 flex: 5,
                 child: DashboardProfileCard(user: user),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: AppSpace.s(12)),
               Expanded(
                 flex: 4,
                 child: Align(
@@ -54,7 +55,7 @@ class DashboardProfileHeader extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DashboardProfileCard(user: user),
-            const SizedBox(height: 12),
+            SizedBox(height: AppSpace.s(12)),
             MileageCreditCard(
               balance: user.mileageBalance,
               holderName: user.displayName,
