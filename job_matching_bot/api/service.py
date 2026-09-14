@@ -1297,7 +1297,9 @@ class ChatService(_LivenessMixin):
             )
 
         head = understood.strip() or f"{condition} 조건으로 찾았어요."
-        tail = f" 가까운 순으로 {shown}건 보여드릴게요." if count > shown else ""
+        # "가까운 순"이라고 썼더니 거리 순으로 읽혔다. 실제 순서는 말한 조건이 제목에 그대로 있는
+        # 공고 → 제목에 있는 공고 → 태그에 있는 공고 → 본문에만 있는 공고다.
+        tail = f" 조건이 제목에 잘 맞는 공고부터 {shown}건 보여드릴게요." if count > shown else ""
         return f"{head}\n{found}{tail}"
 
 
