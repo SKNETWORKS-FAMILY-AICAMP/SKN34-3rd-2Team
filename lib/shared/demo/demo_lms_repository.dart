@@ -2,6 +2,8 @@ import 'dart:async';
 
 import '../../core/constants/attendance_status.dart';
 import '../../core/constants/cohort_status.dart';
+import '../../core/constants/record_types.dart';
+import '../../core/constants/role.dart';
 import '../../core/utils/class_period_utils.dart';
 import '../models/assessment_model.dart';
 import '../models/alert_popup_model.dart';
@@ -65,8 +67,65 @@ class DemoLmsRepository {
     _todos = [];
     _posts = [];
     _notices = [];
-    _submissions = [];
-    _resumes = [];
+    // 관리자 시연에서 승인·반려 흐름을 보여 줄 대기 기록. 이름은 예시다.
+    final now = DateTime.now();
+    _submissions = [
+      SubmissionModel(
+        id: 'sub-demo-1',
+        userId: 'demo-student-002',
+        userDisplayName: '김하늘',
+        title: 'PCCP Lv.2 취득',
+        type: RecordTypes.certification,
+        status: 'pending',
+        certType: 'PCCP',
+        submittedAt: now.subtract(const Duration(hours: 3)),
+      ),
+      SubmissionModel(
+        id: 'sub-demo-2',
+        userId: 'demo-student-003',
+        userDisplayName: '이도윤',
+        title: 'Pandas groupby 정리',
+        type: RecordTypes.blog,
+        status: 'pending',
+        link: 'https://velog.io/@example/pandas-groupby',
+        submittedAt: now.subtract(const Duration(hours: 20)),
+      ),
+      SubmissionModel(
+        id: 'sub-demo-3',
+        userId: DemoAccounts.studentUid,
+        userDisplayName: DemoAccounts.student.displayName,
+        title: 'SQL 스터디 3주차',
+        type: RecordTypes.study,
+        status: 'pending',
+        weekNumber: 3,
+        weekLabel: '3주차',
+        isTeamStudy: true,
+        submittedAt: now.subtract(const Duration(days: 1, hours: 2)),
+      ),
+      SubmissionModel(
+        id: 'sub-demo-4',
+        userId: 'demo-student-004',
+        userDisplayName: '박서연',
+        title: 'SQLD 합격',
+        type: RecordTypes.certification,
+        status: 'approved',
+        certType: 'SQLD',
+        mileageGranted: true,
+        submittedAt: now.subtract(const Duration(days: 3)),
+      ),
+    ];
+    _resumes = [
+      ResumeModel(
+        id: 'r-demo-1',
+        userId: DemoAccounts.studentUid,
+        title: '데이터 분석가 지원 이력서',
+        status: 'submitted',
+        sections: const {},
+        isBaseResume: true,
+        revisionCount: 1,
+        updatedAt: now.subtract(const Duration(hours: 5)),
+      ),
+    ];
     _attendances = [];
     _mileageTx = [];
     _assessments = [
@@ -874,6 +933,20 @@ class DemoLmsRepository {
   Stream<List<UserModel>> watchCohortStudents(String cohortId) async* {
     yield [
       DemoAccounts.student,
+      // 자리 확인·출석부 시연용 예시 학생. 기록실 예시 기록의 제출자와 같다.
+      for (final (uid, name) in const [
+        ('demo-student-002', '김하늘'),
+        ('demo-student-003', '이도윤'),
+        ('demo-student-004', '박서연'),
+      ])
+        UserModel(
+          uid: uid,
+          email: '$uid@playdata.co.kr',
+          displayName: name,
+          role: UserRole.student,
+          cohortId: DemoConfig.cohortId,
+          cohortName: DemoConfig.cohortName,
+        ),
     ];
   }
 
@@ -895,15 +968,19 @@ class DemoLmsRepository {
   String _rollCallKey(String cohortId, String dateKey, String periodId) =>
       '$cohortId|$dateKey|$periodId';
 
+  /// 확인·보류를 누르면 화면의 집계가 바로 바뀌도록 변경을 알린다.
+  final _rollCallChanges = StreamController<void>.broadcast();
+
   Stream<Set<String>> watchRollCallConfirmed(
     String cohortId,
     String dateKey,
     String periodId,
   ) async* {
-    yield Set.of(
-      _rollCallConfirmed[_rollCallKey(cohortId, dateKey, periodId)] ??
-          const {},
-    );
+    final key = _rollCallKey(cohortId, dateKey, periodId);
+    yield Set.of(_rollCallConfirmed[key] ?? const {});
+    await for (final _ in _rollCallChanges.stream) {
+      yield Set.of(_rollCallConfirmed[key] ?? const {});
+    }
   }
 
   Stream<Set<String>> watchRollCallHeld(
@@ -911,9 +988,11 @@ class DemoLmsRepository {
     String dateKey,
     String periodId,
   ) async* {
-    yield Set.of(
-      _rollCallHeld[_rollCallKey(cohortId, dateKey, periodId)] ?? const {},
-    );
+    final key = _rollCallKey(cohortId, dateKey, periodId);
+    yield Set.of(_rollCallHeld[key] ?? const {});
+    await for (final _ in _rollCallChanges.stream) {
+      yield Set.of(_rollCallHeld[key] ?? const {});
+    }
   }
 
   Future<void> ensureRollCallCarriedForward({
@@ -963,6 +1042,7 @@ class DemoLmsRepository {
     } else {
       set.remove(userId);
     }
+    _rollCallChanges.add(null);
   }
 
   Future<void> setRollCallHeld({
@@ -989,6 +1069,7 @@ class DemoLmsRepository {
     } else {
       heldSet.remove(userId);
     }
+    _rollCallChanges.add(null);
   }
 
   Future<int> seedDemoAttendances({
