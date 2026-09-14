@@ -241,6 +241,13 @@ COMPANY_TYPES: dict[str, str] = {
 }
 
 
+# 빼 달라는 말 중 고용형태 칸으로 거를 것. 값은 그 칸에서 찾을 글자다.
+EMPLOYMENT_WORDS: dict[str, str] = {
+    "계약직": "계약", "인턴": "인턴", "파견": "파견", "파견직": "파견",
+    "프리랜서": "프리랜서", "아르바이트": "아르바이트", "알바": "아르바이트",
+}
+
+
 def _company_type_keywords(filters: "JobFilters") -> list[str]:
     return [word for word in _dedupe(filters.keywords) if word.replace(" ", "") in COMPANY_TYPES]
 
@@ -278,13 +285,16 @@ class JobFilters:
     employment_types: list[str] = field(default_factory=list)
     deadline_within_days: int | None = None                 # 마감 임박만 보기
     keywords: list[str] = field(default_factory=list)       # 그 밖의 말
+    exclude_keywords: list[str] = field(default_factory=list)  # 빼 달라는 말(스타트업, 파견)
+    posted_within_days: int | None = None                   # 최근 올라온 것만. 0이면 오늘
 
     @property
     def is_empty(self) -> bool:
         return not any(
             [self.roles, self.skills, self.regions, self.employment_types,
              self.keywords, self.deadline_within_days, self.career != "무관",
-             self.career_years is not None]
+             self.career_years is not None, self.exclude_keywords,
+             self.posted_within_days is not None]
         )
 
     def summary(self) -> str:
@@ -301,7 +311,11 @@ class JobFilters:
             parts.append(self.career)
         if self.deadline_within_days:
             parts.append(f"{self.deadline_within_days}일 내 마감")
+        if self.posted_within_days is not None:
+            # "오늘"이라고 쓰지 않는다. 마지막 수집일에서 센다(`conditions`).
+            parts.append("새로 올라온" if self.posted_within_days == 0 else f"최근 {self.posted_within_days}일 새로 올라온")
         parts.extend(self.keywords)
+        parts.extend(f"{word} 제외" for word in self.exclude_keywords)
         return " · ".join(parts) if parts else "조건 없음"
 
 
@@ -402,7 +416,7 @@ _ALL_COLUMNS = ("title", "keywords", "tech_stack", "description")
 _ROLE_COLUMNS = ("title", "keywords", "tech_stack")
 
 
-def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[object]]:
+def conditions(filters: JobFilters, as_of: datetime, *, listing: bool = False) -> tuple[list[str], list[object]]:
     """조건을 WHERE 절과 값으로. 검색(`search`)과 집계(`market_stats`)가 같이 쓴다.
 
     조건이 여럿이면 **모두 만족**해야 한다. 같은 갈래의 말끼리는 하나만 맞아도 된다
@@ -479,10 +493,38 @@ def conditions(filters: JobFilters, as_of: datetime) -> tuple[list[str], list[ob
         where.append("(" + " OR ".join(clauses) + ")")
 
     # 기업형태는 기업 정보 칸에서만 본다. 같은 뜻끼리는 하나만 맞아도 된다.
+    # 목록에서만 본 공고(`listing`)에는 기업 정보가 없다. 걸러 달라면 `search`가 그쪽을 통째로 빼고,
+    # 빼 달라면 그쪽은 빼지 않는다 — 모르는 것을 스타트업이라고 단정하지 않는다.
     company_types = _company_type_keywords(filters)
-    if company_types:
+    if company_types and not listing:
         where.append("(" + " OR ".join("RE_HAS(?, company_type)" for _ in company_types) + ")")
         params.extend(COMPANY_TYPES[word.replace(" ", "")] for word in company_types)
+
+    # 빼 달라는 말. 기업형태는 기업 정보 칸, 고용형태는 고용형태 칸, 나머지는 제목·회사명에서 본다.
+    # 본문은 보지 않는다 — "파견 근무 없음"처럼 빼 달라는 말이 본문에 부정으로 적힌 공고도 있다.
+    for word in _dedupe(filters.exclude_keywords):
+        key = word.replace(" ", "")
+        if key in COMPANY_TYPES:
+            if not listing:
+                where.append("NOT RE_HAS(?, company_type)")
+                params.append(COMPANY_TYPES[key])
+            continue
+        if key in EMPLOYMENT_WORDS:
+            where.append("(employment_type IS NULL OR employment_type NOT LIKE ?)")
+            params.append(f"%{EMPLOYMENT_WORDS[key]}%")
+            continue
+        where.append("NOT (title LIKE ? OR company LIKE ?)")
+        params.extend([f"%{word}%", f"%{word}%"])
+
+    # 최근에 올라온 것만. 우리가 그 공고를 처음 본 날로 세되, **오늘이 아니라 마지막 수집일에서**
+    # 거꾸로 센다. 공고는 밤 23시 수집에서 처음 보므로, 낮에 "오늘 올라온"을 오늘 날짜로 세면
+    # 늘 0건이었다. 0이면 마지막 수집에서 처음 본 공고다.
+    if filters.posted_within_days is not None:
+        where.append(
+            "substr(first_seen_at, 1, 10) >= "
+            "date((SELECT MAX(substr(first_seen_at, 1, 10)) FROM jobs), ?)"
+        )
+        params.append(f"-{filters.posted_within_days} days")
 
     return where, params
 
@@ -502,6 +544,7 @@ def search(
     """
     as_of = as_of or datetime.now(KST)
     where, params = conditions(filters, as_of)
+    listing_where, listing_params = conditions(filters, as_of, listing=True)
 
     # 어디에서 맞았는지로 순서를 가른다. 본문만 훑으면 "신입/경력 공개채용" 같은 범용
     # 공고가 온갖 직무 말을 다 담고 있어서 무엇을 물어도 같은 공고가 올라온다.
@@ -562,12 +605,15 @@ def search(
     )
     listing_part = (
         f"SELECT {_HIT_COLUMNS}, {relevance} AS relevance, 0 AS has_detail, "
-        "keywords, first_seen_at FROM list_jobs_search WHERE " + " AND ".join(where)
+        "keywords, first_seen_at FROM list_jobs_search WHERE " + " AND ".join(listing_where)
         # 상세를 받은 공고는 `jobs`에 있다. 같은 공고가 두 번 나오지 않게 뺀다.
         + " AND source_job_id NOT IN (SELECT source_job_id FROM jobs)"
     )
-    # 기업형태로 걸렀으면 목록에서만 본 공고는 뺀다. 기업 정보는 상세에만 있어 맞는지 알 수 없다.
-    with_listing = not _company_type_keywords(filters)
+    # 목록에서만 본 공고를 뺄 때가 둘이다.
+    # - 기업형태로 걸렀을 때. 기업 정보는 상세에만 있어 맞는지 알 수 없다.
+    # - 새로 올라온 공고만 볼 때. 목록 표(`list_jobs`)는 2026-09-13에 처음 채워져 13만 5천 건의
+    #   처음 본 날이 전부 그날이다. 넣으면 "새로 올라온"이 목록 전체가 된다.
+    with_listing = not _company_type_keywords(filters) and filters.posted_within_days is None
     body = detail_part + (" UNION ALL " + listing_part if with_listing else "")
     sql = (
         f"SELECT * FROM ({body}) "
@@ -580,11 +626,14 @@ def search(
         " LENGTH(keywords) ASC, first_seen_at DESC LIMIT ?"
     )
 
-    # 값은 UNION 두 쪽에 똑같이 들어간다. 순서는 SELECT → WHERE 를 두 번, 그다음 LIMIT.
-    half = [*case_params, *params]
+    # 값 순서는 상세 쪽 SELECT → WHERE, 목록 쪽 SELECT → WHERE, 그다음 LIMIT. 목록 쪽 WHERE는
+    # 기업형태 조건이 빠질 수 있어 값이 다르다(`conditions(listing=True)`).
+    values = [*case_params, *params]
+    if with_listing:
+        values += [*case_params, *listing_params]
     connection = connect(store_path)
     try:
-        rows = connection.execute(sql, [*half, *half, SCAN_LIMIT] if with_listing else [*half, SCAN_LIMIT]).fetchall()
+        rows = connection.execute(sql, [*values, SCAN_LIMIT]).fetchall()
     finally:
         connection.close()
 

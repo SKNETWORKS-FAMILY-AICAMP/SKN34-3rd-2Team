@@ -1242,9 +1242,11 @@ class ChatService(_LivenessMixin):
     def _reply(understood: str, filters, result, by_meaning: bool = False, more: bool = False) -> str:
         """실제 결과로 답을 만든다. 건수를 모르는 채로 LLM이 쓰면 틀린 말을 하게 된다.
 
-        **넘겨 보는 중(`more`)이면 모델이 쓴 한 줄을 붙이지 않는다.** 같은 목록을 다시
-        찾아 놓고도 "기존 공고는 제외하고 다른 공고를 찾아보겠습니다"라고 쓴 적이 있다.
-        몇 번째 공고인지는 서버만 알므로 서버가 쓴다.
+        **라우터가 쓴 한 줄(`understood`)을 붙이지 않는다.** 모델은 알아들은 대로 쓰지, 실제로
+        건 조건대로 쓰지 않는다. "스타트업은 빼고"에 뺄 칸이 없는데도 "스타트업을 제외하고
+        찾아보겠습니다", "오늘 올라온"에 날짜로 안 걸렀는데도 "오늘 새로 등록된 공고를
+        찾아보겠습니다"라고 썼다. 넘겨 볼 때는 같은 목록을 다시 찾아 놓고 "기존 공고는 제외하고"라고
+        쓴 적도 있다. 무엇으로 걸렀는지는 `filters.summary()`가 실제 조건으로 말한다.
         """
         condition = filters.summary()
         shown = len(result.jobs)
@@ -1257,11 +1259,10 @@ class ChatService(_LivenessMixin):
             # 어떻게 찾았는지 밝힌다. 조건에 맞는 공고를 센 것처럼 보이면 안 된다.
             if more:
                 return f"앞에서 보여드린 공고 말고, 뜻이 가까운 공고를 {shown}건 더 찾았어요."
-            head = understood.strip() or "찾아볼게요."
             found = f"뜻이 가까운 공고를 {shown}건 찾았어요."
             if filters.is_empty:
-                return f"{head}\n말씀하신 말이 공고에 그대로 적히는 말은 아니라서, {found}"
-            return f"{head}\n{condition} 조건 그대로는 걸리는 공고가 없어서, {found}"
+                return f"말씀하신 말이 공고에 그대로 적히는 말은 아니라서, {found}"
+            return f"{condition} 조건 그대로는 걸리는 공고가 없어서, {found}"
 
         # 말하는 건수는 제목·태그에 직접 맞은 공고다. 본문에 말이 스친 범용 공고까지
         # 세면 실제보다 훨씬 많아 보인다. 직접 맞은 것이 없을 때만 전체를 말한다.
@@ -1296,11 +1297,10 @@ class ChatService(_LivenessMixin):
                 f"{start - strong:,}~{end - strong:,}번째예요."
             )
 
-        head = understood.strip() or f"{condition} 조건으로 찾았어요."
         # 순서는 말하지 않는다. "가까운 순"은 거리 순으로 읽혔고, "제목에 잘 맞는 순"은 태그로 걸린
         # 공고가 맨 앞에 설 때 틀린 말이 됐다. 순서 규칙은 사용자가 알 필요가 없다.
         tail = f" {shown}건 보여드릴게요." if count > shown else ""
-        return f"{head}\n{found}{tail}"
+        return f"{found}{tail}"
 
 
 # 모으지 않는 것들. 왜 못 하는지까지 말한다. 실측에 근거한 숫자를 그대로 쓴다.
@@ -1416,6 +1416,8 @@ def _to_job_filters(filters: schemas.ChatFilters):
         employment_types=filters.employment_types,
         deadline_within_days=filters.deadline_within_days,
         keywords=filters.keywords,
+        exclude_keywords=filters.exclude_keywords,
+        posted_within_days=filters.posted_within_days,
     )
 
 
@@ -1432,6 +1434,10 @@ def _suggestions(filters, result) -> list[str]:
             wider.append("경력 상관없이")
         if filters.deadline_within_days:
             wider.append("마감 상관없이")
+        if filters.posted_within_days is not None:
+            wider.append("올라온 날 상관없이")
+        if filters.exclude_keywords:
+            wider.append(f"{filters.exclude_keywords[0]}도 포함해서")
         return wider[:3]
 
     narrower = []

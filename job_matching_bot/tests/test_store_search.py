@@ -206,6 +206,39 @@ class StoreSearchTest(unittest.TestCase):
         self.assertIn("H3", ids)
         self.assertEqual(len(ids), result.total)
 
+    def test_excluded_company_type_is_left_out(self):
+        """'스타트업은 빼고'는 기업 정보 칸에 스타트업이 있는 공고를 뺀다."""
+        self._add(
+            self._job("X1", title="데이터 분석 신입", company="작은회사", company_type="스타트업, 주식회사"),
+            self._job("X2", title="데이터 분석 신입", company="큰회사", company_type="대기업"),
+        )
+        found = {job.job_id for job in self.find(roles=["데이터 분석"], exclude_keywords=["스타트업"]).jobs}
+        self.assertIn("X2", found)
+        self.assertNotIn("X1", found)
+
+    def test_excluded_employment_type_and_title_words(self):
+        """고용형태는 고용형태 칸에서, 나머지 말은 제목·회사명에서 뺀다. 본문은 보지 않는다."""
+        self._add(
+            self._job("Y1", title="QA 테스터", company="가", employment_type="파견직"),
+            self._job("Y2", title="[헤드헌팅] QA 매니저", company="나", employment_type="정규직"),
+            self._job("Y3", title="QA 엔지니어", company="다", employment_type="정규직",
+                      description="파견 근무 없음, 헤드헌팅 아님"),
+        )
+        found = {job.job_id for job in self.find(roles=["QA"], exclude_keywords=["파견", "헤드헌팅"]).jobs}
+        self.assertEqual({"Y3"}, found & {"Y1", "Y2", "Y3"})
+
+    def test_posted_within_days_counts_from_first_seen(self):
+        """'오늘 올라온'은 마지막 수집에서 처음 본 공고다. 밤에 수집하므로 오늘 날짜로 세면 낮엔 0건이다."""
+        with SqliteJobStore(self.path) as store:
+            store.upsert(self.jobs, source="MOCK", as_of=datetime(2026, 9, 1, tzinfo=KST))
+            store.upsert([self._job("N1", title="백엔드 신규", company="새회사")], source="MOCK", as_of=NOW)
+        self.assertEqual(["N1"], [job.job_id for job in self.find(roles=["백엔드"], posted_within_days=0).jobs])
+        self.assertIn("A", {job.job_id for job in self.find(roles=["백엔드"], posted_within_days=7).jobs})
+
+    def test_summary_names_exclusions_and_posted_days(self):
+        filters = JobFilters(roles=["백엔드"], exclude_keywords=["스타트업"], posted_within_days=0)
+        self.assertEqual("백엔드 · 새로 올라온 · 스타트업 제외", filters.summary())
+
     def test_region_narrows(self):
         self.assertEqual({"A", "C"}, {job.job_id for job in self.find(regions=["서울"]).jobs})
 
