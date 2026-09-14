@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/date_utils.dart';
 import 'resume_content.dart';
+
 class WeeklyTaskModel {
   const WeeklyTaskModel({
     required this.id,
@@ -72,6 +73,9 @@ class ResumeModel {
     required this.sections,
     this.content = const ResumeContent(),
     this.isBaseResume = false,
+    this.baseResumeId = '',
+    this.sourceTailoredResumeId = '',
+    this.linkedJobId = '',
     this.feedbackCount = 0,
     this.lastSeenFeedbackCount = 0,
     this.readFeedbackIds = const [],
@@ -86,8 +90,12 @@ class ResumeModel {
   final String status;
   final Map<String, bool> sections;
   final ResumeContent content;
+
   /// 공고별 첨삭의 출발점으로 쓰는 사용자의 기본 이력서다.
   final bool isBaseResume;
+  final String baseResumeId;
+  final String sourceTailoredResumeId;
+  final String linkedJobId;
   final int feedbackCount;
   final int lastSeenFeedbackCount;
 
@@ -117,8 +125,7 @@ class ResumeModel {
 
   int get completedCount => sections.values.where((v) => v).length;
   int get totalCount => AppConstants.resumeSections.length;
-  double get progress =>
-      totalCount == 0 ? 0 : completedCount / totalCount;
+  double get progress => totalCount == 0 ? 0 : completedCount / totalCount;
 
   int get unreadFeedbackCount {
     // 예전에는 화면을 열기만 해도 lastSeenFeedbackCount 를 채워 두었다. 그 기록이 남은
@@ -132,7 +139,9 @@ class ResumeModel {
 
   bool get hasUnreadFeedback => unreadFeedbackCount > 0;
 
-  factory ResumeModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory ResumeModel.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data()!;
     final rawSections = data['sections'] as Map<String, dynamic>? ?? {};
     final content = ResumeContent.fromMap(
@@ -149,12 +158,16 @@ class ResumeModel {
       sections: sections,
       content: content,
       isBaseResume: data['isBaseResume'] as bool? ?? false,
+      baseResumeId: data['baseResumeId'] as String? ?? '',
+      sourceTailoredResumeId: data['sourceTailoredResumeId'] as String? ?? '',
+      linkedJobId: data['jobId'] as String? ?? '',
       feedbackCount: data['feedbackCount'] as int? ?? 0,
       lastSeenFeedbackCount: data['lastSeenFeedbackCount'] as int? ?? 0,
       readFeedbackIds:
           (data['readFeedbackIds'] as List?)?.cast<String>() ?? const [],
       reviewerReadFeedbackIds:
-          (data['reviewerReadFeedbackIds'] as List?)?.cast<String>() ?? const [],
+          (data['reviewerReadFeedbackIds'] as List?)?.cast<String>() ??
+          const [],
       revisionCount: data['revisionCount'] as int? ?? 0,
       updatedAt: AppDateUtils.timestampToDateTime(data['updatedAt']),
     );
@@ -180,10 +193,10 @@ class ResumeModel {
   }
 
   String get statusLabel => switch (status) {
-        'submitted' => '피드백 요청',
-        'approved' || 'completed' => '승인 완료',
-        _ => '작성 중',
-      };
+    'submitted' => '피드백 요청',
+    'approved' || 'completed' => '승인 완료',
+    _ => '작성 중',
+  };
 
   /// 저장된 값은 'submitted' 그대로 둔다. 이미 쌓인 이력서를 옮기지 않으려는 것이고,
   /// 바뀐 것은 학생에게 보이는 이름뿐이다.
@@ -198,6 +211,7 @@ class ResumeModel {
 
   /// 피드백을 남길 수 있나. 요청하지 않은 이력서에는 손대지 않는다.
   bool get acceptsFeedback => isFeedbackRequested;
+
   /// 승인된 뒤에도 학생은 고칠 수 있다. 승인은 "더는 손대지 말라"가 아니라
   /// "여기까지 봤다"는 표시다. 회사마다 이력서를 손보는 것이 정상이고, 잠가 두면
   /// 승인받은 이력서를 두고 새로 만들어야 한다.
@@ -224,7 +238,8 @@ class ResumeModel {
       content: content ?? this.content,
       isBaseResume: isBaseResume ?? this.isBaseResume,
       feedbackCount: feedbackCount ?? this.feedbackCount,
-      lastSeenFeedbackCount: lastSeenFeedbackCount ?? this.lastSeenFeedbackCount,
+      lastSeenFeedbackCount:
+          lastSeenFeedbackCount ?? this.lastSeenFeedbackCount,
       readFeedbackIds: readFeedbackIds ?? this.readFeedbackIds,
       reviewerReadFeedbackIds:
           reviewerReadFeedbackIds ?? this.reviewerReadFeedbackIds,
@@ -233,6 +248,7 @@ class ResumeModel {
     );
   }
 }
+
 /// 안 읽은 피드백. **보는 사람에 따라 다르다.**
 ///
 /// 학생은 남이 남긴 말을 읽어야 하고, 검토자는 학생이 단 답글을 읽어야 한다.
@@ -252,8 +268,9 @@ List<ResumeFeedbackModel> unreadFeedback(
       resume.lastSeenFeedbackCount >= items.length) {
     return const [];
   }
-  final read = (asReviewer ? resume.reviewerReadFeedbackIds : resume.readFeedbackIds)
-      .toSet();
+  final read =
+      (asReviewer ? resume.reviewerReadFeedbackIds : resume.readFeedbackIds)
+          .toSet();
   return [
     for (final item in items)
       if (!_isMine(item, viewerId) &&
@@ -345,13 +362,12 @@ class ResumeFeedbackModel {
   Map<String, dynamic> toFirestore({
     required String authorId,
     required String authorName,
-  }) =>
-      {
-        'sectionKey': sectionKey,
-        'content': content,
-        'authorId': authorId,
-        'authorName': authorName,
-        if (parentId.isNotEmpty) 'parentId': parentId,
-        'createdAt': FieldValue.serverTimestamp(),
-      };
+  }) => {
+    'sectionKey': sectionKey,
+    'content': content,
+    'authorId': authorId,
+    'authorName': authorName,
+    if (parentId.isNotEmpty) 'parentId': parentId,
+    'createdAt': FieldValue.serverTimestamp(),
+  };
 }

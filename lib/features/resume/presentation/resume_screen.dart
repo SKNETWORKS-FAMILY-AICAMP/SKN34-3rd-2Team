@@ -9,12 +9,16 @@ import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/resume_model.dart';
+import '../../../shared/models/resume_content.dart';
 import '../../../shared/providers/cohort_providers.dart';
+import '../../../shared/providers/firebase_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
 import '../../../shared/widgets/app_section_card.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../onboarding/domain/onboarding_target_registry.dart';
 import '../../onboarding/instructor/instructor_onboarding_keys.dart';
+import '../ai_coach/data/resume_review_api_client.dart';
+import '../ai_coach/presentation/job_resume_review_dialog.dart';
 import '../../../core/theme/app_space.dart';
 
 const _kResumeContentMaxWidth = 1100.0;
@@ -90,7 +94,9 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
       _ResumeFilter.writing: resumes
           .where((r) => !r.isFeedbackRequested && !r.isApproved)
           .length,
-      _ResumeFilter.requested: resumes.where((r) => r.isFeedbackRequested).length,
+      _ResumeFilter.requested: resumes
+          .where((r) => r.isFeedbackRequested)
+          .length,
       _ResumeFilter.approved: resumes.where((r) => r.isApproved).length,
     };
     const labels = {
@@ -100,7 +106,11 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
       _ResumeFilter.approved: '승인',
     };
     final tabs = canReview
-        ? const [_ResumeFilter.requested, _ResumeFilter.approved, _ResumeFilter.all]
+        ? const [
+            _ResumeFilter.requested,
+            _ResumeFilter.approved,
+            _ResumeFilter.all,
+          ]
         : const [
             _ResumeFilter.all,
             _ResumeFilter.writing,
@@ -108,7 +118,10 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
             _ResumeFilter.approved,
           ];
     final shown = resumes.where(_matches).toList()
-      ..sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+      ..sort(
+        (a, b) =>
+            (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)),
+      );
     final baseResume = _registeredBaseResume(resumes);
 
     final String subtitle;
@@ -147,6 +160,12 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
             resume: baseResume,
             onChangeBase: () => _registerBaseResume(context, ref, resumes),
           ),
+        if (baseResume != null &&
+            (_filter == _ResumeFilter.all ||
+                _filter == _ResumeFilter.writing)) ...[
+          SizedBox(height: AppSpace.s(14)),
+          _TailoredResumeList(baseResume: baseResume),
+        ],
         if (others.isNotEmpty) ...[
           if (showBase || baseResume == null && _filter == _ResumeFilter.all)
             SizedBox(height: AppSpace.s(14)),
@@ -158,7 +177,9 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
             ),
           ),
         ],
-        if (!showBase && others.isEmpty && !(baseResume == null && _filter == _ResumeFilter.all))
+        if (!showBase &&
+            others.isEmpty &&
+            !(baseResume == null && _filter == _ResumeFilter.all))
           _EmptyNote(resumes.isEmpty ? '이력서가 없습니다' : '이 묶음에 해당하는 이력서가 없습니다'),
       ];
     }
@@ -167,7 +188,12 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: _kResumeContentMaxWidth),
         child: ListView(
-          padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(16), AppSpace.s(20), AppSpace.s(24)),
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.s(20),
+            AppSpace.s(16),
+            AppSpace.s(20),
+            AppSpace.s(24),
+          ),
           children: [
             const Text(
               '이력서 관리',
@@ -231,7 +257,12 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
         title: const Text('기본 이력서 등록'),
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(AppSpace.s(24), AppSpace.s(0), AppSpace.s(24), AppSpace.s(10)),
+            padding: EdgeInsets.fromLTRB(
+              AppSpace.s(24),
+              AppSpace.s(0),
+              AppSpace.s(24),
+              AppSpace.s(10),
+            ),
             child: Text(
               '공고별 첨삭은 여기서 등록한 기본 이력서를 복사해 진행합니다.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
@@ -302,7 +333,12 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
 
 // ── 공통 조각 ──────────────────────────────────────────────────
 
-void _openResume(BuildContext context, WidgetRef ref, ResumeModel resume, {String? section}) {
+void _openResume(
+  BuildContext context,
+  WidgetRef ref,
+  ResumeModel resume, {
+  String? section,
+}) {
   context.go(
     RoutePaths.resumeEditPath(
       resume.id,
@@ -315,7 +351,8 @@ void _openResume(BuildContext context, WidgetRef ref, ResumeModel resume, {Strin
 StatusBadge _statusBadge(ResumeModel resume) {
   if (resume.isApproved) return StatusBadge.success(resume.statusLabel);
   // StatusBadge.info는 강조색을 따라간다. 피드백 요청은 강조색과 상관없이 파랑으로 둔다.
-  if (resume.isSubmitted) return StatusBadge(label: resume.statusLabel, color: AppColors.info);
+  if (resume.isSubmitted)
+    return StatusBadge(label: resume.statusLabel, color: AppColors.info);
   return StatusBadge.warning(resume.statusLabel);
 }
 
@@ -347,12 +384,19 @@ class _FilterTabs extends StatelessWidget {
                 child: InkWell(
                   onTap: () => onSelect(i),
                   child: Container(
-                    padding: EdgeInsets.fromLTRB(AppSpace.s(4), AppSpace.s(10), AppSpace.s(4), AppSpace.s(9)),
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpace.s(4),
+                      AppSpace.s(10),
+                      AppSpace.s(4),
+                      AppSpace.s(9),
+                    ),
                     margin: EdgeInsets.only(right: AppSpace.s(18)),
                     decoration: BoxDecoration(
                       border: Border(
                         bottom: BorderSide(
-                          color: tabs[i].selected ? AppColors.textPrimary : Colors.transparent,
+                          color: tabs[i].selected
+                              ? AppColors.textPrimary
+                              : Colors.transparent,
                           width: 3,
                         ),
                       ),
@@ -364,14 +408,21 @@ class _FilterTabs extends StatelessWidget {
                           tabs[i].label,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: tabs[i].selected ? FontWeight.w700 : FontWeight.w500,
-                            color: tabs[i].selected ? AppColors.textPrimary : AppColors.textSecondary,
+                            fontWeight: tabs[i].selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: tabs[i].selected
+                                ? AppColors.textPrimary
+                                : AppColors.textSecondary,
                           ),
                         ),
                         SizedBox(width: AppSpace.s(6)),
                         Container(
                           constraints: const BoxConstraints(minWidth: 22),
-                          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(7), vertical: AppSpace.s(2)),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: AppSpace.s(7),
+                            vertical: AppSpace.s(2),
+                          ),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: tabs[i].selected
@@ -438,7 +489,9 @@ class _SectionProgress extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               minHeight: 5,
-              value: resume.totalCount == 0 ? 0 : resume.completedCount / resume.totalCount,
+              value: resume.totalCount == 0
+                  ? 0
+                  : resume.completedCount / resume.totalCount,
               color: _complete ? AppColors.success : AppColors.primary,
               backgroundColor: AppColors.primaryLight,
             ),
@@ -467,7 +520,8 @@ class _SectionProgress extends StatelessWidget {
     ],
   );
 
-  bool get _complete => resume.totalCount > 0 && resume.completedCount >= resume.totalCount;
+  bool get _complete =>
+      resume.totalCount > 0 && resume.completedCount >= resume.totalCount;
 }
 
 /// 피드백 요약. **알리기만 한다.** 내용은 이력서 안의 종에서 읽는다.
@@ -513,7 +567,10 @@ class _FeedbackSummary extends ConsumerWidget {
           children: [
             TextSpan(
               text: '$total건',
-              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const TextSpan(text: ' · 모두 읽음'),
           ],
@@ -530,18 +587,30 @@ class _FeedbackSummary extends ConsumerWidget {
           width: 7,
           height: 7,
           margin: EdgeInsets.only(right: AppSpace.s(6)),
-          decoration: BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: AppColors.error,
+            shape: BoxShape.circle,
+          ),
         ),
         Flexible(
           child: Text(
             asReviewer ? '학생 답글 $unread' : '새 피드백 $unread',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: AppColors.error,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         Flexible(
-          child: Text(' · 전체 $total건', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
+          child: Text(
+            ' · 전체 $total건',
+            style: muted,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -550,7 +619,12 @@ class _FeedbackSummary extends ConsumerWidget {
 
 /// 표 한 줄의 칸. 머리와 줄이 같은 비율을 쓴다.
 class _TableRow extends StatelessWidget {
-  const _TableRow({required this.flex, required this.cells, this.onTap, this.vertical = 10});
+  const _TableRow({
+    required this.flex,
+    required this.cells,
+    this.onTap,
+    this.vertical = 10,
+  });
 
   final List<int> flex;
   final List<Widget> cells;
@@ -560,16 +634,23 @@ class _TableRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(20), vertical: AppSpace.s(vertical)),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(20),
+        vertical: AppSpace.s(vertical),
+      ),
       child: Row(
         children: [
           for (var i = 0; i < cells.length; i++)
             Expanded(
               flex: flex[i],
               child: Padding(
-                padding: EdgeInsets.only(right: i == cells.length - 1 ? 0 : AppSpace.s(8)),
+                padding: EdgeInsets.only(
+                  right: i == cells.length - 1 ? 0 : AppSpace.s(8),
+                ),
                 child: Align(
-                  alignment: i == cells.length - 1 ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment: i == cells.length - 1
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
                   child: cells[i],
                 ),
               ),
@@ -635,9 +716,16 @@ class _BaseResumeCard extends ConsumerWidget {
             SizedBox(width: AppSpace.s(4)),
             Text(
               '기본 이력서',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
             ),
-            Text('  ·  AI 첨삭과 공고 추천에 쓰입니다', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            Text(
+              '  ·  AI 첨삭과 공고 추천에 쓰입니다',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
           ],
         ),
         SizedBox(height: AppSpace.s(6)),
@@ -663,7 +751,10 @@ class _BaseResumeCard extends ConsumerWidget {
               Text('마지막 수정', style: muted),
               Text(
                 AppDateUtils.formatDetailDateTime(resume.updatedAt!),
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               Text('·', style: muted),
             ],
@@ -697,22 +788,39 @@ class _BaseResumeCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(18), AppSpace.s(12), AppSpace.s(16)),
+            padding: EdgeInsets.fromLTRB(
+              AppSpace.s(20),
+              AppSpace.s(18),
+              AppSpace.s(12),
+              AppSpace.s(16),
+            ),
             child: LayoutBuilder(
               builder: (context, constraints) => constraints.maxWidth >= 560
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [Expanded(child: head), actions],
+                      children: [
+                        Expanded(child: head),
+                        actions,
+                      ],
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [head, SizedBox(height: AppSpace.s(10)), actions],
+                      children: [
+                        head,
+                        SizedBox(height: AppSpace.s(10)),
+                        actions,
+                      ],
                     ),
             ),
           ),
           Divider(height: 1, color: AppColors.divider),
           Padding(
-            padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(14), AppSpace.s(20), AppSpace.s(16)),
+            padding: EdgeInsets.fromLTRB(
+              AppSpace.s(20),
+              AppSpace.s(14),
+              AppSpace.s(20),
+              AppSpace.s(16),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -744,9 +852,16 @@ class _BaseResumeCard extends ConsumerWidget {
                         children: [
                           TextSpan(
                             text: '${resume.completedCount}',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
-                          TextSpan(text: ' / ${resume.totalCount} 섹션 채움', style: muted),
+                          TextSpan(
+                            text: ' / ${resume.totalCount} 섹션 채움',
+                            style: muted,
+                          ),
                         ],
                       ),
                     ),
@@ -764,9 +879,16 @@ class _BaseResumeCard extends ConsumerWidget {
                       Text('남은 섹션', style: muted),
                       for (final key in remaining)
                         ActionChip(
-                          onPressed: () => _openResume(context, ref, resume, section: key),
-                          avatar: Icon(Icons.add, size: 14, color: AppColors.primary),
-                          label: Text(AppConstants.resumeSectionLabels[key] ?? key),
+                          onPressed: () =>
+                              _openResume(context, ref, resume, section: key),
+                          avatar: Icon(
+                            Icons.add,
+                            size: 14,
+                            color: AppColors.primary,
+                          ),
+                          label: Text(
+                            AppConstants.resumeSectionLabels[key] ?? key,
+                          ),
                           visualDensity: VisualDensity.compact,
                         ),
                     ],
@@ -775,6 +897,273 @@ class _BaseResumeCard extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 기본 이력서에서 갈라진 공고별 사본. 서버가 가진 고정 ID를 사용하므로
+/// 같은 공고를 다시 열어도 사본과 AI 첨삭 진행 상태가 중복 생성되지 않는다.
+class _TailoredResumeList extends ConsumerStatefulWidget {
+  const _TailoredResumeList({required this.baseResume});
+
+  final ResumeModel baseResume;
+
+  @override
+  ConsumerState<_TailoredResumeList> createState() =>
+      _TailoredResumeListState();
+}
+
+class _TailoredResumeListState extends ConsumerState<_TailoredResumeList> {
+  late Future<List<Map<String, dynamic>>> _future;
+  String? _deletingId;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TailoredResumeList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.baseResume.id != widget.baseResume.id) _future = _load();
+  }
+
+  Future<List<Map<String, dynamic>>> _load() async {
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (user == null || cohortId == null) return const [];
+    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    try {
+      return await client.listTailoredResumes(cohortId, widget.baseResume.id);
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _open(Map<String, dynamic> item) async {
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    final tailoredId = item['tailored_resume_id'] as String?;
+    if (user == null || cohortId == null || tailoredId == null) return;
+    final existingWorkspaceId = item['workspace_resume_id'] as String? ?? '';
+    if (existingWorkspaceId.isNotEmpty) {
+      context.push(RoutePaths.resumeEditPath(existingWorkspaceId));
+      return;
+    }
+    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    try {
+      final detail = await client.tailoredResume(
+        cohortId,
+        widget.baseResume.id,
+        tailoredId,
+      );
+      final content = ResumeContent.fromMap(
+        Map<String, dynamic>.from(detail['content'] as Map? ?? const {}),
+      );
+      if (!mounted) return;
+      final workspaceResumeId = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => JobResumeReviewDialog(
+          key: ValueKey('tailored-review-${widget.baseResume.id}-$tailoredId'),
+          client: client,
+          cohortId: cohortId,
+          resumeId: widget.baseResume.id,
+          tailoredResumeId: tailoredId,
+          initialReviewSession: Map<String, dynamic>.from(
+            detail['review_session'] as Map? ?? const {},
+          ),
+          jobId: item['job_id'] as String? ?? '',
+          jobCompany: item['company_name'] as String? ?? '',
+          jobTitle: item['job_title'] as String? ?? '',
+          draft: content,
+          onChanged: (_) {},
+        ),
+      );
+      if (mounted && workspaceResumeId != null) {
+        context.push(RoutePaths.resumeEditPath(workspaceResumeId));
+      }
+    } finally {
+      client.close();
+      if (mounted) setState(() => _future = _load());
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> item) async {
+    final tailoredId = item['tailored_resume_id'] as String?;
+    if (tailoredId == null || _deletingId != null) return;
+    final title = item['title'] as String? ?? '맞춤 이력서';
+    final jobTitle = item['job_title'] as String? ?? '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('맞춤 이력서를 삭제할까요?'),
+        content: Text(
+          jobTitle.isEmpty
+              ? '$title와 첨삭 진행 기록이 모두 삭제됩니다.\n삭제한 내용은 복구할 수 없습니다.'
+              : '$title\n$jobTitle\n\n이력서와 첨삭 진행 기록이 모두 삭제됩니다. 삭제한 내용은 복구할 수 없습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (user == null || cohortId == null) return;
+    setState(() => _deletingId = tailoredId);
+    final client = ResumeReviewApiClient(token: () => user.getIdToken());
+    try {
+      await client.deleteTailoredResume(
+        cohortId,
+        widget.baseResume.id,
+        tailoredId,
+      );
+      if (mounted) setState(() => _future = _load());
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('맞춤 이력서를 삭제하지 못했습니다. 다시 시도해 주세요.')),
+        );
+      }
+    } finally {
+      client.close();
+      if (mounted) setState(() => _deletingId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FutureBuilder<List<Map<String, dynamic>>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const AppSectionCard(
+              child: LinearProgressIndicator(minHeight: 2),
+            );
+          }
+          if (snapshot.hasError) {
+            return AppSectionCard(
+              child: Text(
+                '맞춤 이력서를 불러오지 못했습니다.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            );
+          }
+          final items = snapshot.data ?? const [];
+          if (items.isEmpty) {
+            return AppSectionCard(
+              child: Text(
+                '공고를 선택해 맞춤 첨삭을 시작하면 회사별 이력서가 여기에 저장됩니다.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            );
+          }
+          return AppSectionCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpace.s(20),
+                    AppSpace.s(14),
+                    AppSpace.s(20),
+                    AppSpace.s(8),
+                  ),
+                  child: const Text(
+                    '공고별 맞춤 이력서',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                for (final item in items) ...[
+                  Divider(height: 1, color: AppColors.divider),
+                  ListTile(
+                    onTap: () => _open(item),
+                    title: Text(
+                      item['title'] as String? ?? '맞춤 이력서',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      item['job_title'] as String? ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _TailoredProgressBadge(
+                          progress:
+                              item['review_progress'] as String? ??
+                              'not_started',
+                        ),
+                        SizedBox(width: AppSpace.s(8)),
+                        IconButton(
+                          tooltip: '맞춤 이력서 삭제',
+                          onPressed: _deletingId == item['tailored_resume_id']
+                              ? null
+                              : () => _delete(item),
+                          icon: _deletingId == item['tailored_resume_id']
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.delete_outline),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      );
+}
+
+class _TailoredProgressBadge extends StatelessWidget {
+  const _TailoredProgressBadge({required this.progress});
+
+  final String progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (progress) {
+      'completed' => ('첨삭 완료', AppColors.success),
+      'in_progress' => ('첨삭 진행 중', AppColors.info),
+      _ => ('시작 전', AppColors.textSecondary),
+    };
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(8),
+        vertical: AppSpace.s(4),
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
       ),
     );
   }
@@ -797,7 +1186,9 @@ class _StudentTable extends ConsumerWidget {
       onSelected: (value) {
         if (value == 'open') _openResume(context, ref, resume);
         if (value == 'delete') {
-          ref.read(lmsRepositoryProvider).deleteResume(ref.read(effectiveCohortIdProvider)!, resume.id);
+          ref
+              .read(lmsRepositoryProvider)
+              .deleteResume(ref.read(effectiveCohortIdProvider)!, resume.id);
         }
       },
       itemBuilder: (_) => [
@@ -818,8 +1209,19 @@ class _StudentTable extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(14), AppSpace.s(20), wide ? 0 : AppSpace.s(6)),
-              child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              padding: EdgeInsets.fromLTRB(
+                AppSpace.s(20),
+                AppSpace.s(14),
+                AppSpace.s(20),
+                wide ? 0 : AppSpace.s(6),
+              ),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             if (wide)
               _TableRow(
@@ -841,13 +1243,24 @@ class _StudentTable extends ConsumerWidget {
                   flex: _flex,
                   onTap: () => _openResume(context, ref, resume),
                   cells: [
-                    Text(resume.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(
+                      resume.title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     _statusBadge(resume),
                     _SectionProgress(resume: resume),
                     _FeedbackSummary(resume: resume, asReviewer: false),
                     Text(
-                      resume.updatedAt == null ? '—' : AppDateUtils.formatDisplay(resume.updatedAt!),
-                      style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                      resume.updatedAt == null
+                          ? '—'
+                          : AppDateUtils.formatDisplay(resume.updatedAt!),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                     menu(resume),
                   ],
@@ -855,12 +1268,27 @@ class _StudentTable extends ConsumerWidget {
               else
                 _NarrowRow(
                   onTap: () => _openResume(context, ref, resume),
-                  title: Text(resume.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  title: Text(
+                    resume.title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   details: [
                     (child: _statusBadge(resume), width: 104),
                     (child: _labeled('수정', _dateValue(resume)), width: 130),
-                    (child: _labeled('섹션', _SectionProgress(resume: resume)), width: 150),
-                    (child: _FeedbackSummary(resume: resume, asReviewer: false), width: null),
+                    (
+                      child: _labeled('섹션', _SectionProgress(resume: resume)),
+                      width: 150,
+                    ),
+                    (
+                      child: _FeedbackSummary(
+                        resume: resume,
+                        asReviewer: false,
+                      ),
+                      width: null,
+                    ),
                   ],
                   trailing: menu(resume),
                 ),
@@ -881,7 +1309,12 @@ typedef _Detail = ({Widget child, double? width});
 /// 같은 항목이 위아래로 안 맞았고, 전부 같은 회색이라 무엇이 날짜이고 무엇이 피드백인지
 /// 한눈에 안 들어왔다. 항목마다 폭을 정해 줄끼리 맞추고, 이름표는 옅게·값은 진하게 쓴다.
 class _NarrowRow extends StatelessWidget {
-  const _NarrowRow({required this.title, required this.details, required this.trailing, this.onTap});
+  const _NarrowRow({
+    required this.title,
+    required this.details,
+    required this.trailing,
+    this.onTap,
+  });
 
   final Widget title;
   final List<_Detail> details;
@@ -892,7 +1325,12 @@ class _NarrowRow extends StatelessWidget {
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
     child: Padding(
-      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(14), AppSpace.s(8), AppSpace.s(14)),
+      padding: EdgeInsets.fromLTRB(
+        AppSpace.s(20),
+        AppSpace.s(14),
+        AppSpace.s(8),
+        AppSpace.s(14),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -903,7 +1341,10 @@ class _NarrowRow extends StatelessWidget {
                 SizedBox(height: AppSpace.s(8)),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final fixed = details.fold<double>(0, (sum, d) => sum + (d.width ?? 0));
+                    final fixed = details.fold<double>(
+                      0,
+                      (sum, d) => sum + (d.width ?? 0),
+                    );
                     // 폭을 맞출 자리가 없으면(폰) 줄바꿈으로 흘린다.
                     if (constraints.maxWidth < fixed + 120) {
                       return Wrap(
@@ -919,10 +1360,18 @@ class _NarrowRow extends StatelessWidget {
                           if (d.width != null)
                             SizedBox(
                               width: d.width,
-                              child: Align(alignment: Alignment.centerLeft, child: d.child),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: d.child,
+                              ),
                             )
                           else
-                            Expanded(child: Align(alignment: Alignment.centerLeft, child: d.child)),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: d.child,
+                              ),
+                            ),
                       ],
                     );
                   },
@@ -951,7 +1400,11 @@ Widget _labeled(String label, Widget value) => Row(
 Widget _dateValue(ResumeModel r) => Text(
   r.updatedAt == null ? '—' : AppDateUtils.formatDisplay(r.updatedAt!),
   maxLines: 1,
-  style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+  style: TextStyle(
+    fontSize: 12.5,
+    color: AppColors.textPrimary,
+    fontWeight: FontWeight.w500,
+  ),
 );
 
 // ── 강사·관리자 ────────────────────────────────────────────────
@@ -975,9 +1428,15 @@ class _ReviewTable extends ConsumerWidget {
       children: [
         // 요청 중이면 피드백을 남기러, 승인한 것은 읽으러 연다. 승인 버튼은 열린 화면에 있다.
         if (resume.acceptsFeedback)
-          FilledButton(onPressed: () => _openResume(context, ref, resume), child: const Text('검토하기'))
+          FilledButton(
+            onPressed: () => _openResume(context, ref, resume),
+            child: const Text('검토하기'),
+          )
         else
-          OutlinedButton(onPressed: () => _openResume(context, ref, resume), child: const Text('보기')),
+          OutlinedButton(
+            onPressed: () => _openResume(context, ref, resume),
+            child: const Text('보기'),
+          ),
         PopupMenuButton<String>(
           tooltip: '이력서 메뉴',
           icon: Icon(Icons.more_horiz, color: AppColors.textSecondary),
@@ -1027,12 +1486,21 @@ class _ReviewTable extends ConsumerWidget {
                   flex: _flex,
                   onTap: () => _openResume(context, ref, resumes[i]),
                   cells: [
-                    Text(studentName(resumes[i]), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                    Text(
+                      studentName(resumes[i]),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     Text(
                       resumes[i].title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                     _statusBadge(resumes[i]),
                     date(resumes[i]),
@@ -1049,11 +1517,17 @@ class _ReviewTable extends ConsumerWidget {
                       children: [
                         TextSpan(
                           text: studentName(resumes[i]),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         TextSpan(
                           text: '   ${resumes[i].title}',
-                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -1063,8 +1537,20 @@ class _ReviewTable extends ConsumerWidget {
                   details: [
                     (child: _statusBadge(resumes[i]), width: 104),
                     (child: _labeled('수정', _dateValue(resumes[i])), width: 130),
-                    (child: _labeled('섹션', _SectionProgress(resume: resumes[i])), width: 150),
-                    (child: _FeedbackSummary(resume: resumes[i], asReviewer: true), width: null),
+                    (
+                      child: _labeled(
+                        '섹션',
+                        _SectionProgress(resume: resumes[i]),
+                      ),
+                      width: 150,
+                    ),
+                    (
+                      child: _FeedbackSummary(
+                        resume: resumes[i],
+                        asReviewer: true,
+                      ),
+                      width: null,
+                    ),
                   ],
                   trailing: actions(resumes[i]),
                 ),
@@ -1076,7 +1562,11 @@ class _ReviewTable extends ConsumerWidget {
   }
 }
 
-Future<void> _addFeedback(BuildContext context, WidgetRef ref, ResumeModel resume) async {
+Future<void> _addFeedback(
+  BuildContext context,
+  WidgetRef ref,
+  ResumeModel resume,
+) async {
   String sectionKey = AppConstants.resumeSections.first;
   final contentCtrl = TextEditingController();
 
