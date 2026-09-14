@@ -19,6 +19,7 @@ import '../../onboarding/domain/onboarding_target_registry.dart';
 import '../../onboarding/instructor/instructor_onboarding_keys.dart';
 import '../ai_coach/data/resume_review_api_client.dart';
 import '../ai_coach/presentation/job_resume_review_dialog.dart';
+import '../ai_coach/presentation/review_dock.dart';
 import '../../../core/theme/app_space.dart';
 
 const _kResumeContentMaxWidth = 1100.0;
@@ -963,11 +964,16 @@ class _TailoredResumeListState extends ConsumerState<_TailoredResumeList> {
         Map<String, dynamic>.from(detail['content'] as Map? ?? const {}),
       );
       if (!mounted) return;
-      final workspaceResumeId = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => JobResumeReviewDialog(
-          key: ValueKey('tailored-review-${widget.baseResume.id}-$tailoredId'),
+      // 창을 내려두고 다른 메뉴로 가면 이 목록은 사라진다. 끝난 뒤 이동은 라우터로 한다.
+      final router = GoRouter.of(context);
+      final reviewKey = ValueKey(
+        'tailored-review-${widget.baseResume.id}-$tailoredId',
+      );
+      final workspaceResumeId = await ReviewDock.show<String>(
+        context,
+        key: reviewKey,
+        child: JobResumeReviewDialog(
+          key: reviewKey,
           client: client,
           cohortId: cohortId,
           resumeId: widget.baseResume.id,
@@ -982,8 +988,8 @@ class _TailoredResumeListState extends ConsumerState<_TailoredResumeList> {
           onChanged: (_) {},
         ),
       );
-      if (mounted && workspaceResumeId != null) {
-        context.push(RoutePaths.resumeEditPath(workspaceResumeId));
+      if (workspaceResumeId != null) {
+        router.push(RoutePaths.resumeEditPath(workspaceResumeId));
       }
     } finally {
       client.close();

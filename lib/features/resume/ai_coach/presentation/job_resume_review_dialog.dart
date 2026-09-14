@@ -11,8 +11,30 @@ import '../../../../shared/services/ai_ops_service.dart';
 import '../data/resume_review_api_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_space.dart';
+import 'review_dock.dart';
 
 enum _ReviewBusyKind { review, answer, apply, undo }
+
+const _generalReviewSteps = [
+  '기본 이력서 불러오기',
+  '이력서 항목 확인',
+  '경험 근거 비교',
+  '수정안과 확인 질문 준비',
+];
+
+const _jobReviewSteps = [
+  '선택 공고 원문 확인',
+  '이력서 문항별 비교',
+  '부족한 근거 선별',
+  '확인 질문과 수정안 준비',
+];
+
+String _busyLabel(_ReviewBusyKind kind) => switch (kind) {
+  _ReviewBusyKind.answer => '답변을 검토하고 다음 보완 항목을 준비하고 있어요',
+  _ReviewBusyKind.undo => '변경 내용을 되돌리고 있어요',
+  _ReviewBusyKind.review => '이력서를 분석하고 있어요',
+  _ReviewBusyKind.apply => '수정안을 반영하고 있어요',
+};
 
 class JobResumeReviewDialog extends StatefulWidget {
   const JobResumeReviewDialog({
@@ -289,6 +311,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       _busyStage = 0;
       _error = null;
     });
+    _reportDock();
     try {
       await action();
     } catch (error) {
@@ -300,12 +323,52 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           _busyKind = null;
           _busyStage = 0;
         });
+        _reportDock();
       }
     }
   }
 
   void _setBusyStage(int stage) {
     if (mounted) setState(() => _busyStage = stage);
+    _reportDock();
+  }
+
+  /// 앱 맨 위 층에 떠 있으면 내려둔 막대가 보여줄 상태를 알린다.
+  void _reportDock() {
+    if (!mounted) return;
+    final dock = ReviewDockScope.read(context);
+    if (dock == null) return;
+    final kind = _busyKind;
+    final staged = kind == _ReviewBusyKind.review && _result == null;
+    final steps = widget.generalReview ? _generalReviewSteps : _jobReviewSteps;
+    final stage = _busyStage.clamp(0, steps.length - 1);
+    dock.report(
+      ReviewDockStatus(
+        title: widget.generalReview ? '이력서 첨삭' : '공고 맞춤 첨삭',
+        subtitle: widget.generalReview
+            ? ''
+            : '${widget.jobCompany} ${widget.jobTitle}'.trim(),
+        busy: _busy,
+        stageLabel: kind == null
+            ? null
+            : staged
+            ? steps[stage]
+            : _busyLabel(kind),
+        stageIndex: staged ? stage : null,
+        stageCount: staged ? steps.length : null,
+        failed: _error != null,
+      ),
+    );
+  }
+
+  /// 대화 상자면 경로를 닫고, 앱 맨 위 층에 떠 있으면 층에서 내린다.
+  void _closeWith([Object? result]) {
+    final dock = ReviewDockScope.read(context);
+    if (dock != null) {
+      dock.close(result);
+    } else {
+      Navigator.pop(context, result);
+    }
   }
 
   Future<void> _review() => _run(() async {
@@ -693,7 +756,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
             _tailoredResumeId!,
           );
         }
-        if (mounted) Navigator.pop(context, workspaceResumeId);
+        if (mounted) _closeWith(workspaceResumeId);
       } finally {
         _mutationPending = false;
       }
@@ -1143,6 +1206,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _questionQueue.isEmpty &&
         !_gapAuditScheduled &&
         (!_gapAuditStarted || _gapAuditFinished);
+    final dock = ReviewDockScope.watch(context);
     return PopScope(
       canPop: !_busy && !_mutationPending,
       child: Dialog(
@@ -1165,7 +1229,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                 busy: _busy,
                 canComplete: _result != null,
                 onComplete: _completeReview,
-                onClose: () => Navigator.pop(context),
+                // 기다리는 동안에만 내려둔다. 앱 맨 위 층에 떠 있을 때만 된다.
+                onMinimize: dock != null && _busy ? dock.minimize : null,
+                onClose: _closeWith,
               ),
               const Divider(height: 1),
               Expanded(
@@ -1200,7 +1266,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       onApply: _applySuggestion,
                       onSkip: _skipSuggestion,
                       onUndo: _undoSuggestion,
-                      onClose: () => Navigator.pop(context),
+                      canMinimize: dock != null,
+                      onClose: _closeWith,
                     );
                     if (!horizontal) {
                       return Column(
@@ -1269,6 +1336,7 @@ class _ReviewDialogHeader extends StatelessWidget {
     required this.busy,
     required this.canComplete,
     required this.onComplete,
+    required this.onMinimize,
     required this.onClose,
   });
 
@@ -1277,6 +1345,7 @@ class _ReviewDialogHeader extends StatelessWidget {
   final bool busy;
   final bool canComplete;
   final VoidCallback onComplete;
+  final VoidCallback? onMinimize;
   final VoidCallback onClose;
 
   @override
@@ -1328,6 +1397,19 @@ class _ReviewDialogHeader extends StatelessWidget {
               onPressed: busy ? null : onComplete,
               icon: const Icon(Icons.check, size: 16),
               label: const Text('첨삭 완료'),
+            ),
+          ],
+          if (onMinimize != null) ...[
+            SizedBox(width: AppSpace.s(8)),
+            OutlinedButton.icon(
+              onPressed: onMinimize,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                backgroundColor: AppColors.primaryLight,
+                side: BorderSide(color: AppColors.primary),
+              ),
+              icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+              label: const Text('내려두기'),
             ),
           ],
           IconButton(
@@ -1930,6 +2012,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.onApply,
     required this.onSkip,
     required this.onUndo,
+    required this.canMinimize,
     required this.onClose,
   });
 
@@ -1952,6 +2035,7 @@ class _ReviewChatPane extends StatelessWidget {
   final ValueChanged<List<int>> onApply;
   final ValueChanged<List<int>> onSkip;
   final ValueChanged<Map<String, dynamic>> onUndo;
+  final bool canMinimize;
   final VoidCallback onClose;
 
   @override
@@ -2040,6 +2124,7 @@ class _ReviewChatPane extends StatelessWidget {
                         ? _InitialReviewProgress(
                             currentStage: busyStage,
                             generalReview: generalReview,
+                            canMinimize: canMinimize,
                           )
                         : _ReviewInlineProgress(
                             kind: busyKind ?? _ReviewBusyKind.answer,
@@ -2123,26 +2208,16 @@ class _InitialReviewProgress extends StatelessWidget {
   const _InitialReviewProgress({
     required this.currentStage,
     required this.generalReview,
+    this.canMinimize = false,
   });
 
   final int currentStage;
   final bool generalReview;
+  final bool canMinimize;
 
   @override
   Widget build(BuildContext context) {
-    final steps = generalReview
-        ? const [
-            '기본 이력서 불러오기',
-            '이력서 항목 확인',
-            '경험 근거 비교',
-            '수정안과 확인 질문 준비',
-          ]
-        : const [
-            '선택 공고 원문 확인',
-            '이력서 문항별 비교',
-            '부족한 근거 선별',
-            '확인 질문과 수정안 준비',
-          ];
+    final steps = generalReview ? _generalReviewSteps : _jobReviewSteps;
     return Container(
       padding: EdgeInsets.all(AppSpace.s(16)),
       decoration: BoxDecoration(
@@ -2181,9 +2256,16 @@ class _InitialReviewProgress extends StatelessWidget {
             style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
           SizedBox(height: AppSpace.s(2)),
+          // 2026-09-14 기록으로 첫 첨삭은 33~71초였다. "15초"라고 하면 더 답답하다.
           Text(
-            '보통 15초 정도 걸립니다. 창을 닫지 않고 잠시 기다려 주세요.',
-            style: TextStyle(fontSize: 10.5, color: AppColors.textHint),
+            canMinimize
+                ? '보통 1분 안팎 걸립니다. 내려두기를 누르고 다른 화면을 봐도 첨삭은 계속됩니다.'
+                : '보통 1분 안팎 걸립니다. 창을 닫지 않고 잠시 기다려 주세요.',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: canMinimize ? AppColors.primary : AppColors.textHint,
+              fontWeight: canMinimize ? FontWeight.w600 : null,
+            ),
           ),
           SizedBox(height: AppSpace.s(14)),
           for (var index = 0; index < steps.length; index++)
@@ -2209,13 +2291,7 @@ class _ReviewInlineProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (kind) {
-      _ReviewBusyKind.answer => '답변을 검토하고 다음 보완 항목을 준비하고 있어요',
-      _ReviewBusyKind.undo => '변경 내용을 되돌리고 있어요',
-      _ReviewBusyKind.review => '이력서를 분석하고 있어요',
-      _ReviewBusyKind.apply => '수정안을 반영하고 있어요',
-    };
-    return _CompactBusyCard(label: label);
+    return _CompactBusyCard(label: _busyLabel(kind));
   }
 }
 

@@ -20,6 +20,7 @@ import '../data/demo_ai_coach_clients.dart';
 import '../data/resume_review_api_client.dart';
 import 'job_resume_review_dialog.dart';
 import 'job_recommendation_loading.dart';
+import 'review_dock.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../data/ai_job_coach_repository.dart';
 import '../data/job_recommend_api_client.dart';
@@ -284,12 +285,15 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
             ),
       );
     }
+    // 창을 내려두고 다른 화면으로 가면 이 패널은 사라진다. 끝난 뒤 이동은 라우터로 한다.
+    final router = GoRouter.of(context);
+    final reviewKey = ValueKey('job-review-${widget.resumeId}-${job.jobId}');
     try {
-      final workspaceResumeId = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => JobResumeReviewDialog(
-          key: ValueKey('job-review-${widget.resumeId}-${job.jobId}'),
+      final workspaceResumeId = await ReviewDock.show<String>(
+        context,
+        key: reviewKey,
+        child: JobResumeReviewDialog(
+          key: reviewKey,
           client: client,
           cohortId: cohort,
           aiOps: DemoConfig.enabled ? null : ref.read(aiOpsServiceProvider),
@@ -308,8 +312,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           },
         ),
       );
-      if (mounted && workspaceResumeId != null) {
-        context.push(RoutePaths.resumeEditPath(workspaceResumeId));
+      if (workspaceResumeId != null) {
+        router.push(RoutePaths.resumeEditPath(workspaceResumeId));
       }
     } finally {
       client.close();
@@ -427,11 +431,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     final ResumeReviewApiClient client = DemoConfig.enabled
         ? DemoResumeReviewApiClient(draft: widget.draftContent)
         : ResumeReviewApiClient(token: () => user!.getIdToken());
+    final reviewKey = ValueKey('general-review-${widget.resumeId}');
     try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => JobResumeReviewDialog(
+      await ReviewDock.show<void>(
+        context,
+        key: reviewKey,
+        child: JobResumeReviewDialog(
+          key: reviewKey,
           client: client,
           cohortId: cohort,
           aiOps: DemoConfig.enabled ? null : ref.read(aiOpsServiceProvider),
@@ -439,8 +445,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
           draft: widget.draftContent,
           generalReview: true,
           onChanged: (content) {
+            // 창을 내려두고 편집 화면을 떠났으면 알릴 곳이 없다. 저장은 서버가 이미 했다.
+            if (!mounted) return;
             widget.onResumeChanged?.call(content);
-            if (mounted) setState(() => _result = null);
+            setState(() => _result = null);
           },
         ),
       );
@@ -747,7 +755,9 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     // 기수를 모르면(로그인 전) 남길 곳이 없으므로 건너뛴다. 로그가 실패해도
     // 추천은 막지 않는다 — `recordCoachLog`가 실패 시 null을 돌려준다.
     // 데모 모드는 예시 결과라 남기지 않는다.
-    final cohort = DemoConfig.enabled ? null : ref.read(effectiveCohortIdProvider);
+    final cohort = DemoConfig.enabled
+        ? null
+        : ref.read(effectiveCohortIdProvider);
     final ops = ref.read(aiOpsServiceProvider);
     final watch = Stopwatch()..start();
     setState(() {
