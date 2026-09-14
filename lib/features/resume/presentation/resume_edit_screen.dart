@@ -810,7 +810,8 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
                       ),
                     ),
                   ),
-                if (resume.isApproved)
+                // 학생에게 하는 안내다. 강사·관리자는 위 진행 줄의 "승인 완료"로 충분하다.
+                if (resume.isApproved && !isReviewer)
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(
