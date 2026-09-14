@@ -87,8 +87,11 @@ python -m job_matching_bot.crawling.nightly --max-minutes 300
   지우지 않는다. 하룻밤 상한이 있어 시간을 다 쓰지 않는다.
 - **시간 한도.** 기본 7시간. 목록과 링크 확인을 먼저 하고 남는 시간에 상세를 받는다.
   못 받은 신규는 다음 밤에 인기 배지 → 목록 순위 → 마감 순으로 이어서 받는다.
-- 결과는 `artifacts/nightly/<날짜>.json`에, 오늘 받은 상세는 `artifacts/raw/details/<날짜>.jsonl`에,
-  목록은 `artifacts/raw/sweeps/<날짜>.json`(14일 보관)에 남는다.
+- 결과는 `artifacts/nightly/<날짜>-<시작 시각>.json`(예: `2026-09-13-2300.json`)에, 목록은
+  `artifacts/raw/sweeps/<날짜>-<시작 시각>.json`(14일 보관)에 남는다. **시각을 붙이는 까닭:** 날짜만
+  쓰던 때 같은 날 두 번 돈 배치(00:55 재실행, 23:00 정기)가 서로 파일을 덮어썼다.
+- 받은 상세는 `artifacts/raw/details/<날짜>.jsonl`에 **덧붙인다.** 같은 날 다시 돌리면 이미 받은
+  상세를 건너뛰고 이어 받게 일부러 날짜 하나로 둔다.
 
 **스케줄 등록.** 작업 스케줄러에 매일 23:00으로 건다. 가상환경 python을 쓰고 로그는
 `artifacts/nightly/log/<날짜>.log`에 남는다. 노트북이 꺼져 있던 밤은 건너뛰고 다음 밤에 이어서 받는다.

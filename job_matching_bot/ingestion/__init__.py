@@ -4,8 +4,7 @@
 Hard Filter는 이 레이어를 import하지만 반대 방향으로는 의존하지 않는다.
 """
 
-from job_matching_bot.ingestion.jobkorea import normalize_jobkorea
 from job_matching_bot.ingestion.mock_source import mock_jobs
 from job_matching_bot.ingestion.skill_extractor import extract_skills
 
-__all__ = ["extract_skills", "mock_jobs", "normalize_jobkorea"]
+__all__ = ["extract_skills", "mock_jobs"]

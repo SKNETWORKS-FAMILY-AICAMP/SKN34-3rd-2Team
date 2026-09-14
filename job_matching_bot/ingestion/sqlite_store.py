@@ -31,7 +31,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from job_matching_bot.config import AS_OF
+from job_matching_bot.config import now
 from job_matching_bot.ingestion.job_store import REQUIRED_FIELDS, _is_expired, resolve_status
 from job_matching_bot.ingestion.detail_quality import has_requirement_text
 from job_matching_bot.retrieval.documents import embed_hash as _embed_hash
@@ -245,7 +245,7 @@ class SqliteJobStore:
             with self.conn:
                 self.conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
 
-    # ── JobStore 호환 ──────────────────────────────────────────
+    # ── 옛 호출 방식(load/save) 호환 ─────────────────────────────
     def load(self) -> "SqliteJobStore":
         return self
 
@@ -377,7 +377,7 @@ class SqliteJobStore:
                 found[(row["source"], row["source_job_id"])] = row
         return found
 
-    def refresh(self, collected: Iterable[Job], *, as_of: datetime = AS_OF) -> dict[str, list[str]]:
+    def refresh(self, collected: Iterable[Job], *, as_of: datetime | None = None) -> dict[str, list[str]]:
         """이미 저장된 공고를 **다시 파싱한 내용으로만** 덮어쓴다.
 
         `upsert`와 다른 점은 "이번에 안 보인 공고"를 세지 않는다는 것이다. 파서를
@@ -390,10 +390,11 @@ class SqliteJobStore:
 
         **상태와 미관측 횟수는 손대지 않는다.** 다시 파싱하는 것은 저장해 둔 글을
         다시 읽는 일이지, 그 공고가 아직 살아 있는지 확인하는 일이 아니다. 처음에는
-        `resolve_status`로 다시 계산했는데, 그 판정이 9일 전에 고정된 `AS_OF`를 기준으로
+        `resolve_status`로 다시 계산했는데, 그 판정이 9일 전에 고정된 기준 시각(옛 `config.AS_OF`)을 기준으로
         해서 만료·삭제된 공고 7,090건이 한꺼번에 OPEN으로 되살아났다. 살아 있는지는
         목록 관측과 링크 확인이 정하는 것이고, 여기서 알 수 있는 것이 아니다.
         """
+        as_of = as_of or now()
         collected = list(collected)
         keys = [(job.source, job.source_job_id) for job in collected]
         existing = self._lifecycle(list(dict.fromkeys(keys)))
@@ -423,11 +424,12 @@ class SqliteJobStore:
         collected: Iterable[Job],
         *,
         source: str,
-        as_of: datetime = AS_OF,
+        as_of: datetime | None = None,
         missing_run_limit: int = DEFAULT_MISSING_RUN_LIMIT,
         observed_ids: set[str] | None = None,
     ) -> CollectionReport:
         """`job_store.reconcile`과 같은 판정을 SQL 위에서 한다. 결과 리포트도 같은 모양."""
+        as_of = as_of or now()
         collected = list(collected)
         report = CollectionReport(source=source, collected_at=as_of.isoformat())
         timestamp = as_of.isoformat()

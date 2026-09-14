@@ -4,7 +4,6 @@
 실패했다고 저장된 공고 전체가 삭제 처리되면 안 된다.
 """
 
-import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -12,18 +11,20 @@ from datetime import timedelta
 from pathlib import Path
 
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records
-from job_matching_bot.config import AS_OF, DEFAULT_INPUT, DEFAULT_SARAMIN_INPUT
+from job_matching_bot.config import DEFAULT_SARAMIN_INPUT
 from job_matching_bot.ingest import ingest
 from job_matching_bot.ingestion import raw_store
-from job_matching_bot.ingestion.job_store import JobStore, reconcile, resolve_status
-from job_matching_bot.ingestion.jobkorea import normalize_jobkorea
+from job_matching_bot.ingestion.job_store import reconcile, resolve_status
 from job_matching_bot.ingestion.mock_source import mock_jobs
+from job_matching_bot.ingestion.saramin import normalize_saramin
+from job_matching_bot.ingestion.sqlite_store import SqliteJobStore
 from job_matching_bot.schemas.job_record import (
     STATUS_EXPIRED,
     STATUS_OPEN,
     STATUS_REMOVED,
     JobRecord,
 )
+from job_matching_bot.tests import AS_OF, saramin_records
 
 
 def _store_from(jobs, source="MOCK", as_of=AS_OF):
@@ -122,16 +123,16 @@ class StatusTransitionTest(unittest.TestCase):
             self.assertEqual(STATUS_EXPIRED, record.status)
 
     def test_other_source_jobs_are_not_marked_missing(self):
-        jobkorea = [
-            normalize_jobkorea(record)
-            for record in json.loads(DEFAULT_INPUT.read_text(encoding="utf-8"))
+        other = [
+            replace(job, source="OTHER", job_id=f"OTHER-{job.source_job_id}")
+            for job in self.jobs
         ]
-        store, _ = reconcile({}, jobkorea + self.jobs, source="MOCK")
-        # 이번 수집은 MOCK만 책임진다. 잡코리아 공고는 대상이 아니다.
+        store, _ = reconcile({}, other + self.jobs, source="MOCK")
+        # 이번 수집은 MOCK만 책임진다. 다른 소스 공고는 대상이 아니다.
         store, report = reconcile(store, [], source="MOCK")
 
         self.assertEqual(len(self.jobs), len(report.still_missing))
-        for job in jobkorea:
+        for job in other:
             self.assertNotIn(job.job_id, report.still_missing)
             self.assertEqual(0, store[(job.source, job.source_job_id)].missing_runs)
 
@@ -157,45 +158,43 @@ class QualityReportTest(unittest.TestCase):
 class PersistenceTest(unittest.TestCase):
     def test_store_round_trips_through_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "store.json"
-            store = JobStore(path)
-            store.upsert(mock_jobs(), source="MOCK")
-            store.save()
+            path = Path(temp_dir) / "store.sqlite"
+            with SqliteJobStore(path) as store:
+                store.upsert(mock_jobs(), source="MOCK")
+                original = store.get("MOCK-BE-001")
 
-            reloaded = JobStore(path).load()
-            self.assertEqual(len(mock_jobs()), len(reloaded.records))
-            original = store.records[("MOCK", "MOCK-BE-001")]
-            restored = reloaded.records[("MOCK", "MOCK-BE-001")]
-            self.assertEqual(original.to_dict(), restored.to_dict())
+            with SqliteJobStore(path) as reloaded:
+                self.assertEqual(len(mock_jobs()), reloaded.count())
+                self.assertEqual(original.to_dict(), reloaded.get("MOCK-BE-001").to_dict())
 
     def test_active_jobs_exclude_expired_and_removed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = JobStore(Path(temp_dir) / "store.json")
-            store.upsert(mock_jobs(), source="MOCK")
-            self.assertEqual(3, len(store.active_jobs()))
+            with SqliteJobStore(Path(temp_dir) / "store.sqlite") as store:
+                store.upsert(mock_jobs(), source="MOCK")
+                self.assertEqual(3, len(store.active_jobs()))
 
-            store.upsert([], source="MOCK", as_of=AS_OF + timedelta(days=60))
-            self.assertEqual([], store.active_jobs())
-            # 만료돼도 레코드는 남아 있다.
-            self.assertEqual(3, store.stats()["total"])
+                store.upsert([], source="MOCK", as_of=AS_OF + timedelta(days=60))
+                self.assertEqual([], store.active_jobs())
+                # 만료돼도 레코드는 남아 있다.
+                self.assertEqual(3, store.stats()["total"])
 
 
 class RawStoreTest(unittest.TestCase):
     def setUp(self):
-        self.records = json.loads(DEFAULT_INPUT.read_text(encoding="utf-8"))
+        self.records = saramin_records(3)
 
     def test_ingest_preserves_raw_and_populates_store(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             report = ingest(
                 self.records,
-                source="JOBKOREA_POC",
-                store_path=root / "store.json",
+                source="SARAMIN_POC",
+                store_path=root / "store.sqlite",
                 raw_root=root / "job_raw",
             )
             self.assertEqual(len(self.records), len(report.new))
 
-            saved = raw_store.load_raw(root / "job_raw", "JOBKOREA_POC")
+            saved = raw_store.load_raw(root / "job_raw", "SARAMIN_POC")
             self.assertEqual(len(self.records), len(saved))
             self.assertTrue(all(item["parse_status"] == "OK" for item in saved))
             self.assertEqual([], raw_store.failed_raw(root / "job_raw"))
@@ -205,11 +204,11 @@ class RawStoreTest(unittest.TestCase):
             root = Path(temp_dir)
             ingest(
                 self.records,
-                source="JOBKOREA_POC",
-                store_path=root / "store.json",
+                source="SARAMIN_POC",
+                store_path=root / "store.sqlite",
                 raw_root=root / "job_raw",
             )
-            parsed, failures = raw_store.reparse(root / "job_raw", normalize_jobkorea)
+            parsed, failures = raw_store.reparse(root / "job_raw", normalize_saramin)
             self.assertEqual(len(self.records), len(parsed))
             self.assertEqual([], failures)
 
@@ -217,7 +216,7 @@ class RawStoreTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             raw_store.save_raw(root, "MOCK", "broken", {"list_item": "잘못된 형식"})
-            parsed, failures = raw_store.reparse(root, normalize_jobkorea)
+            parsed, failures = raw_store.reparse(root, normalize_saramin)
             self.assertEqual([], parsed)
             self.assertEqual(1, len(failures))
             self.assertIn("parse_error", failures[0])
@@ -261,15 +260,15 @@ class SaraminIngestTest(unittest.TestCase):
             report = ingest(
                 self.records,
                 source="SARAMIN_POC",
-                store_path=root / "store.json",
+                store_path=root / "store.sqlite",
                 raw_root=root / "job_raw",
             )
             self.assertEqual(len(self.records), len(report.new))
             self.assertEqual({}, report.missing_fields)
 
             # 저장 → 다시 읽어도 기술스택이 살아 있어야 랭킹이 쓸 수 있다.
-            store = JobStore(root / "store.json").load()
-            reloaded = [record.job for record in store.records.values()]
+            with SqliteJobStore(root / "store.sqlite") as store:
+                reloaded = [record.job for record in store.all_records()]
             self.assertTrue(any(job.tech_stack for job in reloaded))
             self.assertTrue(all(job.job_id.startswith("SARAMIN-") for job in reloaded))
 
@@ -278,7 +277,7 @@ class SaraminIngestTest(unittest.TestCase):
             self.skipTest("사람인 수집본 없음")
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            kwargs = dict(source="SARAMIN_POC", store_path=root / "store.json", raw_root=root / "job_raw")
+            kwargs = dict(source="SARAMIN_POC", store_path=root / "store.sqlite", raw_root=root / "job_raw")
             ingest(self.records, **kwargs)
             report = ingest(self.records, **kwargs)
             self.assertEqual(len(self.records), len(report.unchanged))
@@ -286,19 +285,22 @@ class SaraminIngestTest(unittest.TestCase):
             self.assertEqual([], report.removed)
 
     def test_sources_do_not_expire_each_other(self):
-        # 사람인만 수집한 날 잡코리아 공고가 안 보인 것은 삭제가 아니다.
+        # 한 소스만 수집한 날 다른 소스 공고가 안 보인 것은 삭제가 아니다.
         if not self.records:
             self.skipTest("사람인 수집본 없음")
-        jobkorea_records = json.loads(DEFAULT_INPUT.read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            common = dict(store_path=root / "store.json", raw_root=root / "job_raw")
-            ingest(jobkorea_records, source="JOBKOREA_POC", **common)
-            report = ingest(self.records, source="SARAMIN_POC", **common)
+            with SqliteJobStore(root / "store.sqlite") as store:
+                store.upsert(mock_jobs(), source="MOCK")
+            report = ingest(
+                self.records, source="SARAMIN_POC",
+                store_path=root / "store.sqlite", raw_root=root / "job_raw",
+            )
             self.assertEqual([], report.removed)
             self.assertEqual([], report.still_missing)
-            store = JobStore(root / "store.json").load()
-            self.assertEqual(len(jobkorea_records) + len(self.records), store.stats()["total"])
+            with SqliteJobStore(root / "store.sqlite") as store:
+                self.assertEqual(len(mock_jobs()) + len(self.records), store.stats()["total"])
+                self.assertEqual(0, store.get("MOCK-BE-001").missing_runs)
 
 
 if __name__ == "__main__":
