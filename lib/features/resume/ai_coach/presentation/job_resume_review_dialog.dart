@@ -3252,7 +3252,12 @@ class _ReviewChatBubble extends StatelessWidget {
 
   /// 수정안 카드 밑에 붙일 안내. 칸 사이 중복과 원문 부정 표현이 빠진 것.
   static List<String> _noticesFor(Map<String, dynamic> item) => [
-    for (final key in const ['overlap_notice', 'meaning_notice'])
+    for (final key in const [
+      'overlap_notice',
+      'meaning_notice',
+      'fact_notice',
+      'flow_notice',
+    ])
       if ((item[key] as String? ?? '').isNotEmpty) item[key] as String,
   ];
 

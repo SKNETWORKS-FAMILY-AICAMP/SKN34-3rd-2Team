@@ -739,6 +739,11 @@ void main() {
       findsOneWidget,
       reason: '부정 표현이 빠진 수정안은 막지 않고 안내를 붙인다',
     );
+    expect(
+      find.textContaining('목적 표현으로 바뀌었어요'),
+      findsOneWidget,
+      reason: '사실이 약해진 수정안도 막지 않고 안내를 붙인다',
+    );
     expect(find.textContaining('확인했어요. 다음으로'), findsNothing);
     // 답에 이름이 나온 다른 항목(프로젝트 1)의 수정안은 대기열에 들어가고, 무관한 항목 수정안은 들어가지 않는다.
     await tester.tap(find.text('이 문장으로 바꾸기'));
@@ -1131,6 +1136,7 @@ class _RoutedAnswerClient extends FakeReviewClient {
             'suggested_revision': '오디오 파일을 내려받아 AVPlayer로 재생했습니다.',
             'reason': '답변 반영',
             'meaning_notice': "원문의 '끊기지 않게' 표현이 수정안에서 빠졌어요. 뜻이 달라지지 않았는지 확인해 주세요.",
+            'fact_notice': "원문의 '오디오 파일을 내려받아 재생합니다'이(가) 수정안에서 목적 표현으로 바뀌었어요. 한 일이 그대로 드러나는지 확인해 주세요.",
             'edit_type': 'content',
             'status': 'improved',
           },
