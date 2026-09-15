@@ -18,6 +18,7 @@ SQLite가 아니라 케이스에 적힌 지어낸 공고를 쓴다(실제 공고
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -166,7 +167,40 @@ APPLICANT_SYSTEM = """너는 이력서 첨삭 챗봇의 질문에 답하는 지�
 """
 
 
-def make_applicant(settings):
+# 사람 답변 모드(--applicant human). 목업 답은 항목 이름을 또박또박 넣은 완결 문장이라, 실제 학생 답에서 흔한 모양을
+# 서버가 어떻게 받는지 보지 못했다. 답의 근거는 그대로 [내가 실제로 한 일]·[해 본 적 없는 것]만 쓰고 모양만 바꾼다.
+HUMAN_TRAITS = {
+    "short": "한 줄로 짧게 답한다. 문장을 끝맺지 않아도 된다(예: '네 pytest로 40개 정도 짰어요').",
+    "nickname": "항목 이름을 정확히 쓰지 않고 줄이거나 대충 부른다(예: '그 챗봇', '전 회사', '졸작').",
+    "other_item": "질문한 항목 말고 [내가 실제로 한 일]에 있는 다른 항목 이야기도 한 가지 같이 한다.",
+    "not_done_tail": "사실을 말한 뒤 [해 본 적 없는 것] 중 질문과 가까운 것을 '그건 안 해 봤어요'처럼 덧붙인다.",
+    "typo": "줄임말·띄어쓰기·맞춤법을 대충 쓴다(예: '했었는데여', '구현햇어요', 'api 연동함').",
+    "uncertain": "사실 하나를 '잘 모르겠는데 아마', '~였던 것 같아요'처럼 확신 없이 말한다. 없는 사실을 만들지는 않는다.",
+}
+
+APPLICANT_HUMAN_SYSTEM = """너는 이력서 첨삭 챗봇의 질문에 채팅으로 답하는 실제 취업 준비생이다.
+[내가 실제로 한 일]과 [해 본 적 없는 것]만 근거로 답한다. 새 사실·숫자·기술·역할을 지어내지 않는다.
+
+- 질문과 관련된 내용이 [내가 실제로 한 일]에 있으면 그 사실로 답한다. 없거나 [해 본 적 없는 것]이면 '안 해봤어요', '없어요'처럼 짧게 답한다.
+- 이번 답에서는 [말투 지시]를 따른다. 말투는 바꿔도 사실은 바꾸지 않는다.
+- 설명·머리말 없이 답 문장만 쓴다.
+"""
+
+
+def _human_traits(case_id: str, question: str) -> list[str]:
+    """케이스·질문마다 같은 말투 한두 개를 고른다(다시 돌려도 같은 조합)."""
+    seed = int(hashlib.sha256(f"{case_id}|{question}".encode("utf-8")).hexdigest(), 16)
+    names = list(HUMAN_TRAITS)
+    first = names[seed % len(names)]
+    picked = [first]
+    if (seed // 7) % 2:
+        second = names[(seed // 11) % len(names)]
+        if second != first:
+            picked.append(second)
+    return picked
+
+
+def make_applicant(settings, style: str = "mock"):
     model = ChatOpenAI(
         model=settings.openai_model,
         api_key=settings.openai_api_key,
@@ -174,21 +208,27 @@ def make_applicant(settings):
         reasoning_effort="low",
         max_retries=2,
     )
+    traits_by_turn: dict[tuple[str, str], list[str]] = {}
 
     def answer(case: dict, question: str) -> str:
         projects = ", ".join(p.get("name", "") for p in case["content"].get("projects", []))
         facts = "\n".join(f"- {fact}" for fact in case["applicant"]["facts"])
         not_done = "\n".join(f"- {item}" for item in case["applicant"]["not_done"])
-        message = model.invoke([
-            ("system", APPLICANT_SYSTEM),
-            ("human", f"[이력서 프로젝트 이름]\n{projects}\n\n[내가 실제로 한 일]\n{facts}\n\n"
-                      f"[해 본 적 없는 것]\n{not_done}\n\n[챗봇 질문]\n{question}"),
-        ])
+        body = (f"[이력서 프로젝트 이름]\n{projects}\n\n[내가 실제로 한 일]\n{facts}\n\n"
+                f"[해 본 적 없는 것]\n{not_done}\n\n[챗봇 질문]\n{question}")
+        system = APPLICANT_SYSTEM
+        if style == "human":
+            traits = _human_traits(case["id"], question)
+            traits_by_turn[(case["id"], question)] = traits
+            system = APPLICANT_HUMAN_SYSTEM
+            body += "\n\n[말투 지시]\n" + "\n".join(f"- {HUMAN_TRAITS[t]}" for t in traits)
+        message = model.invoke([("system", system), ("human", body)])
         content = message.content
         if isinstance(content, list):
             content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
         return str(content).strip()
 
+    answer.traits_for = lambda case_id, question: traits_by_turn.get((case_id, question))
     return answer
 
 
@@ -280,6 +320,9 @@ def run_case(case: dict, settings, applicant, max_questions: int, generator=None
         turn = {"field_path": question["field_path"], "question": question["question"],
                 "kind": classify_question(question, []), "answer": answer,
                 "negative": is_negative_answer(answer)}
+        traits_for = getattr(applicant, "traits_for", None)
+        if traits_for and traits_for(case["id"], question["question"]):
+            turn["answer_traits"] = traits_for(case["id"], question["question"])
         try:
             follow = service.review("eval-token", request(
                 previous_review_id=current["review_id"],
@@ -296,6 +339,11 @@ def run_case(case: dict, settings, applicant, max_questions: int, generator=None
             continue
         summary = summarize_review(follow, fields)
         turn["elapsed_ms"] = (follow.get("telemetry") or {}).get("elapsed_ms")
+        # resume-v16u부터: 후속 첨삭에서 사실 검사 모델을 부른 수·걸린 시간·안내가 붙은 수.
+        follow_telemetry = follow.get("telemetry") or {}
+        turn["fact_checks"] = follow_telemetry.get("fact_checks")
+        turn["fact_check_ms"] = follow_telemetry.get("fact_check_ms")
+        turn["fact_notices"] = follow_telemetry.get("fact_notices")
         turn["requirement_id"] = question.get("requirement_id")
         turn["topic"] = question.get("topic")
         before = {row["id"]: row["status"] for row in current.get("requirement_map") or []}
@@ -319,7 +367,13 @@ def run_case(case: dict, settings, applicant, max_questions: int, generator=None
         moved = next((a.get("field_path") for a in reversed(follow.get("confirmed_answers") or [])
                       if a.get("answer") == answer), question["field_path"])
         turn["moved_to"] = moved
-        turn["suggestions_shown"] = [s for s in summary["suggestions"] if group(s["field_path"]) == group(moved)]
+        # resume-v16p부터: 답에 다른 항목 이름이 나오면 그 항목도 함께 고치고 answer_scope_paths에 싣는다. 앱은 답한 칸 다음에 그 칸 수정안도 보여 준다.
+        turn["scope_paths"] = [p for p in (follow.get("answer_scope_paths") or []) if group(p) != group(moved)]
+        shown_groups = {group(moved), *(group(p) for p in turn["scope_paths"])}
+        turn["suggestions_shown"] = [s for s in summary["suggestions"] if group(s["field_path"]) in shown_groups]
+        turn["scope_suggestions"] = [s for s in turn["suggestions_shown"] if group(s["field_path"]) != group(moved)]
+        turn["scope_dropped"] = [d for d in summary["dropped"]
+                                 if group(d["field_path"]) in shown_groups and group(d["field_path"]) != group(moved)]
         # 새 프로젝트 제안은 아직 없는 칸(projects[N])이라 위 기준으로는 안 잡힌다. 앱은 "새 프로젝트로 추가" 카드로 보여 준다.
         new_items = [s for s in summary["suggestions"] if s.get("new_item") and s not in turn["suggestions_shown"]]
         turn["suggestions_shown"] += new_items
@@ -378,6 +432,9 @@ def summarize_review(review: dict, fields: dict) -> dict:
         "requirements_ms": telemetry.get("requirements_ms"),
         "input_tokens": telemetry.get("input_tokens"),
         "output_tokens": telemetry.get("output_tokens"),
+        # resume-v16s부터: 첫 첨삭에 준 명사형으로 끊긴 문장 수와 그중 수정안으로 잇지 못한 수.
+        "noun_fragments": telemetry.get("noun_fragments"),
+        "noun_fragments_unjoined": telemetry.get("noun_fragments_unjoined"),
         "summary": review.get("summary", ""),
         "questions_total": len(review.get("questions", [])),
         "visible": [{"field_path": q["field_path"], "kind": q["kind"], "stage": q.get("stage"), "question": q["question"]}
@@ -390,7 +447,10 @@ def summarize_review(review: dict, fields: dict) -> dict:
              # resume-v16k부터: 받을 칸이 없는 경험은 새 프로젝트로 제안한다(원문이 비어 있다).
              "new_item": s.get("new_item"),
              # resume-v16m부터: 원문의 바람·목적 부정 표현("겪지 않는")이 빠지면 막지 않고 뜻 확인 안내를 붙인다.
-             "meaning_notice": s.get("meaning_notice")}
+             "meaning_notice": s.get("meaning_notice"),
+             # resume-v16u부터: 원문 사실이 빠지거나 약해졌는지 검사 모델이 본 안내, 답을 원문 뒤에 따로 붙인 수정안 안내.
+             "fact_notice": s.get("fact_notice"),
+             "flow_notice": s.get("flow_notice")}
             for s in sentences if s.get("suggested_revision")
         ],
         "dropped": [
@@ -663,6 +723,8 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--apply-polish", action="store_true", help="첫 첨삭의 문장 다듬기를 모두 적용한 뒤 질문에 답한다(앱의 묶음 적용)")
     parser.add_argument("--rescore", help="저장된 실행 폴더의 기록으로 질문 품질 지표만 다시 센다(모델을 부르지 않는다)")
+    parser.add_argument("--applicant", choices=["mock", "human"], default="mock",
+                        help="human: 짧은 답·줄인 항목 이름·다른 항목 섞기·'안 해 봤어요' 덧붙이기·맞춤법·불확실한 말을 턴마다 한두 개 섞는다")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -685,7 +747,7 @@ def main() -> None:
     cases = load_cases(args.cases)
     if args.only:
         cases = [c for c in cases if c["id"] in set(args.only)]
-    applicant = make_applicant(settings)
+    applicant = make_applicant(settings, args.applicant)
     out = HERE / "runs" / f"{datetime.now():%Y%m%d-%H%M%S}_{args.label}"
     out.mkdir(parents=True, exist_ok=True)
 
