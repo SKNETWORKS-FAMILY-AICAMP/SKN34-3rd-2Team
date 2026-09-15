@@ -162,7 +162,10 @@ class DemoJobRecommendApiClient extends JobRecommendApiClient {
     return JobChatResponse.fromMap({
       'mode': '검색',
       'reply': '데모 화면에서는 예시 공고로 보여 드려요. 실제 서비스에서는 지금 열려 있는 공고에서 찾아 드립니다.',
-      'filters': {'roles': ['데이터'], 'career': '신입'},
+      'filters': {
+        'roles': ['데이터'],
+        'career': '신입',
+      },
       'jobs': [
         for (final job in _demoJobs)
           {
@@ -248,11 +251,17 @@ class DemoResumeReviewApiClient extends ResumeReviewApiClient {
     String? tailoredResumeId,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    return {'content': _copy(_content), 'input_hash': _hash, 'job_source': _jobSource};
+    return {
+      'content': _copy(_content),
+      'input_hash': _hash,
+      'job_source': _jobSource,
+    };
   }
 
   @override
-  Future<Map<String, dynamic>> createTailoredResume(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> createTailoredResume(
+    Map<String, dynamic> body,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 700));
     return {'tailored_resume_id': 'demo-tailored', 'content': _copy(_content)};
   }
@@ -267,35 +276,128 @@ class DemoResumeReviewApiClient extends ResumeReviewApiClient {
         ? <Map<String, dynamic>>[]
         : [
             for (final (path, original, revision, reason) in _candidates)
-              if ((_read(_content, path) ?? '').contains(original))
+              // 공고 맞춤 첨삭은 서버처럼 단계 순서를 지킨다. 자기소개서(5단계) 수정안이 요건 질문(2단계)보다
+              // 먼저 뜨지 않도록 첫 첨삭에서는 문장 다듬기만 준다.
+              if ((_read(_content, path) ?? '').contains(original) &&
+                  (general || !path.startsWith('selfIntroduction')))
                 {
                   'field_path': path,
                   'original_quote': original,
                   'suggested_revision': revision,
                   'reason': reason,
+                  'edit_type': path.startsWith('selfIntroduction')
+                      ? 'content'
+                      : 'clarity',
+                  'stage': path.startsWith('selfIntroduction') ? 5 : 1,
                 },
           ];
     _lastSuggestions = suggestions;
     final company = jobCompany ?? '선택한 공고';
+    // 공고 맞춤 첫 첨삭에는 서버 v3 응답처럼 요건 표·STAR 판정·단계가 붙은 질문을 함께 준다.
+    // 근거 인용은 데모 이력서(resume_mocks의 데이터 엔지니어 신입)에 실제로 있는 문장만 쓴다.
+    final jobFirst = !general && !followUp;
     return {
       'review_id': 'demo-review-$_reviewCount',
       'input_hash': _hash,
       'summary': general
           ? '명사로 끊긴 문장과 성과가 흐릿한 문장을 찾았습니다. 이력서에 이미 있는 내용만으로 다듬었습니다. 수정안을 하나씩 확인해 적용해 보세요.'
-          : '$company 공고의 자격요건과 이력서를 비교했습니다. 공고가 요구하는 배치 파이프라인 경험이 잘 드러나도록 문장을 다듬었습니다. 수정안을 확인해 적용해 보세요.',
+          : '$company 공고의 요건 4개를 이력서와 대조했습니다. 배치 파이프라인 경험은 근거가 있고, SQL 데이터 마트는 일부만 확인됩니다. 먼저 문장을 다듬고, 확인이 필요한 요건을 여쭤볼게요.',
       'sentence_reviews': suggestions,
       'suggestions': suggestions,
-      'questions': <Map<String, dynamic>>[],
+      'questions': jobFirst ? _demoQuestions : <Map<String, dynamic>>[],
+      'requirement_map': jobFirst
+          ? _demoRequirements
+          : <Map<String, dynamic>>[],
+      'star_checks': jobFirst ? _demoStarChecks : <Map<String, dynamic>>[],
       'grounding_warnings': <String>[],
       'job_source': _jobSource,
     };
   }
 
+  static const _demoRequirements = <Map<String, dynamic>>[
+    {
+      'id': 'req-1',
+      'group': 'must',
+      'label': 'Airflow 배치 파이프라인',
+      'posting_quote': 'Airflow 등 워크플로 도구로 배치 파이프라인을 운영해 본 분',
+      'status': 'met',
+      'evidence_paths': ['projects[0].description'],
+      'evidence_quotes': ['Airflow DAG 5개 운영'],
+      'source': 'resume',
+    },
+    {
+      'id': 'req-2',
+      'group': 'must',
+      'label': 'SQL 데이터 마트 구축',
+      'posting_quote': 'SQL로 분석용 데이터 마트를 설계·구축합니다',
+      'status': 'partial',
+      'evidence_paths': ['otherActivities[0].description'],
+      'evidence_quotes': ['매장별 매출 데이터를 SQL로 집계해 주간 리포트를 자동화했습니다.'],
+      'source': 'resume',
+    },
+    {
+      'id': 'req-3',
+      'group': 'preferred',
+      'label': 'Spark 대용량 처리',
+      'posting_quote': 'Spark 등 대용량 처리 경험 우대',
+      'status': 'unconfirmed',
+      'source': 'none',
+    },
+    {
+      'id': 'req-4',
+      'group': 'must',
+      'label': '전문학사 이상',
+      'posting_quote': '전문학사 이상',
+      'status': 'unconfirmed',
+      'source': 'none',
+      'kind': 'eligibility',
+      'kind_basis': '공고 조건: 전문학사 이상',
+    },
+  ];
+
+  static const _demoStarChecks = <Map<String, dynamic>>[
+    {
+      'field_path': 'projects[0].description',
+      'present': ['task', 'action'],
+      'reason': '해결하려던 문제와 확인한 결과가 빠져 있습니다.',
+    },
+    {
+      'field_path': 'otherActivities[0].description',
+      'present': ['situation', 'action', 'result'],
+      'reason': '',
+    },
+  ];
+
+  static const _demoQuestions = <Map<String, dynamic>>[
+    {
+      'question_id': 'demo-q-1',
+      'field_path': 'projects[0].description',
+      'topic': 'scope',
+      'question':
+          '공고 우대사항의 Spark 같은 대용량 처리 도구를 써 본 적이 있나요? 있다면 이력서의 어느 항목에서 무엇을 했는지 항목 이름과 함께 알려 주세요. 없다면 없다고 답해 주세요.',
+      'reason': '공고 우대사항이 이력서에서 확인되지 않습니다.',
+      'priority': 2,
+      'requirement_id': 'req-3',
+      'stage': 2,
+    },
+    {
+      'question_id': 'demo-q-2',
+      'field_path': 'projects[0].description',
+      'topic': 'result',
+      'question':
+          "'채용공고 수집 파이프라인' 프로젝트에서 적재를 자동화한 뒤 무엇이 달라졌나요? 처리 시간이나 누락 건수처럼 확인한 결과를 알려 주세요.",
+      'reason': '행동은 적혀 있지만 결과가 빠져 있습니다.',
+      'priority': 1,
+      'stage': 3,
+    },
+  ];
+
   @override
   Future<Map<String, dynamic>> apply(Map<String, dynamic> body) async {
     await Future<void>.delayed(const Duration(milliseconds: 900));
     final before = _copy(_content);
-    final indices = (body['selected_indices'] as List? ?? const []).whereType<int>();
+    final indices = (body['selected_indices'] as List? ?? const [])
+        .whereType<int>();
     for (final index in indices) {
       if (index < 0 || index >= _lastSuggestions.length) continue;
       final s = _lastSuggestions[index];
@@ -305,7 +407,10 @@ class DemoResumeReviewApiClient extends ResumeReviewApiClient {
       _write(
         _content,
         path,
-        current.replaceFirst(s['original_quote'] as String, s['suggested_revision'] as String),
+        current.replaceFirst(
+          s['original_quote'] as String,
+          s['suggested_revision'] as String,
+        ),
       );
     }
     _version++;
@@ -354,6 +459,9 @@ class DemoResumeReviewApiClient extends ResumeReviewApiClient {
 
   static List<Object> _keys(String path) => [
     for (final match in RegExp(r'([^.\[\]]+)|\[(\d+)\]').allMatches(path))
-      if (match.group(2) != null) int.parse(match.group(2)!) else match.group(1)!,
+      if (match.group(2) != null)
+        int.parse(match.group(2)!)
+      else
+        match.group(1)!,
   ];
 }
