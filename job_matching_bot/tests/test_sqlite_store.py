@@ -97,6 +97,30 @@ class SqliteVersusRulesTest(unittest.TestCase):
         self.assertEqual(a, b)
         self.assertEqual(STATUS_EXPIRED, self.store.get(expiring.job_id).status)
 
+    def test_refetch_without_listing_keeps_title_company_and_deadline(self):
+        """번호만 들고 상세를 다시 받으면 목록 값이 비어 온다. 저장된 값을 지우면 안 된다.
+
+        2026-09-11에 328건을 그렇게 다시 받아 313건의 제목·회사명·마감일이 빈 값으로 덮였다.
+        """
+        target = replace(self.jobs[0], deadline=(AS_OF + timedelta(days=10)).isoformat())
+        blank = replace(target, company="", title="", deadline=None, content_hash="sha256:refetched")
+        a, b = self._both([
+            ([target] + self.jobs[1:], dict(source="MOCK")),
+            ([blank], dict(source="MOCK", as_of=AS_OF + timedelta(days=1), observed_ids={j.source_job_id for j in self.jobs})),
+        ])
+        self.assertEqual(a, b)
+        kept = self.store.get(target.job_id).job
+        self.assertEqual((target.company, target.title, target.deadline), (kept.company, kept.title, kept.deadline))
+        # 본문 쪽 변경(다시 파싱한 내용)은 그대로 들어온다.
+        self.assertEqual("sha256:refetched", kept.content_hash)
+
+    def test_a_real_listing_still_replaces_the_title(self):
+        """목록 값이 있으면 바뀐 제목이 들어간다. 막는 것은 **둘 다 빈** 경우뿐이다."""
+        renamed = replace(self.jobs[0], title="새 제목", content_hash="sha256:renamed")
+        self.store.upsert(self.jobs, source="MOCK")
+        self.store.upsert([renamed] + self.jobs[1:], source="MOCK", as_of=AS_OF + timedelta(days=1))
+        self.assertEqual("새 제목", self.store.get(renamed.job_id).job.title)
+
     def test_other_source_is_not_touched(self):
         other = [replace(j, source="OTHER", job_id=f"OTHER:{j.source_job_id}") for j in self.jobs[:2]]
         a, b = self._both([
@@ -241,6 +265,14 @@ class RefreshTest(unittest.TestCase):
         before = self._record(self.jobs[0].job_id).last_seen_at
         self.store.refresh([replace(self.jobs[0], description="바뀐 본문", content_hash="새-지문")])
         self.assertEqual(before, self._record(self.jobs[0].job_id).last_seen_at)
+
+    def test_refresh_without_listing_keeps_title_company_and_deadline(self):
+        """다시 파싱해 덮어쓰는 통로에서도 목록 값이 빈 레코드는 저장된 값을 이어받는다."""
+        original = self._record(self.jobs[0].job_id).job
+        blank = replace(self.jobs[0], company="", title="", deadline=None, content_hash="새-지문")
+        self.store.refresh([blank], as_of=AS_OF)
+        after = self._record(self.jobs[0].job_id).job
+        self.assertEqual((original.company, original.title, original.deadline), (after.company, after.title, after.deadline))
 
     def test_a_posting_the_store_never_had_is_not_added(self):
         """새 공고를 들이는 것은 `upsert`가 할 일이다."""

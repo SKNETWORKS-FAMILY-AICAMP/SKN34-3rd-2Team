@@ -11,6 +11,7 @@ from pathlib import Path
 
 from job_matching_bot.ingestion.record_files import latest_by_id, read_records
 from job_matching_bot.config import ARTIFACTS_DIR, REPO_ROOT
+from job_matching_bot.ingestion.company_name import clean_company_name
 from job_matching_bot.tests import AS_OF, SARAMIN_SAMPLE
 from job_matching_bot.ingestion.saramin import (
     normalize_many,
@@ -101,6 +102,17 @@ class DeadlineTest(unittest.TestCase):
 
 
 class NormalizeTest(unittest.TestCase):
+    def test_removes_company_ui_noise(self):
+        record = json.loads(json.dumps(SAMPLE))
+        record["list_item"]["company"] = "(주)엣지크로스 관심기업 등록"
+        self.assertEqual("(주)엣지크로스", normalize_saramin(record).company)
+
+    def test_only_removes_company_noise_at_the_end(self):
+        self.assertEqual(
+            "관심기업 등록 연구소",
+            clean_company_name("관심기업 등록 연구소"),
+        )
+
     def test_maps_to_common_schema(self):
         job = normalize_saramin(SAMPLE)
         self.assertEqual("SARAMIN-54845055", job.job_id)

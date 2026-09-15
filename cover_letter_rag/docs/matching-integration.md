@@ -13,8 +13,12 @@
 저장소 루트에서:
 
 ```powershell
-.\cover_letter_rag\.venv\Scripts\python.exe -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1 --port 8000
+.\scripts\start-backend.ps1
 ```
+
+이 스크립트는 Firebase Storage의 팀 공유 공고 DB가 갱신된 경우에만 임시 다운로드,
+SQLite 무결성·필수 컬럼 검증, 원자 교체를 마친 뒤 8000번 통합 서버를 실행한다.
+공유본 확인을 생략해야 할 때만 `-SkipJobStoreSync`를 사용한다.
 
 - 추천 문서: `http://127.0.0.1:8000/docs`
 - 첨삭 문서: `http://127.0.0.1:8000/resume-review/docs`

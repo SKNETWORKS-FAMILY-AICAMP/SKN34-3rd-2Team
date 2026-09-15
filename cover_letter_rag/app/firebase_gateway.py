@@ -19,16 +19,7 @@ def tailored_resume_title(base: dict[str, Any], company: str) -> str:
     base_title = str(base.get('title') or '').strip()
     if not company:
         return base_title
-    content = base.get('content') or {}
-    basic_info = content.get('basicInfo') if isinstance(content, dict) else {}
-    student_name = str(
-        basic_info.get('name') if isinstance(basic_info, dict) else ''
-    ).strip()
-    return (
-        f'{student_name} · {company} 맞춤 이력서'
-        if student_name
-        else f'{company} 맞춤 이력서'
-    )
+    return f'{company} 맞춤 이력서'
 
 
 class FirebaseAuthenticationError(Exception):
@@ -119,6 +110,7 @@ class FirebaseGateway:
             'status': 'draft',
             'title': title,
             'content': deepcopy(base.get('content') or {}),
+            'reviewSession': {},
             'createdAt': firestore.SERVER_TIMESTAMP,
             'updatedAt': firestore.SERVER_TIMESTAMP,
         }
@@ -135,11 +127,18 @@ class FirebaseGateway:
             return {'tailored_resume_id': tailored_id, **existing}
 
     def list_tailored_resumes(self, cohort_id: str, resume_id: str, uid: str) -> list[dict[str, Any]]:
-        self.get_owned_resume(cohort_id, resume_id, uid)
+        base = self.get_owned_resume(cohort_id, resume_id, uid)
         result = []
         for snapshot in self._resume_ref(cohort_id, resume_id).collection('tailoredResumes').stream():
             data = snapshot.to_dict() or {}
             if data.get('userId') == uid:
+                title = tailored_resume_title(base, data.get('companyName', ''))
+                if title and data.get('title') != title:
+                    snapshot.reference.update({
+                        'title': title,
+                        'updatedAt': firestore.SERVER_TIMESTAMP,
+                    })
+                    data['title'] = title
                 result.append({'tailored_resume_id': snapshot.id, **data})
         return result
 
@@ -159,6 +158,109 @@ class FirebaseGateway:
         if data.get('userId') != uid or data.get('baseResumeId') != resume_id:
             raise ResumeNotFoundError('tailored resume not found')
         return data
+
+    def save_tailored_resume_session(
+        self,
+        cohort_id: str,
+        resume_id: str,
+        tailored_resume_id: str,
+        uid: str,
+        state: dict[str, Any],
+    ) -> None:
+        """Persist resumable UI progress beside the company-specific draft."""
+        self.get_owned_tailored_resume(cohort_id, resume_id, tailored_resume_id, uid)
+        self._tailored_ref(cohort_id, resume_id, tailored_resume_id).update({
+            'reviewSession': deepcopy(state),
+            'updatedAt': firestore.SERVER_TIMESTAMP,
+        })
+
+    def delete_tailored_resume(
+        self,
+        cohort_id: str,
+        resume_id: str,
+        tailored_resume_id: str,
+        uid: str,
+    ) -> None:
+        """Delete one owned company-specific draft and its known child records."""
+        tailored = self.get_owned_tailored_resume(
+            cohort_id, resume_id, tailored_resume_id, uid,
+        )
+        ref = self._tailored_ref(cohort_id, resume_id, tailored_resume_id)
+        workspace_id = str(tailored.get('workspaceResumeId') or '')
+        if workspace_id:
+            workspace_ref = self._resume_ref(cohort_id, workspace_id)
+            workspace = workspace_ref.get().to_dict() or {}
+            if (
+                workspace.get('userId') == uid and
+                workspace.get('sourceTailoredResumeId') == tailored_resume_id
+            ):
+                self._db.recursive_delete(workspace_ref)
+        # Firestore 문서 삭제는 하위 컬렉션을 자동 삭제하지 않는다. SDK의
+        # recursive_delete를 사용해야 첨삭/적용/대화 기록까지 남김없이 지워진다.
+        self._db.recursive_delete(ref)
+
+    def promote_tailored_resume(
+        self,
+        cohort_id: str,
+        resume_id: str,
+        tailored_resume_id: str,
+        uid: str,
+    ) -> str:
+        """Expose a completed tailored draft through the normal resume editor."""
+        self.get_owned_tailored_resume(cohort_id, resume_id, tailored_resume_id, uid)
+        ref = self._tailored_ref(cohort_id, resume_id, tailored_resume_id)
+        workspace_id = 'matched_' + hashlib.sha256(
+            f'{resume_id}:{tailored_resume_id}'.encode()
+        ).hexdigest()[:24]
+        workspace_ref = self._resume_ref(cohort_id, workspace_id)
+
+        @firestore.transactional
+        def promote(transaction):
+            tailored = ref.get(transaction=transaction).to_dict() or {}
+            existing = workspace_ref.get(transaction=transaction).to_dict() or {}
+            if tailored.get('userId') != uid or tailored.get('baseResumeId') != resume_id:
+                raise ResumeNotFoundError('tailored resume not found')
+            if existing and (
+                existing.get('userId') != uid or
+                existing.get('sourceTailoredResumeId') != tailored_resume_id
+            ):
+                raise ResumeNotFoundError('workspace resume not found')
+            if not existing:
+                transaction.create(workspace_ref, {
+                    'userId': uid,
+                    'title': tailored.get('title') or '맞춤 이력서',
+                    'status': 'writing',
+                    'sections': {},
+                    'content': deepcopy(tailored.get('content') or {}),
+                    'isBaseResume': False,
+                    'baseResumeId': resume_id,
+                    'sourceTailoredResumeId': tailored_resume_id,
+                    'jobId': tailored.get('jobId') or '',
+                    'jobCompany': tailored.get('companyName') or '',
+                    'jobTitle': tailored.get('jobTitle') or '',
+                    'feedbackCount': 0,
+                    'lastSeenFeedbackCount': 0,
+                    'readFeedbackIds': [],
+                    'reviewerReadFeedbackIds': [],
+                    'revisionCount': 0,
+                    'createdAt': firestore.SERVER_TIMESTAMP,
+                    'updatedAt': firestore.SERVER_TIMESTAMP,
+                })
+            elif not existing.get('jobId'):
+                transaction.update(workspace_ref, {
+                    'jobId': tailored.get('jobId') or '',
+                    'jobCompany': tailored.get('companyName') or '',
+                    'jobTitle': tailored.get('jobTitle') or '',
+                    'updatedAt': firestore.SERVER_TIMESTAMP,
+                })
+            transaction.update(ref, {
+                'workspaceResumeId': workspace_id,
+                'status': 'ready',
+                'updatedAt': firestore.SERVER_TIMESTAMP,
+            })
+            return workspace_id
+
+        return promote(self._db.transaction())
 
     def get_ai_review(self, cohort_id, resume_id, uid, review_id, tailored_resume_id: str | None = None):
         if tailored_resume_id:

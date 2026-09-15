@@ -204,6 +204,21 @@ class ChatFilters(StrictModel):
         default=None, description="마감 임박만 볼 때의 날짜 수. 아니면 null"
     )
     keywords: list[str] = Field(default_factory=list, description="위에 안 들어가는 말")
+    # 빼 달라는 말. **걸러 달라는 말과 따로 둔다.**
+    #
+    # "스타트업은 빼고 데이터 분석 신입"에 답이 "스타트업을 제외하고 찾아보겠습니다"라고 했지만
+    # 담을 칸이 없어 아무것도 빼지 않았다.
+    exclude_keywords: list[str] = Field(
+        default_factory=list,
+        description="빼 달라는 말. '스타트업은 빼고' → 스타트업, '파견은 싫어요' → 파견, '계약직 말고' → 계약직",
+    )
+    # 공고가 올라온 지 며칠 안 됐나. 마감(`deadline_within_days`)과 다른 방향이다.
+    #
+    # "오늘 새로 올라온 개발 공고"에 날짜로 거르지 않고 개발 공고 전체가 나갔다.
+    posted_within_days: int | None = Field(
+        default=None, ge=0, le=60,
+        description="최근 올라온 공고만 볼 때의 날짜 수. '오늘 올라온' → 0, '이번 주 새로 올라온' → 7. 아니면 null",
+    )
 
 
 class ChatTurnOut(StrictModel):

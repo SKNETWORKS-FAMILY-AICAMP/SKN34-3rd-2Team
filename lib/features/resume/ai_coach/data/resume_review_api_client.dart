@@ -64,6 +64,73 @@ class ResumeReviewApiClient {
   Future<Map<String, dynamic>> createTailoredResume(
     Map<String, dynamic> body,
   ) => _request('POST', '/api/v1/resumes/tailored', body: body);
+  Future<List<Map<String, dynamic>>> listTailoredResumes(
+    String cohortId,
+    String resumeId,
+  ) async {
+    final response = await _requestJson(
+      'GET',
+      '/api/v1/resumes/$resumeId/tailored',
+      query: {'cohort_id': cohortId},
+    );
+    return (response as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> tailoredResume(
+    String cohortId,
+    String resumeId,
+    String tailoredResumeId,
+  ) => _request(
+    'GET',
+    '/api/v1/resumes/$resumeId/tailored/$tailoredResumeId',
+    query: {'cohort_id': cohortId},
+  );
+
+  Future<void> saveTailoredSession(
+    String cohortId,
+    String resumeId,
+    String tailoredResumeId,
+    Map<String, dynamic> state,
+  ) async {
+    await _request(
+      'PUT',
+      '/api/v1/resumes/$resumeId/tailored/$tailoredResumeId/session',
+      body: {'cohort_id': cohortId, 'state': state},
+    );
+  }
+
+  Future<void> deleteTailoredResume(
+    String cohortId,
+    String resumeId,
+    String tailoredResumeId,
+  ) async {
+    await _request(
+      'DELETE',
+      '/api/v1/resumes/$resumeId/tailored/$tailoredResumeId',
+      query: {'cohort_id': cohortId},
+    );
+  }
+
+  Future<String> promoteTailoredResume(
+    String cohortId,
+    String resumeId,
+    String tailoredResumeId,
+  ) async {
+    final response = await _request(
+      'POST',
+      '/api/v1/resumes/$resumeId/tailored/$tailoredResumeId/promote',
+      body: {'cohort_id': cohortId},
+    );
+    final workspaceId = response['workspace_resume_id'] as String?;
+    if (workspaceId == null || workspaceId.isEmpty) {
+      throw const FormatException('완료한 맞춤 이력서를 편집 화면으로 연결하지 못했습니다.');
+    }
+    return workspaceId;
+  }
+
   Future<Map<String, dynamic>> review(Map<String, dynamic> body) =>
       _request('POST', '/api/v1/resumes/reviews', body: body);
   Future<Map<String, dynamic>> apply(Map<String, dynamic> body) =>
@@ -115,6 +182,19 @@ class ResumeReviewApiClient {
     Map<String, dynamic>? body,
     Map<String, String>? query,
   }) async {
+    final decoded = await _requestJson(method, path, body: body, query: query);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('첨삭 응답 형식 오류');
+    }
+    return decoded;
+  }
+
+  Future<Object?> _requestJson(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? query,
+  }) async {
     final credential = await token();
     if (credential == null || credential.isEmpty) {
       throw const FormatException('실제 Firebase 로그인이 필요합니다. 데모 계정은 사용할 수 없습니다.');
@@ -126,11 +206,13 @@ class ResumeReviewApiClient {
     };
     final http.Response response;
     try {
-      response =
-          await (method == 'GET'
-                  ? _client.get(uri, headers: headers)
-                  : _client.post(uri, headers: headers, body: jsonEncode(body)))
-              .timeout(const Duration(seconds: 120));
+      final encodedBody = body == null ? null : jsonEncode(body);
+      response = await switch (method) {
+        'GET' => _client.get(uri, headers: headers),
+        'PUT' => _client.put(uri, headers: headers, body: encodedBody),
+        'DELETE' => _client.delete(uri, headers: headers, body: encodedBody),
+        _ => _client.post(uri, headers: headers, body: encodedBody),
+      }.timeout(const Duration(seconds: 120));
     } on TimeoutException {
       throw const FormatException('응답 시간이 초과됐습니다. 재시도는 같은 요청 ID로 처리됩니다.');
     } on http.ClientException {
@@ -142,10 +224,6 @@ class ResumeReviewApiClient {
         response.statusCode,
       );
     }
-    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('첨삭 응답 형식 오류');
-    }
-    return decoded;
+    return jsonDecode(utf8.decode(response.bodyBytes));
   }
 }

@@ -7,6 +7,7 @@ import 'core/theme/app_colors.dart';
 import 'core/theme/app_space.dart';
 import 'core/widgets/compact_text_scale.dart';
 import 'features/auth/providers/auth_providers.dart';
+import 'features/resume/ai_coach/presentation/review_dock.dart';
 import 'core/theme/app_theme.dart';
 import 'shared/providers/app_appearance_provider.dart';
 import 'shared/providers/side_rail_theme_provider.dart';
@@ -68,9 +69,10 @@ class PlaydataApp extends ConsumerWidget {
               },
       ),
       // 좁게면 여백과 함께 글자도 줄인다. 폭은 그대로라 목록이 비지 않는다.
+      // 첨삭 창은 화면을 옮겨도 살아 있어야 해서 Navigator 위 층에 띄운다.
       builder: (context, child) => CompactTextScale(
         compact: dense,
-        child: child ?? const SizedBox.shrink(),
+        child: ReviewDockHost(child: child ?? const SizedBox.shrink()),
       ),
       routerConfig: router,
     );

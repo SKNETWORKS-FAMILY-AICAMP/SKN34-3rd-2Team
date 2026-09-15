@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from job_matching_bot.config import now
+from job_matching_bot.ingestion.company_name import clean_company_name, clean_listing_text
 from job_matching_bot.ingestion.detail_quality import is_image_only_detail
 from job_matching_bot.ingestion.saramin_tech_vocab import split_tags
 from job_matching_bot.schemas.job_posting import Job
@@ -267,9 +268,10 @@ def normalize_saramin(
         source=SOURCE,
         source_job_id=source_job_id,
         source_url=str(record.get("source_url") or listing.get("source_url") or ""),
-        company=str(listing.get("company") or ""),
+        # 옛 수집본의 회사명에는 뱃지가 붙어 있다. 수집기를 고친 뒤에도 원본은 그대로라 여기서도 뗀다.
+        company=clean_company_name(listing.get("company")),
         company_type=_clean(company_info.get("기업형태", "")) or "미기재",
-        title=str(listing.get("title") or ""),
+        title=clean_listing_text(str(listing.get("title") or "")),
         description=description,
         required_skills=required,
         preferred_skills=preferred,
