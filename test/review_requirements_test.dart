@@ -740,6 +740,11 @@ void main() {
       reason: '부정 표현이 빠진 수정안은 막지 않고 안내를 붙인다',
     );
     expect(find.textContaining('확인했어요. 다음으로'), findsNothing);
+    // 답에 이름이 나온 다른 항목(프로젝트 1)의 수정안은 대기열에 들어가고, 무관한 항목 수정안은 들어가지 않는다.
+    await tester.tap(find.text('이 문장으로 바꾸기'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('재생 상태를 한곳에 모았습니다'), findsOneWidget);
+    expect(find.textContaining('답과 무관한 항목의 수정안'), findsNothing);
     client.close();
   });
 
@@ -1099,7 +1104,26 @@ class _RoutedAnswerClient extends FakeReviewClient {
             'answer': '오프라인 다운로드에서 AVPlayer로 재생',
           },
       ],
+      'answer_scope_paths': [if (answered) 'projects[0].description'],
       'sentence_reviews': [
+        if (answered)
+          {
+            'field_path': 'projects[0].description',
+            'original_quote': '재생 화면을 SwiftUI로 전환했습니다.',
+            'suggested_revision': '재생 화면을 SwiftUI로 전환하고 재생 상태를 한곳에 모았습니다.',
+            'reason': '답변에 적은 재생 화면 전환 내용 반영',
+            'edit_type': 'content',
+            'status': 'improved',
+          },
+        if (answered)
+          {
+            'field_path': 'projects[2].description',
+            'original_quote': '다른 항목',
+            'suggested_revision': '답과 무관한 항목의 수정안',
+            'reason': '보이면 안 됨',
+            'edit_type': 'content',
+            'status': 'improved',
+          },
         if (answered)
           {
             'field_path': 'projects[1].description',

@@ -666,12 +666,29 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       answeredQuestionId,
       answeredFieldPath,
     );
-    for (var index = 0; index < reviews.length; index++) {
+    // 답에 이름이 나온 다른 항목도 이번 재첨삭에서 함께 고쳤다. 그 항목의 수정안도 보여 준다(2026-09-15).
+    final scopePaths = {
+      for (final path in review['answer_scope_paths'] as List? ?? const [])
+        if (path is String) path,
+    };
+    // 답한 칸의 수정안을 먼저, 이름이 나온 다른 항목의 수정안을 그 뒤에 보여 준다. 모델이 내는 순서는 매번 다르다.
+    final order = [
+      for (var i = 0; i < reviews.length; i++)
+        if (resolvedFieldPath == null ||
+            reviews[i]['field_path'] == resolvedFieldPath)
+          i,
+      for (var i = 0; i < reviews.length; i++)
+        if (resolvedFieldPath != null &&
+            reviews[i]['field_path'] != resolvedFieldPath)
+          i,
+    ];
+    for (final index in order) {
       final sentence = Map<String, dynamic>.from(reviews[index]);
       // 새 프로젝트 추가 수정안은 아직 없는 칸(projects[N])이라 답의 칸으로 거르지 않고, 방금 답한 질문에서 나온 것만 보여 준다.
       final newItem = sentence['new_item'];
       final fromThisAnswer =
-          newItem is Map && newItem['question_id'] == answeredQuestionId;
+          (newItem is Map && newItem['question_id'] == answeredQuestionId) ||
+          scopePaths.contains(sentence['field_path']);
       if (resolvedFieldPath != null &&
           sentence['field_path'] != resolvedFieldPath &&
           !fromThisAnswer) {
