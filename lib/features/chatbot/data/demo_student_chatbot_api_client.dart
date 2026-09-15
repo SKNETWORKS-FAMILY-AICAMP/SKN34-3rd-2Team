@@ -63,6 +63,7 @@ class DemoStudentChatbotApiClient extends StudentChatbotApiClient {
     required String threadId,
     required String question,
   }) async* {
+    lastOps = null;
     final answer = _answers
         .firstWhere(
           (entry) => entry.$1.any(question.contains),

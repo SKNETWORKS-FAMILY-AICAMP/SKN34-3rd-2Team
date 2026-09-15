@@ -111,6 +111,7 @@ class AiOpsService {
     AiOpsTypes.jobChat => AiOpsPromptVersions.jobChat,
     AiOpsTypes.jobRecommend => AiOpsPromptVersions.jobRecommend,
     AiOpsTypes.resumeReview => AiOpsPromptVersions.resumeReview,
+    AiOpsTypes.studentChatbot => AiOpsPromptVersions.studentChatbot,
     _ => type,
   };
 }

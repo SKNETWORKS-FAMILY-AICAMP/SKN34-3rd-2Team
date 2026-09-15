@@ -1,7 +1,7 @@
 /**
- * LLMOps: 취업 코치(공고 챗봇·추천·첨삭) 생성 로그 / outcome 피드백.
+ * LLMOps: 생성 로그 / outcome 피드백.
  * 클라이언트가 메타만 넘기고 Admin SDK가 Firestore에 쓴다 (rules: client write 금지).
- * 이력서·채팅·공고 원문은 받지 않는다.
+ * 이력서·채팅·공고·질문 원문은 받지 않는다.
  */
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 
@@ -15,11 +15,13 @@ const callOptions = {
 export const JOB_CHAT_PROMPT_VERSION = "job_chat_v1";
 export const JOB_RECOMMEND_PROMPT_VERSION = "job_recommend_v1";
 export const RESUME_REVIEW_PROMPT_VERSION = "resume_review_v1";
+export const STUDENT_CHATBOT_PROMPT_VERSION = "student_chatbot_v2";
 
 const CLIENT_LOG_TYPES = new Set([
   "job_chat",
   "job_recommend",
   "resume_review",
+  "student_chatbot",
 ]);
 
 const OUTCOMES = new Set([
@@ -40,6 +42,9 @@ const OUTCOMES = new Set([
   "partial_apply",
   "undone",
   "abandoned",
+  // student_chatbot
+  "helpful",
+  "not_helpful",
 ]);
 
 const META_KEYS = new Set([
@@ -54,6 +59,13 @@ const META_KEYS = new Set([
   "reranked",
   "reviewMode",
   "selectedCount",
+  "route",
+  "namespaces",
+  "studentScopes",
+  "blocked",
+  "retrievalMs",
+  "llmMs",
+  "evalRunId",
 ]);
 
 type UserRole = "admin" | "instructor" | "student";
@@ -119,7 +131,7 @@ function sanitizeMeta(raw: unknown): Record<string, string | number | boolean> {
 
 /**
  * 취업 코치 LLM 호출 1회분 관측 로그.
- * type: job_chat | job_recommend | resume_review
+ * type: job_chat | job_recommend | resume_review | student_chatbot
  */
 export const recordAiGenerationLog = onCall(callOptions, async (request) => {
   if (!request.auth) {
@@ -146,7 +158,7 @@ export const recordAiGenerationLog = onCall(callOptions, async (request) => {
   if (!CLIENT_LOG_TYPES.has(type) || !cohortId) {
     throw new HttpsError(
       "invalid-argument",
-      "type(job_chat|job_recommend|resume_review)과 cohortId가 필요합니다.",
+      "type(job_chat|job_recommend|resume_review|student_chatbot)과 cohortId가 필요합니다.",
     );
   }
   assertCohortMember(caller, cohortId);
@@ -165,7 +177,9 @@ export const recordAiGenerationLog = onCall(callOptions, async (request) => {
         ? JOB_CHAT_PROMPT_VERSION
         : type === "job_recommend"
           ? JOB_RECOMMEND_PROMPT_VERSION
-          : RESUME_REVIEW_PROMPT_VERSION),
+          : type === "student_chatbot"
+            ? STUDENT_CHATBOT_PROMPT_VERSION
+            : RESUME_REVIEW_PROMPT_VERSION),
     model: model || "unknown",
     cohortId,
     latencyMs: asInt(data.latencyMs),

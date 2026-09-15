@@ -6,7 +6,7 @@ import '../models/ai_ops_models.dart';
 import '../providers/cohort_providers.dart';
 import '../providers/firebase_providers.dart';
 
-/// Admin AI 품질 type 필터. null = 전체
+/// Admin LLMOps type 필터. null = 전체
 final aiQualityTypeFilterProvider =
     NotifierProvider.autoDispose<_AiQualityTypeFilter, String?>(
       _AiQualityTypeFilter.new,
@@ -31,6 +31,8 @@ class AiQualityStats {
     required this.totalOutcomes,
     required this.avgLatencyMs,
     required this.p95LatencyMs,
+    required this.tokenIn,
+    required this.tokenOut,
     required this.byPromptVersion,
   });
 
@@ -44,6 +46,8 @@ class AiQualityStats {
   final int totalOutcomes;
   final double avgLatencyMs;
   final double p95LatencyMs;
+  final int tokenIn;
+  final int tokenOut;
   final Map<String, ({int generated, int adopted, int edited, int useful})>
   byPromptVersion;
 
@@ -100,6 +104,22 @@ final aiQuestionFeedbackProvider =
           );
     });
 
+final latestAiEvalRunProvider =
+    StreamProvider.autoDispose<AiEvalRunModel?>((ref) {
+      if (DemoConfig.enabled) return Stream.value(null);
+      return ref
+          .watch(firestoreProvider)
+          .collection('aiEvalRuns')
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .snapshots()
+          .map(
+            (s) => s.docs.isEmpty
+                ? null
+                : AiEvalRunModel.fromFirestore(s.docs.first),
+          );
+    });
+
 List<AiGenerationLogModel> filterLogsByType(
   List<AiGenerationLogModel> logs,
   String? typeFilter,
@@ -122,6 +142,8 @@ final aiQualityStatsProvider = Provider.autoDispose<AiQualityStats>((ref) {
 
   var totalGenerated = 0;
   var successRuns = 0;
+  var tokenIn = 0;
+  var tokenOut = 0;
   final latencies = <int>[];
   final byVersion =
       <String, ({int generated, int adopted, int edited, int useful})>{};
@@ -132,6 +154,8 @@ final aiQualityStatsProvider = Provider.autoDispose<AiQualityStats>((ref) {
       totalGenerated += log.generatedCount;
     }
     if (log.latencyMs > 0) latencies.add(log.latencyMs);
+    tokenIn += log.tokenIn ?? 0;
+    tokenOut += log.tokenOut ?? 0;
     final key = log.promptVersion.isEmpty ? '(unknown)' : log.promptVersion;
     final cur =
         byVersion[key] ?? (generated: 0, adopted: 0, edited: 0, useful: 0);
@@ -200,6 +224,8 @@ final aiQualityStatsProvider = Provider.autoDispose<AiQualityStats>((ref) {
     totalOutcomes: totalOutcomes,
     avgLatencyMs: avg,
     p95LatencyMs: p95,
+    tokenIn: tokenIn,
+    tokenOut: tokenOut,
     byPromptVersion: byVersion,
   );
 });

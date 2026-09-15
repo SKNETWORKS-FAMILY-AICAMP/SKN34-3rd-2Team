@@ -34,6 +34,8 @@ class StudentChatbotApiClient {
 
   void close() => _client.close();
 
+  StudentChatbotOps? lastOps;
+
   Future<void> initialize(String threadId) async {
     final http.Response response;
     try {
@@ -60,6 +62,7 @@ class StudentChatbotApiClient {
     required String threadId,
     required String question,
   }) async* {
+    lastOps = null;
     final request =
         http.Request(
             'POST',
@@ -97,6 +100,8 @@ class StudentChatbotApiClient {
         yield event['content'] as String;
       } else if (event['type'] == 'error') {
         throw FormatException(event['message'] as String? ?? '답변 생성에 실패했습니다.');
+      } else if (event['type'] == 'done') {
+        lastOps = StudentChatbotOps.tryParse(event['ops']);
       }
     }
   }
@@ -126,5 +131,28 @@ class StudentChatbotApiClient {
       503 => '챗봇 서버를 준비하지 못했습니다.',
       _ => '챗봇 요청에 실패했습니다. (HTTP $statusCode)',
     };
+  }
+}
+
+class StudentChatbotOps {
+  const StudentChatbotOps({
+    required this.logId,
+    this.promptVersion,
+    this.route,
+  });
+
+  final String logId;
+  final String? promptVersion;
+  final String? route;
+
+  static StudentChatbotOps? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final logId = raw['logId']?.toString() ?? '';
+    if (logId.isEmpty) return null;
+    return StudentChatbotOps(
+      logId: logId,
+      promptVersion: raw['promptVersion']?.toString(),
+      route: raw['route']?.toString(),
+    );
   }
 }
