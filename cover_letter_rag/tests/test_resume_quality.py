@@ -656,3 +656,72 @@ def test_statement_of_never_having_used_something_is_not_written_into_the_resume
     kept = review('실무에서는 써 본 적 없지만 개인 과제로 Docker를 다뤘습니다.', '실무 경험은 없지만 개인 과제로 Docker를 다뤘습니다.',
                   edit_type='clarity')
     assert 'absence_written' not in kept.validation_issues
+
+
+def test_answer_the_applicant_was_unsure_about_is_not_written_as_a_fact():
+    # "잘 모르겠는데 아마 30개쯤 했던 것 같아요"로 답한 테스트 개수와 "~했던 것 같다"로 답한 작업이 단정문 수정안이 됐다
+    # (2026-09-15 한 번도 안 본 케이스, 사람 말투 답). 확신하지 못한 문장은 근거가 아니다.
+    path = 'projects[0].description'
+    original = 'Solidity로 토큰 스왑 컨트랙트를 작성했습니다.'
+    answer = ConfirmationAnswer(
+        question_id='q1', field_path=path, question='컨트랙트를 어떻게 검증했나요?',
+        answer='잘 모르겠는데 아마 테스트를 30개쯤 작성했던 것 같아요. 테스트넷 배포는 Hardhat으로 했어요.')
+
+    def grounded(revision):
+        result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+            field_path=path, original_quote=original, suggested_revision=revision, reason='답변 반영',
+            edit_type='content', evidence_quotes=[answer.answer])])
+        ground_sentences({path: original}, [answer], result)
+        return result.sentence_reviews[0]
+
+    number = grounded('Solidity로 토큰 스왑 컨트랙트를 작성하고 테스트 30개로 검증한 뒤 Hardhat으로 테스트넷에 배포했습니다.')
+    assert number.suggested_revision is None and number.confirmation_question is None
+    # 숫자 없이 작업만 단정문으로 옮겨도 막는다.
+    work = grounded('Solidity로 토큰 스왑 컨트랙트를 작성하고 단위 테스트를 작성해 검증한 뒤 Hardhat으로 테스트넷에 배포했습니다.')
+    assert work.suggested_revision is None and 'uncertain_fact_written' in work.validation_issues
+    # 확인된 부분만 쓴 수정안은 그대로 둔다.
+    kept = grounded('Solidity로 토큰 스왑 컨트랙트를 작성하고 Hardhat으로 테스트넷에 배포했습니다.')
+    assert kept.suggested_revision and not kept.validation_issues
+    # 다음 답에서 확인해 주면 쓸 수 있다.
+    confirmed = answer.model_copy(update={'question_id': 'q2', 'answer': '확인해 보니 테스트는 30개 작성했습니다.'})
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path=path, original_quote=original, reason='답변 반영', edit_type='content',
+        suggested_revision='Solidity로 토큰 스왑 컨트랙트를 작성하고 테스트 30개를 작성해 검증했습니다.')])
+    ground_sentences({path: original}, [answer, confirmed], result)
+    assert result.sentence_reviews[0].suggested_revision
+
+
+def test_reason_clause_with_seems_is_not_treated_as_unsure():
+    from app.review_rules import split_uncertain_answer
+    assert split_uncertain_answer('목록이 느린 것 같아서 인덱스를 추가했어요.')[1] == []
+    assert split_uncertain_answer('수치는 모르겠는데 캐시는 붙였어요')[1] == []
+    assert split_uncertain_answer('아마존 S3에 올렸습니다.')[1] == []
+    confirmed, unsure = split_uncertain_answer('스트리밍으로 바꿨던 것 같고 캐시는 붙였어요')
+    assert confirmed == '캐시는 붙였어요' and unsure == ['스트리밍으로 바꿨던 것 같고']
+
+
+def test_fallback_drops_unsure_and_never_tried_sentences_and_uses_resume_endings():
+    # 답을 그대로 붙이는 대체 수정안에 채팅 말투와 "만들어 보지 않았어요"가 이력서 문장으로 들어갔다(2026-09-15 한 번도 안
+    # 본 케이스, 사람 말투 답).
+    from app.resume_review import add_substantive_answer_fallback
+    path = 'projects[1].description'
+    original = 'LLM 챗봇 서비스의 백엔드를 개발했습니다.'
+    answer = ConfirmationAnswer(
+        question_id='q1', field_path=path, question='챗봇에서 직접 한 작업과 결과를 알려 주세요.',
+        answer='FastAPI로 대화 API를 구현했고 Redis 캐시를 적용해서 같은 질문 응답 시간을 3초에서 1초로 줄였어요. '
+               '대화 기록은 PostgreSQL에 사용자별로 저장해서 이어서 물어볼 수 있게 했어요. '
+               '응답을 스트리밍으로 바꿨던 것 같아요. 프론트 화면은 직접 만들어 보지 않았어요.')
+    result = ResumeReviewGeneration(summary='', section_reviews=[])
+    add_substantive_answer_fallback(result, {path: original}, [answer])
+    assert len(result.sentence_reviews) == 1
+    revision = result.sentence_reviews[0].suggested_revision
+    assert '3초에서 1초로 줄였습니다' in revision
+    assert '스트리밍' not in revision and '보지 않았' not in revision and '어요' not in revision
+
+
+def test_followup_scope_names_the_unsure_sentences():
+    from app.review_workflow import uncertain_scope_note
+    answer = ConfirmationAnswer(question_id='q1', field_path='projects[0].description', question='q',
+                                answer='캐시를 붙였어요. 아마 30개쯤 했던 것 같아요.')
+    assert "'아마 30개쯤 했던 것 같아요.'" in uncertain_scope_note([answer])
+    assert uncertain_scope_note([answer.model_copy(update={'answer': '캐시를 붙였어요.'})]) == ''

@@ -62,8 +62,34 @@ def star_action_quote_has_method(quote: str) -> bool:
 ABSENCE_STATEMENT = re.compile(
     r'(?:써|사용해|다뤄|적용해|해)\s*본\s*(?:적|경험)(?:은|이|도)?\s*없|경험(?:은|이|도)?\s*없|'
     r'개념(?:만|\s*위주로)|이론(?:만|으로만)|수업에서만|강의로만|'
-    r'(?:실제로|직접|실무에서)(?:는)?\s*(?:써|사용해|다뤄|적용해)\s*보지\s*(?:는\s*)?(?:않|못)'
+    # "만들어 보지 않았어요", "안 써 봤어요". 예전에는 써·사용해·다뤄·적용해 네 낱말만 봐서 답을 그대로 붙이는 대체
+    # 수정안에 "만들어 보지 않았어요"가 들어갔다(2026-09-15 한 번도 안 본 케이스, 사람 말투 답).
+    r'[가-힣]\s*보지\s*(?:는|도)?\s*(?:않|못)|안\s*(?:해|써|만들어|다뤄|사용해|적용해)\s*봤'
 )
+
+
+# 확신하지 못한 답. "~했던 것 같아요", "잘 모르겠는데 아마 30개쯤"으로 답한 내용이 수정안에서 단정문이 됐다(2026-09-15
+# 한 번도 안 본 케이스, 사람 말투 답 7턴 중 2턴). 서버는 그 사실이 맞는지 알 수 없으니 확인된 근거로 쓰지 않는다.
+# "느린 것 같아서 인덱스를 추가했어요"의 "것 같아서"는 이유라 확신 여부와 상관없어 뺀다. "모르겠"만으로는 잡지 않는다
+# ("수치는 모르겠는데 캐시는 붙였어요"의 캐시는 확인된 사실이다).
+UNCERTAIN_STATEMENT = re.compile(
+    r'것\s*같(?!아서|았)|듯\s*(?:해요|합니다|하다|싶|한데|하고)|(?:^|\s)아마(?:도)?\s|'
+    r'(?:확실|정확)(?:하지|치|하진)\s*(?:는\s*)?않|정확히는?\s*모르|'
+    r'기억(?:이|은|상)?\s*(?:잘\s*)?(?:안\s*나|나지\s*않)|가물가물|헷갈|어렴풋'
+)
+_ANSWER_SENTENCE_BREAK = re.compile(
+    r'(?<=[.!?])\s+|\n+|(?<=같고)[,\s]+|(?<=같은데)[,\s]+|(?<=같아요)[,\s]+|(?<=같습니다)[,\s]+'
+)
+
+
+def split_uncertain_answer(text: str) -> tuple[str, list[str]]:
+    """답을 확인된 부분과 확신하지 못한 문장들로 나눈다. 확신하지 못한 문장이 없으면 답을 그대로 돌려준다."""
+    text = str(text or '')
+    sentences = [part.strip() for part in _ANSWER_SENTENCE_BREAK.split(text) if part and part.strip()]
+    uncertain = [sentence for sentence in sentences if UNCERTAIN_STATEMENT.search(sentence)]
+    if not uncertain:
+        return text, []
+    return ' '.join(sentence for sentence in sentences if sentence not in uncertain), uncertain
 
 
 # 사용자에게 보이는 칸 이름. 내부 경로("coreCompetencies.text")를 문장에 쓰지 않을 때 쓴다.

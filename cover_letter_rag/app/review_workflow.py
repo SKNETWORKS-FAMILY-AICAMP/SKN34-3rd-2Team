@@ -8,11 +8,11 @@ from difflib import SequenceMatcher
 from app.models import (
     Diagnostic, FirestoreResumeReviewResponse, NewResumeItem, ResumeReviewGeneration, ReviewQuestion, SentenceReview,
 )
-from app.prompts import ANSWER_FLOW_RULE, MIXED_ANSWER_RULE, NEW_PROJECT_RULE
+from app.prompts import ANSWER_FLOW_RULE, MIXED_ANSWER_RULE, NEW_PROJECT_RULE, UNCERTAIN_ANSWER_RULE
 from app.review_rules import (
     EXPERIENCE_DESCRIPTION, EXPERIENCE_ITEM, EXPERIENCE_SECTION_PATTERN, GENERIC_NAME_TOKENS, ITEM_NAME_KEYS,
     NARRATIVE_FIELD, NEW_PROJECT_NAME_GENERIC, PROJECT_FORM_WORDS, ROLE_EXPANSION_WORDS, SECTION_NAMES,
-    noun_fragment_sentences,
+    noun_fragment_sentences, split_uncertain_answer,
 )
 from app.technology import technology_mentions
 from app.star_checks import (
@@ -24,7 +24,7 @@ from app.job_requirements import (
     mark_requirement_absent, requirements_prompt_text,
 )
 
-PROMPT_VERSION = 'resume-v16w-scope-guard-experience-only'
+PROMPT_VERSION = 'resume-v16x-uncertain-answer'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 
@@ -843,6 +843,14 @@ _NONE_ANSWER = re.compile(
 )
 
 
+def uncertain_scope_note(answers) -> str:
+    """이번 답에서 확신하지 못한 문장을 모델에 짚어 준다. 없으면 빈 문자열."""
+    sentences = [sentence for answer in answers for sentence in split_uncertain_answer(answer.answer)[1]]
+    if not sentences:
+        return ''
+    return ' 이번 답에서 확신하지 못한 문장: ' + ' / '.join(f"'{sentence}'" for sentence in sentences[:6])
+
+
 def is_none_answer(text):
     """앱의 "없음" 카드나 그만큼 짧은 부정 답. 사실이 섞인 답("pyserial로 작성했고 시간은 안 쟀어요")은 아니다."""
     return bool(_NONE_ANSWER.match(str(text or '')))
@@ -1458,7 +1466,8 @@ def run_review(service, id_token, request):
                     '첫 검토입니다. 이력서 전체와 선택 공고를 비교해 검토하세요.'
                     if not is_focused_followup
                     else '후속 첨삭입니다. 이번 답변의 field_path와 같은 이력서 항목만 수정하세요. '
-                    '다른 항목의 새 진단·수정·질문은 만들지 마세요. ' + MIXED_ANSWER_RULE + ' ' + ANSWER_FLOW_RULE + ' ' + NEW_PROJECT_RULE
+                    '다른 항목의 새 진단·수정·질문은 만들지 마세요. ' + MIXED_ANSWER_RULE + ' ' + UNCERTAIN_ANSWER_RULE
+                    + uncertain_scope_note(turn_answers) + ' ' + ANSWER_FLOW_RULE + ' ' + NEW_PROJECT_RULE
                 )
             ),
             'review_mode': (

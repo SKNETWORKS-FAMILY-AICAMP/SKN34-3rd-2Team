@@ -24,7 +24,7 @@ from app.service import NUMBER_PATTERN
 from app.technology import comparison_terms, grounding_terms
 from app.review_rules import (
     EXPERIENCE_DESCRIPTION, EXPERIENCE_SECTION_PATTERN, ITEM_NAME_KEYS, NARRATIVE_FIELD, NEGATION, NOT_NEGATION_WORDS,
-    ABSENCE_STATEMENT, ROLE_EXPANSION_WORDS, SECTION_NAMES, WORK_NEGATION,
+    ABSENCE_STATEMENT, ROLE_EXPANSION_WORDS, SECTION_NAMES, WORK_NEGATION, split_uncertain_answer,
 )
 
 # 같은 양을 가리키는 단위 표기. "1.2s"와 "1.2초", "40min"과 "40분"은 같은 사실이다.
@@ -792,6 +792,33 @@ def _concise_company_fit_answer(path: str, question: str, confirmed: str) -> str
     return ' '.join(selected)
 
 
+def _resume_endings(text: str) -> str:
+    """채팅 말투 끝맺음("붙였어요", "해요", "이에요")을 이력서 말투("붙였습니다")로 바꾼다.
+
+    답을 그대로 붙이는 대체 수정안에 "캐시를 붙였어요"가 이력서 문장으로 들어갔다(2026-09-15 한 번도 안 본 케이스,
+    사람 말투 답). 받침 ㅆ으로 끝나는 말(했·었·았·있)과 해요·돼요·이에요만 바꾼다. 그 밖의 끝맺음은 그대로 둔다.
+    """
+    def past(match):
+        stem = match.group(1)
+        return f'{stem}습니다' if (ord(stem) - 0xAC00) % 28 == 20 else match.group(0)
+
+    text = re.sub(r'([가-힣])어요(?=[.!?]|\s|$)', past, str(text or ''))
+    text = re.sub(r'(?:이에요|예요)(?=[.!?]|\s|$)', '입니다', text)
+    text = re.sub(r'해요(?=[.!?]|\s|$)', '합니다', text)
+    return re.sub(r'돼요(?=[.!?]|\s|$)', '됩니다', text)
+
+
+def _uncertain_fact_written(revision: str, uncertain: str, known: str) -> bool:
+    """확신하지 못한 답 문장에만 있는 숫자·기술어나 내용 낱말이 수정안에 들어갔는가."""
+    known_stable, known_content = _answer_reflection_anchors(known)
+    uncertain_stable, uncertain_content = _answer_reflection_anchors(uncertain)
+    revision_stable, revision_content = _answer_reflection_anchors(revision)
+    if (uncertain_stable - known_stable) & revision_stable:
+        return True
+    shared = (uncertain_content - known_content) & revision_content
+    return len(shared) >= 2 or any(len(token) >= 3 for token in shared)
+
+
 def _split_answer_sentences(text: str) -> list[str]:
     """답변을 문장 부호와 줄바꿈으로 나눈다. "주요 업무"처럼 낱말 끝의 "요"에서는 나누지 않는다."""
     return [part.strip() for part in re.split(r'(?<=[.!?])\s+|\n+', str(text or '').strip()) if part.strip()]
@@ -803,6 +830,9 @@ def add_substantive_answer_fallback(generation, fields, answers):
     negative_answer = re.compile(
         r'(모르겠|기억(?:이\s*)?나지|없습니다|없어요|하지\s*않았|못했|해본\s*적\s*없)'
     )
+
+    def keep(sentence):
+        return not negative_answer.search(sentence) and not ABSENCE_STATEMENT.search(sentence)
     for answer_index, answer in enumerate(answers):
         path = answer.field_path
         original = fields.get(path, '').strip()
@@ -812,12 +842,15 @@ def add_substantive_answer_fallback(generation, fields, answers):
         # 사실과 "없다"가 섞인 답은 없다고 한 문장만 뺀다. 예전에는 "없어요"가 한 번만 들어 있어도 답 전체를 버려,
         # "50건 테스트로 중복 예약 0건을 확인했습니다. 느린 점을 보완한 행동은 없어요."의 앞 문장까지 사라졌다
         # (2026-09-15 새 케이스 v16m, 모델도 수정안을 내지 않았다).
+        # 확신하지 못한 문장("아마 30개쯤 했던 것 같아요")은 확인된 사실이 아니라 옮기지 않는다.
+        confirmed = split_uncertain_answer(confirmed)[0]
         factual = ' '.join(
             sentence for sentence in _split_answer_sentences(confirmed)
-            if not negative_answer.search(sentence)
+            if keep(sentence)
         )
         if factual and factual != confirmed:
             confirmed = factual
+        confirmed = _resume_endings(confirmed)
         already_present = bool(original) and (
             re.sub(r'\s+', '', confirmed) in re.sub(r'\s+', '', original)
         )
@@ -827,7 +860,7 @@ def add_substantive_answer_fallback(generation, fields, answers):
         if (
             not original
             or len(confirmed) < 80
-            or negative_answer.search(confirmed)
+            or not keep(confirmed)
             or any(
                 item.field_path == path and item.suggested_revision
                 for item in generation.sentence_reviews
@@ -896,11 +929,16 @@ def ground_sentences(fields, answers, generation, job_text=''):
             continue
         from app.review_workflow import group
         source_map = {p: v for p, v in fields.items() if group(p) == group(item.field_path)}
-        answer_source_map = {
-            f'answer:{i}': a.answer
+        # 확신하지 못한 답 문장("아마 30개쯤 했던 것 같아요")은 확인된 근거가 아니다. 그 문장에만 있는 숫자·기술어는
+        # 근거 없는 숫자·용어로 걸리고, 내용 낱말이 들어가면 uncertain_fact_written으로 막는다(2026-09-15 한 번도 안 본
+        # 케이스: 불확실한 답이 단정문 수정안이 됐다).
+        split_answers = {
+            f'answer:{i}': split_uncertain_answer(a.answer)
             for i, a in enumerate(answers)
             if group(a.field_path) == group(item.field_path)
         }
+        answer_source_map = {key: confirmed for key, (confirmed, _) in split_answers.items()}
+        uncertain_sentences = [sentence for _, uncertain in split_answers.values() for sentence in uncertain]
         source_map.update(answer_source_map)
         sources = list(source_map.values())
         quotes = list(dict.fromkeys(q for q in item.evidence_quotes if q.strip() and any(q in s for s in sources)))
@@ -972,6 +1010,10 @@ def ground_sentences(fields, answers, generation, job_text=''):
                 item.validation_issues.append('unsupported_role')
             if ABSENCE_STATEMENT.search(revision) and not ABSENCE_STATEMENT.search(item.original_quote):
                 item.validation_issues.append('absence_written')
+            if uncertain_sentences:
+                known = '\n'.join([*fields.values(), *answer_source_map.values(), item.original_quote])
+                if any(_uncertain_fact_written(revision, sentence, known) for sentence in uncertain_sentences):
+                    item.validation_issues.append('uncertain_fact_written')
             if '[연락처 삭제]' in revision or '[연락처 삭제]' in item.original_quote:
                 item.validation_issues.append('redacted_content')
         if (not item.validation_issues and item.edit_type in _SURFACE_EDITS and revision.strip()
@@ -992,6 +1034,10 @@ def ground_sentences(fields, answers, generation, job_text=''):
                 # 표현만 다듬다 부정 표현("않도록" 등)이 흔들린 경우다. 원문은 사용자가 쓴 그대로이고 물을 사실이 없다.
                 # 예전에는 "원문의 수행 여부와 수정안의 의미가 달라질 수 있습니다. 실제 수행 여부를 확인해 주세요."가
                 # 질문으로 떠, 사용자는 무엇을 답할지 몰랐다(2026-09-15 자세한 이력서 목업).
+                item.confirmation_question = None
+            elif 'uncertain_fact_written' in item.validation_issues:
+                # 사용자가 확신하지 못한다고 이미 답했다. 같은 것을 다시 묻지 않고 수정안만 버린다. 확인된 나머지 답은
+                # 대체 수정안이 받는다.
                 item.confirmation_question = None
             elif 'absence_written' in item.validation_issues:
                 # 해 보지 않았다는 말을 이력서에 적으려던 수정안. 사용자는 이미 답했고 물을 것이 없다.
