@@ -184,6 +184,9 @@ RESUME_REVIEW_PROMPT = ChatPromptTemplate.from_messages(
 [STAR 판정 대상 — 칸마다 star_judgements를 채운다. 빈 목록이면 채우지 않는다]
 {star_targets}
 
+[명사형으로 끊긴 문장 — 문장마다 서술문('~했습니다')으로 잇는 sentence_reviews를 하나씩 낸다. original_quote는 그 문장을 포함하는 연속 원문이고, 수치·기술명·역할·진행 상태는 그대로 둔다. 같은 칸의 다른 문장과 겹치지 않게 한다. 빈 목록이면 무시한다]
+{noun_fragments}
+
 [이력서에 기록된 프로젝트 기간]
 {resume_time_context}
 

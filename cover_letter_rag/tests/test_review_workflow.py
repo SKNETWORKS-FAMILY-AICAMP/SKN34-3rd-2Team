@@ -780,3 +780,57 @@ def test_sentence_moved_to_another_item_is_withheld_from_the_answered_field():
         suggested_revision='Airflow로 DAG를 짜는 실습을 3주 동안 했습니다.', reason='r', status='improved')
     withhold_moved_sentences(generation, {'trainingExperience[0].description'}, [moved], fields)
     assert generation.sentence_reviews[0].suggested_revision
+
+
+def test_first_review_lists_noun_fragments_and_counts_unjoined_ones():
+    # 끊긴 문장과 온전한 문장이 섞인 칸을 모델이 건너뛰어 개발용 30칸 중 25칸만 이었다(2026-09-15). 첫 첨삭에만 목록을 준다.
+    calls = []
+
+    def generate(data):
+        calls.append(data)
+        return ResumeReviewGeneration(summary='검토', section_reviews=[], questions=[ReviewQuestion(
+            field_path='projects[0].description', topic='action', question='LMS 프로젝트에서 어떻게 했나요?',
+            reason='r', priority=1)], sentence_reviews=[SentenceReview(
+                field_path='coreCompetencies.text', original_quote='Python REST API 개발',
+                suggested_revision='Python으로 REST API를 개발했습니다.', reason='명사형 잇기', edit_type='clarity')])
+
+    service = ResumeReviewService(Settings(openai_api_key='test'), FakeFirebase(), generate)
+    first = service.review('valid-token', FirestoreResumeReviewRequest(cohort_id='cohort-1', resume_id='resume-1'))
+    listed = json.loads(calls[0]['noun_fragments'])
+    assert {'field_path': 'coreCompetencies.text', 'sentence': 'Python REST API 개발'} in listed
+    assert all(item['sentence'] != 'API 응답 시간을 20% 개선했습니다.' for item in listed), '온전한 문장은 넣지 않는다'
+    assert first.telemetry['noun_fragments'] == len(listed)
+    assert first.telemetry['noun_fragments_unjoined'] == 0
+    q = first.questions[0]
+    service.review('valid-token', FirestoreResumeReviewRequest(
+        cohort_id='cohort-1', resume_id='resume-1', previous_review_id=first.review_id, expected_input_hash=first.input_hash,
+        answers=[ConfirmationAnswer(question_id=q.question_id, field_path=q.field_path, question=q.question,
+                                    answer='캐시를 적용했습니다.')]))
+    assert json.loads(calls[1]['noun_fragments']) == [], '후속 첨삭에는 주지 않는다'
+
+
+def test_one_sentence_about_two_items_is_split_at_the_item_names():
+    # 경력 칸 질문에 "X에서 처리 시간을 줄였고, Y에서는 테스트로 검증했습니다"라고 한 문장으로 답했더니, 문장째 Y에 붙어 X의
+    # 숫자 성과가 Y 칸 수정안에 들어갔다(2026-09-15 한 번도 안 본 케이스). 항목 이름이 나오는 자리에서 나눈다.
+    from app.review_workflow import mentioned_item_answers, without_mentioned_sentences
+    fields = {'experience[0].company': '(주)예시물류', 'experience[0].description': '물류 시스템 백엔드를 개발했습니다.',
+              'projects[0].name': '주문 정산 배치', 'projects[0].description': '주문 정산 배치를 만들었습니다.',
+              'projects[1].name': '재고 동기화', 'projects[1].description': '재고 동기화 API를 만들었습니다.'}
+    refs = {path: f'ref:{path}' for path in fields}
+    answer = ConfirmationAnswer(
+        question_id='q1', field_path='experience[0].description', question='회사에서 한 일은?',
+        answer='주문 정산 배치에서 처리 시간을 40분에서 10분으로 줄였고, 재고 동기화에서는 통합 테스트로 결과를 검증했습니다.')
+    extra = {a.field_path: a.answer for a in mentioned_item_answers([answer], fields, refs, {'item_refs': refs})}
+    assert extra['projects[0].description'] == '주문 정산 배치에서 처리 시간을 40분에서 10분으로 줄였고'
+    assert extra['projects[1].description'] == '재고 동기화에서는 통합 테스트로 결과를 검증했습니다.'
+    # 질문한 경력 칸에는 두 조각 모두 떼어 낸 것이라 근거로 남기지 않는다.
+    assert without_mentioned_sentences([answer], [a for a in mentioned_item_answers([answer], fields, refs, {'item_refs': refs})],
+                                       fields) == []
+    # Y 칸 수정안에 X의 숫자가 들어가면 근거가 없어 버린다.
+    mentioned = mentioned_item_answers([answer], fields, refs, {'item_refs': refs})
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path='projects[1].description', original_quote='재고 동기화 API를 만들었습니다.', edit_type='content',
+        suggested_revision='재고 동기화 API를 만들고 처리 시간을 40분에서 10분으로 줄였으며 통합 테스트로 검증했습니다.', reason='r')])
+    ground_sentences(fields, mentioned, result)
+    assert result.sentence_reviews[0].suggested_revision is None
+    assert 'unsupported_number' in result.sentence_reviews[0].validation_issues

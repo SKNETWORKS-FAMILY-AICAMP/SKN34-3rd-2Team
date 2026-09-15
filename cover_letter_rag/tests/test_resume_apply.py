@@ -157,3 +157,17 @@ def test_invalid_new_project_suggestion_rejected(mode):
     if mode == 'blocked': edit['validation_issues'] = ['unsupported_term']
     with pytest.raises((ReviewConflict, ReviewInputError)):
         build_application(CONTENT, data, request())
+
+
+def test_second_suggestion_on_the_same_field_still_applies_after_the_first():
+    # 한 턴에 같은 칸(서로 다른 문장) 수정안이 둘 나오면 앱은 하나씩 적용한다. 앞 수정안을 적용해 이력서가 바뀌어도
+    # 서버가 첨삭 결과를 새 이력서로 옮기므로(rebase) 뒤 수정안이 그대로 적용돼야 한다.
+    first_request = ApplyRequest(cohort_id='c', resume_id='r', request_id='apply1', review_id='review1',
+                                 expected_input_hash=digest(CONTENT), selected_indices=[0])
+    first_applied, _ = build_application(CONTENT, review(), first_request)
+    rebased = rebase_review_response(review(), first_applied)
+    second_request = ApplyRequest(cohort_id='c', resume_id='r', request_id='apply2', review_id='review1',
+                                  expected_input_hash=digest(first_applied), selected_indices=[1])
+    both, fields = build_application(first_applied, rebased, second_request)
+    assert both['projects'][0]['description'] == 'Python API 개발. 테스트를 작성했습니다.'
+    assert fields == ['projects[0].description']

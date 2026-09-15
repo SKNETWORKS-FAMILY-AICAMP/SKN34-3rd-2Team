@@ -22,6 +22,40 @@ NARRATIVE_FIELD = re.compile(
     rf'coreCompetencies\.text|(?:{EXPERIENCE_SECTION_PATTERN})\[\d+\]\.description|selfIntroduction\.[^.]+\.body'
 )
 
+
+def noun_fragment_sentences(text: str) -> list[str]:
+    """명사형으로 끊긴 문장("사내 관리자 페이지의 Django REST API 유지보수.", "정확도 0.87.", "만들었음.").
+
+    마지막 글자가 서술 어미(다·요)가 아닌 문장이다. 끊긴 문장과 온전한 문장이 한 칸에 섞이면 모델이 칸 전체를
+    "이미 괜찮다"고 보고 건너뛰어, 개발용 30칸 중 25~26칸만 이었다(2026-09-15 v16n·v16p). 모델에 목록으로 준다.
+    """
+    sentences = []
+    for part in re.split(r'(?<=\.)\s+|\n+', str(text or '')):
+        body = part.strip().rstrip('.').rstrip()
+        if len(body) >= 4 and body[-1] not in '다요!?':
+            sentences.append(part.strip())
+    return sentences
+
+
+# STAR 행동 확인. 모델이 "데이터 수집과 시각화를 맡았습니다", "개발을 본격적으로 배웠습니다"를 행동으로 봤다.
+# 역할·참여·학습 말만 있고 무엇을 어떻게 했는지(방법) 말이 없으면 행동이 아니다.
+# 결과 쪽 낱말 확인도 만들어 봤지만 버렸다: 개발용 기록에서는 일치가 올랐는데, 최종 확인용 기록에서 "0으로
+# 만들었습니다", "0.81에서 0.87로 올렸습니다"를 결과로 못 알아봐 54/58 → 48/58로 떨어졌다(2026-09-15).
+STAR_ROLE_ONLY = re.compile(r'맡았|맡아|담당|참여|배웠|학습|공부|익혔|관심|흥미')
+STAR_ACTION_CUE = re.compile(
+    r'적용|구현|작성|만들|만든|개발했|개발하|설계|도입|분석|수집해|수집했|정리해|정리했|나누|나눠|바꾸|바꿔|바꿨|추가|자동화|'
+    r'측정|튜닝|옮기|옮겨|연동|구축했|구축하|수정|찾아|쌓아|읽고|읽어|확인하|테스트|검증하|붙였|붙여|잡고|잡아|계산|'
+    r'파싱|정규화|제거|전환|리팩터|캐시|인덱스|개선했|배포|학습시켰|시도|남기|남겼|물어보|대화로'
+)
+
+
+def star_action_quote_has_method(quote: str) -> bool:
+    """행동 인용이 역할·학습 말만으로 되어 있지 않은가."""
+    if not STAR_ROLE_ONLY.search(quote or ''):
+        return True
+    return bool(STAR_ACTION_CUE.search(STAR_ROLE_ONLY.sub('', quote)))
+
+
 # 사용자에게 보이는 칸 이름. 내부 경로("coreCompetencies.text")를 문장에 쓰지 않을 때 쓴다.
 SECTION_NAMES = {'coreCompetencies': '핵심역량', 'selfIntroduction': '자기소개서', 'trainingExperience': '교육',
                  'otherActivities': '활동', 'techStack': '기술 스택', 'projects': '프로젝트', 'experience': '경력',

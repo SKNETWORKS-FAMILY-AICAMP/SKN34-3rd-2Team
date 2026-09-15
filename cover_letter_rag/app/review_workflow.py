@@ -11,7 +11,8 @@ from app.models import (
 from app.prompts import MIXED_ANSWER_RULE, NEW_PROJECT_RULE
 from app.review_rules import (
     EXPERIENCE_DESCRIPTION, EXPERIENCE_ITEM, EXPERIENCE_SECTION_PATTERN, GENERIC_NAME_TOKENS, ITEM_NAME_KEYS,
-    NEW_PROJECT_NAME_GENERIC, PROJECT_FORM_WORDS, ROLE_EXPANSION_WORDS, SECTION_NAMES,
+    NARRATIVE_FIELD, NEW_PROJECT_NAME_GENERIC, PROJECT_FORM_WORDS, ROLE_EXPANSION_WORDS, SECTION_NAMES,
+    noun_fragment_sentences,
 )
 from app.technology import technology_mentions
 from app.star_checks import (
@@ -23,7 +24,7 @@ from app.job_requirements import (
     mark_requirement_absent, requirements_prompt_text,
 )
 
-PROMPT_VERSION = 'resume-v16q-mentioned-stays-put'
+PROMPT_VERSION = 'resume-v16t-split-by-item-name'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 
@@ -492,6 +493,39 @@ _SEPARATE_WORK = re.compile(
 MAX_MENTIONED_ITEMS = 2
 
 
+def _item_mention_positions(text, fields):
+    """문장에서 경험 항목 이름이 처음 나오는 위치. [(위치, 칸)] 위치 순.
+
+    이름 전체가 있으면 그 자리, 없으면 네 글자 이상의 이름 낱말("현장실습")이 처음 나온 자리를 쓴다.
+    """
+    lowered = text.casefold()
+    found = {}
+    for target_path, name in _item_description_targets(fields):
+        spaced = re.escape(name.strip()).replace(r'\ ', r'\s*')
+        match = re.search(spaced, text, re.IGNORECASE) if name.strip() else None
+        position = match.start() if match else None
+        if position is None:
+            hits = [lowered.find(token) for token in _name_tokens(name) if len(token) >= 4 and token in lowered]
+            position = min(hits) if hits else None
+        if position is not None:
+            found[target_path] = position
+    return sorted((position, target_path) for target_path, position in found.items())
+
+
+def _split_by_item_mentions(sentence, fields):
+    """한 문장에 두 항목 이야기가 섞였으면 항목 이름이 나오는 자리에서 나눈다.
+
+    "X에서 처리 시간을 40분에서 10분으로 줄였고, Y에서는 테스트로 검증했습니다"를 문장째 Y에 주면 X의 숫자가 Y 칸
+    수정안에 들어가 Y에서 한 일처럼 읽혔다(2026-09-15 한 번도 안 본 케이스). 이름 앞의 말은 앞 조각에 붙인다.
+    """
+    mentions = _item_mention_positions(sentence, fields)
+    if len(mentions) < 2:
+        return [sentence]
+    cuts = [0] + [position for position, _ in mentions[1:]] + [len(sentence)]
+    pieces = [sentence[start:end].strip(' ,') for start, end in zip(cuts, cuts[1:])]
+    return [piece for piece in pieces if len(piece) >= 4]
+
+
 def mentioned_item_answers(current_answers, fields, refs, previous):
     """이번 답에서 질문한 항목이 아닌 다른 경험 항목을 이름으로 말한 문장을, 그 항목에 붙인 답으로 만든다.
 
@@ -508,13 +542,15 @@ def mentioned_item_answers(current_answers, fields, refs, previous):
         if is_none_answer(answer.answer):
             continue
         by_path = {}
-        for sentence in _split_answer_sentences(answer.answer):
-            path = resolve_missing_technology_project(sentence, fields)
+        pieces = [piece for sentence in _split_answer_sentences(answer.answer)
+                  for piece in _split_by_item_mentions(sentence, fields)]
+        for piece in pieces:
+            path = resolve_missing_technology_project(piece, fields)
             if not path or group(path) == group(answer.field_path):
                 continue
             if refs.get(path, 'legacy:').startswith('legacy:') or item_refs.get(path) != refs[path]:
                 continue
-            by_path.setdefault(path, []).append(sentence)
+            by_path.setdefault(path, []).append(piece)
         for path, sentences in list(by_path.items())[:MAX_MENTIONED_ITEMS]:
             extra.append(answer.model_copy(update={
                 'question_id': None, 'field_path': path, 'answer': ' '.join(sentences),
@@ -522,7 +558,29 @@ def mentioned_item_answers(current_answers, fields, refs, previous):
     return extra
 
 
-def without_mentioned_sentences(answers, mentioned_answers):
+def noun_fragment_targets(fields):
+    """첫 첨삭에서 서술문으로 이어야 할 끊긴 문장 목록. [{field_path, sentence}]"""
+    return [{'field_path': path, 'sentence': sentence}
+            for path, value in fields.items() if NARRATIVE_FIELD.fullmatch(path)
+            for sentence in noun_fragment_sentences(value)]
+
+
+def count_unjoined_fragments(targets, sentence_reviews):
+    """목록의 끊긴 문장 중 이어 준 수정안이 없는 수. 측정용으로 telemetry에 남긴다."""
+    squash = lambda text: re.sub(r'\s+', '', str(text or ''))  # noqa: E731
+    missed = 0
+    for target in targets:
+        joined = any(
+            review.field_path == target['field_path'] and review.suggested_revision
+            and squash(target['sentence']) in squash(review.original_quote)
+            and squash(target['sentence']) not in squash(review.suggested_revision)
+            for review in sentence_reviews
+        )
+        missed += not joined
+    return missed
+
+
+def without_mentioned_sentences(answers, mentioned_answers, fields):
     """다른 항목으로 떼어 낸 문장을 원래 답에서 뺀다. 문장이 모두 빠진 답은 목록에서 뺀다.
 
     떼어 낸 문장을 질문한 칸의 근거에도 그대로 두면, 모델이 그 문장을 질문한 칸 수정안에도 넣었다. 교육 칸 질문에 회사
@@ -531,13 +589,21 @@ def without_mentioned_sentences(answers, mentioned_answers):
     """
     from app.resume_review import _split_answer_sentences
 
-    moved = {sentence for answer in mentioned_answers for sentence in _split_answer_sentences(answer.answer)}
-    if not moved:
+    moved_paths = {answer.field_path for answer in mentioned_answers}
+    if not moved_paths:
         return list(answers)
     trimmed = []
     for answer in answers:
-        kept = [sentence for sentence in _split_answer_sentences(answer.answer) if sentence not in moved]
-        if len(kept) == len(_split_answer_sentences(answer.answer)):
+        # mentioned_item_answers와 같은 기준으로 나눈 조각 중, 다른 항목으로 떼어 낸 조각만 뺀다.
+        pieces = [piece for sentence in _split_answer_sentences(answer.answer)
+                  for piece in _split_by_item_mentions(sentence, fields)]
+        kept = []
+        for piece in pieces:
+            target = resolve_missing_technology_project(piece, fields)
+            if target in moved_paths and group(target) != group(answer.field_path):
+                continue
+            kept.append(piece)
+        if len(kept) == len(pieces):
             trimmed.append(answer)
         elif kept:
             trimmed.append(answer.model_copy(update={'answer': ' '.join(kept)}))
@@ -1208,6 +1274,7 @@ def assign_review_stages(generation, requirement_rows):
 def run_review(service, id_token, request):
     # Import here to keep pure helpers independent of model/provider construction.
     from app.resume_review import (
+        add_pending_repeated_fact_notices,
         add_substantive_answer_fallback,
         extract_review_fields,
         enforce_resume_review_grounding,
@@ -1287,8 +1354,8 @@ def run_review(service, id_token, request):
         [] if is_gap_audit else mentioned_item_answers(current_answers, fields, refs, previous)
     )
     # 떼어 낸 문장은 질문한 칸의 근거에서 뺀다(저장하는 답은 그대로).
-    evidence_answers = without_mentioned_sentences(answers, mentioned_answers) + mentioned_answers
-    turn_answers = without_mentioned_sentences(current_answers, mentioned_answers) + mentioned_answers
+    evidence_answers = without_mentioned_sentences(answers, mentioned_answers, fields) + mentioned_answers
+    turn_answers = without_mentioned_sentences(current_answers, mentioned_answers, fields) + mentioned_answers
     prompt_fields, prompt_answers, is_focused_followup = focused_followup_context(
         fields, evidence_answers, current_answers + mentioned_answers,
     )
@@ -1352,6 +1419,8 @@ def run_review(service, id_token, request):
     prompt_requirements = requirements
     if is_focused_followup:
         prompt_requirements = [r for r in requirements if r.id in answered_requirement_ids]
+    # 명사형으로 끊긴 문장은 첫 첨삭에서만 목록으로 준다(후속 첨삭은 답한 항목만 고친다).
+    fragment_targets = noun_fragment_targets(prompt_fields) if not is_focused_followup and not is_gap_audit else []
     try:
         generated = ResumeReviewGeneration(
             summary=str((previous or {}).get('summary') or ''), section_reviews=[],
@@ -1371,6 +1440,7 @@ def run_review(service, id_token, request):
                 star_targets(prompt_fields) if not is_gap_audit and not is_focused_followup else [],
                 ensure_ascii=False,
             ),
+            'noun_fragments': json.dumps(fragment_targets, ensure_ascii=False),
             'resume_time_context': prompt_time_context,
             'review_scope': (
                 '누락 점검 단계입니다. 기존 첨삭을 다시 쓰거나 수정안을 만들지 마세요. '
@@ -1428,7 +1498,7 @@ def run_review(service, id_token, request):
             warnings.extend(
                 add_substantive_answer_fallback(
                     grounded, fields,
-                    [answer for answer in without_mentioned_sentences(current_answers, mentioned_answers)
+                    [answer for answer in without_mentioned_sentences(current_answers, mentioned_answers, fields)
                      if answer.question_id not in new_project_answer_ids],
                 )
             )
@@ -1441,6 +1511,9 @@ def run_review(service, id_token, request):
             warnings.extend(withhold_moved_sentences(
                 grounded, {answer.field_path for answer in current_answers}, mentioned_answers, fields,
             ))
+        if not is_gap_audit:
+            # 같은 응답의 경험 칸 수정안에 들어가는 숫자를 자기소개서에도 옮겨 적었으면 안내한다.
+            add_pending_repeated_fact_notices(grounded, fields)
         grounded.sentence_reviews.extend(new_project_reviews)
         if not is_gap_audit:
             apply_selected_job_identity_revisions(
@@ -1512,6 +1585,9 @@ def run_review(service, id_token, request):
             add_requirement_questions(grounded, fields, requirement_rows)
             normalize_questions(grounded, fields, answers, request.request_id)
         assign_review_stages(grounded, requirement_rows)
+        if fragment_targets:
+            telemetry.update(noun_fragments=len(fragment_targets),
+                             noun_fragments_unjoined=count_unjoined_fragments(fragment_targets, grounded.sentence_reviews))
         telemetry.update(status='complete', elapsed_ms=round((time.monotonic() - started) * 1000))
         response = FirestoreResumeReviewResponse(
             **grounded.model_dump(), review_id=request.request_id, cohort_id=request.cohort_id,

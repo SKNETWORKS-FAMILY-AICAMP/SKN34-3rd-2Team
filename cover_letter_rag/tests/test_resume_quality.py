@@ -551,3 +551,29 @@ def test_reported_restated_answer_case_keeps_the_40_percent_result():
     ground_sentences({path: original}, [answer], result)
     item = result.sentence_reviews[0]
     assert item.suggested_revision is None and 'missing_fact_anchor' in item.validation_issues
+
+
+def test_self_intro_repeating_numbers_that_the_same_answer_adds_to_a_project_gets_a_notice():
+    # 틀 질문 답에서 처음 나온 프로젝트 숫자가 프로젝트 칸 수정안과 자기소개서 수정안에 함께 들어갔다. 원문 다른 칸에 없던
+    # 숫자라 안내가 붙지 않았다(2026-09-15 한 번도 안 본 케이스). 같은 응답의 프로젝트 수정안과 견준다.
+    from app.resume_review import add_pending_repeated_fact_notices
+    fields = {'projects[0].name': '숙소 예약 클론', 'projects[0].description': '숙소 예약 API를 구현했습니다.',
+              'selfIntroduction.challenge.body': '어려운 문제를 끝까지 해결했습니다.'}
+    generation = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[
+        SentenceReview(field_path='projects[0].description', original_quote='숙소 예약 API를 구현했습니다.',
+                       suggested_revision='숙소 예약 API를 구현하고 동시 요청 50건 테스트로 중복 예약 0건을 확인했습니다.',
+                       reason='r', status='improved'),
+        SentenceReview(field_path='selfIntroduction.challenge.body', original_quote='어려운 문제를 끝까지 해결했습니다.',
+                       suggested_revision='중복 예약 문제를 트랜잭션으로 막고 동시 요청 50건 테스트로 중복 예약 0건을 확인했습니다.',
+                       reason='r', status='improved'),
+    ])
+    add_pending_repeated_fact_notices(generation, fields)
+    project, intro = generation.sentence_reviews
+    assert intro.overlap_notice and "'숙소 예약 클론' 프로젝트 칸 수정안에도 들어가는" in intro.overlap_notice
+    assert '50건·0건' in intro.overlap_notice
+    assert project.overlap_notice is None
+    # 같은 응답에 경험 칸 수정안이 없으면 아무것도 하지 않는다.
+    alone = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[generation.sentence_reviews[1].model_copy(
+        update={'overlap_notice': None})])
+    add_pending_repeated_fact_notices(alone, fields)
+    assert alone.sentence_reviews[0].overlap_notice is None

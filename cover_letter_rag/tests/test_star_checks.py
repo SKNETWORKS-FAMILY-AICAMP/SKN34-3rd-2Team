@@ -236,3 +236,18 @@ def test_item_with_action_and_result_is_not_dug_into_even_with_other_topic():
     ])
     filter_questions_by_resume_facts(generation, FIELDS, stars)
     assert [q.requirement_id for q in generation.questions] == ['req-1'], '요건 질문만 남고 파고드는 질문은 빠진다'
+
+
+def test_action_quote_with_only_role_or_learning_words_is_not_an_action():
+    # 모델이 "데이터 수집과 시각화를 맡았습니다", "개발을 본격적으로 배웠습니다"를 행동으로 봤다(2026-09-15 개발용 기록).
+    from app.models import StarJudgementOut
+    fields = {'awards[0].description': '배차 개선안을 제안. 데이터 수집과 시각화를 맡았습니다.',
+              'projects[0].description': '목록 조회에 select_related를 적용해 쿼리 수를 줄이는 일을 맡았습니다.'}
+    checks, warnings = ground_star_judgements([
+        StarJudgementOut(field_path='awards[0].description', action_quote='데이터 수집과 시각화를 맡았습니다'),
+        StarJudgementOut(field_path='projects[0].description', action_quote='select_related를 적용해'),
+    ], fields, [])
+    by_path = {check.field_path: check for check in checks}
+    assert 'action' not in by_path['awards[0].description'].present
+    assert 'action' in by_path['projects[0].description'].present, '방법이 있으면 그대로 행동이다'
+    assert any('방법이 없음' in warning for warning in warnings)

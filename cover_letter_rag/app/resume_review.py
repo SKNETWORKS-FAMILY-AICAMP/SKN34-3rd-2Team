@@ -509,7 +509,27 @@ def _cross_field_overlap(field_path: str, original_quote: str, revision: str, fi
 _BEFORE_AFTER = re.compile(r'(\d+(?:[.,]\d+)?)\s*\D{0,3}?\s*(?:에서|→|->|~)\s*(\d+(?:[.,]\d+)?)')
 
 
-def _repeated_facts_notice(field_path: str, original_quote: str, revision: str, fields: dict) -> str | None:
+def add_pending_repeated_fact_notices(generation, fields) -> None:
+    """같은 응답에서 경험 칸에 새로 들어가는 수치가 자기소개서 수정안에도 둘 이상 들어가면 안내를 붙인다.
+
+    틀 질문(자기소개·어려움 극복)에 답하며 프로젝트 성과를 처음 말하면, 그 숫자가 프로젝트 칸 수정안과 자기소개서
+    수정안에 함께 들어갔다. 원문 다른 칸에는 없던 숫자라 `_repeated_facts_notice`가 안내를 붙이지 못했다(2026-09-15
+    한 번도 안 본 케이스). 같은 응답의 경험 칸 수정안을 그 칸 내용에 더해 한 번 더 본다. 막지 않는다.
+    """
+    pending = dict(fields)
+    for review in generation.sentence_reviews:
+        if review.suggested_revision and review.new_item is None and EXPERIENCE_DESCRIPTION.fullmatch(review.field_path):
+            pending[review.field_path] = f"{pending.get(review.field_path, '')}\n{review.suggested_revision}"
+    if pending == fields:
+        return
+    for review in generation.sentence_reviews:
+        if review.suggested_revision and not review.overlap_notice:
+            review.overlap_notice = _repeated_facts_notice(
+                review.field_path, review.original_quote, review.suggested_revision, pending, fields)
+
+
+def _repeated_facts_notice(field_path: str, original_quote: str, revision: str, fields: dict,
+                           written_fields: dict | None = None) -> str | None:
     """자기소개서 수정안이 경험 칸의 수치 사실 여러 개를 표현만 바꿔 다시 적었으면 안내를 돌려준다.
 
     문장 유사도로는 잡히지 않는다. "500건을 한 번에 받던 목록을 20건씩 불러오는 무한 스크롤로 개선했습니다"는 프로젝트
@@ -543,7 +563,11 @@ def _repeated_facts_notice(field_path: str, original_quote: str, revision: str, 
     name = str(fields.get(f'{section}[{index}].{ITEM_NAME_KEYS[section]}') or '').strip()
     label = f"'{name}' {SECTION_NAMES[section]}" if name else SECTION_NAMES[section]
     facts = '·'.join(f'{value}{unit}' for value, unit in sorted(found, key=lambda f: revision.find(f[0]))[:3])
-    return (f"{label} 칸에 이미 있는 {facts} 내용을 자기소개서에 다시 적었어요. "
+    # written_fields가 있으면 fields는 같은 응답의 수정안까지 더한 내용이다. 원문에 없던 숫자면 "이미 있는"이 아니다.
+    path = f'{section}[{index}].description'
+    already = written_fields is None or not (found & _number_facts(fields[path])) - _number_facts(written_fields.get(path, ''))
+    where = '칸에 이미 있는' if already else '칸 수정안에도 들어가는'
+    return (f"{label} {where} {facts} 내용을 자기소개서에 다시 적었어요. "
             '자기소개서에서는 그 경험을 한 구절로만 가리키는 게 좋아요.')
 
 

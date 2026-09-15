@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 
 from app.models import STAR_ELEMENTS, StarCheck
-from app.review_rules import EXPERIENCE_SECTION_PATTERN
+from app.review_rules import EXPERIENCE_SECTION_PATTERN, star_action_quote_has_method
 
 # 경험을 서술하는 칸. 지원동기·입사 후 포부는 경험 서술이 아니라 판정하지 않는다.
 STAR_TARGET = re.compile(
@@ -53,11 +53,13 @@ def ground_star_judgements(judgements, fields, answers, previous_checks=None, ju
             quote = str(getattr(judgement, f'{element}_quote') or '').strip()
             if not quote:
                 continue
-            if any(_squash(quote) and _squash(quote) in haystack for haystack in haystacks):
+            if not any(_squash(quote) and _squash(quote) in haystack for haystack in haystacks):
+                warnings.append(f'STAR 인용 불일치: {path} {STAR_LABELS[element]}')
+            elif element == 'action' and not star_action_quote_has_method(quote):
+                warnings.append(f'STAR 행동 인용에 방법이 없음: {path}')
+            else:
                 present.append(element)
                 quotes[element] = quote[:200]
-            else:
-                warnings.append(f'STAR 인용 불일치: {path} {STAR_LABELS[element]}')
         missing = [element for element in STAR_ELEMENTS if element not in present]
         checks[path] = StarCheck(
             field_path=path, present=present, missing=missing, quotes=quotes,
