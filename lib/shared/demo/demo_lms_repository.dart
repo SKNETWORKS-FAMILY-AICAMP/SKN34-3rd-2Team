@@ -907,13 +907,18 @@ class DemoLmsRepository {
     required String resumeId,
     required List<String> feedbackIds,
     required bool asReviewer,
+    String? viewerId,
   }) async {
     final i = _resumes.indexWhere((r) => r.id == resumeId);
     if (i < 0 || feedbackIds.isEmpty) return;
     final before = asReviewer
         ? _resumes[i].reviewerReadFeedbackIds
         : _resumes[i].readFeedbackIds;
-    final after = {...before, ...feedbackIds}.toList();
+    final after = {
+      ...before,
+      for (final id in feedbackIds)
+        asReviewer ? reviewerReadKey(viewerId, id) : id,
+    }.toList();
     _resumes[i] = asReviewer
         ? _resumes[i].copyWith(reviewerReadFeedbackIds: after)
         : _resumes[i].copyWith(readFeedbackIds: after);

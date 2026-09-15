@@ -145,6 +145,7 @@ class _ResumeEditFeedbackPanelState
           resumeId: widget.resume.id,
           feedbackIds: ids,
           asReviewer: widget.isAdmin,
+          viewerId: ref.read(currentUserSyncProvider)?.uid,
         );
   }
 

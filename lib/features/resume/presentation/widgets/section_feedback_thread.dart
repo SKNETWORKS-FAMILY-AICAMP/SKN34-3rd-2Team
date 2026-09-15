@@ -124,6 +124,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
           resumeId: widget.resume.id,
           feedbackIds: ids,
           asReviewer: ref.read(canReviewResumesProvider),
+          viewerId: ref.read(currentUserSyncProvider)?.uid,
         );
   }
 

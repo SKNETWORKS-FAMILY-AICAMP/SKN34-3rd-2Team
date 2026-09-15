@@ -73,13 +73,40 @@ void main() {
       expect(_ids(unread), ['c'], reason: '자기가 남긴 피드백은 안 읽음이 아니다');
     });
 
-    test('한 강사가 읽으면 다른 강사에게도 읽은 것이다', () {
-      final unread = unreadFeedback(
-        _thread(),
-        _resume(reviewerRead: ['c']),
-        asReviewer: true,
+    test('강사가 읽어도 관리자에게는 여전히 안 읽음이다', () {
+      final resume = _resume(reviewerRead: [reviewerReadKey(_teacher, 'c')]);
+      expect(
+        unreadFeedback(_thread(), resume, asReviewer: true, viewerId: _teacher),
+        isEmpty,
+        reason: '읽은 사람에게서만 사라진다',
       );
-      expect(unread, isEmpty, reason: '검토자끼리는 나눠 읽는다');
+      expect(
+        _ids(
+          unreadFeedback(
+            _thread(),
+            resume,
+            asReviewer: true,
+            viewerId: 'admin-1',
+          ),
+        ),
+        ['c'],
+        reason: '다른 검토자의 알림은 그대로 남는다',
+      );
+    });
+
+    test('누가 읽었는지 모르는 예전 기록은 검토자 각자에게 다시 보인다', () {
+      final resume = _resume(reviewerRead: ['c']);
+      expect(
+        _ids(
+          unreadFeedback(
+            _thread(),
+            resume,
+            asReviewer: true,
+            viewerId: _teacher,
+          ),
+        ),
+        ['c'],
+      );
     });
 
     test('학생이 읽은 것과 서로 섞이지 않는다', () {
