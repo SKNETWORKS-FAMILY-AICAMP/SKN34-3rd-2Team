@@ -6,9 +6,11 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/constants/ai_ops_types.dart';
 import '../../../shared/demo/demo_accounts.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/firebase_providers.dart';
+import '../../../shared/services/ai_ops_service.dart';
 import '../data/demo_student_chatbot_api_client.dart';
 import '../data/student_chatbot_api_client.dart';
 import 'robot_head_icon.dart';
@@ -273,6 +275,17 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
             fromUser: false,
           ),
         );
+      } else if (mounted) {
+        final ops = _api.lastOps;
+        if (ops != null && ops.logId.isNotEmpty) {
+          setState(() {
+            final current = _messages.last;
+            _messages[_messages.length - 1] = current.copyWith(
+              logId: ops.logId,
+              promptVersion: ops.promptVersion,
+            );
+          });
+        }
       }
     } catch (error) {
       if (!mounted) return;
@@ -287,6 +300,25 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
       if (mounted) setState(() => _answering = false);
       _scrollToBottom();
     }
+  }
+
+  Future<void> _onFeedback(int index, String outcome) async {
+    if (DemoConfig.enabled || index < 0 || index >= _messages.length) return;
+    final message = _messages[index];
+    final logId = message.logId;
+    if (logId == null || logId.isEmpty || message.feedbackOutcome != null) {
+      return;
+    }
+    setState(() {
+      _messages[index] = message.copyWith(feedbackOutcome: outcome);
+    });
+    await ref.read(aiOpsServiceProvider).recordOutcome(
+      cohortId: widget.user.cohortId,
+      logId: logId,
+      outcome: outcome,
+      promptVersion: message.promptVersion,
+      type: AiOpsTypes.studentChatbot,
+    );
   }
 
   void _scrollToBottom() {
@@ -358,6 +390,7 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
                   onRetry: _initialize,
                   onSend: _send,
                   onFaq: _showFaq,
+                  onFeedback: DemoConfig.enabled ? null : _onFeedback,
                   onResize: (size) => setState(() {
                     _panelWidth = size.width
                         .clamp(minWidth, maxWidth)
@@ -452,6 +485,7 @@ class _ChatPanel extends StatelessWidget {
     required this.onRetry,
     required this.onSend,
     required this.onFaq,
+    this.onFeedback,
     required this.onResize,
   });
 
@@ -475,6 +509,7 @@ class _ChatPanel extends StatelessWidget {
   final VoidCallback onRetry;
   final ValueChanged<String?> onSend;
   final void Function(String label, String answer) onFaq;
+  final void Function(int index, String outcome)? onFeedback;
   final ValueChanged<Size> onResize;
 
   void _resizeToPointer(
@@ -728,6 +763,26 @@ class _ChatPanel extends StatelessWidget {
                           message: message,
                           highlight: searchQuery,
                         ),
+                        if (!message.fromUser &&
+                            !message.isError &&
+                            !answering &&
+                            message.logId != null &&
+                            message.logId!.isNotEmpty)
+                          _FeedbackRow(
+                            outcome: message.feedbackOutcome,
+                            onHelpful: onFeedback == null
+                                ? null
+                                : () => onFeedback!(
+                                    index,
+                                    AiOpsOutcomes.helpful,
+                                  ),
+                            onNotHelpful: onFeedback == null
+                                ? null
+                                : () => onFeedback!(
+                                    index,
+                                    AiOpsOutcomes.notHelpful,
+                                  ),
+                          ),
                         if (showFaq) _faqButtons(),
                       ],
                     );
@@ -1058,6 +1113,59 @@ class _MessageBubble extends StatelessWidget {
   );
 }
 
+class _FeedbackRow extends StatelessWidget {
+  const _FeedbackRow({
+    required this.outcome,
+    required this.onHelpful,
+    required this.onNotHelpful,
+  });
+
+  final String? outcome;
+  final VoidCallback? onHelpful;
+  final VoidCallback? onNotHelpful;
+
+  @override
+  Widget build(BuildContext context) {
+    final recorded = outcome != null && outcome!.isNotEmpty;
+    return Padding(
+      padding: EdgeInsets.only(left: AppSpace.s(47), top: AppSpace.s(4)),
+      child: recorded
+          ? Text(
+              outcome == AiOpsOutcomes.helpful ? '도움됨으로 기록됨' : '안 됨으로 기록됨',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            )
+          : Wrap(
+              spacing: 4,
+              children: [
+                TextButton(
+                  onPressed: onHelpful,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('도움됨', style: TextStyle(fontSize: 12)),
+                ),
+                TextButton(
+                  onPressed: onNotHelpful,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.symmetric(horizontal: AppSpace.s(8)),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('안됨', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
 class _HighlightedMarkdown extends StatelessWidget {
   const _HighlightedMarkdown({required this.text, required this.query});
 
@@ -1151,14 +1259,29 @@ class _ChatMessage {
     required this.text,
     required this.fromUser,
     this.isError = false,
+    this.logId,
+    this.promptVersion,
+    this.feedbackOutcome,
   });
   final String text;
   final bool fromUser;
   final bool isError;
+  final String? logId;
+  final String? promptVersion;
+  final String? feedbackOutcome;
 
-  _ChatMessage copyWith({String? text}) => _ChatMessage(
-    text: text ?? this.text,
-    fromUser: fromUser,
-    isError: isError,
-  );
+  _ChatMessage copyWith({
+    String? text,
+    String? logId,
+    String? promptVersion,
+    String? feedbackOutcome,
+  }) =>
+      _ChatMessage(
+        text: text ?? this.text,
+        fromUser: fromUser,
+        isError: isError,
+        logId: logId ?? this.logId,
+        promptVersion: promptVersion ?? this.promptVersion,
+        feedbackOutcome: feedbackOutcome ?? this.feedbackOutcome,
+      );
 }

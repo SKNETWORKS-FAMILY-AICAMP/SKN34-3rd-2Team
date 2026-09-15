@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/loading_widgets.dart';
+import '../../../shared/constants/ai_ops_token_costs.dart';
 import '../../../shared/constants/ai_ops_types.dart';
 import '../../../shared/models/ai_ops_models.dart';
 import '../../../shared/providers/ai_ops_providers.dart';
@@ -19,6 +20,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
     (AiOpsTypes.jobChat, '공고챗봇'),
     (AiOpsTypes.jobRecommend, '추천'),
     (AiOpsTypes.resumeReview, '첨삭'),
+    (AiOpsTypes.studentChatbot, '학생챗봇'),
   ];
 
   @override
@@ -29,18 +31,25 @@ class AdminAiQualityScreen extends ConsumerWidget {
     final typeFilter = ref.watch(aiQualityTypeFilterProvider);
     final feedback =
         ref.watch(aiQuestionFeedbackProvider).asData?.value ?? const [];
+    final evalRun = ref.watch(latestAiEvalRunProvider).asData?.value;
+    final tokenTotal = stats.tokenIn + stats.tokenOut;
+    final estimatedUsd = AiOpsTokenCosts.estimateUsd(
+      tokenIn: stats.tokenIn,
+      tokenOut: stats.tokenOut,
+    );
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(aiGenerationLogsProvider);
           ref.invalidate(aiQuestionFeedbackProvider);
+          ref.invalidate(latestAiEvalRunProvider);
         },
         child: ListView(
           padding: EdgeInsets.fromLTRB(AppSpace.s(16), AppSpace.s(16), AppSpace.s(16), AppSpace.s(32)),
           children: [
             Text(
-              'AI 품질 · ${cohortName ?? '기수 미선택'}',
+              'LLMOps · ${cohortName ?? '기수 미선택'}',
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -48,8 +57,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
             ),
             SizedBox(height: AppSpace.s(6)),
             Text(
-              'LLM 기능 운영 — 생성 로그 · 지연 · 피드백 · 프롬프트 버전 비교\n'
-              '문제생성 · 공고챗봇 · 맞춤 추천 · 이력서 첨삭',
+              '관측 · 평가 · 피드백 · 프롬프트 버전',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
@@ -109,8 +117,25 @@ class AdminAiQualityScreen extends ConsumerWidget {
                   label: '유용률',
                   value: '${(stats.usefulnessRate * 100).toStringAsFixed(1)}%',
                 ),
+                _StatChip(
+                  label: '총 토큰',
+                  value: tokenTotal == 0 ? '-' : '$tokenTotal',
+                ),
+                _StatChip(
+                  label: '대략 비용 (추정치)',
+                  value: tokenTotal == 0
+                      ? '-'
+                      : '\$${estimatedUsd.toStringAsFixed(4)}',
+                ),
               ],
             ),
+            SizedBox(height: AppSpace.s(20)),
+            const Text(
+              '최근 평가 실행',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+            SizedBox(height: AppSpace.s(8)),
+            _EvalRunCard(run: evalRun),
             SizedBox(height: AppSpace.s(20)),
             const Text(
               '프롬프트 버전별',
@@ -162,7 +187,7 @@ class AdminAiQualityScreen extends ConsumerWidget {
                     padding: EdgeInsets.symmetric(vertical: AppSpace.s(24)),
                     child: Text(
                       '아직 AI 생성 로그가 없습니다.\n'
-                      '문제 생성 AI · 취업 코치(챗봇/추천/첨삭)를 실행해 보세요.',
+                      '문제 생성 · 취업 코치 · 학생 챗봇을 실행해 보세요.',
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                   );
@@ -243,6 +268,46 @@ class _StatChip extends StatelessWidget {
   }
 }
 
+class _EvalRunCard extends StatelessWidget {
+  const _EvalRunCard({this.run});
+
+  final AiEvalRunModel? run;
+
+  @override
+  Widget build(BuildContext context) {
+    if (run == null) {
+      return Card(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.s(12),
+            AppSpace.s(16),
+            AppSpace.s(12),
+            AppSpace.s(16),
+          ),
+          child: Text(
+            '아직 평가 실행 없음',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+        ),
+      );
+    }
+    final when = run!.createdAt?.toString().substring(0, 16) ?? '-';
+    return Card(
+      child: ListTile(
+        title: Text(
+          '${run!.promptVersion} · ${run!.model}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          'source=${run!.source} · 사례 ${run!.totalCases} · 통과 ${run!.passed}'
+          ' · 정답률 ${(run!.accuracy * 100).toStringAsFixed(1)}%'
+          ' · 평균 ${run!.avgLatencyMs}ms · $when',
+        ),
+      ),
+    );
+  }
+}
+
 class _LogCard extends StatelessWidget {
   const _LogCard({
     required this.log,
@@ -271,6 +336,13 @@ class _LogCard extends StatelessWidget {
       if (log.topK != null) 'topK=${log.topK}',
       if (log.reviewMode != null && log.reviewMode!.isNotEmpty)
         'review=${log.reviewMode}',
+      if (log.type == AiOpsTypes.studentChatbot) ...[
+        if (log.route != null && log.route!.isNotEmpty) 'route=${log.route}',
+        if (log.namespaces != null && log.namespaces!.isNotEmpty)
+          'ns=${log.namespaces}',
+        if (log.retrievalMs != null) 'retrieval=${log.retrievalMs}ms',
+        if (log.llmMs != null) 'llm=${log.llmMs}ms',
+      ],
     ];
 
     return Card(

@@ -124,8 +124,8 @@ abstract final class AdminOnboarding {
     ),
     OnboardingStep(
       id: 'nav_ai',
-      title: 'AI 품질',
-      body: 'AI 기능 품질·로그를 점검하는 시스템 메뉴입니다.',
+      title: 'LLMOps',
+      body: '관측 · 평가 · 피드백 · 프롬프트 버전을 점검하는 시스템 메뉴입니다.',
       targetId: AdminOnboardingTargets.navAiQuality,
       route: RoutePaths.adminAiQuality,
     ),

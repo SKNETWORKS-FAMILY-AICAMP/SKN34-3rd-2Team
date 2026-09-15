@@ -168,7 +168,7 @@ List<AppSideRailSection> _adminSections({required bool expandAll}) {
       items: [
         AppSideRailItem(
           icon: Icons.analytics_outlined,
-          label: 'AI 품질',
+          label: 'LLMOps',
           path: RoutePaths.adminAiQuality,
           itemKey: keyFor(RoutePaths.adminAiQuality),
         ),

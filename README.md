@@ -348,7 +348,7 @@ LMS → LXP 전환의 축은 **운영은 역할별로, 학습 경험은 AI로** 
 
 | 역할 | 홈 | 내비 |
 | --- | --- | --- |
-| 관리자 | `/admin` | 대시보드, 운영·인원, 출결·공간, 학습·평가, 소통·리워드, AI 품질 |
+| 관리자 | `/admin` | 대시보드, 운영·인원, 출결·공간, 학습·평가, 소통·리워드, LLMOps |
 | 강사 | `/instructor` | 자리 확인, 이력서관리, 게시물관리, 성취도평가, 커리큘럼, 마이페이지 |
 | 학생 | `/` | 대시보드, 이력서 관리, 학습실, 게시판, 자리 배치, 설문·제출, 자격 시험 일정, 기록실, 마일리지, 성취도평가 + 챗봇 FAB |
 
@@ -360,7 +360,7 @@ LMS → LXP 전환의 축은 **운영은 역할별로, 학습 경험은 AI로** 
 - 기록실 5유형 승인 시 마일리지 자동 정산
 - 게시판: 공지 / 예약 공지 / 알림 팝업, Discord 동기화
 - 공지 저장 시 Pinecone `notice` 증분 인덱싱
-- AI 품질: 생성 로그, latency p95, 문항 채택률
+- LLMOps: 생성 로그, outcome 피드백, 학생 챗봇 메타(route/version/latency), evalRuns, 문항 채택률
 
 ### 7-3. 강사 — 현장에서 출결하고 평가한다
 
@@ -380,7 +380,7 @@ LMS → LXP 전환의 축은 **운영은 역할별로, 학습 경험은 AI로** 
 ### 7-5. LXP AI (핵심 차별점)
 
 **학생 챗봇 (RAG)**  
-LangGraph Supervisor가 `policy` / `notice` / `project_reference`와 Firebase 스코프를 고른 뒤, 질문에 드러난 공지·정책·출석·프로젝트 신호를 합집합으로 보정한다. 대필·무관 주제는 `blocked`. NDJSON 스트리밍, Bearer 인증, 프롬프트 인젝션 가드. 완료된 단위기간은 출석률을 계산하고, 진행 중이면 확인된 수업일 기준 예상치(`in_progress_estimate`)만 안내한다. 프로젝트 범위 질문(예: 1~28기)은 기수 버킷 검색 후 서로 다른 기수 사례를 우선한다.
+LangGraph Supervisor가 `policy` / `notice` / `project_reference`와 Firebase 스코프를 고른 뒤, 질문에 드러난 공지·정책·출석·프로젝트 신호를 합집합으로 보정한다. 대필·무관 주제는 `blocked`. NDJSON 스트리밍, Bearer 인증, 프롬프트 인젝션 가드. 완료된 단위기간은 출석률을 계산하고, 진행 중이면 확인된 수업일 기준 예상치(`in_progress_estimate`)만 안내한다. 프로젝트 범위 질문(예: 1~28기)은 기수 버킷 검색 후 서로 다른 기수 사례를 우선한다. `/stream` 1회는 `aiGenerationLogs`(type=`student_chatbot`) 1건이며 route·promptVersion·latency만 남기고 질문·답변 원문은 저장하지 않는다. 도움됨/안됨은 `aiQuestionFeedback`으로 집계하고, `chatbot_lab.evaluate_supervisor --publish`가 `aiEvalRuns`에 평가 요약을 남긴다.
 
 **공부방**  
 관리자가 등록한 GitHub 수업 repo에서 날짜/폴더/파일(최대 8)을 고르면, 단일 LLM 패스로 Markdown 노트 + 복습 문제 6개를 만든다. 생성 락 10분. 결과는 `users/{uid}/studyNotes`.
@@ -572,6 +572,12 @@ python -m vectordb.policy_ingestion ingest
 - **대응:** Supervisor 뒤에 정규식 신호를 합집합으로 보정하고, `blocked`·대필은 덮어쓰지 않는다
 - **결과:** 출석 질문은 Firestore 스코프, 공지는 `notice`가 빠지지 않는다
 
+### 6) LLMOps 로그에 질문 원문이 없다
+
+- **원인:** 이력서·채팅·공고 원문을 Firestore에 두지 않는 정책
+- **대응:** `aiGenerationLogs` / `aiQuestionFeedback` / `aiEvalRuns`에는 type, promptVersion, route, latency, outcome, 평가 카운트만 저장한다
+- **결과:** 관리자 LLMOps 화면에서 관측·평가·피드백이 보이되 원문은 남지 않는다
+
 ---
 
 ## 역할 분담 & 협업
@@ -616,8 +622,8 @@ python -m vectordb.policy_ingestion ingest
 ```
 lib/                 Flutter LXP (역할별 화면, RAG 클라이언트)
 functions/           Cloud Functions (계정, 승인, 평가, 공지 벡터)
-chatbot/             학생 RAG 챗봇 (LangGraph, 라우팅 보정, 출석·프로젝트 검색)
-chatbot_lab/         실험 전용 (운영 서버와 분리, 포트 8002)
+chatbot/             학생 RAG 챗봇 (LangGraph, 라우팅 보정, 원문 없이 관측 로그)
+chatbot_lab/         실험 전용 (운영 서버와 분리, 포트 8002, eval --publish)
 vectordb/            정책·레퍼런스 수집, 청킹, Pinecone 적재
 study_notes/         GitHub → AI 학습 노트
 job_matching_bot/    채용공고 수집·추천

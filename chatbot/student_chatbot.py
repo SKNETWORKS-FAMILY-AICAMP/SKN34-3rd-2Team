@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Literal
@@ -239,6 +240,10 @@ class ChatState(MessagesState):
     documents: list[Document]
     answer: str
     sources: list[dict[str, str]]
+    retrieval_ms: int
+    llm_ms: int
+    token_in: int
+    token_out: int
 
 
 class SupervisorGuardrailMiddleware:
@@ -358,6 +363,33 @@ class RoutingGuardrailMiddleware:
         messages = inputs.get("messages") or []
         question = str(getattr(messages[-1], "content", "")) if messages else ""
         return reconcile_decision(question, decision)
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, round((time.perf_counter() - started) * 1000))
+
+
+def _message_tokens(message: Any) -> tuple[int | None, int | None]:
+    usage = getattr(message, "usage_metadata", None)
+    if isinstance(usage, dict):
+        token_in = usage.get("input_tokens")
+        token_out = usage.get("output_tokens")
+        if token_in is not None or token_out is not None:
+            return (
+                int(token_in) if token_in is not None else None,
+                int(token_out) if token_out is not None else None,
+            )
+    meta = getattr(message, "response_metadata", None) or {}
+    token_usage = meta.get("token_usage") or meta.get("usage") or {}
+    if isinstance(token_usage, dict):
+        token_in = token_usage.get("prompt_tokens")
+        token_out = token_usage.get("completion_tokens")
+        if token_in is not None or token_out is not None:
+            return (
+                int(token_in) if token_in is not None else None,
+                int(token_out) if token_out is not None else None,
+            )
+    return None, None
 
 
 def _chat_history(messages: list[Any], limit: int = 8) -> list[Any]:
@@ -527,6 +559,7 @@ class LmsStudentChatbot:
         )
 
     def _supervisor(self, state: ChatState) -> dict[str, Any]:
+        started = time.perf_counter()
         decision = self.supervisor_middleware.invoke(
             {"messages": _chat_history(state["messages"])}, self.supervisor_chain,
         )
@@ -556,6 +589,8 @@ class LmsStudentChatbot:
             "query": query[:2000],
             "student_context": {},
             "documents": [],
+            "retrieval_ms": int(state.get("retrieval_ms", 0) or 0),
+            "llm_ms": int(state.get("llm_ms", 0) or 0) + _elapsed_ms(started),
         }
         if decision.route == "greeting":
             answer = GREETING_ANSWER
@@ -591,6 +626,7 @@ class LmsStudentChatbot:
         return "project_retrieve" if "project_reference" in state.get("namespaces", []) else END
 
     def _student_tools(self, state: ChatState) -> dict[str, Any]:
+        started = time.perf_counter()
         try:
             context = self.student_context_loader(
                 state.get("student_uid", ""),
@@ -600,7 +636,10 @@ class LmsStudentChatbot:
             )
         except Exception:
             context = {"errors": {"firebase": "student_context_load_failed"}}
-        return {"student_context": context}
+        return {
+            "student_context": context,
+            "retrieval_ms": int(state.get("retrieval_ms", 0) or 0) + _elapsed_ms(started),
+        }
 
     def _after_student_tools(
         self, state: ChatState,
@@ -634,6 +673,7 @@ class LmsStudentChatbot:
     def _retrieve_namespaces(
         self, state: ChatState, namespaces: list[Namespace],
     ) -> dict[str, Any]:
+        started = time.perf_counter()
         documents = list(state.get("documents", []))
         seen = {
             (
@@ -665,7 +705,10 @@ class LmsStudentChatbot:
                 if key not in seen:
                     seen.add(key)
                     documents.append(document)
-        return {"documents": documents}
+        return {
+            "documents": documents,
+            "retrieval_ms": int(state.get("retrieval_ms", 0) or 0) + _elapsed_ms(started),
+        }
 
     def _policy_notice_retrieve(self, state: ChatState) -> dict[str, Any]:
         namespaces = [
@@ -680,6 +723,7 @@ class LmsStudentChatbot:
         if not bounds:
             return self._retrieve_namespaces(state, ["project_reference"])
 
+        started = time.perf_counter()
         search_query = neutralize_cohort_ranges(query)
         vector = self.embeddings.embed_query(search_query)
         start, end = bounds
@@ -731,9 +775,13 @@ class LmsStudentChatbot:
             if key not in seen:
                 seen.add(key)
                 documents.append(document)
-        return {"documents": documents}
+        return {
+            "documents": documents,
+            "retrieval_ms": int(state.get("retrieval_ms", 0) or 0) + _elapsed_ms(started),
+        }
 
     def _answer(self, state: ChatState) -> dict[str, Any]:
+        started = time.perf_counter()
         documents = state.get("documents", [])
         sources = [{
             "namespace": str(document.metadata.get("_namespace", "")),
@@ -750,6 +798,7 @@ class LmsStudentChatbot:
         student_context = state.get("student_context", {})
         if not documents and not unit_period_context and not student_context:
             answer = "관련 학생 데이터, 정책, 공지 또는 프로젝트 레퍼런스를 찾지 못했습니다. LMS 담당자에게 확인해 주세요."
+            token_in = token_out = None
         else:
             search_context = "\n\n".join(
                 f"[{i}] namespace={document.metadata['_namespace']} metadata={document.metadata}\n"
@@ -775,7 +824,19 @@ class LmsStudentChatbot:
                 "question": state["question"],
             })
             answer = str(response.content).strip() or "답변을 생성하지 못했습니다. LMS 담당자에게 확인해 주세요."
-        return {"answer": answer, "sources": sources, "documents": [], "messages": [AIMessage(content=answer)]}
+            token_in, token_out = _message_tokens(response)
+        update: dict[str, Any] = {
+            "answer": answer,
+            "sources": sources,
+            "documents": [],
+            "messages": [AIMessage(content=answer)],
+            "llm_ms": int(state.get("llm_ms", 0) or 0) + _elapsed_ms(started),
+        }
+        if token_in is not None:
+            update["token_in"] = token_in
+        if token_out is not None:
+            update["token_out"] = token_out
+        return update
 
     def _prepare_call(self, inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         question = inputs.get("question")
@@ -839,6 +900,32 @@ class LmsStudentChatbot:
             answer = str(self.graph.get_state(config).values.get("answer", ""))
             if answer:
                 yield answer
+
+    def ops_snapshot(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from chatbot.ops_log import chatbot_prompt_version, request_id_hash, supervisor_model_name
+
+        thread_id = str(inputs.get("thread_id") or "").strip()
+        values: dict[str, Any] = {}
+        try:
+            values = dict(self.graph.get_state({
+                "configurable": {"thread_id": thread_id},
+            }).values or {})
+        except Exception:
+            values = {}
+        route = str(values.get("route") or "")
+        return {
+            "promptVersion": chatbot_prompt_version(),
+            "model": supervisor_model_name(),
+            "route": route,
+            "namespaces": list(values.get("namespaces") or []),
+            "student_scopes": list(values.get("student_scopes") or []),
+            "blocked": route == "blocked",
+            "retrieval_ms": int(values.get("retrieval_ms") or 0),
+            "llm_ms": int(values.get("llm_ms") or 0),
+            "token_in": values.get("token_in"),
+            "token_out": values.get("token_out"),
+            "request_id_hash": request_id_hash(thread_id),
+        }
 
 
 def create_student_chatbot(
