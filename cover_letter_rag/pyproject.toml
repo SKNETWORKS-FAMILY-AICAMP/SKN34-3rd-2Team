@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cover-letter-rag"
-version = "0.1.0"
-description = "Evidence-grounded job matching and cover-letter review API"
+version = "0.2.0"
+description = "Job-posting grounded resume review API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,11 +13,7 @@ dependencies = [
   "uvicorn[standard]>=0.34,<1",
   "langchain>=1.1,<2",
   "langchain-core>=1.1,<2",
-  "langchain-text-splitters>=1.0,<2",
   "langchain-openai>=1.4.1,<2",
-  "langchain-chroma>=1.0,<2",
-  "chromadb>=1.0,<2",
-  "pinecone>=9,<11",
   "firebase-admin>=7,<8",
   "pydantic-settings>=2.7,<3",
   "python-dotenv>=1.0,<2",
