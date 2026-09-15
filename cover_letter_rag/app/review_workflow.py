@@ -24,7 +24,7 @@ from app.job_requirements import (
     mark_requirement_absent, requirements_prompt_text,
 )
 
-PROMPT_VERSION = 'resume-v16x-uncertain-answer'
+PROMPT_VERSION = 'resume-v16y-check-and-repair'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 
@@ -1287,7 +1287,7 @@ def assign_review_stages(generation, requirement_rows):
 
 def run_review(service, id_token, request):
     # Import here to keep pure helpers independent of model/provider construction.
-    from app.fact_check import add_fact_notices
+    from app.fact_check import check_and_repair_revisions
     from app.resume_review import (
         add_flow_notices,
         add_pending_repeated_fact_notices,
@@ -1528,13 +1528,24 @@ def run_review(service, id_token, request):
             warnings.extend(withhold_moved_sentences(
                 grounded, {answer.field_path for answer in current_answers}, mentioned_answers, fields,
             ))
+        if is_focused_followup and not is_gap_audit and not skip_model:
+            # 수정안을 원문·확인된 답과 뜻으로 대조하고, 빠진 사실·근거 없는 사실이 있으면 그 곳만 다시 쓰게 한다.
+            # 다시 쓴 수정안도 같은 서버 검사를 통과해야 바꾼다.
+            def reground(items):
+                subset = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=items)
+                ground_sentences(fields, evidence_answers, subset, job_text or "")
+                require_answer_reflection(subset, turn_answers)
+
+            warnings.extend(check_and_repair_revisions(
+                grounded, fields, evidence_answers, getattr(service, '_fact_checker', None),
+                getattr(service, '_fact_repairer', None), telemetry, reground,
+            ))
         if not is_gap_audit:
             # 같은 응답의 경험 칸 수정안에 들어가는 숫자를 자기소개서에도 옮겨 적었으면 안내한다.
             add_pending_repeated_fact_notices(grounded, fields)
         if is_focused_followup and not is_gap_audit and not skip_model:
-            # 답을 원문 뒤에 따로 붙인 수정안, 원문 사실이 빠지거나 약해진 수정안에 안내를 붙인다(막지 않는다).
+            # 답을 원문 뒤에 따로 붙인 수정안에 안내를 붙인다(막지 않는다).
             add_flow_notices(grounded, turn_answers)
-            add_fact_notices(grounded, turn_answers, getattr(service, '_fact_checker', None), telemetry)
         grounded.sentence_reviews.extend(new_project_reviews)
         if not is_gap_audit:
             apply_selected_job_identity_revisions(

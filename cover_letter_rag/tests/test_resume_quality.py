@@ -598,8 +598,8 @@ def test_answer_appended_as_a_separate_also_paragraph_gets_a_flow_notice():
 
 
 def test_fact_checker_notice_only_uses_phrases_really_in_the_original():
-    # 검사 모델이 "구현했습니다 → 연동하기 위해"를 짚으면 안내를 붙이고, 원문에 없는 구절을 지어내면 무시한다.
-    from app.fact_check import FactKeepCheck, WeakenedFact, add_fact_notices
+    # 검사 모델이 "구현했습니다 → 연동하기 위해"를 짚고 다시 쓰기가 없으면 안내를 붙이고, 원문에 없는 구절을 지어내면 무시한다.
+    from app.fact_check import FactKeepCheck, WeakenedFact, check_and_repair_revisions
     original = '숙소 예약 API를 만들었습니다. 결제 위젯 연동을 구현했습니다.'
     revision = '숙소 예약 API를 만들고, 결제 승인 뒤 예약을 확정하도록 결제 위젯을 연동하기 위해 흐름을 설계했습니다.'
 
@@ -610,32 +610,109 @@ def test_fact_checker_notice_only_uses_phrases_really_in_the_original():
 
     calls = []
 
-    def checker(o, r, a):
-        calls.append((o, r, a))
+    def checker(o, r, c):
+        calls.append((o, r, c))
         return FactKeepCheck(weakened=[WeakenedFact(original_phrase='결제 위젯 연동을 구현했습니다', revision_phrase='연동하기 위해',
                                                     change='purpose')])
 
+    fields = {'projects[0].description': original}
     generation, telemetry = review(), {}
-    add_fact_notices(generation, [], checker, telemetry)
+    check_and_repair_revisions(generation, fields, [], checker, None, telemetry)
     notice = generation.sentence_reviews[0].fact_notice
     assert notice and "'결제 위젯 연동을 구현했습니다'" in notice and '목적 표현' in notice
+    assert generation.sentence_reviews[0].suggested_revision == revision
     assert telemetry['fact_checks'] == 1 and telemetry['fact_notices'] == 1
 
     generation = review()
-    add_fact_notices(generation, [], lambda o, r, a: FactKeepCheck(weakened=[WeakenedFact(
-        original_phrase='원문에 없는 구절', change='dropped')]), {})
+    check_and_repair_revisions(generation, fields, [], lambda o, r, c: FactKeepCheck(weakened=[WeakenedFact(
+        original_phrase='원문에 없는 구절', change='dropped')]), None, {})
     assert generation.sentence_reviews[0].fact_notice is None
 
     # 조금만 바뀐 수정안이나 표현 다듬기는 묻지 않는다.
     generation = review()
     generation.sentence_reviews[0].change_rate = 0.1
     calls.clear()
-    add_fact_notices(generation, [], checker, {})
+    check_and_repair_revisions(generation, fields, [], checker, None, {})
     assert calls == []
     # 검사가 실패해도 수정안은 그대로다.
     generation = review()
-    add_fact_notices(generation, [], lambda o, r, a: (_ for _ in ()).throw(RuntimeError('down')), {})
+    check_and_repair_revisions(generation, fields, [], lambda o, r, c: (_ for _ in ()).throw(RuntimeError('down')), None, {})
     assert generation.sentence_reviews[0].suggested_revision == revision
+
+
+def _repair_case():
+    from app.resume_review import require_answer_reflection
+    path = 'projects[0].description'
+    original = 'Solidity로 토큰 스왑 컨트랙트를 작성했습니다.'
+    fields = {'projects[0].name': 'NFT 티켓', path: original}
+    answer = ConfirmationAnswer(question_id='q1', field_path=path, question='어떻게 배포했나요?',
+                                answer='Hardhat으로 테스트넷에 배포했어요. 아마 단위 테스트도 짰던 것 같아요.')
+    revision = 'Solidity로 토큰 스왑 컨트랙트를 작성하고 단위 테스트로 검증한 뒤 Hardhat으로 테스트넷에 배포했습니다.'
+
+    def generation():
+        return ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+            field_path=path, original_quote=original, suggested_revision=revision, reason='답변 반영',
+            edit_type='content', status='improved', change_rate=0.7)])
+
+    def reground(items):
+        subset = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=items)
+        ground_sentences(fields, [answer], subset)
+        require_answer_reflection(subset, [answer])
+
+    return fields, answer, generation, reground
+
+
+def test_flagged_revision_is_rewritten_once_and_kept_smooth():
+    # 매끄럽게 녹여 쓴 수정안에서 확신 없는 답의 내용만 짚어 다시 쓰게 한다(원문 옆에 따로 붙이지 않는다).
+    from app.fact_check import FactKeepCheck, UnsupportedFact, check_and_repair_revisions
+    fields, answer, generation, reground = _repair_case()
+    fixed = 'Solidity로 토큰 스왑 컨트랙트를 작성하고 Hardhat으로 테스트넷에 배포했습니다.'
+    contexts = []
+
+    def checker(o, r, c):
+        contexts.append(c)
+        if '단위 테스트' in r:
+            return FactKeepCheck(unsupported=[UnsupportedFact(revision_phrase='단위 테스트로 검증한 뒤', kind='uncertain')])
+        return FactKeepCheck()
+
+    problems_seen = []
+
+    def repairer(o, r, c, problems):
+        problems_seen.append(problems)
+        return fixed
+
+    result, telemetry = generation(), {}
+    warnings = check_and_repair_revisions(result, fields, [answer], checker, repairer, telemetry, reground)
+    item = result.sentence_reviews[0]
+    assert item.suggested_revision == fixed and not item.validation_issues
+    assert "'단위 테스트로 검증한 뒤'" in problems_seen[0]
+    assert '[확신하지 못한 답' in contexts[0] and '짰던 것 같아요' in contexts[0].split('[확신하지 못한 답')[1]
+    assert telemetry['fact_repaired'] == 1 and warnings
+
+
+def test_revision_still_unsupported_after_rewrite_is_withheld():
+    from app.fact_check import FactKeepCheck, UnsupportedFact, check_and_repair_revisions
+    fields, answer, generation, reground = _repair_case()
+
+    def checker(o, r, c):
+        return FactKeepCheck(unsupported=[UnsupportedFact(revision_phrase='단위 테스트로 검증한 뒤', kind='uncertain')])
+
+    # 다시 쓰기가 같은 문장을 돌려주면 보류한다.
+    result, telemetry = generation(), {}
+    check_and_repair_revisions(result, fields, [answer], checker, lambda o, r, c, p: r, telemetry, reground)
+    item = result.sentence_reviews[0]
+    assert item.suggested_revision is None and 'uncertain_fact_written' in item.validation_issues
+    assert item.confirmation_question is None and telemetry['fact_withheld'] == 1
+    # 다시 쓴 수정안이 서버 검사(근거 없는 숫자)에 걸리면 바꾸지 않고 보류한다.
+    result = generation()
+    check_and_repair_revisions(result, fields, [answer], lambda o, r, c: checker(o, r, c) if '단위' in r else FactKeepCheck(),
+                               lambda o, r, c, p: 'Solidity로 토큰 스왑 컨트랙트를 작성하고 테스트넷에 3번 배포했습니다.', {}, reground)
+    assert result.sentence_reviews[0].suggested_revision is None
+    # 검사 모델이 짚은 구절이 확인된 근거에 그대로 있으면 믿지 않는다.
+    result = generation()
+    check_and_repair_revisions(result, fields, [answer], lambda o, r, c: FactKeepCheck(unsupported=[UnsupportedFact(
+        revision_phrase='Hardhat으로 테스트넷에 배포했', kind='unsupported')]), None, {}, reground)
+    assert result.sentence_reviews[0].suggested_revision
 
 
 def test_statement_of_never_having_used_something_is_not_written_into_the_resume():

@@ -135,6 +135,7 @@ class ResumeReviewService:
         generator: Callable[[dict[str, str]], ResumeReviewGeneration] | None = None,
         requirement_extractor: Callable | None = None,
         fact_checker: Callable | None = None,
+        fact_repairer: Callable | None = None,
     ) -> None:
         self._settings = settings
         self._firebase = firebase
@@ -149,6 +150,11 @@ class ResumeReviewService:
             from app.fact_check import build_fact_checker
             fact_checker = build_fact_checker(settings)
         self._fact_checker = fact_checker
+        # 검사에 걸린 수정안의 그 곳만 고쳐 다시 쓰는 모델.
+        if fact_repairer is None and generator is None:
+            from app.fact_check import build_fact_repairer
+            fact_repairer = build_fact_repairer(settings)
+        self._fact_repairer = fact_repairer
 
     @staticmethod
     def _build_generator(settings: Settings):
