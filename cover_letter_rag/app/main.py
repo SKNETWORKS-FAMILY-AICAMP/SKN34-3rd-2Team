@@ -1,6 +1,4 @@
-from functools import lru_cache
-
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query
 from langchain_core.exceptions import LangChainException
 from openai import OpenAIError
 
@@ -9,16 +7,6 @@ from app.models import (
     FirestoreResumeReviewRequest,
     FirestoreResumeReviewResponse,
     HealthResponse,
-    JobComparisonRequest,
-    JobComparisonResponse,
-    JobRecommendationRequest,
-    JobRecommendationResponse,
-    JobSearchRequest,
-    JobSearchResponse,
-    ReviewRequest,
-    ReviewResponse,
-    ResumeProfileRequest,
-    ResumeProfileResponse,
     TailoredResumeCreateRequest,
     TailoredResumePromoteRequest,
     TailoredResumeResponse,
@@ -36,15 +24,13 @@ from app.review_workflow import ReviewConflict, ReviewInputError
 from app.firebase_gateway import ResumeAccessError
 from google.api_core.exceptions import GoogleAPIError
 from google.auth.exceptions import GoogleAuthError
-from app.service import CoverLetterService
-from app.vector_store import JobRepository
 from app.tailored_resumes import TailoredResumeService
 
 
 app = FastAPI(
-    title="Cover Letter RAG API",
-    version="0.1.0",
-    description="이력서 근거 기반 채용공고 검색 및 자기소개서 첨삭 API",
+    title="Resume Review API",
+    version="0.2.0",
+    description="선택 공고와 이력서를 대조하는 대화형 이력서 첨삭·맞춤 이력서 API",
 )
 from app.resume_apply import router as resume_apply_router
 app.include_router(resume_apply_router)
@@ -102,9 +88,18 @@ def review_context(
         raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
 
 
+def _warm_job_requirements(gateway, settings, job):
+    from app.job_requirements import build_requirement_extractor, load_or_extract_requirements
+    try:
+        load_or_extract_requirements(gateway, build_requirement_extractor(settings), job['text'], job['source'])
+    except Exception:  # noqa: BLE001 — 미리 만들어 두는 일일 뿐이다
+        pass
+
+
 @app.post('/api/v1/resumes/tailored', response_model=TailoredResumeResponse)
 def create_tailored_resume(
     request: TailoredResumeCreateRequest,
+    background: BackgroundTasks,
     authorization: str | None = Header(default=None),
     gateway: FirebaseGateway = Depends(get_context_gateway),
     settings: Settings = Depends(get_settings),
@@ -112,8 +107,20 @@ def create_tailored_resume(
     from app.matching_handoff import load_selected_job
     try:
         uid = gateway.verify_id_token(extract_bearer_token(authorization))
-        service = TailoredResumeService(gateway, lambda job_id: load_selected_job(settings.matching_job_store_path, job_id))
-        return service.create(uid, request)
+        jobs = {}
+
+        def load_job(job_id):
+            jobs[job_id] = load_selected_job(settings.matching_job_store_path, job_id)
+            return jobs[job_id]
+
+        service = TailoredResumeService(gateway, load_job)
+        created = service.create(uid, request)
+        job = jobs.get(request.selected_job_id)
+        if job and settings.openai_api_key:
+            # 맞춤본을 만들고 첨삭 시작을 누르기까지 몇 초가 걸린다. 그 사이 공고 요건을 정리해 두면 첫
+            # 첨삭이 요건 정리(약 4초)를 기다리지 않는다. 실패해도 첫 첨삭이 다시 만든다.
+            background.add_task(_warm_job_requirements, gateway, settings, job)
+        return created
     except FirebaseAuthenticationError as exc:
         raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
     except ResumeAccessError as exc:
@@ -243,19 +250,6 @@ def promote_tailored_resume(
         raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
 
 
-@lru_cache
-def get_service() -> CoverLetterService:
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured on the server")
-    if not JobRepository.is_index_ready(settings):
-        raise HTTPException(
-            status_code=503,
-            detail=f"{settings.vector_store_provider} index is not ready; run the indexing command first",
-        )
-    return CoverLetterService(settings, JobRepository(settings))
-
-
 def get_resume_review_service(authorization: str | None = Header(default=None)) -> ResumeReviewService:
     try:
         extract_bearer_token(authorization)
@@ -276,66 +270,8 @@ def get_resume_review_service(authorization: str | None = Header(default=None)) 
 def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     return HealthResponse(
         model=settings.openai_model,
-        index_ready=JobRepository.is_index_ready(settings),
         firebase_auth="configured" if settings.firebase_project_id else "not_configured",
     )
-
-
-@app.post("/api/v1/jobs/search", response_model=JobSearchResponse)
-def search_jobs(
-    request: JobSearchRequest,
-    service: CoverLetterService = Depends(get_service),
-) -> JobSearchResponse:
-    try:
-        return service.search_jobs(request.resume_text, request.top_k)
-    except (OpenAIError, LangChainException, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
-
-
-@app.post("/api/v1/profiles/analyze", response_model=ResumeProfileResponse)
-def analyze_resume_profile(
-    request: ResumeProfileRequest,
-    service: CoverLetterService = Depends(get_service),
-) -> ResumeProfileResponse:
-    try:
-        return service.analyze_profile(request)
-    except (OpenAIError, LangChainException, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
-
-
-@app.post("/api/v1/jobs/recommend", response_model=JobRecommendationResponse)
-def recommend_jobs(
-    request: JobRecommendationRequest,
-    service: CoverLetterService = Depends(get_service),
-) -> JobRecommendationResponse:
-    try:
-        return service.recommend_jobs(request)
-    except (OpenAIError, LangChainException, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
-
-
-@app.post("/api/v1/jobs/compare", response_model=JobComparisonResponse)
-def compare_selected_job(
-    request: JobComparisonRequest,
-    service: CoverLetterService = Depends(get_service),
-) -> JobComparisonResponse:
-    try:
-        return service.compare_job(request)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail="Selected job was not found") from exc
-    except (OpenAIError, LangChainException, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
-
-
-@app.post("/api/v1/reviews", response_model=ReviewResponse)
-def review_cover_letter(
-    request: ReviewRequest,
-    service: CoverLetterService = Depends(get_service),
-) -> ReviewResponse:
-    try:
-        return service.review(request)
-    except (OpenAIError, LangChainException, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
 
 
 @app.post("/api/v1/resumes/reviews", response_model=FirestoreResumeReviewResponse)

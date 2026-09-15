@@ -1,10 +1,11 @@
 // capture.mjs가 찍은 화면으로 A4 사용자 안내서 PDF를 만든다.
+// 구성: 표지 → 목차 → PART 1 시작하기 → 역할별(기능 챕터마다 단계별 캡처) → 자주 묻는 질문
 // 결과: onboarding/output/PLAYDATA_LMS_사용자_가이드.pdf (중간 .html은 build/onboarding)
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
-import { outRoot, deliverRoot } from './lib/app.mjs';
+import { outRoot, deliverRoot, repoRoot } from './lib/app.mjs';
 import { roles } from './scenes.mjs';
 
 const shots = path.join(outRoot, 'shots');
@@ -21,47 +22,93 @@ function img(rel) {
   return pathToFileURL(abs).href;
 }
 
-const roleColor = { student: '#1f6feb', instructor: '#0f9d76', admin: '#7c4dff' };
+// 앱과 같은 글꼴(Paperlogy)을 쓴다.
+const fontDir = path.join(repoRoot, 'assets', 'fonts', 'Paperlogy');
+const fontFaces = [
+  [400, '4Regular'],
+  [500, '5Medium'],
+  [600, '6SemiBold'],
+  [700, '7Bold'],
+  [800, '8ExtraBold'],
+]
+  .map(([w, f]) => `@font-face { font-family: 'Paperlogy'; font-weight: ${w}; src: url('${pathToFileURL(path.join(fontDir, `Paperlogy-${f}.ttf`)).href}'); }`)
+  .join('\n');
 
-function sceneBlock(role, s, index) {
-  const tips = s.tips?.length
-    ? `<ul class="tips">${s.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`
+// 앱 강조색(#0055FF)과 사이드바 네이비(#0B2A6F)를 기준으로 역할 색을 둔다.
+const brand = '#0055FF';
+const navy = '#0B2A6F';
+const roleColor = { student: '#0055FF', instructor: '#0E9F7A', admin: '#6D4AFF' };
+
+const partNo = (i) => i + 2;
+const chapterNo = (ri, fi) => `${partNo(ri)}-${fi + 1}`;
+
+function stepBlock(role, feature, step, si) {
+  const points = step.points?.length
+    ? `<ol class="points">${step.points.map((p, i) => `<li><span class="badge">${i + 1}</span><span>${esc(p)}</span></li>`).join('')}</ol>`
     : '';
   return `
-  <section class="scene">
-    <div class="scene-head">
-      <span class="num" style="background:${roleColor[role]}">${index}</span>
-      <h3>${esc(s.title)}</h3>
+  <section class="step">
+    <div class="step-head">
+      <span class="step-no" style="color:${roleColor[role]}">STEP ${si + 1}</span>
+      <h3>${esc(step.title)}</h3>
     </div>
-    <p class="desc">${esc(s.desc)}</p>
-    ${tips}
-    <figure><img src="${img(`${role}/${s.id}.png`)}" alt="${esc(s.title)} 화면"></figure>
+    <p class="step-desc">${esc(step.desc)}</p>
+    <div class="step-body">
+      <figure><img src="${img(`${role}/${feature.id}-${si + 1}.png`)}" alt="${esc(step.title)} 화면"></figure>
+      ${points}
+    </div>
   </section>`;
+}
+
+function featureChapter(r, ri, f, fi) {
+  const color = roleColor[r.role];
+  const tips = f.tips?.length
+    ? `<aside class="tips"><strong>알아두세요</strong><ul>${f.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></aside>`
+    : '';
+  return `
+  <article class="chapter" style="--accent:${color}">
+    <div class="chapter-start">
+    <header class="chapter-head">
+      <p class="chapter-kicker"><span>${esc(r.label)}</span> ${chapterNo(ri, fi)}</p>
+      <h2>${esc(f.title)}</h2>
+      <p class="menu-path"><b>메뉴</b>${esc(f.menu)}</p>
+      <p class="summary">${esc(f.summary)}</p>
+      <div class="can">
+        <strong>이 화면에서 할 수 있는 일</strong>
+        <ul>${f.can.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+      </div>
+    </header>
+    ${stepBlock(r.role, f, f.steps[0], 0)}
+    </div>
+    ${f.steps.slice(1).map((s, si) => stepBlock(r.role, f, s, si + 1)).join('')}
+    ${tips}
+  </article>`;
 }
 
 const toc = roles
   .map(
-    (r, i) => `
-    <li>
-      <span class="toc-part" style="color:${roleColor[r.role]}">PART ${i + 2}</span>
-      <strong>${esc(r.label)}</strong>
-      <span class="toc-items">${r.scenes.map((s) => esc(s.title)).join(' · ')}</span>
+    (r, ri) => `
+    <li class="toc-part" style="--accent:${roleColor[r.role]}">
+      <div class="toc-title"><span>PART ${partNo(ri)}</span><strong>${esc(r.label)}</strong></div>
+      <ol class="toc-features">
+        ${r.features.map((f, fi) => `<li><span>${chapterNo(ri, fi)}</span>${esc(f.title)}</li>`).join('')}
+      </ol>
     </li>`,
   )
   .join('');
 
 const roleSections = roles
   .map(
-    (r, i) => `
+    (r, ri) => `
   <section class="divider" style="--accent:${roleColor[r.role]}">
-    <p class="part">PART ${i + 2}</p>
+    <p class="part">PART ${partNo(ri)}</p>
     <h2>${esc(r.label)} 화면 안내</h2>
     <p class="intro">${esc(r.intro)}</p>
     <div class="menu-grid">
-      ${r.scenes.map((s, j) => `<div><span>${j + 1}</span>${esc(s.title)}</div>`).join('')}
+      ${r.features.map((f, fi) => `<div><span>${chapterNo(ri, fi)}</span>${esc(f.title)}</div>`).join('')}
     </div>
   </section>
-  ${r.scenes.map((s, j) => sceneBlock(r.role, s, j + 1)).join('')}`,
+  ${r.features.map((f, fi) => featureChapter(r, ri, f, fi)).join('')}`,
   )
   .join('');
 
@@ -76,7 +123,7 @@ const themeSection = hasThemeShots
   ? `
 <section class="page">
   <h2>화면 테마 고르기</h2>
-  <p class="desc">「설정 → 화면 테마」에서 세 가지 중 하나를 고릅니다. 고르는 즉시 전체 화면에 적용되고, 이 안내서의 나머지 화면은 기본값인 <b>라이트</b>로 찍었습니다.</p>
+  <p class="lead">「설정 → 화면 테마」에서 세 가지 중 하나를 고릅니다. 고르는 즉시 전체 화면에 적용되고, 이 안내서의 나머지 화면은 기본값인 <b>라이트</b>로 찍었습니다.</p>
   <div class="themes">
     ${themes
       .map(
@@ -96,99 +143,121 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <title>PLAYDATA LMS 사용자 가이드</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4; margin: 12mm 14mm 14mm 14mm; }
+  ${fontFaces}
+  @page { size: A4; margin: 13mm 14mm 15mm 14mm; }
   * { box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body {
     margin: 0;
-    font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
-    color: #1d2433;
-    font-size: 10pt;
-    line-height: 1.65;
+    font-family: 'Paperlogy', 'Malgun Gothic', sans-serif;
+    color: #111827;
+    font-size: 9.6pt;
+    line-height: 1.62;
     word-break: keep-all;
   }
-  h1, h2, h3 { margin: 0; line-height: 1.3; }
+  h1, h2, h3, p { margin: 0; }
+  h1, h2, h3 { line-height: 1.3; }
+  b, strong { font-weight: 700; }
 
   /* 표지 */
   .cover {
-    height: 268mm;
+    height: 266mm; padding: 18mm 16mm 12mm; border-radius: 4mm;
     display: flex; flex-direction: column; justify-content: space-between;
-    page-break-after: always;
-    padding: 6mm 2mm;
+    page-break-after: always; color: #fff;
+    background: radial-gradient(140mm 110mm at 90% 8%, rgba(0,85,255,.55), transparent 70%), linear-gradient(160deg, ${navy} 0%, #081a45 60%, #05102c 100%);
   }
-  .brand { font-weight: 900; font-size: 13pt; letter-spacing: .06em; color: #0b57d0; }
-  .cover h1 { font-size: 32pt; font-weight: 900; letter-spacing: -.02em; margin-top: 50mm; }
-  .cover .sub { font-size: 13pt; color: #4b5565; margin-top: 5mm; }
-  .cover .roles { display: flex; gap: 3mm; margin-top: 10mm; }
-  .cover .roles span {
-    border-radius: 99px; padding: 1.5mm 5mm; font-weight: 700; font-size: 10pt; color: #fff;
-  }
-  .cover img { width: 100%; border-radius: 3mm; border: 1px solid #dfe3ea; box-shadow: 0 2mm 6mm rgba(20,30,60,.12); }
-  .cover .meta { color: #7a8494; font-size: 9pt; display: flex; justify-content: space-between; }
+  .brand { font-weight: 800; font-size: 14pt; letter-spacing: .08em; color: #9ec0ff; }
+  .cover h1 { font-size: 34pt; font-weight: 800; letter-spacing: -.02em; margin-top: 30mm; }
+  .cover .sub { font-size: 13pt; color: #c9d6f2; margin-top: 4mm; }
+  .cover .roles { display: flex; gap: 3mm; margin-top: 9mm; }
+  .cover .roles span { border-radius: 99px; padding: 1.4mm 5mm; font-weight: 700; font-size: 10pt; color: #fff; }
+  .cover img { width: 100%; border-radius: 3mm; border: 1px solid rgba(255,255,255,.18); box-shadow: 0 4mm 12mm rgba(0,0,0,.35); }
+  .cover .meta { color: #8fa3c8; font-size: 9pt; display: flex; justify-content: space-between; }
 
-  /* 목차 · 시작하기 */
+  /* 공통 페이지 */
   .page { page-break-after: always; }
-  .page h2 { font-size: 20pt; font-weight: 900; margin-bottom: 6mm; }
-  .toc { list-style: none; padding: 0; margin: 0 0 10mm; }
-  .toc li { padding: 4mm 0; border-bottom: 1px solid #e6e9ef; display: grid; grid-template-columns: 22mm 22mm 1fr; align-items: baseline; }
-  .toc-part { font-weight: 900; font-size: 9pt; letter-spacing: .05em; }
-  .toc li strong { font-size: 12pt; }
-  .toc-items { color: #5b6575; font-size: 9pt; }
-  .toc .start .toc-part { color: #0b57d0; }
+  .page h2 { font-size: 20pt; font-weight: 800; margin-bottom: 5mm; }
+  .lead { color: #374151; margin-bottom: 4mm; }
+
+  /* 목차 */
+  .toc { list-style: none; padding: 0; margin: 0 0 8mm; }
+  .toc > li { padding: 3.2mm 0; border-bottom: 1px solid #e5e7eb; }
+  .toc .toc-title { display: flex; align-items: baseline; gap: 4mm; }
+  .toc .toc-title span { font-weight: 800; font-size: 8.5pt; letter-spacing: .06em; color: var(--accent, ${brand}); min-width: 16mm; }
+  .toc .toc-title strong { font-size: 12pt; }
+  .toc-plain { color: #4b5563; font-size: 9pt; margin: 1mm 0 0 20mm; }
+  .toc-features { list-style: none; padding: 0; margin: 1.5mm 0 0 20mm; display: grid; grid-template-columns: repeat(3, 1fr); gap: .6mm 4mm; font-size: 9pt; color: #374151; }
+  .toc-features span { display: inline-block; min-width: 9mm; color: var(--accent); font-weight: 700; }
 
   .steps { counter-reset: step; list-style: none; padding: 0; margin: 0; }
-  .steps > li { counter-increment: step; position: relative; padding: 0 0 5mm 11mm; }
+  .steps > li { counter-increment: step; position: relative; padding: 0 0 4.2mm 11mm; }
   .steps > li::before {
-    content: counter(step); position: absolute; left: 0; top: .5mm;
-    width: 7mm; height: 7mm; border-radius: 50%; background: #0b57d0; color: #fff;
+    content: counter(step); position: absolute; left: 0; top: .4mm;
+    width: 7mm; height: 7mm; border-radius: 50%; background: ${brand}; color: #fff;
     font-weight: 700; font-size: 9pt; display: flex; align-items: center; justify-content: center;
   }
-  .steps h4 { margin: 0 0 1mm; font-size: 11pt; }
-  .steps p { margin: 0; color: #3d4757; }
+  .steps h4 { margin: 0 0 .6mm; font-size: 11pt; }
+  .steps p { color: #374151; }
 
-  table.accounts { width: 100%; border-collapse: collapse; margin: 2mm 0 0; font-size: 9.5pt; }
-  table.accounts th, table.accounts td { border: 1px solid #dfe3ea; padding: 2mm 3mm; text-align: left; }
-  table.accounts th { background: #f3f6fb; }
-
-  .note {
-    background: #f3f6fb; border-left: 1.2mm solid #0b57d0; border-radius: 1.5mm;
-    padding: 3mm 4mm; margin: 4mm 0; color: #334;
-  }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 3mm; }
+  .note { background: #eef4ff; border-left: 1.2mm solid ${brand}; border-radius: 1.5mm; padding: 3mm 4mm; margin: 4mm 0; color: #1f2937; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 2mm; }
   .two figure { margin: 0; }
-  .two img { width: 100%; border: 1px solid #dfe3ea; border-radius: 2mm; }
-  .two figcaption { font-size: 8.5pt; color: #6b7585; margin-top: 1mm; }
+  .two img { width: 100%; border: 1px solid #e5e7eb; border-radius: 2mm; }
+  .two figcaption { font-size: 8.5pt; color: #6b7280; margin-top: 1mm; }
 
-  .themes { display: flex; flex-direction: column; gap: 5mm; margin-top: 5mm; }
+  .themes { display: flex; flex-direction: column; gap: 5mm; }
   .themes figure { margin: 0; break-inside: avoid; }
-  .themes img { width: 108mm; display: block; border: 1px solid #dfe3ea; border-radius: 2mm; }
-  .themes figcaption { font-size: 9pt; color: #4b5565; margin-top: 1mm; }
+  .themes img { width: 112mm; display: block; border: 1px solid #e5e7eb; border-radius: 2mm; }
+  .themes figcaption { font-size: 9pt; color: #4b5563; margin-top: 1mm; }
 
   /* 역할 구분 페이지 */
-  .divider { page-break-before: always; page-break-after: always; padding-top: 55mm; }
-  .divider .part { color: var(--accent); font-weight: 900; letter-spacing: .1em; margin: 0; }
-  .divider h2 { font-size: 30pt; font-weight: 900; margin: 2mm 0 5mm; }
-  .divider .intro { font-size: 12pt; color: #4b5565; max-width: 150mm; }
+  .divider { page-break-before: always; page-break-after: always; padding-top: 50mm; }
+  .divider .part { color: var(--accent); font-weight: 800; letter-spacing: .12em; }
+  .divider h2 { font-size: 30pt; font-weight: 800; margin: 2mm 0 5mm; }
+  .divider .intro { font-size: 12pt; color: #4b5563; max-width: 150mm; }
   .menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.5mm; margin-top: 14mm; }
-  .menu-grid div { border: 1px solid #e1e5ec; border-radius: 2mm; padding: 2.5mm 3mm; font-weight: 500; }
-  .menu-grid span { display: inline-block; min-width: 6mm; color: var(--accent); font-weight: 900; }
+  .menu-grid div { border: 1px solid #e5e7eb; border-left: 1mm solid var(--accent); border-radius: 2mm; padding: 2.5mm 3mm; font-weight: 600; }
+  .menu-grid span { display: inline-block; min-width: 9mm; color: var(--accent); font-weight: 800; }
 
-  /* 화면 설명 — A4 한 쪽에 두 화면이 들어가도록 캡처 폭을 160mm(높이 100mm)로 둔다 */
-  .scene { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm; }
-  .scene + .scene { border-top: 1px solid #e6e9ef; padding-top: 5mm; }
-  .scene-head { display: flex; align-items: center; gap: 3mm; margin-bottom: 1.5mm; }
-  .num { width: 7mm; height: 7mm; border-radius: 1.5mm; color: #fff; font-weight: 900; font-size: 9pt; display: flex; align-items: center; justify-content: center; }
-  .scene h3 { font-size: 14pt; font-weight: 700; }
-  .desc { margin: 0 0 1.5mm; color: #333c4b; }
-  .tips { margin: 0 0 2mm; padding-left: 5mm; color: #0b57d0; font-size: 9pt; }
-  .scene figure { margin: 2mm 0 0; }
-  .scene img { width: 160mm; margin: 0 auto; display: block; border: 1px solid #dfe3ea; border-radius: 2mm; box-shadow: 0 1mm 3mm rgba(20,30,60,.08); }
+  /* 기능 챕터 */
+  /* 챕터는 새 쪽을 강제하지 않고 이어 붙인다(쪽마다 아래가 비지 않게). 머리글은 첫 단계와 떨어지지 않게 한다. */
+  .chapter + .chapter { margin-top: 9mm; padding-top: 7mm; border-top: 1.2mm solid var(--accent); }
+  .chapter-start { break-inside: avoid; page-break-inside: avoid; }
+  .chapter-head { border-bottom: 1px solid #e5e7eb; padding-bottom: 5mm; margin-bottom: 5mm; }
+  .divider + .chapter { margin-top: 0; }
+  .chapter-kicker { font-size: 9pt; font-weight: 800; letter-spacing: .06em; color: var(--accent); }
+  .chapter-kicker span { background: var(--accent); color: #fff; border-radius: 99px; padding: .3mm 2.6mm; margin-right: 1.5mm; letter-spacing: 0; }
+  .chapter-head h2 { font-size: 21pt; font-weight: 800; margin: 1.6mm 0 2mm; }
+  .menu-path { font-size: 9pt; color: #374151; display: flex; gap: 2mm; align-items: baseline; }
+  .menu-path b { font-size: 7.5pt; color: #fff; background: #4b5563; border-radius: 1mm; padding: 0 1.6mm; }
+  .summary { margin-top: 2.5mm; font-size: 10.5pt; color: #1f2937; }
+  .can { margin-top: 3.5mm; background: #f5f8ff; border: 1px solid #e0e9ff; border-radius: 2mm; padding: 3mm 4mm; }
+  .can strong { font-size: 8.5pt; color: var(--accent); letter-spacing: .02em; }
+  .can ul { list-style: none; padding: 0; margin: 1.2mm 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: .6mm 5mm; }
+  .can li { position: relative; padding-left: 4.5mm; }
+  .can li::before { content: ''; position: absolute; left: .4mm; top: 1.9mm; width: 2.2mm; height: 1.2mm; border-left: .5mm solid var(--accent); border-bottom: .5mm solid var(--accent); transform: rotate(-45deg); }
+
+  .step { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm; }
+  .step + .step, .chapter-start + .step { border-top: 1px dashed #e5e7eb; padding-top: 5mm; }
+  .step-head { display: flex; align-items: baseline; gap: 3mm; }
+  .step-no { font-size: 8.5pt; font-weight: 800; letter-spacing: .06em; }
+  .step h3 { font-size: 13pt; font-weight: 700; }
+  .step-desc { margin: 1mm 0 2mm; color: #374151; }
+  .step figure { margin: 0; }
+  /* 캡처(118mm, 높이 약 74mm)를 왼쪽에, 번호 설명을 오른쪽에 두어 한 쪽에 두세 단계가 들어가게 한다 */
+  .step-body { display: grid; grid-template-columns: 118mm 1fr; gap: 5mm; align-items: start; }
+  .step img { width: 118mm; display: block; border: 1px solid #e5e7eb; border-radius: 2mm; box-shadow: 0 1mm 3mm rgba(15,23,42,.08); }
+  .points { list-style: none; padding: 0; margin: 0; display: grid; gap: 1.6mm; font-size: 9pt; line-height: 1.5; }
+  .points li { display: grid; grid-template-columns: 6mm 1fr; align-items: start; }
+  .badge { width: 4.6mm; height: 4.6mm; border-radius: 50%; background: #f97316; color: #fff; font-size: 7.5pt; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-top: .5mm; }
+
+  .tips { break-inside: avoid; background: #fff8eb; border: 1px solid #fde7bf; border-radius: 2mm; padding: 3mm 4mm; margin-top: 2mm; }
+  .tips strong { color: #b45309; font-size: 9pt; }
+  .tips ul { margin: 1mm 0 0; padding-left: 4.5mm; color: #374151; }
 
   dl.faq dt { font-weight: 700; margin-top: 4mm; }
-  dl.faq dd { margin: 1mm 0 0; color: #3d4757; }
+  dl.faq dd { margin: 1mm 0 0; color: #374151; }
 </style>
 </head>
 <body>
@@ -197,24 +266,28 @@ const html = `<!doctype html>
   <div class="brand">PLAYDATA</div>
   <div>
     <h1>LMS 사용자 가이드</h1>
-    <p class="sub">처음 로그인부터 역할별 주요 화면까지</p>
+    <p class="sub">처음 로그인부터 역할별 기능까지, 화면을 따라 하나씩</p>
     <div class="roles">
       ${roles.map((r) => `<span style="background:${roleColor[r.role]}">${esc(r.label)}</span>`).join('')}
     </div>
   </div>
-  <img src="${img('student/dashboard.png')}" alt="학생 대시보드">
+  <img src="${img(hasThemeShots ? 'themes/light.png' : 'student/_tour.png')}" alt="학생 대시보드">
   <div class="meta"><span>SK네트웍스 Family AI 캠프</span><span>${dateLabel} 기준</span></div>
 </section>
 
 <section class="page">
   <h2>목차</h2>
   <ol class="toc">
-    <li class="start"><span class="toc-part">PART 1</span><strong>시작하기</strong><span class="toc-items">로그인 · 비밀번호 변경 · 이용 안내 투어 · 화면 구성 · 화면 설정(테마)</span></li>
+    <li><div class="toc-title"><span>PART 1</span><strong>시작하기</strong></div><p class="toc-plain">로그인 · 비밀번호 변경 · 이용 안내 투어 · 화면 구성 · 화면 테마</p></li>
     ${toc}
-    <li class="start"><span class="toc-part">부록</span><strong>자주 묻는 질문</strong><span class="toc-items">로그인이 안 될 때 · 이용 안내 다시 보기 · 문의</span></li>
+    <li><div class="toc-title"><span>부록</span><strong>자주 묻는 질문</strong></div></li>
   </ol>
   <div class="note">
-    이 안내서의 화면은 <b>데모 계정</b>으로 찍었습니다. 이름·이메일·점수는 예시이며 실제 수강생 정보가 아닙니다.
+    <b>읽는 법</b> — 기능마다 메뉴 위치와 할 수 있는 일을 먼저 적고, 화면을 단계(STEP)별로 보여 줍니다.
+    화면 위 <b style="color:#f97316">주황색 번호</b>는 아래 같은 번호의 설명과 짝입니다.
+  </div>
+  <div class="note">
+    이 안내서의 화면은 <b>데모 계정</b>으로 찍었습니다. 이름·이메일·점수·공고는 예시이며 실제 정보가 아닙니다.
     기수 운영 상황에 따라 메뉴 이름이나 표시 내용이 조금 다를 수 있습니다.
   </div>
 </section>
@@ -244,7 +317,7 @@ const html = `<!doctype html>
     </li>
     <li>
       <h4>화면 설정</h4>
-      <p>사이드바 맨 아래 「설정」에서 화면 테마(라이트 · 사이드바 다크 · 전체 다크), 사이드바 색, 화면 밀도(자동 · 보통 · 좁게)를 고릅니다. 설정은 지금 쓰는 기기에만 저장됩니다.</p>
+      <p>사이드바 「설정」에서 화면 테마(라이트 · 사이드바 다크 · 전체 다크), 사이드바 색, 화면 밀도(자동 · 보통 · 좁게)를 고릅니다. 설정은 지금 쓰는 기기에만 저장됩니다.</p>
     </li>
   </ol>
   <div class="two">
@@ -264,7 +337,9 @@ ${roleSections}
     <dt>이용 안내 투어를 닫았는데 다시 보고 싶어요.</dt>
     <dd>마이페이지 → 「이용 안내 다시보기」를 누르면 처음부터 다시 볼 수 있습니다.</dd>
     <dt>출결 폼은 언제 내나요?</dt>
-    <dd>지각·조퇴·외출·공가 같은 예외 출결이 있을 때 대시보드 오른쪽 위 「출결 폼」으로 제출합니다.</dd>
+    <dd>지각·조퇴·외출·공가 같은 예외 출결이 있을 때 오른쪽 위 「출결 폼」으로 당일에 제출합니다.</dd>
+    <dt>이력서 편집 화면에 AI 코치가 안 보여요.</dt>
+    <dd>피드백을 요청한 이력서는 오른쪽에 피드백 창이 대신 보입니다. 기본 이력서(작성 중)를 열면 AI 코치가 나옵니다. 창이 좁으면 위쪽 로봇 아이콘으로 엽니다.</dd>
     <dt>기록실에 올린 기록은 언제 마일리지로 들어오나요?</dt>
     <dd>매니저가 승인하면 기수 규칙에 따라 자동으로 적립됩니다. 승인 상태는 기록실 목록에서 확인합니다.</dd>
     <dt>마일리지 상품을 구매 요청했는데 포인트가 그대로예요.</dt>

@@ -217,6 +217,10 @@ class ReviewDockHostState extends State<ReviewDockHost> {
       ..showSnackBar(
         SnackBar(
           content: Text(text),
+          // 단추가 달린 스낵바는 Flutter가 기본으로 누를 때까지 남겨 둔다.
+          // 안내일 뿐이니 조금 더 보여 주고 저절로 닫는다.
+          persist: false,
+          duration: Duration(seconds: openAction ? 7 : 4),
           action: openAction
               ? SnackBarAction(
                   label: '열기',
@@ -466,28 +470,32 @@ class _ReviewDockBar extends StatelessWidget {
       ),
     );
 
+    // 넓은 화면은 가운데 아래에 둔다. Align은 카드 밖을 누르면 뒤 화면으로 넘겨 좌우 빈 곳을 막지 않는다.
     return Positioned(
-      right: compact ? 12 : 128,
-      left: compact ? 12 : null,
+      right: 12,
+      left: 12,
       bottom: compact ? 124 : 18,
       child: SafeArea(
-        child: Semantics(
-          container: true,
-          liveRegion: true,
-          label: '$title, $detail',
-          child: Container(
-            width: compact ? null : 340,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.14),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Semantics(
+            container: true,
+            liveRegion: true,
+            label: '$title, $detail',
+            child: Container(
+              width: compact ? null : 340,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.14),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: bar,
             ),
-            child: bar,
           ),
         ),
       ),

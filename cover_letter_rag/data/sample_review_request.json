@@ -1,8 +1,0 @@
-{
-  "resume_text": "팀 프로젝트에서 Flutter와 Firebase 기반 LMS를 개발했습니다. 이력서 등록과 관리자 피드백 화면을 구현했고 Git 브랜치 전략으로 협업했습니다. Python 수업에서 FastAPI와 LangChain을 사용해 문서 검색 실습을 수행했습니다.",
-  "job_posting_text": "교육 플랫폼 백엔드 개발자를 채용합니다. Python 기반 API 개발 경험과 관계형 데이터베이스 사용 경험이 필수입니다. FastAPI, Firebase 연동, 테스트 자동화 경험을 우대합니다.",
-  "cover_letter_question": "지원 직무와 관련된 본인의 강점과 입사 후 기여 방안을 작성해 주세요.",
-  "draft_text": "저는 교육 서비스 개발에 관심이 많습니다. 프로젝트에서 LMS를 개발하며 많은 것을 배웠습니다. 입사 후에도 열심히 성장하고 싶습니다.",
-  "top_k": 3
-}
-

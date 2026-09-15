@@ -86,7 +86,72 @@ Future<void> _panel(
   expect(find.byType(JobRecommendationLoading), findsOneWidget);
 }
 
+class _LinkedJobApi extends JobRecommendApiClient {
+  _LinkedJobApi() : super(baseUrl: 'http://test');
+
+  final response = Completer<JobChatResponse>();
+
+  @override
+  Future<JobChatResponse> chat({
+    required String message,
+    JobChatFilters? filters,
+    int topK = 5,
+    String? jobId,
+    String? resumeText,
+    List<String> lastJobIds = const [],
+    List<String> lastAnswerJobIds = const [],
+    List<String> seenJobIds = const [],
+  }) => response.future;
+}
+
+void _noop() {}
+
 void main() {
+  testWidgets('linked job lookup shows a short line, not the recommendation robot', (
+    tester,
+  ) async {
+    final api = _LinkedJobApi();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          jobRecommendApiClientProvider.overrideWithValue(api),
+          currentUserProvider.overrideWith((ref) => Stream.value(null)),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 380,
+              child: AiJobCoachPanel(
+                resumeId: 'resume',
+                draftContent: _resume,
+                isSidebar: true,
+                linkedJobId: 'job-1',
+                onClose: _noop,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('맞춤 공고 보기'));
+    await tester.pump();
+    // 새로 추천하는 게 아니라 연결된 공고 하나를 읽는다. 4단계 로봇과 "분석 중"은 띄우지 않는다.
+    expect(find.byType(JobRecommendationLoading), findsNothing);
+    expect(find.text('이 이력서와 연결된 공고를 불러오는 중이에요'), findsOneWidget);
+    expect(find.text('분석 중'), findsNothing);
+    api.response.complete(JobChatResponse.fromMap({
+      'mode': '공고',
+      'reply': '',
+      'jobs': [
+        {'job_id': 'job-1', 'company': '(주)토마토에이아이', 'title': 'AI 엔지니어'},
+      ],
+    }));
+    await tester.pump();
+    expect(find.text('이 이력서와 연결된 공고를 불러오는 중이에요'), findsNothing);
+    expect(find.text('맞춤 공고'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('unknown progress stays pending and long server details fit', (
     tester,
   ) async {

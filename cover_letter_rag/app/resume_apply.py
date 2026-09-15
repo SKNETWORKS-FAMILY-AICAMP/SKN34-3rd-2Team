@@ -61,10 +61,19 @@ def build_application(content, review, request):
     edits = review.get('sentence_reviews', [])
     if len(indices) != len(set(indices)) or any(i < 0 or i >= len(edits) for i in indices):
         raise ReviewInputError('invalid_selection')
-    updated, spans = deepcopy(content), {}
+    updated, spans, additions = deepcopy(content), {}, []
     for i in indices:
         edit = edits[i]
         replacement, quote, path = edit.get('suggested_revision'), edit.get('original_quote'), edit.get('field_path')
+        new_item = edit.get('new_item')
+        if new_item:
+            # 기존 칸을 고치지 않고 프로젝트 목록 끝에 항목을 하나 더한다. 기존 항목은 건드리지 않는다.
+            if (edit.get('validation_issues') or edit.get('status') != 'improved'
+                    or new_item.get('section') != 'projects' or not str(new_item.get('description') or '').strip()
+                    or not str(new_item.get('name') or '').strip()):
+                raise ReviewInputError('selection_not_applicable')
+            additions.append((path, new_item))
+            continue
         if edit.get('validation_issues') or edit.get('status') not in ('improved', 'formatting') or not replacement or not replacement.strip() or not quote:
             raise ReviewInputError('selection_not_applicable')
         target, key = locate(content, path)
@@ -84,7 +93,26 @@ def build_application(content, review, request):
         for start, end, replacement in sorted(changes, reverse=True):
             value = value[:start] + replacement + value[end:]
         target[key] = value
-    return updated, sorted(spans)
+    added = []
+    for path, item in additions:
+        projects = updated.setdefault('projects', [])
+        if not isinstance(projects, list):
+            raise ReviewConflict('field_not_found')
+        # 제안할 때의 목록 길이와 같아야 한다. 입력 해시가 같으면 늘 같지만, 한 번에 둘을 고르면 두 번째가 어긋난다.
+        if path != f'projects[{len(projects)}].description':
+            raise ReviewConflict('resume_item_changed')
+        projects.append({
+            'id': 'ai' + digest([request.review_id, path, item.get('name')])[:20],
+            'name': str(item.get('name') or '').strip(),
+            'startDate': '',
+            'endDate': '',
+            'role': str(item.get('role') or '').strip(),
+            'techStack': str(item.get('tech_stack') or '').strip(),
+            'description': str(item['description']).strip(),
+            'url': '',
+        })
+        added.append(path)
+    return updated, sorted([*spans, *added])
 
 
 def rebase_review_response(response, content):

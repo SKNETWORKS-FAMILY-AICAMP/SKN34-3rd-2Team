@@ -122,3 +122,52 @@ def test_api_apply_and_missing_auth(gateway):
         assert response.json()['operation_id'] == 'apply1'
     finally:
         app.dependency_overrides.pop(gateway_dependency, None)
+
+
+
+def new_project_review():
+    return {'input_hash': digest(CONTENT), 'sentence_reviews': [
+        {'field_path': 'projects[0].description', 'original_quote': 'API 개발.', 'suggested_revision': 'Python API 개발.', 'status': 'improved'},
+        {'field_path': 'projects[1].description', 'original_quote': '', 'suggested_revision': '카카오맵 API로 마커 화면을 만들었습니다.',
+         'status': 'improved', 'new_item': {'section': 'projects', 'question_id': 'q1', 'name': '카카오맵 매물 지도',
+                                            'role': '개인 과제', 'tech_stack': '카카오맵 API',
+                                            'description': '카카오맵 API로 마커 화면을 만들었습니다.'}}]}
+
+
+def test_new_project_suggestion_appends_item_without_touching_existing_ones():
+    updated, fields = build_application(CONTENT, new_project_review(), request())
+    assert updated['projects'][0]['description'] == 'Python API 개발. 테스트 작성.'
+    added = updated['projects'][1]
+    assert {k: added[k] for k in ('name', 'role', 'techStack', 'description', 'startDate', 'endDate', 'url')} == {
+        'name': '카카오맵 매물 지도', 'role': '개인 과제', 'techStack': '카카오맵 API',
+        'description': '카카오맵 API로 마커 화면을 만들었습니다.', 'startDate': '', 'endDate': '', 'url': ''}
+    assert added['id'] and added['id'] != 'a'
+    assert fields == ['projects[0].description', 'projects[1].description']
+    assert len(CONTENT['projects']) == 1
+    rebased = rebase_review_response(new_project_review(), updated)
+    assert rebased['input_fields']['projects[1].name'] == '카카오맵 매물 지도'
+
+
+@pytest.mark.parametrize('mode', ['wrong_slot', 'no_name', 'blocked'])
+def test_invalid_new_project_suggestion_rejected(mode):
+    data = new_project_review()
+    edit = data['sentence_reviews'][1]
+    if mode == 'wrong_slot': edit['field_path'] = 'projects[3].description'
+    if mode == 'no_name': edit['new_item']['name'] = ' '
+    if mode == 'blocked': edit['validation_issues'] = ['unsupported_term']
+    with pytest.raises((ReviewConflict, ReviewInputError)):
+        build_application(CONTENT, data, request())
+
+
+def test_second_suggestion_on_the_same_field_still_applies_after_the_first():
+    # 한 턴에 같은 칸(서로 다른 문장) 수정안이 둘 나오면 앱은 하나씩 적용한다. 앞 수정안을 적용해 이력서가 바뀌어도
+    # 서버가 첨삭 결과를 새 이력서로 옮기므로(rebase) 뒤 수정안이 그대로 적용돼야 한다.
+    first_request = ApplyRequest(cohort_id='c', resume_id='r', request_id='apply1', review_id='review1',
+                                 expected_input_hash=digest(CONTENT), selected_indices=[0])
+    first_applied, _ = build_application(CONTENT, review(), first_request)
+    rebased = rebase_review_response(review(), first_applied)
+    second_request = ApplyRequest(cohort_id='c', resume_id='r', request_id='apply2', review_id='review1',
+                                  expected_input_hash=digest(first_applied), selected_indices=[1])
+    both, fields = build_application(first_applied, rebased, second_request)
+    assert both['projects'][0]['description'] == 'Python API 개발. 테스트를 작성했습니다.'
+    assert fields == ['projects[0].description']

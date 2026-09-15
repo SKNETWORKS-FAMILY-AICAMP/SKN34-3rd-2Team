@@ -427,21 +427,30 @@ class _StudentChatbotHostState extends ConsumerState<StudentChatbotHost> {
                   child: MergeSemantics(
                     child: Semantics(
                       label: _open ? '챗봇 닫기' : '학생 챗봇 열기',
-                      child: FloatingActionButton(
-                        heroTag: 'student-chatbot',
-                        tooltip: null,
-                        backgroundColor: Colors.transparent,
-                        elevation: 0,
-                        hoverElevation: 0,
-                        focusElevation: 0,
-                        highlightElevation: 0,
-                        disabledElevation: 0,
-                        splashColor: Colors.transparent,
-                        onPressed: () => setState(() {
-                          _robotBounce++;
-                          _open = !_open;
-                        }),
-                        child: RobotHeadIcon(size: 104, bounce: _robotBounce),
+                      // 누르는 동안 칠해지는 강조색은 버튼 설정에 없어 테마로 끈다.
+                      child: Theme(
+                        data: Theme.of(
+                          context,
+                        ).copyWith(highlightColor: Colors.transparent),
+                        child: FloatingActionButton(
+                          heroTag: 'student-chatbot',
+                          tooltip: null,
+                          backgroundColor: Colors.transparent,
+                          elevation: 0,
+                          hoverElevation: 0,
+                          focusElevation: 0,
+                          highlightElevation: 0,
+                          disabledElevation: 0,
+                          splashColor: Colors.transparent,
+                          // 마우스를 올리거나 누르면 로봇 둘레에 사각형이 칠해졌다. 호버는 말풍선이 알려 준다.
+                          // 키보드 포커스 표시는 남긴다.
+                          hoverColor: Colors.transparent,
+                          onPressed: () => setState(() {
+                            _robotBounce++;
+                            _open = !_open;
+                          }),
+                          child: RobotHeadIcon(size: 104, bounce: _robotBounce),
+                        ),
                       ),
                     ),
                   ),

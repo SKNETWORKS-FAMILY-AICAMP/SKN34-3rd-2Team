@@ -61,11 +61,21 @@ export async function ensureVisible(page, locator) {
   return box;
 }
 
+/// 화면이 바뀌어 버튼을 못 찾으면 녹화는 그냥 넘어간다. 빠진 장면을 알 수 있게 남긴다.
+function missed(what, locator) {
+  console.warn(`  [못 찾음] ${what}: ${locator}`);
+}
+
 /// 설명하는 곳에 주황색 상자를 잠깐 띄운다. 기다리지 않고 바로 돌아온다.
 export async function highlight(page, locator, ms = 2600, pad = 6) {
-  if (!(await locator.count())) return;
+  if (!(await locator.count())) return missed('강조', locator);
   const box = await ensureVisible(page, locator);
   if (!box) return;
+  await highlightRect(page, box, ms, pad);
+}
+
+/// 좌표로 강조 상자를 띄운다(접근성 라벨이 없는 곳용).
+export async function highlightRect(page, box, ms = 2600, pad = 6) {
   await page.evaluate(
     ([b, ms, pad]) => {
       const el = document.createElement('div');
@@ -123,12 +133,13 @@ export async function tapIf(page, locator, opts) {
     await tap(page, locator, opts);
     return true;
   }
+  if (!opts?.quiet) missed('누르기', locator);
   return false;
 }
 
 /// 누르지 않고 커서만 올린다.
 export async function hover(page, locator, holdMs = 800) {
-  if (!(await locator.count())) return;
+  if (!(await locator.count())) return missed('커서', locator);
   const box = await ensureVisible(page, locator);
   if (box) await moveTo(page, box.x + box.width / 2, box.y + box.height / 2);
   await sleep(holdMs);
@@ -149,9 +160,34 @@ export async function typeInto(page, locator, text) {
 export const btn = (page, name) => page.getByRole('button', { name, exact: true });
 export const btnLike = (page, re) => page.getByRole('button', { name: re });
 
-/// 사이드바 메뉴를 누른다. 라벨이 semantics에 없으면 hash 이동으로 대신한다.
+// 사이드바 메뉴는 semantics 트리에 올라오지 않아 라벨로 찾을 수 없다.
+// 학생·강사 사이드바는 한 줄 목록이라 순서로 자리를 계산해 누른다(1440×900, 밀도 자동 기준).
+// 관리자 사이드바는 접히는 그룹이라 자리가 바뀌므로 hash 이동으로 대신한다.
+const railItems = {
+  student: ['대시보드', '이력서 관리', '학습실', '게시판', '자리 배치', '설문 · 제출', '자격 시험 일정', '기록실', '마일리지', '성취도평가', '설정'],
+  instructor: ['자리 확인', '이력서관리', '게시물관리', '성취도평가', '커리큘럼', '마이페이지', '설정'],
+};
+const rail = { x: 8, top: 72, width: 191, height: 40, pitch: 44 };
+
+/// 사이드바 메뉴 칸의 위치. 지금 화면이 학생·강사 셸이 아니거나 메뉴가 없으면 null.
+export async function railRect(page, label) {
+  const hash = await page.evaluate(() => window.location.hash);
+  const role = hash.startsWith('#/admin') ? 'admin' : hash.startsWith('#/instructor') ? 'instructor' : 'student';
+  const index = railItems[role]?.indexOf(label) ?? -1;
+  if (index < 0) return null;
+  return { x: rail.x, y: rail.top + index * rail.pitch, width: rail.width, height: rail.height };
+}
+
+/// 사이드바 메뉴를 누른다. 자리를 모르면 hash 이동으로 대신한다.
 export async function openMenu(page, label, fallbackRoute) {
-  if (!(await tapIf(page, btn(page, label), { pause: 1800 }))) await go(page, fallbackRoute, 1800);
+  if (await tapIf(page, btn(page, label), { pause: 1800, quiet: true })) return;
+  const box = await railRect(page, label);
+  if (box) {
+    await tapAt(page, box.x + 40, box.y + box.height / 2, 1800);
+    const hash = await page.evaluate(() => window.location.hash);
+    if (hash.replace(/^#/, '').split('?')[0] === fallbackRoute) return;
+  }
+  await go(page, fallbackRoute, 1800);
 }
 
 export async function login(page, role) {
@@ -162,19 +198,13 @@ export async function login(page, role) {
   await installCursor(page);
 }
 
-/// 앱의 이용 안내 투어를 끝까지 넘긴다.
-export async function walkTour(page, perStepMs = 1900) {
-  for (let i = 0; i < 30; i++) {
-    const done = btn(page, '완료');
-    if (await done.count()) {
-      await sleep(perStepMs);
-      await tap(page, done, { pause: 1200 });
-      return;
-    }
-    const next = btn(page, '다음');
-    if (!(await next.count())) return;
-    await sleep(perStepMs);
-    await tap(page, next, { pause: 900 });
+/// 이용 안내 투어는 첫 말풍선만 보여 주고 닫는다. 전부 넘기면 역할마다 1분 가까이 걸린다.
+/// 투어는 마이페이지 「이용 안내 다시보기」로 언제든 다시 볼 수 있다.
+export async function showTourStart(page, holdMs = 3200) {
+  await highlight(page, btn(page, '다음'), holdMs - 400);
+  await sleep(holdMs);
+  if (!(await tapIf(page, btn(page, '다시 보지 않기'), { pause: 1000, quiet: true }))) {
+    await tapIf(page, btnLike(page, /^(건너뛰기|닫기)$/), { pause: 1000 });
   }
 }
 
@@ -186,6 +216,22 @@ export async function scrollCoachPanelToTop(page) {
   await page.mouse.wheel(0, -3000);
   await sleep(700);
 }
+
+/// 강사·관리자: 피드백 요청 이력서를 「검토하기」로 열고, 항목을 골라 오른쪽 입력칸에 피드백을 보낸다.
+export async function writeResumeFeedback(page, section, text) {
+  if (!(await tapIf(page, btn(page, '검토하기'), { pause: 2200 }))) return false;
+  await tapIf(page, btn(page, section), { pause: 900 });
+  await typeInto(page, page.getByRole('textbox').last(), text);
+  await sleep(400);
+  // 입력칸 안내대로 Enter로 보낸다(보내기 아이콘은 접근성 라벨이 없다).
+  await page.keyboard.press('Enter');
+  await sleep(1400);
+  return true;
+}
+
+/// 대시보드 출석 캘린더의 오늘 칸. 데모 캘린더는 녹화하는 날짜를 기준으로 그린다.
+export const todayCell = (page) =>
+  btnLike(page, new RegExp(`^${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`));
 
 /// 화면 설정의 테마 항목. "라벨 + 설명"이 한 버튼이라 라벨로 시작하는 이름으로 찾는다.
 export const themeOption = (page, label) => btnLike(page, new RegExp(`^${label} `));

@@ -12,6 +12,7 @@ import '../data/resume_review_api_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_space.dart';
 import 'review_dock.dart';
+import 'review_requirements.dart';
 
 enum _ReviewBusyKind { review, answer, apply, undo }
 
@@ -23,9 +24,9 @@ const _generalReviewSteps = [
 ];
 
 const _jobReviewSteps = [
-  '선택 공고 원문 확인',
-  '이력서 문항별 비교',
-  '부족한 근거 선별',
+  '공고 요건 정리',
+  '이력서 근거 대조',
+  '경험·문장 점검',
   '확인 질문과 수정안 준비',
 ];
 
@@ -71,7 +72,7 @@ class JobResumeReviewDialog extends StatefulWidget {
 }
 
 class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
-  static const int _maxReviewQuestions = 7;
+  static const int _maxReviewQuestions = 10;
   Map<String, dynamic>? _result, _reviewRequest, _applyRequest;
   final Set<int> _selected = {};
   final Set<int> _appliedSuggestionIndices = {};
@@ -98,6 +99,20 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   String? _error;
   String? _focusedFieldPath;
   String? _tailoredResumeId;
+  // 지난 대화를 정리하고 처음부터 시작할 때 사용자에게 알리는 한 줄.
+  String? _restartNotice;
+  bool _restartedFromSaved = false;
+  // 공고 요건 대조 표. 첫 첨삭 응답의 requirement_map으로 채우고, 답할 때마다 서버가 갱신한다.
+  List<ReviewRequirementRow> _requirementRows = [];
+  // 경험 항목별 STAR 판정. 미리보기 네 칸과 질문 표시("경험 보완 · 행동이 빠짐")에 쓴다.
+  Map<String, ReviewStarCheck> _starChecks = {};
+  // 요건 칩을 눌러 근거 위치를 보고 있을 때만 채운다. 다음 질문·수정안이 오면 비운다.
+  String? _requirementFocusPath;
+  // 대화 끝에 무엇이 붙었는지 기억해 두고, 바뀌면 맨 아래로 스크롤한다(_followChatBottom).
+  String _chatTailSignature = '';
+  // "없음" 카드 기록은 화면을 막지 않고 뒤에서 순서대로 보낸다. 다음 답변은 이 줄이 끝난 뒤에 보낸다.
+  Future<void> _noneAnswerChain = Future<void>.value();
+  int _pendingNoneAnswers = 0;
   Future<void> _sessionSaveChain = Future<void>.value();
   final ValueNotifier<double> _previewFraction = ValueNotifier(0.5);
   late ResumeContent _preview;
@@ -122,7 +137,73 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _tailoredResumeId != null &&
         widget.initialReviewSession.isNotEmpty) {
       _restoreSession(widget.initialReviewSession);
+      // 목록에서 이어 열었는데 그 사이 이력서를 고쳤으면 지난 질문은 옛 이력서 기준이다.
+      if (_result != null && !_sessionCompleted) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _checkRestoredResumeVersion(),
+        );
+      }
     }
+  }
+
+  /// 저장된 대화를 버리고 첫 첨삭 전 상태로 돌린다.
+  ///
+  /// 사용자가 첨삭을 마친 뒤 이력서에 내용을 더 넣고 "재첨삭"을 누르는 흐름을 위한 것이다(2026-09-15).
+  /// 예전에는 마친 대화가 그대로 복원돼 입력창이 잠기고, 고친 이력서로는 새 첨삭을 시작할 수 없었다.
+  void _resetSession() {
+    _result = null;
+    _reviewRequest = null;
+    _applyRequest = null;
+    _selected.clear();
+    _appliedSuggestionIndices.clear();
+    _messages.clear();
+    _answeredQuestionIds.clear();
+    _questionQueue.clear();
+    _suggestionQueue.clear();
+    _pendingQuestion = null;
+    _gapAuditScheduled = false;
+    _gapAuditStarted = false;
+    _gapAuditFinished = false;
+    _manuallyCompleted = false;
+    _changed = false;
+    _requirementRows = [];
+    _starChecks = {};
+    _requirementFocusPath = null;
+    _error = null;
+  }
+
+  /// 목록에서 이어 연 대화가 지금 저장된 이력서와 같은 판인지 본다. 다르면 대화를 정리하고 처음부터 시작하게 한다.
+  Future<void> _checkRestoredResumeVersion() async {
+    try {
+      final snapshot = await widget.client.context(
+        widget.cohortId,
+        widget.resumeId,
+        job: widget.jobId,
+        tailoredResumeId: _tailoredResumeId,
+      );
+      if (!mounted ||
+          _result == null ||
+          _result!['input_hash'] == snapshot['input_hash']) {
+        return;
+      }
+      setState(() {
+        _resetSession();
+        _restartNotice = '이력서가 바뀌어 지난 대화를 정리했어요. 첨삭 시작을 누르면 바뀐 이력서로 다시 첨삭해요.';
+        _preview = ResumeContent.fromMap(
+          Map<String, dynamic>.from(snapshot['content'] as Map),
+        );
+      });
+    } catch (_) {
+      // 확인하지 못하면 그대로 둔다. 답을 보낼 때 서버가 판을 다시 확인한다.
+    }
+  }
+
+  /// 완료 안내의 "다시 첨삭". 고친 이력서로 처음부터 다시 첨삭한다.
+  void _restartReview() {
+    if (_busy) return;
+    setState(_resetSession);
+    _restartedFromSaved = true;
+    unawaited(_review());
   }
 
   void _restoreSession(Map<String, dynamic> state) {
@@ -191,6 +272,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _gapAuditFinished = state['gap_audit_finished'] == true;
     _manuallyCompleted = state['manually_completed'] == true;
     _changed = state['changed'] == true;
+    _requirementRows = (state['requirement_map'] as List? ?? const [])
+        .whereType<Map>()
+        .map(ReviewRequirementRow.fromMap)
+        .toList();
+    _starChecks = starChecksByPath(state['star_checks']);
     _trimQuestionBacklog();
   }
 
@@ -214,6 +300,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     'gap_audit_finished': _gapAuditFinished,
     'manually_completed': _manuallyCompleted,
     'changed': _changed,
+    'requirement_map': _requirementRows.map((row) => row.toMap()).toList(),
+    'star_checks': _starChecks.values.map((check) => check.toMap()).toList(),
     'completed': _sessionCompleted,
   };
 
@@ -231,6 +319,28 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     };
   }
 
+  /// 적용도 건너뛰기도 하지 않은 수정안이 대화에 남아 있는가.
+  bool get _hasActiveSuggestion => _messages.any(
+    (message) =>
+        (message.suggestion != null &&
+            message.suggestion!['_applied'] != true &&
+            message.suggestion!['_skipped'] != true) ||
+        (message.identitySuggestion != null &&
+            message.identitySuggestion!['_applied'] != true &&
+            message.identitySuggestion!['_skipped'] != true),
+  );
+
+  /// 질문을 다 마쳤지만 마지막 누락 점검이 아직 시작되지 않았다.
+  ///
+  /// 이때 완료로 보면 점검이 붙기 직전 초록 "첨삭 완료" 카드가 잠깐 떴다가 사라지고, 목록 배지도 먼저 완료로
+  /// 저장됐다(2026-09-15 앱). 점검 예약은 대기 중에 부르면 취소되므로, 이 상태면 build에서 다시 예약한다.
+  /// 적용하지 않은 수정안이 떠 있으면 사용자가 고른 뒤에 점검하므로 기다리는 상태로 보지 않는다.
+  bool get _awaitingGapAudit =>
+      _result != null &&
+      !_manuallyCompleted &&
+      !_gapAuditStarted &&
+      !_hasActiveSuggestion;
+
   bool get _sessionCompleted {
     if (_manuallyCompleted) return _result != null;
     final hasActiveQuestion = _messages.any((message) {
@@ -238,23 +348,15 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       return message.question != null &&
           (id == null || !_answeredQuestionIds.contains(id));
     });
-    final hasActiveSuggestion = _messages.any(
-      (message) =>
-          (message.suggestion != null &&
-              message.suggestion!['_applied'] != true &&
-              message.suggestion!['_skipped'] != true) ||
-          (message.identitySuggestion != null &&
-              message.identitySuggestion!['_applied'] != true &&
-              message.identitySuggestion!['_skipped'] != true),
-    );
     return _result != null &&
         !hasActiveQuestion &&
-        !hasActiveSuggestion &&
+        !_hasActiveSuggestion &&
         _pendingQuestion == null &&
         _questionQueue.isEmpty &&
         _suggestionQueue.isEmpty &&
         !_gapAuditScheduled &&
-        (!_gapAuditStarted || _gapAuditFinished);
+        _pendingNoneAnswers == 0 &&
+        _gapAuditFinished;
   }
 
   Future<void> _persistSession() {
@@ -374,7 +476,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   Future<void> _review() => _run(() async {
     final watch = Stopwatch()..start();
     try {
-      await _reviewOnce();
+      // 저장된 대화를 그대로 보여 준 경우(모델을 부르지 않음)는 로그를 남기지 않는다.
+      if (!await _reviewOnce()) return;
     } catch (error) {
       final ops = widget.aiOps;
       if (ops != null) {
@@ -411,7 +514,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     }
   }, kind: _ReviewBusyKind.review);
 
-  Future<void> _reviewOnce() async {
+  /// 첨삭을 한 번 돌린다. 저장된 대화만 보여 주고 모델을 부르지 않았으면 false.
+  Future<bool> _reviewOnce() async {
     _setBusyStage(0);
     await _ensureTailoredResume();
     _setBusyStage(1);
@@ -427,6 +531,18 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         throw const FormatException(
           '화면과 저장된 이력서가 다릅니다. 창을 닫고 저장 또는 새로고침한 뒤 다시 추천해 주세요.',
         );
+      }
+      // 재첨삭: 저장된 대화가 있으면 이력서가 그대로인지 본다. 고쳤으면 지난 대화를 이어 쓰지 않고 처음부터
+      // 첨삭한다. 그대로인데 이미 마친 대화면 모델을 부르지 않고 저장된 대화만 보여 준다(다시 첨삭은 완료 카드 버튼).
+      final restored = _result;
+      if (restored != null) {
+        if (restored['input_hash'] != snapshot['input_hash']) {
+          _resetSession();
+          _restartedFromSaved = true;
+        } else if (_sessionCompleted) {
+          _setBusyStage(4);
+          return false;
+        }
       }
       _reviewRequest = {
         ..._identity,
@@ -445,7 +561,16 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     _result = await widget.client.review(_reviewRequest!);
     _setBusyStage(4);
     _appendReview(_result!, isFirstReview: _messages.isEmpty);
+    if (_restartedFromSaved) {
+      _restartedFromSaved = false;
+      _messages.insert(
+        0,
+        const _ReviewChatMessage.assistant('이력서를 처음부터 다시 첨삭했어요. 지난 대화는 정리했어요.'),
+      );
+    }
+    _restartNotice = null;
     await _persistSession();
+    return true;
   }
 
   Future<void> _ensureTailoredResume() async {
@@ -502,9 +627,21 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     Map<String, dynamic> review, {
     required bool isFirstReview,
     String? answeredFieldPath,
+    String? answeredQuestionId,
+    String? answeredRequirementId,
     bool isGapAudit = false,
   }) {
     _pendingQuestion = null;
+    _requirementFocusPath = null;
+    final requirementMap = review['requirement_map'] as List?;
+    if (requirementMap != null && requirementMap.isNotEmpty) {
+      _requirementRows = requirementMap
+          .whereType<Map>()
+          .map(ReviewRequirementRow.fromMap)
+          .toList();
+    }
+    final starChecks = starChecksByPath(review['star_checks']);
+    if (starChecks.isNotEmpty) _starChecks = starChecks;
     if (isFirstReview) {
       final summary =
           review['summary'] as String? ??
@@ -520,10 +657,41 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     );
     var displayedSuggestions = 0;
     final identitySuggestions = <Map<String, dynamic>>[];
-    for (var index = 0; index < reviews.length; index++) {
+    final polishSuggestions = <Map<String, dynamic>>[];
+    // 서버는 "어느 항목에서 했나요?" 질문의 답을 답에 적힌 항목으로 옮긴다. 수정안은 옮겨진 항목에 생기므로
+    // 질문이 붙어 있던 칸이 아니라 서버가 기록한 답의 칸으로 거른다. 예전에는 질문 칸으로만 걸러 사용자에게
+    // 수정안이 하나도 안 보였다(2026-09-15 새 케이스: AVFoundation 답이 다른 프로젝트로 옮겨짐).
+    final resolvedFieldPath = _resolvedAnswerFieldPath(
+      review,
+      answeredQuestionId,
+      answeredFieldPath,
+    );
+    // 답에 이름이 나온 다른 항목도 이번 재첨삭에서 함께 고쳤다. 그 항목의 수정안도 보여 준다(2026-09-15).
+    final scopePaths = {
+      for (final path in review['answer_scope_paths'] as List? ?? const [])
+        if (path is String) path,
+    };
+    // 답한 칸의 수정안을 먼저, 이름이 나온 다른 항목의 수정안을 그 뒤에 보여 준다. 모델이 내는 순서는 매번 다르다.
+    final order = [
+      for (var i = 0; i < reviews.length; i++)
+        if (resolvedFieldPath == null ||
+            reviews[i]['field_path'] == resolvedFieldPath)
+          i,
+      for (var i = 0; i < reviews.length; i++)
+        if (resolvedFieldPath != null &&
+            reviews[i]['field_path'] != resolvedFieldPath)
+          i,
+    ];
+    for (final index in order) {
       final sentence = Map<String, dynamic>.from(reviews[index]);
-      if (answeredFieldPath != null &&
-          sentence['field_path'] != answeredFieldPath) {
+      // 새 프로젝트 추가 수정안은 아직 없는 칸(projects[N])이라 답의 칸으로 거르지 않고, 방금 답한 질문에서 나온 것만 보여 준다.
+      final newItem = sentence['new_item'];
+      final fromThisAnswer =
+          (newItem is Map && newItem['question_id'] == answeredQuestionId) ||
+          scopePaths.contains(sentence['field_path']);
+      if (resolvedFieldPath != null &&
+          sentence['field_path'] != resolvedFieldPath &&
+          !fromThisAnswer) {
         continue;
       }
       if (sentence['suggested_revision'] is String &&
@@ -535,11 +703,38 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           sentence['_title'] =
               job['role_title'] ?? job['title'] ?? widget.jobTitle;
           identitySuggestions.add(sentence);
+        } else if (isFirstReview &&
+            const {
+              'spelling',
+              'tone',
+              'clarity',
+            }.contains(sentence['edit_type'])) {
+          // 새 사실 없이 표현만 고친 수정안. 하나씩 넘기지 않고 한 카드에서 골라 한 번에 적용한다.
+          polishSuggestions.add(sentence);
         } else {
           _suggestionQueue.add(_ReviewChatMessage.suggestion(sentence));
         }
         displayedSuggestions++;
       }
+    }
+    if (polishSuggestions.length == 1) {
+      _suggestionQueue.insert(
+        0,
+        _ReviewChatMessage.suggestion(polishSuggestions.single),
+      );
+    } else if (polishSuggestions.length > 1) {
+      // 회사명·직무명 카드와 같은 묶음 적용 경로(_indices)를 쓴다. 적용·되돌리기·건너뛰기·세션 저장이
+      // 이미 여러 수정안을 한 번에 다룬다. 첫 질문보다 먼저 보여 준다.
+      _suggestionQueue.insert(
+        0,
+        _ReviewChatMessage.identityConfirmation({
+          '_kind': 'polish',
+          'field_path': polishSuggestions.first['field_path'],
+          'stage': 1,
+          'items': polishSuggestions,
+          '_indices': [for (final item in polishSuggestions) item['_index']],
+        }),
+      );
     }
     if (identitySuggestions.isNotEmpty) {
       // 회사명·직무명 자리표시자는 같은 선택 공고의 확정값으로 바뀝니다.
@@ -563,22 +758,50 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           queuedSuggestion.identitySuggestion?['field_path'] as String?;
       _focusPreviewField(fieldPath);
     }
-    if (!isFirstReview && !isGapAudit && displayedSuggestions == 0) {
+    final answeredNone =
+        (review['telemetry'] as Map?)?['model_skipped'] == 'none_answer';
+    if (!isFirstReview && !isGapAudit && answeredNone) {
+      // "없음" 카드. 수정안을 만들려다 실패한 게 아니라 고칠 사실이 없는 것이다.
+      String? label;
+      for (final row in _requirementRows) {
+        if (row.id == answeredRequirementId) label = row.label;
+      }
+      _messages.add(
+        _ReviewChatMessage.assistant(
+          label != null ? '알겠어요. 이력서에는 넣지 않을게요.' : '알겠어요. 다음 질문으로 넘어갈게요.',
+        ),
+      );
+    } else if (!isFirstReview && !isGapAudit && displayedSuggestions == 0) {
       final warnings = (review['grounding_warnings'] as List? ?? const [])
           .whereType<String>();
       final answerAlreadyPresent = warnings.any(
         (warning) => warning.startsWith('answer_already_present:'),
       );
+      // 답변으로 공고 요건이 확인됐는지. 수정안은 없어도 요건 표는 바뀐다.
+      final requirementConfirmed =
+          answeredRequirementId != null &&
+          (review['requirement_map'] as List? ?? const []).whereType<Map>().any(
+            (row) =>
+                row['id'] == answeredRequirementId &&
+                (row['status'] == 'met' || row['status'] == 'partial'),
+          );
+      // 수정안이 없다고 실패가 아니다. 지원 자격처럼 확인만 되고 이력서에 적을 문장이 없는 답이
+      // 많은데, 예전 문구("안전한 수정안을 만들지 못했습니다")는 오류처럼 읽혔다(2026-09-15 앱).
       _messages.add(
         _ReviewChatMessage.assistant(
           answerAlreadyPresent
-              ? '방금 답변한 내용은 이미 이력서에 반영되어 있어 같은 수정안을 다시 만들지 않았습니다. 다음 항목을 살펴봅니다.'
-              : '방금 답변을 반영한 안전한 수정안을 만들지 못했습니다. 확인되지 않은 내용은 넣지 않고 다음 항목을 살펴봅니다.',
+              ? '확인했어요. 이미 이력서에 들어 있는 내용이라 그대로 두고 다음으로 넘어갈게요.'
+              : requirementConfirmed
+              ? '확인했어요. 공고 요건 표에 반영하고 다음으로 넘어갈게요.'
+              : '확인했어요. 다음으로 넘어갈게요.',
         ),
       );
     }
     final questions = (review['questions'] as List? ?? []).cast<Map>();
-    _enqueueQuestions(questions);
+    _syncQuestionsWithServer(
+      questions,
+      dropMissing: !isFirstReview && !isGapAudit,
+    );
     final nextQuestion = _takeNextQuestion();
     if (nextQuestion != null) {
       if (displayedSuggestions > 0 || _suggestionQueue.isNotEmpty) {
@@ -608,15 +831,6 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         nextQuestion == null) {
       _scheduleGapAudit();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_chatScrollController.hasClients) {
-        _chatScrollController.animateTo(
-          _chatScrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   String _formatInitialSummary(String summary) {
@@ -633,6 +847,11 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   String _questionKey(Map<String, dynamic> question) {
     // A follow-up response gets a new question_id.  Deduplicate by the target
     // and intent instead, so wording changes cannot ask the same thing again.
+    // 공고 요건 질문은 요건마다 하나다. 같은 프로젝트·같은 topic이라도 요건이 다르면 다른 질문이다.
+    final requirementId = question['requirement_id'] as String?;
+    if (requirementId != null && requirementId.isNotEmpty) {
+      return 'requirement|$requirementId';
+    }
     return '${question['field_path']}|${question['topic']}';
   }
 
@@ -709,27 +928,34 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     }
   }
 
-  Future<void> _completeReview() async {
+  /// 위쪽 "첨삭 완료"와 완료 안내 카드의 초록 "첨삭 완료"가 함께 쓴다.
+  ///
+  /// 초록 버튼은 예전에 창만 닫았다. 완료 상태 저장이 끝나기 전에 목록이 다시 불러와져 "첨삭 진행 중"으로
+  /// 남았고, 새로고침해야 "첨삭 완료"로 바뀌었다(2026-09-15 앱). 이제 둘 다 저장을 기다린 뒤 편집기로 옮긴다.
+  /// 확인 창은 버리게 될 질문이나 수정안이 남아 있을 때만 띄운다.
+  Future<void> _completeReview({bool alwaysConfirm = true}) async {
     if (_busy || _result == null) return;
-    final shouldComplete = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('첨삭을 완료할까요?'),
-        content: const Text(
-          '현재까지 적용한 내용은 유지됩니다. 남은 질문과 적용하지 않은 수정안은 건너뛰고 첨삭을 완료합니다.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('계속 첨삭'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('첨삭 완료'),
-          ),
-        ],
-      ),
-    );
+    final shouldComplete = !alwaysConfirm && !_hasActiveSuggestion
+        ? true
+        : await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('첨삭을 완료할까요?'),
+              content: const Text(
+                '현재까지 적용한 내용은 유지됩니다. 남은 질문과 적용하지 않은 수정안은 건너뛰고 첨삭을 완료합니다.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('계속 첨삭'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('첨삭 완료'),
+                ),
+              ],
+            ),
+          );
     if (shouldComplete != true || !mounted) return;
     setState(() {
       _manuallyCompleted = true;
@@ -798,6 +1024,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       _gapAuditScheduled = false;
       if (_gapAuditStarted ||
           _busy ||
+          _pendingNoneAnswers > 0 ||
           _result == null ||
           _suggestionQueue.isNotEmpty ||
           _pendingQuestion != null ||
@@ -944,6 +1171,21 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     GlobalKey.new,
   );
 
+  /// 서버가 답을 옮겨 둔 칸. 응답의 `confirmed_answers`에서 이 질문의 답을 찾아 그 `field_path`를 쓴다.
+  static String? _resolvedAnswerFieldPath(
+    Map<String, dynamic> review,
+    String? questionId,
+    String? fallback,
+  ) {
+    if (questionId == null) return fallback;
+    for (final raw in (review['confirmed_answers'] as List? ?? const [])) {
+      if (raw is Map && raw['question_id'] == questionId) {
+        return raw['field_path'] as String? ?? fallback;
+      }
+    }
+    return fallback;
+  }
+
   void _focusPreviewField(String? fieldPath) {
     if (fieldPath == null || fieldPath == _focusedFieldPath) return;
     _focusedFieldPath = fieldPath;
@@ -961,9 +1203,223 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     });
   }
 
+  /// "없음" 카드. 고칠 사실이 없으니 서버 응답을 기다리지 않고 바로 다음 질문을 띄운다.
+  ///
+  /// 서버는 이 답이면 모델을 부르지 않고 기록만 한다(요건이면 absent). 그래도 1~2초 걸리는데, 그동안
+  /// 대기 표시를 띄우면 "없음"을 여러 번 누르는 흐름이 느리게 느껴졌다. 기록은 뒤에서 순서대로 보내고,
+  /// 서버가 다시 매긴 질문 번호는 화면에 떠 있는 질문에 옮겨 둔다.
+  void _submitNoneAnswer(Map<String, dynamic> question) {
+    if (_busy || _result == null) return;
+    final questionId = question['question_id'] as String?;
+    if (questionId != null && _answeredQuestionIds.contains(questionId)) return;
+    final requirementId = question['requirement_id'] as String?;
+    Map<String, dynamic>? next;
+    setState(() {
+      if (questionId != null) _answeredQuestionIds.add(questionId);
+      _messages.add(const _ReviewChatMessage.user('없음'));
+      _messages.add(
+        _ReviewChatMessage.assistant(
+          requirementId != null
+              ? '알겠어요. 이력서에는 넣지 않을게요.'
+              : '알겠어요. 다음 질문으로 넘어갈게요.',
+        ),
+      );
+      if (requirementId != null) {
+        _requirementRows = [
+          for (final row in _requirementRows)
+            // 근거를 못 찾은 요건만 해당 없음. 일부 근거가 있는 요건은 좁게 물은 질문에만 없다고 한 것이다.
+            row.id == requirementId && row.status == 'unconfirmed'
+                ? ReviewRequirementRow.fromMap({
+                    ...row.toMap(),
+                    'status': 'absent',
+                    'source': 'user',
+                    'evidence_paths': const [],
+                    'evidence_quotes': const [],
+                  })
+                : row,
+        ];
+      }
+      next = _takeNextQuestion();
+      if (next != null) _messages.add(_ReviewChatMessage.question(next!));
+    });
+    if (next != null) _focusPreviewField(next!['field_path'] as String?);
+    _pendingNoneAnswers++;
+    _noneAnswerChain = _noneAnswerChain
+        .then((_) => _recordNoneAnswer(question))
+        .whenComplete(() => _pendingNoneAnswers--);
+    unawaited(
+      _noneAnswerChain.then((_) async {
+        if (!mounted) return;
+        await _persistSession();
+        if (_pendingNoneAnswers == 0 && !_hasUnansweredDisplayedQuestion) {
+          _scheduleGapAudit();
+        }
+      }),
+    );
+  }
+
+  Future<void> _recordNoneAnswer(Map<String, dynamic> question) async {
+    if (!mounted || _result == null) return;
+    // 앞선 기록 사이에 서버가 이 질문을 뺐으면 기록할 것이 없다.
+    if (!_isQuestionStillOpen(question)) return;
+    final previous = _result!;
+    try {
+      final response = await widget.client.review({
+        ..._identity,
+        'request_id': _id(),
+        'review_mode': widget.generalReview ? 'general' : 'job',
+        if (!widget.generalReview && _tailoredResumeId != null)
+          'tailored_resume_id': _tailoredResumeId,
+        if (!widget.generalReview) ...{
+          'selected_job_id': widget.jobId,
+          'expected_job_hash':
+              (previous['job_source'] as Map?)?['snapshot_hash'],
+        },
+        'previous_review_id': previous['review_id'],
+        'expected_input_hash': previous['input_hash'],
+        'answers': [
+          {
+            'question_id': question['question_id'],
+            'field_path': question['field_path'],
+            'question': question['question'],
+            'answer': '없음',
+          },
+        ],
+      });
+      if (!mounted) return;
+      setState(() {
+        _result = response;
+        final requirementMap = response['requirement_map'] as List?;
+        if (requirementMap != null && requirementMap.isNotEmpty) {
+          _requirementRows = requirementMap
+              .whereType<Map>()
+              .map(ReviewRequirementRow.fromMap)
+              .toList();
+        }
+        final starChecks = starChecksByPath(response['star_checks']);
+        if (starChecks.isNotEmpty) _starChecks = starChecks;
+        final questions = (response['questions'] as List? ?? const [])
+            .whereType<Map>()
+            .toList();
+        _syncQuestionsWithServer(questions, dropMissing: true);
+        if (!_hasUnansweredDisplayedQuestion && _suggestionQueue.isEmpty) {
+          final next = _takeNextQuestion();
+          if (next != null) _messages.add(_ReviewChatMessage.question(next));
+        }
+      });
+    } on ResumeReviewApiException catch (error) {
+      // 서버가 이미 뺀 질문이면(422) 기록할 것이 없으니 넘어간다. 나머지 실패만 알린다.
+      if (mounted && error.statusCode != 422) {
+        setState(() => _error = '없음 답변을 저장하지 못했습니다. 다시 시도해 주세요. ($error)');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = '없음 답변을 저장하지 못했습니다. 다시 시도해 주세요. ($error)');
+      }
+    }
+  }
+
+  /// 서버가 돌려준 질문 목록을 기준으로 대기열을 맞춘다.
+  ///
+  /// 서버는 답할 때마다 남은 질문을 다시 정리한다(답한 질문과 비슷한 질문, 이미 확인된 요건 질문, 요건
+  /// 질문 개수 제한을 넘친 질문을 뺀다). 앱이 예전 목록을 그대로 들고 있으면 서버가 이미 뺀 질문을 띄우고,
+  /// 그 질문에 답하면 서버가 "모르는 질문"으로 거절한다(2026-09-15 앱에서 "없음" 기록이 실패했다).
+  void _syncQuestionsWithServer(
+    List<Map> questions, {
+    required bool dropMissing,
+  }) {
+    _adoptReissuedQuestionIds(questions);
+    if (dropMissing) {
+      final keys = {
+        for (final raw in questions)
+          _questionKey(Map<String, dynamic>.from(raw)),
+      };
+      _questionQueue.removeWhere(
+        (question) => !keys.contains(_questionKey(question)),
+      );
+      // 화면에 먼저 띄웠지만(없음 뒤 바로 다음 질문) 서버가 뺀 질문은 답하지 않은 채 대화에서 걷어낸다.
+      _messages.removeWhere((message) {
+        final shown = message.question;
+        final shownId = shown?['question_id'] as String?;
+        final stale =
+            shown != null &&
+            shownId != null &&
+            !_answeredQuestionIds.contains(shownId) &&
+            !keys.contains(_questionKey(shown));
+        if (stale) _answeredQuestionIds.add(shownId);
+        return stale;
+      });
+      if (_pendingQuestion != null &&
+          !keys.contains(_questionKey(_pendingQuestion!))) {
+        _pendingQuestion = null;
+      }
+    }
+    _enqueueQuestions(questions);
+  }
+
+  /// 화면에 띄운 질문이 서버의 최신 질문 목록에 아직 있는가. 없으면 서버가 이미 뺀 질문이다.
+  bool _isQuestionStillOpen(Map<String, dynamic> question) {
+    final questionId = question['question_id'] as String?;
+    final serverQuestions = (_result?['questions'] as List? ?? const [])
+        .whereType<Map>();
+    return serverQuestions.any((raw) => raw['question_id'] == questionId);
+  }
+
+  /// 서버가 이미 뺀 질문에 답하려 할 때. 보내지 않고 다음 질문으로 넘어간다.
+  void _skipStaleQuestion(Map<String, dynamic> question) {
+    Map<String, dynamic>? next;
+    setState(() {
+      final questionId = question['question_id'] as String?;
+      if (questionId != null) _answeredQuestionIds.add(questionId);
+      next = _takeNextQuestion();
+      if (next != null) _messages.add(_ReviewChatMessage.question(next!));
+    });
+    if (next != null) {
+      _focusPreviewField(next!['field_path'] as String?);
+    } else {
+      _scheduleGapAudit();
+    }
+  }
+
+  /// 서버는 응답마다 남은 질문에 새 번호를 매긴다. 이미 화면에 띄운 질문도 새 번호로 답해야 받아 준다.
+  void _adoptReissuedQuestionIds(List<Map> questions) {
+    for (final raw in questions) {
+      final reissued = Map<String, dynamic>.from(raw);
+      final key = _questionKey(reissued);
+      for (final message in _messages) {
+        final shown = message.question;
+        if (shown == null || _questionKey(shown) != key) continue;
+        final shownId = shown['question_id'] as String?;
+        if (shownId != null && _answeredQuestionIds.contains(shownId)) continue;
+        shown['question_id'] = reissued['question_id'];
+      }
+    }
+  }
+
+  void _focusRequirement(ReviewRequirementRow row) {
+    final path = row.evidencePaths.isNotEmpty ? row.evidencePaths.first : null;
+    setState(() => _requirementFocusPath = path);
+    if (path != null) {
+      _focusedFieldPath = null;
+      _focusPreviewField(path);
+    }
+  }
+
   Future<void> _submitAnswer(Map<String, dynamic> question) async {
     final answer = _answerController.text.trim();
     if (answer.isEmpty || _busy || _result == null) return;
+    if (_pendingNoneAnswers > 0) {
+      // 앞서 누른 "없음" 기록이 서버에 도착해야 이 답변이 최신 첨삭 결과를 이어받는다.
+      setState(() => _busy = true);
+      await _noneAnswerChain;
+      if (!mounted) return;
+      setState(() => _busy = false);
+    }
+    if (!_isQuestionStillOpen(question)) {
+      // 기다리는 사이 서버가 이 질문을 정리했다. 적은 답은 입력칸에 남겨 두고 다음 질문을 띄운다.
+      _skipStaleQuestion(question);
+      return;
+    }
     final previous = _result!;
     _answerController.clear();
     setState(() {
@@ -1008,6 +1464,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
         _result!,
         isFirstReview: false,
         answeredFieldPath: question['field_path'] as String?,
+        answeredQuestionId: question['question_id'] as String?,
+        answeredRequirementId: question['requirement_id'] as String?,
       );
       await _persistSession();
     }, kind: _ReviewBusyKind.answer);
@@ -1163,8 +1621,28 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
     }
   }
 
+  /// 새 말풍선·진행 표시·오류가 붙으면 대화를 맨 아래로 내린다.
+  ///
+  /// 예전에는 첫 첨삭과 답변 응답을 붙일 때만 내렸다. "없음" 뒤 다음 질문, 수정안 적용 뒤 다음 질문,
+  /// 누락 점검 안내처럼 다른 길로 붙은 말풍선은 화면 아래에 가려져 사용자가 직접 내려야 했다.
+  /// 말풍선을 붙이는 곳마다 부르는 대신 build에서 대화 끝의 상태가 바뀌었는지만 본다.
+  void _followChatBottom() {
+    final signature = '${_messages.length}|$_busy|$_busyStage|${_error ?? ''}';
+    if (signature == _chatTailSignature) return;
+    _chatTailSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_chatScrollController.hasClients) return;
+      _chatScrollController.animateTo(
+        _chatScrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _followChatBottom();
     Map<String, dynamic>? activeQuestion;
     for (final message in _messages.reversed) {
       final questionId = message.question?['question_id'] as String?;
@@ -1175,12 +1653,14 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       }
     }
     String? activeSuggestionFieldPath;
+    int? activeSuggestionStage;
     for (final message in _messages.reversed) {
       final suggestion = message.suggestion;
       if (suggestion != null &&
           suggestion['_applied'] != true &&
           suggestion['_skipped'] != true) {
         activeSuggestionFieldPath = suggestion['field_path'] as String?;
+        activeSuggestionStage = (suggestion['stage'] as num?)?.toInt();
         break;
       }
       final identitySuggestion = message.identitySuggestion;
@@ -1188,25 +1668,38 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           identitySuggestion['_applied'] != true &&
           identitySuggestion['_skipped'] != true) {
         activeSuggestionFieldPath = identitySuggestion['field_path'] as String?;
+        activeSuggestionStage = identitySuggestion['_kind'] == 'polish' ? 1 : 4;
         break;
       }
     }
     final highlightedFieldPath =
-        activeQuestion?['field_path'] as String? ?? activeSuggestionFieldPath;
+        _requirementFocusPath ??
+        activeQuestion?['field_path'] as String? ??
+        activeSuggestionFieldPath;
     final remainingQuestionCount =
         _questionQueue.length +
         (_pendingQuestion == null ? 0 : 1) +
         (activeQuestion == null ? 0 : 1);
-    final reviewCompleted =
+    final questionsDone =
         _result != null &&
         !_busy &&
         _error == null &&
         activeQuestion == null &&
         _pendingQuestion == null &&
         _questionQueue.isEmpty &&
+        _pendingNoneAnswers == 0;
+    if (questionsDone && _awaitingGapAudit) _scheduleGapAudit();
+    final reviewCompleted =
+        questionsDone &&
+        !_awaitingGapAudit &&
         !_gapAuditScheduled &&
         (!_gapAuditStarted || _gapAuditFinished);
     final dock = ReviewDockScope.watch(context);
+    final activeStage =
+        (activeQuestion?['stage'] as num?)?.toInt() ?? activeSuggestionStage;
+    final currentStage = reviewCompleted
+        ? kReviewStageLabels.length + 1
+        : (activeStage != null && activeStage > 0 ? activeStage : 0);
     return PopScope(
       canPop: !_busy && !_mutationPending,
       child: Dialog(
@@ -1243,6 +1736,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       changed: _changed,
                       highlightedFieldPath: highlightedFieldPath,
                       sectionKeys: _previewSectionKeys,
+                      starChecks: _starChecks,
                     );
                     final chat = _ReviewChatPane(
                       messages: _messages,
@@ -1267,7 +1761,18 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       onSkip: _skipSuggestion,
                       onUndo: _undoSuggestion,
                       canMinimize: dock != null,
-                      onClose: _closeWith,
+                      requirementRows: widget.generalReview
+                          ? const []
+                          : _requirementRows,
+                      starChecks: _starChecks,
+                      currentStage: currentStage,
+                      onRequirementTap: _focusRequirement,
+                      onNoneAnswer: activeQuestion == null
+                          ? null
+                          : () => _submitNoneAnswer(activeQuestion!),
+                      onClose: () => _completeReview(alwaysConfirm: false),
+                      onRestart: _restartReview,
+                      restartNotice: _restartNotice,
                     );
                     if (!horizontal) {
                       return Column(
@@ -1429,12 +1934,14 @@ class _ResumeDraftPreview extends StatelessWidget {
     required this.changed,
     required this.highlightedFieldPath,
     required this.sectionKeys,
+    this.starChecks = const {},
   });
 
   final ResumeContent content;
   final bool changed;
   final String? highlightedFieldPath;
   final Map<String, GlobalKey> sectionKeys;
+  final Map<String, ReviewStarCheck> starChecks;
 
   static const _labels = {
     'coreCompetencies': '핵심 역량',
@@ -1503,6 +2010,7 @@ class _ResumeDraftPreview extends StatelessWidget {
                     ),
                     highlightedFieldPath: highlightedFieldPath,
                     itemKeys: sectionKeys,
+                    starChecks: starChecks,
                   )
                 else if (entry.key == 'techStack' &&
                     (map[entry.key] as List? ?? const []).isNotEmpty)
@@ -1525,6 +2033,8 @@ class _ResumeDraftPreview extends StatelessWidget {
                         .toList(),
                     config: _compactConfig[entry.key]!,
                     highlighted: _highlighted(entry.key),
+                    sectionKey: entry.key,
+                    starChecks: starChecks,
                   )
                 else if (_render(map[entry.key]).isNotEmpty)
                   _PreviewSection(
@@ -1633,12 +2143,16 @@ class _CompactItemsPreview extends StatelessWidget {
     required this.items,
     required this.config,
     required this.highlighted,
+    this.sectionKey = '',
+    this.starChecks = const {},
   });
 
   final String title;
   final List<Map<String, dynamic>> items;
   final _CompactItemConfig config;
   final bool highlighted;
+  final String sectionKey;
+  final Map<String, ReviewStarCheck> starChecks;
 
   String _text(Map<String, dynamic> item, String? key) =>
       key == null ? '' : (item[key] as String? ?? '').trim();
@@ -1655,9 +2169,12 @@ class _CompactItemsPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filled = items
-        .where((item) => _text(item, config.primary).isNotEmpty)
-        .toList();
+    // 서버의 field_path("projects[2].description")는 원래 목록 번호라, 빈 항목을 거르기 전 번호를 함께 둔다.
+    final filledIndices = [
+      for (var index = 0; index < items.length; index++)
+        if (_text(items[index], config.primary).isNotEmpty) index,
+    ];
+    final filled = [for (final index in filledIndices) items[index]];
     if (filled.isEmpty) return const SizedBox.shrink();
     return Container(
       margin: EdgeInsets.only(bottom: AppSpace.s(18)),
@@ -1676,6 +2193,8 @@ class _CompactItemsPreview extends StatelessWidget {
                 _date(filled[index]),
               ].where((value) => value.isNotEmpty).toList(),
               description: _text(filled[index], config.description),
+              star:
+                  starChecks['$sectionKey[${filledIndices[index]}].${config.description}'],
             ),
             if (index != filled.length - 1) SizedBox(height: AppSpace.s(8)),
           ],
@@ -1690,11 +2209,13 @@ class _CompactItemRow extends StatelessWidget {
     required this.primary,
     required this.metadata,
     required this.description,
+    this.star,
   });
 
   final String primary;
   final List<String> metadata;
   final String description;
+  final ReviewStarCheck? star;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1745,6 +2266,8 @@ class _CompactItemRow extends StatelessWidget {
             style: const TextStyle(fontSize: 11, height: 1.45),
           ),
         ],
+        if (star != null && description.isNotEmpty)
+          ReviewStarCells(check: star!),
       ],
     ),
   );
@@ -1863,11 +2386,13 @@ class _SelfIntroductionPreview extends StatelessWidget {
     required this.sections,
     required this.highlightedFieldPath,
     required this.itemKeys,
+    this.starChecks = const {},
   });
 
   final Map<String, dynamic> sections;
   final String? highlightedFieldPath;
   final Map<String, GlobalKey> itemKeys;
+  final Map<String, ReviewStarCheck> starChecks;
 
   @override
   Widget build(BuildContext context) {
@@ -1909,6 +2434,7 @@ class _SelfIntroductionPreview extends StatelessWidget {
                     ) ==
                     true ||
                 highlightedFieldPath == 'selfIntroduction.${entry.key}',
+            star: starChecks['selfIntroduction.${entry.key}.body'],
           ),
       ],
     );
@@ -1941,11 +2467,13 @@ class _PreviewSection extends StatelessWidget {
     required this.title,
     required this.text,
     required this.highlighted,
+    this.star,
   });
 
   final String title;
   final String text;
   final bool highlighted;
+  final ReviewStarCheck? star;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1986,6 +2514,7 @@ class _PreviewSection extends StatelessWidget {
         ),
         SizedBox(height: AppSpace.s(7)),
         Text(text, style: const TextStyle(fontSize: 12, height: 1.55)),
+        if (star != null) ReviewStarCells(check: star!),
       ],
     ),
   );
@@ -2013,7 +2542,14 @@ class _ReviewChatPane extends StatelessWidget {
     required this.onSkip,
     required this.onUndo,
     required this.canMinimize,
+    required this.requirementRows,
+    this.starChecks = const {},
+    required this.currentStage,
+    required this.onRequirementTap,
+    required this.onNoneAnswer,
     required this.onClose,
+    required this.onRestart,
+    this.restartNotice,
   });
 
   final List<_ReviewChatMessage> messages;
@@ -2036,7 +2572,16 @@ class _ReviewChatPane extends StatelessWidget {
   final ValueChanged<List<int>> onSkip;
   final ValueChanged<Map<String, dynamic>> onUndo;
   final bool canMinimize;
+  final List<ReviewRequirementRow> requirementRows;
+  final Map<String, ReviewStarCheck> starChecks;
+
+  /// 0이면 아직 단계가 없고(첫 첨삭 전), 6이면 모두 끝났다.
+  final int currentStage;
+  final ValueChanged<ReviewRequirementRow> onRequirementTap;
+  final VoidCallback? onNoneAnswer;
   final VoidCallback onClose;
+  final VoidCallback onRestart;
+  final String? restartNotice;
 
   @override
   Widget build(BuildContext context) {
@@ -2101,17 +2646,35 @@ class _ReviewChatPane extends StatelessWidget {
             ],
           ),
         ),
+        if (requirementRows.isNotEmpty)
+          ReviewRequirementStrip(
+            rows: requirementRows,
+            onTapRow: onRequirementTap,
+          ),
+        if (resultAvailable && currentStage > 0)
+          ReviewStageBar(
+            currentStage: currentStage,
+            includeRequirementStage: requirementRows.isNotEmpty,
+          ),
         Expanded(
           child: SelectionArea(
             child: ListView(
               controller: scrollController,
               padding: EdgeInsets.all(AppSpace.s(18)),
               children: [
-                if (!resultAvailable && !busy && error == null)
+                if (!resultAvailable && !busy && error == null) ...[
+                  if (restartNotice != null)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: AppSpace.s(10)),
+                      child: _ReviewNoticeLine(text: restartNotice!),
+                    ),
                   _ChatIntro(onStart: onStart, generalReview: generalReview),
+                ],
                 for (final message in messages)
                   _ReviewChatBubble(
                     message: message,
+                    requirementRows: requirementRows,
+                    starChecks: starChecks,
                     appliedSuggestionIndices: appliedSuggestionIndices,
                     onApply: onApply,
                     onSkip: onSkip,
@@ -2145,12 +2708,14 @@ class _ReviewChatPane extends StatelessWidget {
                   ),
                 if (reviewCompleted)
                   _ReviewCompletedNotice(
+                    requirementRows: requirementRows,
                     hasSuggestions: messages.any(
                       (message) =>
                           message.suggestion != null ||
                           message.identitySuggestion != null,
                     ),
                     onClose: onClose,
+                    onRestart: onRestart,
                   ),
               ],
             ),
@@ -2165,38 +2730,60 @@ class _ReviewChatPane extends StatelessWidget {
                 top: BorderSide(color: AppColors.tint(const Color(0xFFE5E7EB))),
               ),
             ),
-            child: Focus(
-              onKeyEvent: (_, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.enter &&
-                    !HardwareKeyboard.instance.isShiftPressed) {
-                  onAnswer?.call();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: answerController,
-                enabled: !busy && activeQuestion != null,
-                minLines: 1,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: activeQuestion == null
-                      ? awaitingSuggestionApply
-                            ? '수정안을 반영하면 다음 질문을 이어갑니다.'
-                            : '현재 추가 확인 질문이 없습니다.'
-                      : '답변을 입력하세요. (Enter 전송 · Shift+Enter 줄바꿈)',
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (onNoneAnswer != null && !busy)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: AppSpace.s(8)),
+                    child: ActionChip(
+                      key: const ValueKey('review-none-answer'),
+                      onPressed: onNoneAnswer,
+                      avatar: Icon(
+                        Icons.remove_circle_outline_rounded,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                      label: const Text('없음'),
+                      tooltip:
+                          '해 본 적이 없거나 기억나지 않으면 누르세요. 이력서에 넣지 않고 다음 질문으로 넘어갑니다.',
+                    ),
                   ),
-                  suffixIcon: IconButton(
-                    tooltip: '답변 보내기',
-                    onPressed: onAnswer,
-                    icon: Icon(Icons.send, color: AppColors.primary),
+                Focus(
+                  onKeyEvent: (_, event) {
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.enter &&
+                        !HardwareKeyboard.instance.isShiftPressed) {
+                      onAnswer?.call();
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                    controller: answerController,
+                    enabled: !busy && activeQuestion != null,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: activeQuestion == null
+                          ? awaitingSuggestionApply
+                                ? '수정안을 반영하면 다음 질문을 이어갑니다.'
+                                : '현재 추가 확인 질문이 없습니다.'
+                          : '답변을 입력하세요. (Enter 전송 · Shift+Enter 줄바꿈)',
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      suffixIcon: IconButton(
+                        tooltip: '답변 보내기',
+                        onPressed: onAnswer,
+                        icon: Icon(Icons.send, color: AppColors.primary),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
       ],
@@ -2488,12 +3075,39 @@ class _ReviewProgressRow extends StatelessWidget {
 
 class _ReviewCompletedNotice extends StatelessWidget {
   const _ReviewCompletedNotice({
+    required this.requirementRows,
     required this.hasSuggestions,
     required this.onClose,
+    required this.onRestart,
   });
 
+  final List<ReviewRequirementRow> requirementRows;
   final bool hasSuggestions;
   final VoidCallback onClose;
+  final VoidCallback onRestart;
+
+  /// "공고 요건: 필수 4/5 · 우대 2/3 근거 확인". 공고 없는 첨삭이면 빈 문자열.
+  String get _requirementSummary {
+    String part(String group) {
+      final rows = requirementRows
+          .where((row) => row.group == group && !row.isEligibility)
+          .toList();
+      if (rows.isEmpty) return '';
+      final met = rows.where((row) => row.status == 'met').length;
+      return '${requirementGroupLabel(group)} $met/${rows.length}';
+    }
+
+    final parts = [
+      part('must'),
+      part('preferred'),
+    ].where((text) => text.isNotEmpty);
+    if (parts.isEmpty) return '';
+    final missing = requirementRows.any(
+      (row) => row.status != 'met' && row.group != 'task' && !row.isEligibility,
+    );
+    return '공고 요건: ${parts.join(' · ')} 근거 확인'
+        '${missing ? '. 확인되지 않은 요건은 이력서에 넣지 않았습니다.' : ''}';
+  }
 
   @override
   Widget build(BuildContext context) => Container(
@@ -2520,6 +3134,18 @@ class _ReviewCompletedNotice extends StatelessWidget {
                 ),
               ),
               SizedBox(height: AppSpace.s(2)),
+              if (_requirementSummary.isNotEmpty) ...[
+                Text(
+                  _requirementSummary,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF166534),
+                  ),
+                ),
+                SizedBox(height: AppSpace.s(2)),
+              ],
               Text(
                 hasSuggestions
                     ? '추가 확인 질문이 없습니다. 표시된 수정안은 원하는 것만 반영한 뒤 마칠 수 있습니다.'
@@ -2528,6 +3154,24 @@ class _ReviewCompletedNotice extends StatelessWidget {
                   fontSize: 11,
                   height: 1.4,
                   color: Color(0xFF166534),
+                ),
+              ),
+              SizedBox(height: AppSpace.s(4)),
+              // 이력서에 내용을 더 넣은 뒤 여기서 다시 첨삭한다. 지난 대화는 정리하고 처음부터 본다.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: onRestart,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF166534),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  icon: const Icon(Icons.refresh, size: 15),
+                  label: const Text(
+                    '이력서를 고쳤다면 다시 첨삭',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
                 ),
               ),
             ],
@@ -2593,6 +3237,8 @@ class _ChatIntro extends StatelessWidget {
 class _ReviewChatBubble extends StatelessWidget {
   const _ReviewChatBubble({
     required this.message,
+    required this.requirementRows,
+    this.starChecks = const {},
     required this.appliedSuggestionIndices,
     required this.onApply,
     required this.onSkip,
@@ -2600,7 +3246,59 @@ class _ReviewChatBubble extends StatelessWidget {
   });
 
   final _ReviewChatMessage message;
+  final List<ReviewRequirementRow> requirementRows;
+  final Map<String, ReviewStarCheck> starChecks;
   final Set<int> appliedSuggestionIndices;
+
+  /// 수정안 카드 밑에 붙일 안내. 칸 사이 중복과 원문 부정 표현이 빠진 것.
+  static List<String> _noticesFor(Map<String, dynamic> item) => [
+    for (final key in const [
+      'overlap_notice',
+      'meaning_notice',
+      'fact_notice',
+      'flow_notice',
+    ])
+      if ((item[key] as String? ?? '').isNotEmpty) item[key] as String,
+  ];
+
+  /// 질문·수정안 위에 붙일 표시. 요건에 연결되면 "필수 · Git 협업", 아니면 단계 이름.
+  Widget? _tagFor(Map<String, dynamic> item) {
+    final requirementId = item['requirement_id'] as String?;
+    if (requirementId != null) {
+      for (final row in requirementRows) {
+        if (row.id == requirementId) {
+          return ReviewItemTag(
+            text: '${requirementGroupLabel(row.group)} · ${row.label}',
+            requirementGroup: row.group,
+          );
+        }
+      }
+    }
+    final stage = reviewStageLabel((item['stage'] as num?)?.toInt());
+    // 경험 질문이 묻는 요소가 STAR 판정에서 빠진 요소면 이유를 함께 보인다. "경험 보완 · 행동이 빠짐".
+    final topic = item['topic'] as String?;
+    final check = starChecks[item['field_path']];
+    const gaps = {
+      'situation': '상황이 빠짐',
+      'task': '과제가 빠짐',
+      'action': '행동이 빠짐',
+      'result': '결과가 빠짐',
+    };
+    final starText =
+        item.containsKey('question') &&
+            topic != null &&
+            check != null &&
+            gaps.containsKey(topic) &&
+            !check.has(topic)
+        ? gaps[topic]
+        : null;
+    if (stage.isEmpty) return null;
+    return ReviewItemTag(
+      text: starText == null ? stage : '$stage · $starText',
+      requirementGroup: null,
+    );
+  }
+
   final ValueChanged<List<int>> onApply;
   final ValueChanged<List<int>> onSkip;
   final ValueChanged<Map<String, dynamic>> onUndo;
@@ -2727,6 +3425,28 @@ class _ReviewChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.identitySuggestion?['_kind'] == 'polish') {
+      final item = message.identitySuggestion!;
+      final count = (item['_indices'] as List? ?? const []).length;
+      if (item['_undone'] == true) {
+        return const _AppliedSuggestionNotice(text: '문장 다듬기 반영을 취소했습니다.');
+      }
+      if (item['_applied'] == true) {
+        return _AppliedSuggestionNotice(
+          text: '문장 다듬기 $count개를 이력서에 반영했습니다.',
+          onUndo: item['_undo_available'] == true ? () => onUndo(item) : null,
+        );
+      }
+      if (item['_skipped'] == true) {
+        return const _AppliedSuggestionNotice(text: '문장 다듬기를 건너뛰었습니다.');
+      }
+      return _PolishBundleCard(
+        item: item,
+        onApply: onApply,
+        onSkip: onSkip,
+        tag: _tagFor(item),
+      );
+    }
     if (message.identitySuggestion != null) {
       final item = message.identitySuggestion!;
       final indices = (item['_indices'] as List? ?? [item['_index']])
@@ -2803,14 +3523,28 @@ class _ReviewChatBubble extends StatelessWidget {
       if (item['_undone'] == true) {
         return const _AppliedSuggestionNotice(text: '수정안 반영을 취소했습니다.');
       }
+      final newItem = item['new_item'] is Map
+          ? Map<String, dynamic>.from(item['new_item'] as Map)
+          : null;
       if (applied) {
         return _AppliedSuggestionNotice(
-          text: '수정안을 이력서에 반영했습니다.',
+          text: newItem != null
+              ? '새 프로젝트를 이력서에 추가했습니다. 기간은 직접 채워 주세요.'
+              : '수정안을 이력서에 반영했습니다.',
           onUndo: item['_undo_available'] == true ? () => onUndo(item) : null,
         );
       }
       if (item['_skipped'] == true) {
         return const _AppliedSuggestionNotice(text: '수정안을 건너뛰었습니다.');
+      }
+      if (newItem != null) {
+        return _NewProjectSuggestionCard(
+          item: item,
+          newItem: newItem,
+          tag: _tagFor(item),
+          onSkip: () => onSkip([index]),
+          onApply: () => onApply([index]),
+        );
       }
       return Card(
         margin: EdgeInsets.only(bottom: AppSpace.s(12)),
@@ -2820,6 +3554,7 @@ class _ReviewChatBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              ?_tagFor(item),
               const Text(
                 'AI 수정안',
                 style: TextStyle(
@@ -2869,6 +3604,11 @@ class _ReviewChatBubble extends StatelessWidget {
                   ),
                 ),
               ],
+              // 다른 칸과 겹치거나 원문의 부정 표현이 빠진 수정안은 막지 않고 알린다. 사용자가 보고 고른다(2026-09-15).
+              for (final notice in _noticesFor(item)) ...[
+                SizedBox(height: AppSpace.s(6)),
+                _ReviewNoticeLine(text: notice),
+              ],
               SizedBox(height: AppSpace.s(9)),
               Row(
                 children: [
@@ -2897,6 +3637,9 @@ class _ReviewChatBubble extends StatelessWidget {
 
     final isUser = message.isUser;
     final text = message.question?['question'] as String? ?? message.text;
+    final questionTag = message.question == null
+        ? null
+        : _tagFor(message.question!);
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -2913,15 +3656,162 @@ class _ReviewChatBubble extends StatelessWidget {
               : Border.all(color: AppColors.tint(const Color(0xFFE5E7EB))),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 12.5,
-            height: 1.45,
-            color: isUser ? Colors.white : AppColors.textPrimary,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ?questionTag,
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.45,
+                color: isUser ? Colors.white : AppColors.textPrimary,
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+/// 답변이 이력서에 없는 별도 경험일 때의 수정안. 기존 칸을 고치지 않고 프로젝트 목록 끝에 항목을 하나 더한다.
+/// 원문이 없으니 바뀐 부분 대신 추가될 이름·형태·기술·설명을 그대로 보여 준다(2026-09-15).
+class _NewProjectSuggestionCard extends StatelessWidget {
+  const _NewProjectSuggestionCard({
+    required this.item,
+    required this.newItem,
+    required this.tag,
+    required this.onSkip,
+    required this.onApply,
+  });
+
+  final Map<String, dynamic> item;
+  final Map<String, dynamic> newItem;
+  final Widget? tag;
+  final VoidCallback onSkip;
+  final VoidCallback onApply;
+
+  Widget _row(String label, String value) => Padding(
+    padding: EdgeInsets.only(bottom: AppSpace.s(5)),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 44,
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value.isEmpty ? '비워 둠 · 직접 채워 주세요' : value,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: value.isEmpty
+                  ? AppColors.textSecondary
+                  : AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final notice = item['overlap_notice'] as String? ?? '';
+    final reason = item['reason'] as String? ?? '';
+    return Card(
+      key: const ValueKey('review-new-project-card'),
+      margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+      color: AppColors.tint(const Color(0xFFF0FDF4)),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpace.s(12)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ?tag,
+            const Row(
+              children: [
+                Icon(Icons.add_box_outlined, size: 16, color: Color(0xFF166534)),
+                SizedBox(width: 5),
+                Text(
+                  '새 프로젝트로 추가',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF166534),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: AppSpace.s(8)),
+            _row('이름', newItem['name'] as String? ?? ''),
+            _row('형태', newItem['role'] as String? ?? ''),
+            _row('기술', newItem['tech_stack'] as String? ?? ''),
+            _row('기간', ''),
+            _row('설명', newItem['description'] as String? ?? ''),
+            if (reason.isNotEmpty) ...[
+              SizedBox(height: AppSpace.s(3)),
+              Text(
+                reason,
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+              ),
+            ],
+            if (notice.isNotEmpty) ...[
+              SizedBox(height: AppSpace.s(6)),
+              _ReviewNoticeLine(text: notice),
+            ],
+            SizedBox(height: AppSpace.s(9)),
+            Row(
+              children: [
+                OutlinedButton(onPressed: onSkip, child: const Text('건너뛰기')),
+                SizedBox(width: AppSpace.s(8)),
+                FilledButton.icon(
+                  onPressed: onApply,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.add, size: 15),
+                  label: const Text('프로젝트로 추가'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 수정안을 막지는 않지만 사용자가 확인해야 할 점을 알리는 한 줄.
+class _ReviewNoticeLine extends StatelessWidget {
+  const _ReviewNoticeLine({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppColors.isDark
+        ? AppColors.warning
+        : const Color(0xFFB45309);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.info_outline, size: 14, color: color),
+        SizedBox(width: AppSpace.s(5)),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 11, height: 1.4, color: color),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -3032,5 +3922,244 @@ class _ReviewChatMessage {
       return {'type': 'identity', 'payload': identitySuggestion};
     }
     return {'type': isUser ? 'user' : 'assistant', 'text': text};
+  }
+}
+
+/// 첫 첨삭의 문장 다듬기 수정안을 한 카드에 모은다. 새 사실이 없는 표현 수정이라 하나씩 넘기지 않고
+/// 고른 것만 한 번에 적용한다. 적용·되돌리기는 회사명·직무명 카드와 같은 `_indices` 경로를 쓴다.
+class _PolishBundleCard extends StatefulWidget {
+  const _PolishBundleCard({
+    required this.item,
+    required this.onApply,
+    required this.onSkip,
+    required this.tag,
+  });
+
+  final Map<String, dynamic> item;
+  final ValueChanged<List<int>> onApply;
+  final ValueChanged<List<int>> onSkip;
+  final Widget? tag;
+
+  @override
+  State<_PolishBundleCard> createState() => _PolishBundleCardState();
+}
+
+class _PolishBundleCardState extends State<_PolishBundleCard> {
+  late final List<Map<String, dynamic>> _items = [
+    for (final raw in widget.item['items'] as List? ?? const [])
+      if (raw is Map) Map<String, dynamic>.from(raw),
+  ];
+  late final Set<int> _chosen = {
+    for (final item in _items) item['_index'] as int,
+  };
+
+  String _fieldLabel(String path) {
+    const sections = {
+      'coreCompetencies': '핵심 역량',
+      'experience': '경력',
+      'projects': '프로젝트',
+      'awards': '수상',
+      'otherActivities': '기타 활동',
+      'trainingExperience': '교육',
+      'education': '학력',
+      'certifications': '자격증',
+    };
+    const intro = {
+      'intro': '자기소개',
+      'motivation': '지원동기',
+      'challenge': '어려움 극복 경험',
+      'growth': '성장과정',
+      'strengthsWeaknesses': '성격의 장단점',
+      'aspiration': '입사 후 포부',
+    };
+    final parts = path.split('.');
+    if (parts.first == 'selfIntroduction' && parts.length > 1) {
+      return intro[parts[1]] ?? '자기소개서';
+    }
+    final match = RegExp(r'^(\w+)\[(\d+)\]').firstMatch(path);
+    if (match != null) {
+      return '${sections[match.group(1)] ?? match.group(1)} ${int.parse(match.group(2)!) + 1}';
+    }
+    return sections[parts.first] ?? parts.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final all = [for (final item in _items) item['_index'] as int];
+    return Card(
+      key: const ValueKey('polish-bundle'),
+      margin: EdgeInsets.only(bottom: AppSpace.s(12)),
+      color: AppColors.tint(const Color(0xFFF0FDF4)),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpace.s(12)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ?widget.tag,
+            Text(
+              '문장 다듬기 ${_items.length}개',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF166534),
+              ),
+            ),
+            SizedBox(height: AppSpace.s(3)),
+            Text(
+              '새 사실 없이 읽기 좋게 고친 문장이에요. 원하는 것만 골라 한 번에 적용하세요. '
+              '적용한 뒤 질문에 답하면 다듬어진 문장을 기준으로 다시 첨삭합니다.',
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            ),
+            SizedBox(height: AppSpace.s(8)),
+            for (final item in _items)
+              _PolishBundleRow(
+                label: _fieldLabel(item['field_path'] as String? ?? ''),
+                notices: _ReviewChatBubble._noticesFor(item),
+                original: item['original_quote'] as String? ?? '',
+                revision: item['suggested_revision'] as String? ?? '',
+                checked: _chosen.contains(item['_index']),
+                onChanged: (value) => setState(() {
+                  final index = item['_index'] as int;
+                  value ? _chosen.add(index) : _chosen.remove(index);
+                }),
+              ),
+            SizedBox(height: AppSpace.s(6)),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => setState(() {
+                    _chosen.length == all.length
+                        ? _chosen.clear()
+                        : _chosen.addAll(all);
+                  }),
+                  child: Text(_chosen.length == all.length ? '모두 해제' : '모두 선택'),
+                ),
+                const Spacer(),
+                OutlinedButton(
+                  onPressed: () => widget.onSkip(all),
+                  child: const Text('건너뛰기'),
+                ),
+                SizedBox(width: AppSpace.s(8)),
+                FilledButton.icon(
+                  key: const ValueKey('polish-bundle-apply'),
+                  onPressed: _chosen.isEmpty
+                      ? null
+                      : () {
+                          final selected = [
+                            for (final index in all)
+                              if (_chosen.contains(index)) index,
+                          ];
+                          // 고르지 않은 수정안은 이 카드에서 버린다. 적용 표시와 되돌리기가 고른 것만 본다.
+                          widget.item['_indices'] = selected;
+                          widget.onApply(selected);
+                        },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.check, size: 15),
+                  label: Text('선택한 ${_chosen.length}개 적용'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PolishBundleRow extends StatelessWidget {
+  const _PolishBundleRow({
+    required this.label,
+    required this.original,
+    required this.revision,
+    required this.checked,
+    required this.onChanged,
+    this.notices = const [],
+  });
+
+  final String label;
+  final List<String> notices;
+  final String original;
+  final String revision;
+  final bool checked;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppSpace.s(6)),
+      child: InkWell(
+        onTap: () => onChanged(!checked),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.s(4),
+            AppSpace.s(6),
+            AppSpace.s(8),
+            AppSpace.s(8),
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.tint(const Color(0xFFBBF7D0))),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Checkbox(
+                value: checked,
+                onChanged: (value) => onChanged(value ?? false),
+                visualDensity: VisualDensity.compact,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: AppSpace.s(2)),
+                    Text(
+                      original,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.45,
+                        color: AppColors.textHint,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    SizedBox(height: AppSpace.s(3)),
+                    Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: AppColors.textPrimary,
+                        ),
+                        children: _ReviewChatBubble._changedRevisionSpans(
+                          original,
+                          revision,
+                        ),
+                      ),
+                    ),
+                    for (final notice in notices) ...[
+                      SizedBox(height: AppSpace.s(4)),
+                      _ReviewNoticeLine(text: notice),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

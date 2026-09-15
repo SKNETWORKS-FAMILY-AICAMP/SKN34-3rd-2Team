@@ -125,7 +125,7 @@ abstract final class AdminOnboarding {
     OnboardingStep(
       id: 'nav_ai',
       title: 'LLMOps',
-      body: '관측 · 평가 · 피드백 · 프롬프트 버전을 점검하는 시스템 메뉴입니다.',
+      body: 'AI 기능의 관측 지표(성공률·지연·비용)와 평가 결과, 프롬프트 버전별 채택률을 확인합니다.',
       targetId: AdminOnboardingTargets.navAiQuality,
       route: RoutePaths.adminAiQuality,
     ),
