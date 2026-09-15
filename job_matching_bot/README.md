@@ -15,39 +15,14 @@ LMS 앱의 **맞춤 공고 추천**과 **공고 찾기 챗봇**을 맡는 모듈
 
 ---
 
-## 📌 프로젝트 주제
+## 📚 문서
 
-**LLM을 연동한 채용공고 기반 질의응답·추천 시스템**
-— 채용 사이트의 공개 공고를 수집해 벡터 DB에 담고, 이력서와 사용자의 말을 질의로 삼아 RAG로 공고를 찾고 판정합니다.
-
-## 🎯 프로젝트 목표
-
-- **환각 없는 추천** — 근거는 이력서·공고 원문에 글자 그대로 있는 인용만 인정하고, 없으면 서버가 버립니다.
-- **조건은 규칙으로, 적합도는 LLM으로** — 연차·학력·지역·고용형태는 LLM 앞에서 규칙으로 먼저 거릅니다.
-- **인덱싱과 서비스 분리** — 수집·정제·임베딩은 매일 밤 한 번, 요청 때는 검색과 판정만 합니다.
-- **숫자로 개선** — 모델이 매긴 등급이 아니라 사람 채점과 규칙 결함 검사로 효과를 잽니다.
-
-## 🛠 프로젝트 내용
-
-| 과제 항목 | 이 모듈에서 한 일 |
+| 무엇 | 위치 |
 |---|---|
-| 데이터 수집 및 가공 | 공고 목록·상세 수집(차단 신호 시 즉시 멈춤), 요건 구간(주요업무·자격요건·우대사항) 분리, 전공·자격증·조건 추출, 중복·만료 판정 |
-| 벡터 DB 생성·저장 | Pinecone `job-posting`(1536차원, cosine)에 공고 1건 = 벡터 1개, 필터용 메타데이터와 요건 원문 1,200자 저장. 바뀐 공고만 다시 임베딩 |
-| 프롬프트 템플릿 | LangChain `ChatPromptTemplate` + 구조화 출력. 질의문 생성은 one-shot, 재정렬은 좋은 근거 짝과 **근거가 아닌 짝**을 함께 보여 주는 few-shot |
-| LLM 선택 | OpenAI 채팅 모델(질의문·재정렬·챗봇), `text-embedding-3-small`(임베딩) |
-| RAG 연동 | 이력서 → 질의문 → 벡터 검색 → 하드 필터 → 마감 확인 → 기술 겹침 재정렬 → LLM 판정 → 근거 검증 |
-| 테스트 및 개선 | 단위 테스트, 규칙 결함 검사, 사람 채점 추천 평가, 챗봇 3층 평가, 단계별 응답 시간 측정 |
-
----
-
-## 📦 필수 산출물
-
-| 산출물 | 위치 |
-|---|---|
-| 수집된 데이터 및 데이터 전처리 문서 | [docs/data_preprocessing.md](docs/data_preprocessing.md) · 수집 규칙 [crawling/README.md](crawling/README.md) |
+| 수집 데이터 · 전처리 | [docs/data_preprocessing.md](docs/data_preprocessing.md) · 수집 규칙 [crawling/README.md](crawling/README.md) |
 | 시스템 아키텍처 | [docs/architecture.md](docs/architecture.md) · 모듈 구조 [docs/modules.md](docs/modules.md) · 그림 원본 [docs/graphs/](docs/graphs/) |
-| RAG 기반 LLM + 벡터 DB 연동 코드 | [`retrieval/`](retrieval/) 적재·검색 · [`api/`](api/) 추천·챗봇 서비스 · [`sync.py`](sync.py) 증분 적재 |
-| 테스트 계획 및 결과 보고서 | [docs/test_report.md](docs/test_report.md) · 챗봇 [docs/chatbot.md](docs/chatbot.md) |
+| 핵심 코드 | [`retrieval/`](retrieval/) 적재·검색 · [`api/`](api/) 추천·챗봇 서비스 · [`sync.py`](sync.py) 증분 적재 |
+| 테스트 계획 · 결과 | [docs/test_report.md](docs/test_report.md) · 챗봇 [docs/chatbot.md](docs/chatbot.md) |
 
 ---
 

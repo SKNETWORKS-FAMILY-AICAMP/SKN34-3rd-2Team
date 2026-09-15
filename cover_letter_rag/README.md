@@ -15,39 +15,14 @@ LMS 앱의 **공고 맞춤 첨삭 창**을 맡는 서버입니다. [채용공고
 
 ---
 
-## 📌 프로젝트 주제
+## 📚 문서
 
-**LLM을 연동한 내외부 문서 기반 이력서 첨삭 대화 시스템**
-— 외부 문서(선택한 채용공고)와 내부 문서(학생 이력서, 확인 답변)만 근거로 삼아 LLM이 수정안과 질문을 만들고, 서버가 모든 수정안을 원문과 대조합니다.
-
-## 🎯 프로젝트 목표
-
-- **환각 없는 첨삭** — 수정안의 숫자·기술어·역할·부정 표현을 이력서 원문과 확인된 답에 대조하고, 근거가 없으면 보여 주지 않습니다.
-- **공고 요건과 이어진 질문** — 공고를 요건 목록(필수·우대·주요 업무 + 원문 인용)으로 정리하고, 이력서에서 근거를 못 찾은 요건부터 묻습니다.
-- **답을 받아 다시 쓰는 대화** — "무엇을 했나요?"에 답하면 그 사실만으로 해당 항목을 다시 첨삭합니다.
-- **사용자가 고르는 적용** — 원본을 덮어쓰지 않고, 고른 수정안만 적용하며 되돌릴 수 있습니다.
-
-## 🛠 프로젝트 내용
-
-| 과제 항목 | 이 모듈에서 한 일 |
+| 무엇 | 위치 |
 |---|---|
-| 데이터 수집 및 가공 | 이력서 칸 추출(이름·연락처·내부 ID 제외), 공고 원문 → 요건 목록 정리(공고 원문 인용 검증, 공고당 한 번 저장), 목업 이력서 평가 케이스 47개 |
-| 데이터 저장 · 검색 | 사용자가 공고를 이미 골라서 벡터 검색 대신 **ID로 정확히 조회**합니다(공고 원문: 추천봇 SQLite, 이력서·대화·요건 목록: Firestore) |
-| 프롬프트 템플릿 | LangChain `ChatPromptTemplate` + 구조화 출력. 규칙마다 좋은 예·나쁜 예를 붙인 few-shot 지시문, 후속 첨삭에만 붙는 범위 규칙 |
-| LLM 선택 | OpenAI 채팅 모델 — 요건 정리, 첫 첨삭, 후속 첨삭, 사실 검사·다시 쓰기(추론 강도는 단계마다 다르게) |
-| RAG 연동 | 공고·이력서·확인 답을 컨텍스트로 넣어 생성 → 서버 근거 검증 → 사실 검사 모델로 뜻 대조 → 틀린 곳만 다시 쓰기 |
-| 테스트 및 개선 | 서버 테스트 214개, 첨삭 대화를 끝까지 돌리는 평가 도구, 한 번도 안 본 케이스로 5회 확인 |
-
----
-
-## 📦 필수 산출물
-
-| 산출물 | 위치 |
-|---|---|
-| 데이터 및 전처리 문서 | 이력서 입력·개인정보 처리 [docs/resume-review-v2.md](docs/resume-review-v2.md) · 공고 요건 정리 [docs/resume-review-v3.md](docs/resume-review-v3.md) · 평가 케이스 [`evaluation/fixtures/`](evaluation/fixtures/) · 공고 수집·전처리는 [추천봇 문서](../job_matching_bot/docs/data_preprocessing.md) |
+| 입력 데이터 · 전처리 | 이력서 입력·개인정보 처리 [docs/resume-review-v2.md](docs/resume-review-v2.md) · 공고 요건 정리 [docs/resume-review-v3.md](docs/resume-review-v3.md) · 평가 케이스 [`evaluation/fixtures/`](evaluation/fixtures/) · 공고 수집·전처리는 [추천봇 문서](../job_matching_bot/docs/data_preprocessing.md) |
 | 시스템 아키텍처 | 아래 그림 · 추천봇과 연결 [docs/matching-integration.md](docs/matching-integration.md) |
-| RAG 기반 LLM 연동 코드 | [`app/review_workflow.py`](app/review_workflow.py) 한 턴 흐름 · [`app/resume_review.py`](app/resume_review.py) 근거 검증 · [`app/fact_check.py`](app/fact_check.py) 사실 검사 · [`app/job_requirements.py`](app/job_requirements.py) 요건 정리 |
-| 테스트 계획 및 결과 보고서 | [docs/resume-review-v3.md](docs/resume-review-v3.md) (회차별 결과·남은 한계) · 적용 API [docs/resume-apply.md](docs/resume-apply.md) |
+| 핵심 코드 | [`app/review_workflow.py`](app/review_workflow.py) 한 턴 흐름 · [`app/resume_review.py`](app/resume_review.py) 근거 검증 · [`app/fact_check.py`](app/fact_check.py) 사실 검사 · [`app/job_requirements.py`](app/job_requirements.py) 요건 정리 |
+| 테스트 계획 · 결과 | [docs/resume-review-v3.md](docs/resume-review-v3.md) (회차별 결과·남은 한계) · 적용 API [docs/resume-apply.md](docs/resume-apply.md) |
 
 ---
 
