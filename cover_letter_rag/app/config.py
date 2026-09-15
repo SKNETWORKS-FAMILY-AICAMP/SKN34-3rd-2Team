@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     firestore_cohorts_collection: str = "cohorts"
     firestore_resumes_collection: str = "resumes"
     firestore_ai_reviews_collection: str = "aiReviews"
+    # 공고별 요건 정리 결과. job_id + 공고 hash + 요건 지시문 버전으로 문서를 나눈다.
+    firestore_job_requirements_collection: str = "jobRequirementProfiles"
     matching_job_store_path: Path = BASE_DIR.parent / "job_matching_bot" / "artifacts" / "job_store.sqlite"
 
     @field_validator("chroma_persist_directory", mode="before")

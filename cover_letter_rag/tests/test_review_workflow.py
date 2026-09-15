@@ -231,13 +231,17 @@ def test_short_project_description_prefers_evidence_question_to_surface_edit():
 
     prefer_project_evidence_over_surface_edit(
         result,
-        {'projects[0].description': '공고 크롤 결과를 정규화·중복 제거해 일 단위로 적재.'},
+        {
+            'projects[0].name': '채용공고 수집 파이프라인',
+            'projects[0].description': '공고 크롤 결과를 정규화·중복 제거해 일 단위로 적재.',
+        },
         [],
     )
 
     review = result.sentence_reviews[0]
-    assert review.suggested_revision is None
-    assert review.confirmation_question is not None
+    # 다듬은 문장은 남기고, 프로젝트의 문제·담당 범위·결과를 묻는 질문을 함께 붙인다.
+    assert review.suggested_revision == '공고 크롤 결과를 정규화하고 중복 제거한 뒤 일 단위로 적재했습니다.'
+    assert review.confirmation_question.startswith("'채용공고 수집 파이프라인' 프로젝트에서"), '어느 프로젝트인지 이름을 넣는다'
 
 
 def test_missing_job_technology_becomes_a_confirmation_question():
@@ -256,7 +260,8 @@ def test_missing_job_technology_becomes_a_confirmation_question():
     assert 'FastAPI' in result.questions[0].question
 
 
-def test_missing_job_technology_question_lists_projects_for_user_selection():
+def test_missing_job_technology_question_does_not_point_at_one_project():
+    # 특정 항목을 지목하거나 목록을 늘어놓지 않고 "어느 항목에서 했나요?"로 묻는다. 답에 적힌 이름으로 옮긴다.
     result = ResumeReviewGeneration(summary='검토', section_reviews=[])
     fields = {
         'projects[0].name': '쇼핑몰 API',
@@ -268,9 +273,26 @@ def test_missing_job_technology_question_lists_projects_for_user_selection():
     add_missing_job_technology_question(result, fields, '필수 요건: Docker 경험')
 
     question = result.questions[0].question
-    assert '1번 쇼핑몰 API' in question
-    assert '2번 AI 취업 코치' in question
-    assert '프로젝트 번호 또는 이름' in question
+    assert '쇼핑몰 API' not in question and 'AI 취업 코치' not in question
+    assert '어느 항목' in question and '항목 이름' in question
+
+
+def test_technology_answer_resolves_item_by_partial_name_in_any_experience_section():
+    from app.review_workflow import resolve_missing_technology_project
+
+    fields = {
+        'projects[0].name': '온도 센서 모니터링 장치',
+        'projects[0].description': 'I2C 센서 드라이버 작성.',
+        'awards[0].name': '전국 대학생 임베디드 경진대회 본선 진출',
+        'awards[0].description': '모터 제어 펌웨어를 담당했습니다.',
+        'trainingExperience[0].course': '산업체 현장실습 (펌웨어 개발)',
+        'trainingExperience[0].description': 'UART 통신 모듈 유지보수.',
+    }
+    assert resolve_missing_technology_project('임베디드 경진대회 로봇에서 PID로 제어했어요', fields) == 'awards[0].description'
+    assert resolve_missing_technology_project('현장실습 때 UART 파형을 봤어요', fields) == 'trainingExperience[0].description'
+    assert resolve_missing_technology_project('개발할 때 UART를 썼어요', fields) is None, '어느 항목에나 붙는 낱말로는 고르지 않는다'
+    assert resolve_missing_technology_project('산업체 현장실습에서 썼어요', fields) == 'trainingExperience[0].description'
+    assert resolve_missing_technology_project('1번 프로젝트에서 썼어요', fields) == 'projects[0].description'
 
 
 def test_missing_technology_answer_resolves_selected_project_by_number_or_name():
@@ -433,3 +455,219 @@ def test_firebase_gateway_denies_inactive_or_foreign_owner():
     gateway._db.user = {'isActive': True, 'cohortId': 'c'}
     with pytest.raises(ResumeNotFoundError):
         gateway.get_owned_resume('c', 'r', 'me')
+
+
+def test_model_questions_come_before_thin_self_introduction_questions():
+    # 문항마다 같은 문장으로 묻는 질문이 앱의 질문 7칸을 먼저 차지하면 공고 요건 질문이 밀린다.
+    result = generation({})
+    fields = {
+        'projects[0].description': '설명',
+        'selfIntroduction.intro.body': '성실합니다.',
+        'selfIntroduction.growth.body': '컴퓨터를 좋아했습니다.',
+    }
+    add_thin_self_introduction_questions(result, fields)
+    normalize_questions(result, fields, [], 'r')
+    assert [q.field_path for q in result.questions] == [
+        'projects[0].description', 'selfIntroduction.intro.body', 'selfIntroduction.growth.body',
+    ]
+
+
+def test_empty_and_near_duplicate_questions_are_dropped():
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[
+        SentenceReview(field_path='projects[0].description', original_quote='배포 전환', reason='정리',
+                       confirmation_question='없음'),
+    ], questions=[
+        ReviewQuestion(field_path='projects[0].description', topic='action', priority=1, reason='r',
+                       question='주문 목록 API에서 개선을 시작하게 된 구체적인 문제 상황이나 조회 조건은 무엇이었나요?'),
+        ReviewQuestion(field_path='projects[0].description', topic='situation', priority=2, reason='r',
+                       question='주문 목록 API에서 성능 문제가 발생한 구체적인 상황이나 조회 조건을 설명할 수 있나요?'),
+        ReviewQuestion(field_path='projects[0].description', topic='scope', priority=2, reason='r',
+                       question='N+1 제거, 커버링 인덱스, Redis 캐시 도입 중 본인이 직접 구현한 범위는 무엇인가요?'),
+        ReviewQuestion(field_path='projects[0].role', topic='other', priority=2, reason='r', question='없습니다.'),
+    ])
+    normalize_questions(result, {'projects[0].description': '설명', 'projects[0].role': '팀원'}, [], 'r')
+    assert [q.topic for q in result.questions] == ['action', 'scope']
+    assert result.sentence_reviews[0].confirmation_question is None
+
+
+def test_recruiting_conditions_in_brackets_are_not_part_of_role_title():
+    from app.review_workflow import job_role_title
+    assert job_role_title('(주)한결정보기술', '공공 SI 사업 Java 개발자 (신입)') == '공공 SI 사업 Java 개발자'
+    assert job_role_title('(주)루멘커머스', 'Web 백엔드 개발자 (Java/Spring, 경력 3년 이상)') == 'Web 백엔드 개발자'
+    assert job_role_title('(주)데이터온', '데이터 엔지니어(Python)') == '데이터 엔지니어(Python)'
+
+
+def test_answered_question_is_not_asked_again_in_other_words():
+    from app.models import ConfirmationAnswer
+    answered = ConfirmationAnswer(
+        question_id='q1', field_path='projects[0].description', answer='Socket.io로 채팅을 직접 구현했습니다.',
+        question='중고거래 커뮤니티에서 채팅 기능을 본인이 직접 구현한 범위는 어디까지인가요?')
+    result = ResumeReviewGeneration(summary='', section_reviews=[], questions=[
+        ReviewQuestion(field_path='projects[0].description', topic='scope', priority=1, reason='r',
+                       question='중고거래 커뮤니티에서 채팅 기능 중 본인이 직접 구현한 범위를 알려 주세요.'),
+        ReviewQuestion(field_path='projects[0].description', topic='result', priority=2, reason='r',
+                       question='찜 목록 조회를 개선한 뒤 확인한 변화가 있나요?'),
+    ])
+    normalize_questions(result, {'projects[0].description': '설명'}, [answered], 'r')
+    assert [q.topic for q in result.questions] == ['result']
+
+
+def test_none_answer_is_recorded_without_calling_the_model():
+    # 앱의 "없음" 카드. 고칠 사실이 없으니 재첨삭을 돌리지 않고 답만 기록해 다음 질문으로 넘어간다.
+    calls = []
+
+    def generate(data):
+        calls.append(data)
+        return ResumeReviewGeneration(summary='검토', section_reviews=[], questions=[
+            ReviewQuestion(field_path='projects[0].description', topic='action', question='어떤 행동을 했나요?', reason='r', priority=1),
+            ReviewQuestion(field_path='projects[0].description', topic='result', question='도입 후 확인한 변화가 있나요?', reason='r', priority=2),
+        ])
+
+    db = FakeFirebase()
+    service = ResumeReviewService(Settings(openai_api_key='test'), db, generate)
+    first = service.review('valid-token', FirestoreResumeReviewRequest(cohort_id='cohort-1', resume_id='resume-1'))
+    q = first.questions[0]
+    answer = ConfirmationAnswer(question_id=q.question_id, field_path=q.field_path, question=q.question, answer='없음')
+    result = service.review('valid-token', FirestoreResumeReviewRequest(
+        cohort_id='cohort-1', resume_id='resume-1', previous_review_id=first.review_id,
+        expected_input_hash=first.input_hash, answers=[answer]))
+    assert len(calls) == 1
+    assert result.telemetry['model_skipped'] == 'none_answer'
+    assert result.confirmed_answers[0].answer == '없음'
+    assert not result.sentence_reviews
+    assert [x.question for x in result.questions] == ['도입 후 확인한 변화가 있나요?']
+
+
+def test_requirement_answer_naming_another_item_moves_there():
+    # 모델이 만든 요건 질문(reason이 서버 상수가 아님)에 다른 프로젝트 이름으로 답하면 그 프로젝트로 옮긴다.
+    from app.review_workflow import prepare_answers
+    fields = {
+        'projects[0].name': '재생 화면 SwiftUI 전환', 'projects[0].description': '재생 화면을 SwiftUI로 옮겼습니다.',
+        'projects[1].name': '오프라인 다운로드', 'projects[1].description': '오디오 파일을 내려받아 재생합니다.',
+    }
+    refs = {path: f'p{i}:' for i, path in enumerate(fields)}
+    previous = {'input_hash': 'h', 'item_refs': refs, 'questions': [{
+        'question_id': 'q1', 'field_path': 'projects[0].description', 'question': 'AVFoundation을 써 봤나요?',
+        'reason': '요건 확인', 'requirement_id': 'req-4'}]}
+    request = FirestoreResumeReviewRequest(cohort_id='c', resume_id='r', expected_input_hash='h', previous_review_id='p', answers=[
+        ConfirmationAnswer(question_id='q1', field_path='projects[0].description', question='AVFoundation을 써 봤나요?',
+                           answer='오프라인 다운로드 프로젝트에서 AVPlayer로 내려받은 오디오를 재생했습니다.')])
+    moved = prepare_answers(request, previous, 'h', refs, fields)
+    assert moved[0].field_path == 'projects[1].description'
+    same = prepare_answers(request.model_copy(update={'answers': [request.answers[0].model_copy(
+        update={'answer': 'AVPlayer로 오디오를 재생했습니다.'})]}), previous, 'h', refs, fields)
+    assert same[0].field_path == 'projects[0].description', '항목 이름이 없으면 질문 칸 그대로'
+
+
+
+def _new_project_run(new_project, stuffed_revision=None):
+    """첫 첨삭은 질문 하나, 답한 뒤 후속 첨삭에서 모델이 새 프로젝트를 제안한다."""
+    from app.models import NewProjectOut
+    calls = []
+
+    def generate(data):
+        calls.append(data)
+        if len(calls) == 1:
+            return ResumeReviewGeneration(summary='검토', section_reviews=[], questions=[ReviewQuestion(
+                field_path='projects[0].description', topic='scope', question='LMS 프로젝트에서 지도 API를 써 봤나요?',
+                reason='요건 확인', priority=1)])
+        reviews = []
+        if stuffed_revision:
+            reviews.append(SentenceReview(
+                field_path='projects[0].description', original_quote='API 응답 시간을 20% 개선했습니다.',
+                suggested_revision=stuffed_revision, reason='답변 반영', edit_type='content', status='improved',
+                evidence_quotes=['API 응답 시간을 20% 개선했습니다.']))
+        return ResumeReviewGeneration(summary='검토', section_reviews=[], sentence_reviews=reviews,
+                                      new_projects=[NewProjectOut(**new_project)])
+
+    service = ResumeReviewService(Settings(openai_api_key='test'), FakeFirebase(), generate)
+    first = service.review('valid-token', FirestoreResumeReviewRequest(cohort_id='cohort-1', resume_id='resume-1'))
+    q = first.questions[0]
+    answer = ConfirmationAnswer(
+        question_id=q.question_id, field_path=q.field_path, question=q.question,
+        answer='부트캠프 개인 과제로 카카오맵 API를 사용해 매물 위치 마커와 마커 클릭 시 매물 요약을 보여주는 화면을 만든 경험이 '
+               '있습니다. LMS 프로젝트에서는 지도 API를 담당하지 않았습니다.')
+    result = service.review('valid-token', FirestoreResumeReviewRequest(
+        cohort_id='cohort-1', resume_id='resume-1', previous_review_id=first.review_id,
+        expected_input_hash=first.input_hash, answers=[answer]))
+    return result, q, calls
+
+
+GOOD_NEW_PROJECT = dict(
+    answer_quote='부트캠프 개인 과제로 카카오맵 API를 사용해 매물 위치 마커와 마커 클릭 시 매물 요약을 보여주는 화면을 만든',
+    name='카카오맵 매물 지도 (부트캠프 개인 과제)', role='개인 과제', tech_stack='카카오맵 API',
+    description='카카오맵 API로 매물 위치 마커를 표시하고, 마커를 누르면 매물 요약을 보여 주는 화면을 만들었습니다.',
+)
+
+
+def test_separate_experience_in_answer_becomes_new_project_suggestion():
+    # 기존 프로젝트에서는 안 했다는 경험을 그 프로젝트에 끼워 넣지 않고, 새 프로젝트 추가 수정안으로 만든다.
+    result, question, calls = _new_project_run(
+        GOOD_NEW_PROJECT,
+        stuffed_revision='API 응답 시간을 20% 개선했고, 카카오맵 API로 매물 위치 마커를 표시하는 화면을 만들었습니다.')
+    from app.prompts import RESUME_REVIEW_SYSTEM_PROMPT
+    # 첫 첨삭에는 새 프로젝트 규칙도 출력 칸도 주지 않는다(첫 첨삭 출력이 늘었다).
+    assert 'new_projects' not in RESUME_REVIEW_SYSTEM_PROMPT
+    assert calls[0]['allow_new_projects'] is False and 'new_projects' not in calls[0]['review_scope']
+    assert calls[1]['allow_new_projects'] is True and 'new_projects' in calls[1]['review_scope']
+    added = [review for review in result.sentence_reviews if review.new_item]
+    assert len(added) == 1
+    item = added[0]
+    assert item.field_path == 'projects[1].description'
+    assert item.original_quote == '' and item.status == 'improved' and not item.validation_issues
+    assert item.new_item.question_id == question.question_id
+    assert item.new_item.name == GOOD_NEW_PROJECT['name'] and item.new_item.role == '개인 과제'
+    assert '새로 추가' in item.reason
+    assert not [r for r in result.sentence_reviews if r.field_path == 'projects[0].description' and r.suggested_revision], \
+        '같은 경험을 기존 프로젝트 설명에 넣은 수정안은 뺀다'
+    assert result.new_projects == []
+
+
+@pytest.mark.parametrize('change, issue', [
+    ({'description': '카카오맵 API로 매물 위치 마커를 표시해 방문 전환율을 30% 높였습니다.'}, 'unsupported_number'),
+    ({'name': 'Next.js 매물 지도'}, 'name_not_in_answer'),
+    ({'tech_stack': '카카오맵 API, Redux'}, 'unsupported_term'),
+    ({'description': '카카오맵 API 연동을 주도해 매물 위치 마커 화면을 만들었습니다.'}, 'unsupported_role'),
+    ({'name': 'LMS 프로젝트'}, 'existing_project'),
+    ({'answer_quote': '답변에 없는 문장을 인용했습니다'}, None),
+])
+def test_new_project_suggestion_only_uses_answer_facts(change, issue):
+    result, _, _ = _new_project_run({**GOOD_NEW_PROJECT, **change})
+    assert not [review for review in result.sentence_reviews if review.new_item]
+    if issue:
+        assert any(issue in warning for warning in result.grounding_warnings)
+
+
+def test_first_review_never_adds_new_project():
+    from app.models import NewProjectOut
+    service = ResumeReviewService(Settings(openai_api_key='test'), FakeFirebase(), lambda _: ResumeReviewGeneration(
+        summary='검토', section_reviews=[], new_projects=[NewProjectOut(**GOOD_NEW_PROJECT)]))
+    first = service.review('valid-token', FirestoreResumeReviewRequest(cohort_id='cohort-1', resume_id='resume-1'))
+    assert not [review for review in first.sentence_reviews if review.new_item]
+    assert first.new_projects == []
+
+
+def test_tech_answer_about_separate_work_is_not_rejected_for_missing_item_name():
+    from app.review_workflow import MISSING_JOB_TECH_REASON
+    fields = {'projects[0].name': '매물 검색 서비스', 'projects[0].description': '검색 필터를 맡았습니다.'}
+    refs = {path: 'projects:p1' for path in fields}
+    previous = {'input_hash': 'h', 'item_refs': refs, 'questions': [{
+        'question_id': 'q1', 'field_path': 'projects[0].description', 'question': '지도 API를 써 봤나요?',
+        'reason': MISSING_JOB_TECH_REASON}]}
+
+    def ask(text):
+        return FirestoreResumeReviewRequest(cohort_id='c', resume_id='r', expected_input_hash='h', previous_review_id='p', answers=[
+            ConfirmationAnswer(question_id='q1', field_path='projects[0].description', question='지도 API를 써 봤나요?', answer=text)])
+
+    kept = prepare_answers(ask('부트캠프 개인 과제로 카카오맵 API 마커 화면을 만들었습니다.'), previous, 'h', refs, fields)
+    assert kept[0].field_path == 'projects[0].description'
+    with pytest.raises(ReviewInputError):
+        prepare_answers(ask('카카오맵 API로 마커 화면을 만들었습니다.'), previous, 'h', refs, fields)
+
+
+def test_new_project_name_made_of_form_words_is_renamed_from_answer_tech():
+    # "부트캠프 개인 과제"는 무엇을 만든 과제인지 안 보인다(2026-09-15 새 케이스 v16l).
+    result, _, _ = _new_project_run({**GOOD_NEW_PROJECT, 'name': '부트캠프 개인 과제'})
+    added = [review for review in result.sentence_reviews if review.new_item]
+    assert len(added) == 1 and added[0].new_item.name == '카카오맵 API 개인 과제'
+    assert "'카카오맵 API 개인 과제'" in added[0].reason

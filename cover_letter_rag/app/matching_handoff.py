@@ -55,4 +55,9 @@ def load_selected_job(path: Path, job_id: str) -> dict:
     source = {key: record.get(key) or '' for key in ('job_id', 'company', 'title', 'source_url', 'content_hash', 'deadline')}
     source['role_title'] = job_role_title(source['company'], source['title'])
     source['snapshot_hash'] = digest([source, text, record['status']])
-    return {'text': text, 'source': source}
+    # 크롤러가 뽑아 둔 지원 조건. 요건 표에서 지원 자격의 근거로만 쓴다. source에 넣으면 snapshot_hash가 바뀌어
+    # 이미 만든 맞춤 이력서가 모두 "공고가 바뀌었다"로 막히므로 따로 둔다.
+    conditions = {key: record.get(key) for key in (
+        'career_type', 'min_career_years', 'education', 'employment_type', 'region', 'military_required',
+    ) if key in record}
+    return {'text': text, 'source': source, 'conditions': conditions}

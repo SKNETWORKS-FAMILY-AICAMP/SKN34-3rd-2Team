@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query
 from langchain_core.exceptions import LangChainException
 from openai import OpenAIError
 
@@ -102,9 +102,18 @@ def review_context(
         raise HTTPException(status_code=503, detail=_safe_error(exc)) from exc
 
 
+def _warm_job_requirements(gateway, settings, job):
+    from app.job_requirements import build_requirement_extractor, load_or_extract_requirements
+    try:
+        load_or_extract_requirements(gateway, build_requirement_extractor(settings), job['text'], job['source'])
+    except Exception:  # noqa: BLE001 — 미리 만들어 두는 일일 뿐이다
+        pass
+
+
 @app.post('/api/v1/resumes/tailored', response_model=TailoredResumeResponse)
 def create_tailored_resume(
     request: TailoredResumeCreateRequest,
+    background: BackgroundTasks,
     authorization: str | None = Header(default=None),
     gateway: FirebaseGateway = Depends(get_context_gateway),
     settings: Settings = Depends(get_settings),
@@ -112,8 +121,20 @@ def create_tailored_resume(
     from app.matching_handoff import load_selected_job
     try:
         uid = gateway.verify_id_token(extract_bearer_token(authorization))
-        service = TailoredResumeService(gateway, lambda job_id: load_selected_job(settings.matching_job_store_path, job_id))
-        return service.create(uid, request)
+        jobs = {}
+
+        def load_job(job_id):
+            jobs[job_id] = load_selected_job(settings.matching_job_store_path, job_id)
+            return jobs[job_id]
+
+        service = TailoredResumeService(gateway, load_job)
+        created = service.create(uid, request)
+        job = jobs.get(request.selected_job_id)
+        if job and settings.openai_api_key:
+            # 맞춤본을 만들고 첨삭 시작을 누르기까지 몇 초가 걸린다. 그 사이 공고 요건을 정리해 두면 첫
+            # 첨삭이 요건 정리(약 4초)를 기다리지 않는다. 실패해도 첫 첨삭이 다시 만든다.
+            background.add_task(_warm_job_requirements, gateway, settings, job)
+        return created
     except FirebaseAuthenticationError as exc:
         raise HTTPException(status_code=401, detail='Firebase authentication failed') from exc
     except ResumeAccessError as exc:

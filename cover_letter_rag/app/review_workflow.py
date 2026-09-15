@@ -3,11 +3,23 @@ import hashlib
 import json
 import re
 import time
+from difflib import SequenceMatcher
 
-from app.models import Diagnostic, FirestoreResumeReviewResponse, ReviewQuestion, SentenceReview
+from app.models import (
+    Diagnostic, FirestoreResumeReviewResponse, NewResumeItem, ResumeReviewGeneration, ReviewQuestion, SentenceReview,
+)
+from app.prompts import NEW_PROJECT_RULE
 from app.technology import technology_mentions
+from app.star_checks import (
+    STAR_LABELS, STAR_TARGET, ground_star_judgements, has_elements, mark_answered_star_elements, star_by_path, star_targets,
+)
+from app.job_requirements import (
+    JobRequirement,
+    classify_requirements, ground_requirement_matches, load_or_extract_requirements,
+    mark_requirement_absent, requirements_prompt_text,
+)
 
-PROMPT_VERSION = 'resume-v11-role-linked-motivation'
+PROMPT_VERSION = 'resume-v16n-notice-fixes'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 
@@ -45,6 +57,10 @@ def normalize_confirmed_answer(text):
 _RECRUITING_TITLE_SUFFIX = re.compile(
     r'\s*(?:을|를)?\s*(?:찾고\s*있(?:어요|습니다)|모십니다|모집합니다|채용합니다|채용|모집)\s*[.!]?$',
     re.IGNORECASE,
+)
+_RECRUITING_CONDITION_BRACKET = re.compile(
+    r'[\(\[【][^()\[\]【】]*(?:신입|경력|주니어|시니어|인턴|정규직|계약직|채용|모집|무관|이상|년차|'
+    r'서울|경기|인천|부산|대구|대전|광주|울산|세종|지역|재택|급구|마감)[^()\[\]【】]*[\)\]】]'
 )
 _RECRUITING_TITLE_PREFIX = re.compile(
     r'^(?:(?:에서|와|과)\s*)?(?:함께할|함께\s*일할|모실)\s*',
@@ -91,6 +107,9 @@ def job_role_title(company, posting_title):
         role = re.sub(re.escape(company), ' ', role, flags=re.IGNORECASE)
     role = re.sub(r'^\s*(?:에서|와|과)\s*', '', role)
     role = _RECRUITING_TITLE_PREFIX.sub('', role)
+    # "(신입)", "(경력 3년 이상)", "[서울]"처럼 모집 조건을 담은 괄호는 직무명이 아니다. 그대로 두면
+    # "공공 SI 사업 Java 개발자 (신입)에 지원하게 되었습니다"가 된다(2026-09-14 목업 첨삭).
+    role = _RECRUITING_CONDITION_BRACKET.sub(' ', role)
     role = _RECRUITING_TITLE_SUFFIX.sub('', role)
     role = re.sub(r'^[\s|·:/_-]+|[\s|·:/_-]+$', '', role)
     # 붙여 쓰인 대표 직무 표기는 이력서에서 읽기 좋은 형태로 통일한다.
@@ -399,26 +418,194 @@ def _project_description_targets(fields):
     return targets
 
 
+_ITEM_NAME_KEYS = {'projects': 'name', 'experience': 'company', 'trainingExperience': 'course',
+                   'awards': 'name', 'otherActivities': 'name'}
+
+
+def _item_description_targets(fields):
+    """기술 요건 답을 옮길 수 있는 경험 칸. 프로젝트 → 경력 → 교육 → 수상 → 활동 순."""
+    targets = []
+    for section, name_key in _ITEM_NAME_KEYS.items():
+        indices = sorted({
+            int(match.group(1)) for path in fields
+            if (match := re.fullmatch(rf'{section}\[(\d+)\]\.description', path))
+        })
+        for index in indices:
+            name = str(fields.get(f'{section}[{index}].{name_key}') or '').strip()
+            if name or section == 'projects':
+                targets.append((f'{section}[{index}].description', name or f'프로젝트 {index + 1}'))
+    return targets
+
+
+# 항목 이름에 흔히 붙어 어느 항목인지 가려 주지 못하는 낱말.
+_GENERIC_NAME_TOKENS = {'개발', '서비스', '시스템', '프로젝트', '기반', '관리', '구축', '과정', '교육', '참여', '팀',
+                        '웹', '앱', '플랫폼', '구현', '활동', '동아리', '수상', '대회', '주식회사', '(주)'}
+
+
+def _name_tokens(name):
+    return [token.casefold() for token in re.findall(r'[0-9A-Za-z가-힣+#]{2,}', name)
+            if token.casefold() not in _GENERIC_NAME_TOKENS]
+
+
 def resolve_missing_technology_project(answer_text, fields):
-    """Resolve an explicitly selected project without guessing its ownership."""
-    targets = _project_description_targets(fields)
+    """답에 적힌 항목 이름으로 답을 옮길 칸을 찾는다. 추측으로 고르지 않는다.
+
+    예전에는 질문에 "1번 A, 2번 B"처럼 프로젝트 목록을 붙이고 번호나 이름 전체를 요구했다. 이제 질문은 "어느
+    항목에서 했나요?"로만 묻으므로(특정 항목을 지목하지 않는다), 이름의 일부("경진대회 로봇")로도 찾는다.
+    이름 낱말이 두 개 이상 답에 있거나, 네 글자 이상 낱말("현장실습", "경진대회")이 답에 있고, 그렇게 가장 많이
+    맞는 항목이 하나일 때만 고른다. "개발"·"서비스"처럼 어느 항목에나 붙는 낱말은 세지 않는다.
+    """
+    targets = _item_description_targets(fields)
     if not targets:
         return None
+    project_targets = [target for target in targets if target[0].startswith('projects[')]
     numbered = {
         int(number) - 1
         for number in re.findall(r'(?<!\d)(\d+)\s*번(?:\s*프로젝트)?', answer_text)
     }
-    numbered_matches = [target for index, target in enumerate(targets) if index in numbered]
+    numbered_matches = [target for index, target in enumerate(project_targets) if index in numbered]
     if len(numbered_matches) == 1:
         return numbered_matches[0][0]
 
     compact_answer = re.sub(r'\s+', '', answer_text).casefold()
-    named_matches = [
-        path for path, name in targets
-        if len(re.sub(r'\s+', '', name)) >= 2
-        and re.sub(r'\s+', '', name).casefold() in compact_answer
-    ]
-    return named_matches[0] if len(named_matches) == 1 else None
+    exact = [path for path, name in targets
+             if len(re.sub(r'\s+', '', name)) >= 2 and re.sub(r'\s+', '', name).casefold() in compact_answer]
+    if len(exact) == 1:
+        return exact[0]
+    scored = []
+    for path, name in targets:
+        tokens = _name_tokens(name)
+        if not tokens:
+            continue
+        matched = [token for token in tokens if token in compact_answer]
+        if len(matched) >= 2 or any(len(token) >= 4 for token in matched) or (matched and len(matched) == len(tokens)):
+            scored.append((len(matched), len(matched) / len(tokens), path))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    if len(scored) > 1 and scored[0][:2] == scored[1][:2]:
+        return None
+    return scored[0][2]
+
+
+# 답변이 이력서에 없는 별도 작업을 말한다는 표시. "부트캠프 개인 과제로", "따로 만든 토이 프로젝트".
+_SEPARATE_WORK = re.compile(
+    r'(?:개인|토이|사이드|부트캠프|수업|학교|동아리|별도|따로)\s*(?:의\s*)?(?:과제|프로젝트|작업)|혼자\s*만든|따로\s*만든'
+)
+# 새 프로젝트 이름에 흔히 붙어 사실을 담지 않는 낱말. 이름 검사에서 세지 않는다.
+_NEW_PROJECT_NAME_GENERIC = _GENERIC_NAME_TOKENS | {'과제', '개인', '토이', '사이드', '화면', '기능', '페이지', '연동', '만들기'}
+_ROLE_EXPANSION = ('주도', '총괄', '리드', '책임', '달성')
+# 프로젝트 이름이 이 낱말로만 되어 있으면 형태만 적힌 이름이다.
+_PROJECT_FORM_WORDS = {'부트캠프', '개인', '과제', '토이', '사이드', '프로젝트', '수업', '학교', '동아리', '팀', '졸업', '캡스톤',
+                       '미니', '실습', '교육', '과정', '팀프로젝트', '개인과제'}
+
+
+def add_new_project_proposals(generation, fields, raw_content, answers, previous_questions=None):
+    """답변이 기존 항목에 없는 별도 경험이면, 모델이 낸 새 프로젝트 제안을 검증해 수정안으로 만든다.
+
+    "매물 검색 서비스(4인 팀)에서는 지도 API를 안 썼고, 부트캠프 개인 과제로 카카오맵 마커 화면을 만들었다"는 답은
+    기존 프로젝트에 넣으면 팀 프로젝트에서 한 일처럼 읽히고, 넣을 칸이 없어 버려졌다(2026-09-15 새 케이스, 답 반영 False).
+    이름·설명·기술은 답변에 적힌 말만 허용한다. 기존 프로젝트와 같은 이름이면 새로 만들지 않는다. 턴마다 하나까지.
+    수정안을 만든 답변의 question_id 집합을 돌려준다(그 답으로 기존 칸을 채우는 대체 수정안을 만들지 않게).
+    """
+    from app.resume_review import _cross_field_overlap, _unsupported_numbers
+    from app.technology import grounding_terms
+
+    proposals, generation.new_projects = list(generation.new_projects), []
+    warnings, used = [], set()
+    if not proposals or not answers or not isinstance(raw_content, dict):
+        return warnings, used
+    projects = raw_content.get('projects')
+    if projects is None:
+        projects = []
+    if not isinstance(projects, list):
+        return warnings, used
+    squash = lambda text: re.sub(r'\s+', '', str(text or '')).casefold()  # noqa: E731
+    existing_names = [str(item.get('name') or '').strip() for item in projects if isinstance(item, dict)]
+    for proposal in proposals:
+        quote = squash(proposal.answer_quote)
+        answer = next((a for a in answers if len(quote) >= 10 and quote in squash(a.answer)
+                       and not is_none_answer(a.answer)), None)
+        if answer is None:
+            warnings.append('new_project_quote_not_in_answer')
+            continue
+        evidence = str(answer.answer)
+        compact = squash(evidence)
+        name, description = proposal.name.strip(), proposal.description.strip()
+        role, tech_stack = proposal.role.strip(), proposal.tech_stack.strip()
+        issues = []
+        if not name or len(name) > 40 or len(description) < 10:
+            issues.append('empty')
+        # 영문 낱말(기술 이름)은 모두 답에 있어야 하고, 한글 낱말은 절반 이상이 답에 있어야 한다. 이름은 이름표라
+        # 조사·어미를 바꿔 짓는 건 받아 주되, 답에 없는 사실("실시간 추천")을 이름으로 들여오지 못하게 한다.
+        tokens = [t for t in re.findall(r'[0-9A-Za-z가-힣+#]{2,}', name) if t.casefold() not in _NEW_PROJECT_NAME_GENERIC]
+        ascii_tokens = [t for t in tokens if re.fullmatch(r'[0-9A-Za-z+#]+', t)]
+        korean_tokens = [t for t in tokens if t not in ascii_tokens]
+        korean_hits = sum(t in compact for t in korean_tokens)
+        if (not tokens or any(t.casefold() not in compact for t in ascii_tokens)
+                or (korean_tokens and korean_hits * 2 < len(korean_tokens))):
+            issues.append('name_not_in_answer')
+        stack_items = [s.strip() for s in re.split(r'[,/·]', tech_stack) if s.strip()]
+        if any(squash(s) not in compact for s in stack_items):
+            issues.append('unsupported_term')
+        written = f'{name}\n{description}'
+        if _unsupported_numbers(written, evidence):
+            issues.append('unsupported_number')
+        if grounding_terms(written) - grounding_terms(evidence):
+            issues.append('unsupported_term')
+        if any(term in written and term not in evidence for term in _ROLE_EXPANSION):
+            issues.append('unsupported_role')
+        compact_name = squash(name)
+        for existing in existing_names:
+            existing_tokens = _name_tokens(existing)
+            if existing and (SequenceMatcher(None, compact_name, squash(existing)).ratio() >= 0.75
+                             or (existing_tokens and all(t in compact_name for t in existing_tokens))):
+                issues.append('existing_project')
+                break
+        path = f'projects[{len(projects)}].description'
+        verbatim, notice = _cross_field_overlap(path, '', description, fields)
+        if verbatim:
+            issues.append('copied_from_other_field')
+        if issues:
+            warnings.append(f"새 프로젝트 제안을 제외했습니다({','.join(dict.fromkeys(issues))})")
+            continue
+        if role and squash(role) not in compact:
+            role = ''  # 역할은 답에 적힌 말일 때만 채운다. 없으면 사용자가 채운다.
+        if stack_items and not [t for t in re.findall(r'[0-9A-Za-z가-힣+#]{2,}', name)
+                                if t.casefold() not in _PROJECT_FORM_WORDS]:
+            # "부트캠프 개인 과제"처럼 형태만 적힌 이름은 무엇을 만든 과제인지 안 보인다(2026-09-15 새 케이스 v16l).
+            # 답에 있는 기술 이름과 형태로 다시 짓는다. 사용자는 추가한 뒤 고칠 수 있다.
+            name = f"{stack_items[0]} {role or '프로젝트'}"
+        # 모델이 같은 답을 질문이 붙어 있던 항목 설명에도 넣었다면 그 수정안은 뺀다. 답이 "그 항목에서는 안 했다"고
+        # 한 경험을 기존 항목에 적는 셈이다. 자기소개서처럼 경험을 가리키기만 하는 칸은 그대로 둔다.
+        from app.resume_review import _answer_is_reflected
+        generation.sentence_reviews = [
+            review for review in generation.sentence_reviews
+            if not (review.field_path == answer.field_path
+                    and re.fullmatch(r'(?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\]\.description',
+                                     review.field_path)
+                    and review.suggested_revision
+                    and _answer_is_reflected(review.original_quote, review.suggested_revision, description))
+        ]
+        requirement_id = ((previous_questions or {}).get(answer.question_id) or {}).get('requirement_id')
+        generation.sentence_reviews.append(SentenceReview(
+            field_path=path,
+            original_quote='',
+            suggested_revision=description,
+            reason=(f"답변에 적은 경험은 이력서에 있는 프로젝트와 다른 경험이라 '{name}' 프로젝트로 새로 추가해요. "
+                    '기간은 비워 두니 직접 채워 주세요.'),
+            evidence_quotes=[proposal.answer_quote],
+            evidence_sources=['answer'],
+            status='improved',
+            edit_type='content',
+            overlap_notice=notice,
+            requirement_id=requirement_id,
+            new_item=NewResumeItem(question_id=answer.question_id, name=name, role=role,
+                                   tech_stack=', '.join(stack_items), description=description),
+        ))
+        used.add(answer.question_id)
+        break
+    return warnings, used
 
 
 def prepare_answers(request, previous, snapshot_hash, refs, fields=None):
@@ -445,20 +632,31 @@ def prepare_answers(request, previous, snapshot_hash, refs, fields=None):
         seen.add(answer.question_id)
         field_path = answer.field_path
         if question.get('reason') == MISSING_JOB_TECH_REASON:
-            has_no_experience = bool(re.search(
+            has_no_experience = is_none_answer(answer.answer) or bool(re.search(
                 r'(사용\s*경험(?:은|이)?\s*없|경험(?:은|이)?\s*없|해본\s*적\s*없|사용하지\s*않)',
                 answer.answer,
             ))
             if not has_no_experience:
                 field_path = resolve_missing_technology_project(answer.answer, fields or {})
-                if field_path is None:
+                if field_path is None and _SEPARATE_WORK.search(answer.answer):
+                    # 이력서에 없는 별도 작업("부트캠프 개인 과제로…")이다. 기존 항목 이름이 없는 게 당연하니 되묻지 않고,
+                    # 새 프로젝트 제안(add_new_project_proposals)으로 받는다.
+                    field_path = answer.field_path
+                elif field_path is None:
                     raise ReviewInputError(
-                        '사용한 프로젝트를 확인할 수 없습니다. 질문에 표시된 번호 또는 프로젝트명을 포함해 주세요.'
+                        '어느 항목에서 했는지 확인할 수 없습니다. 프로젝트·경력 등 항목 이름을 함께 적어 주세요.'
                     )
                 if refs.get(field_path, 'legacy:').startswith('legacy:'):
                     raise ReviewConflict('stable_item_id_required')
                 if previous.get('item_refs', {}).get(field_path) != refs[field_path]:
                     raise ReviewConflict('resume_item_changed')
+        elif question.get('requirement_id') and not is_none_answer(answer.answer):
+            # 모델이 만든 요건 질문도 답에 다른 항목 이름이 적혀 있으면 그 항목으로 옮긴다. 질문이 붙은 프로젝트 칸에
+            # "오프라인 다운로드 프로젝트에서 AVPlayer로…"가 그대로 붙었다(2026-09-15 새 케이스 v16f).
+            resolved = resolve_missing_technology_project(answer.answer, fields or {})
+            if (resolved and resolved != field_path and not refs.get(resolved, 'legacy:').startswith('legacy:')
+                    and previous.get('item_refs', {}).get(resolved) == refs[resolved]):
+                field_path = resolved
         answers.append(answer.model_copy(update={
             'field_path': field_path,
             'question': question['question'],
@@ -494,19 +692,61 @@ def normalize_diagnostics(generation, fields, has_job, previous):
     return changes
 
 
+_NONE_ANSWER = re.compile(
+    r'^\s*(?:없음|없어요|없습니다|해당\s*(?:경험\s*)?없음|(?:그런\s*)?경험(?:은|이)?\s*없(?:음|어요|습니다)|'
+    r'(?:잘\s*)?모르겠(?:어요|습니다)|기억(?:이\s*)?나지\s*않(?:아요|습니다)|넘어갈게요)\s*[.!]?\s*$'
+)
+
+
+def is_none_answer(text):
+    """앱의 "없음" 카드나 그만큼 짧은 부정 답. 사실이 섞인 답("pyserial로 작성했고 시간은 안 쟀어요")은 아니다."""
+    return bool(_NONE_ANSWER.match(str(text or '')))
+
+
+_EMPTY_QUESTION = re.compile(r'^\s*(?:없음|없습니다|해당\s*없음|null|none|n/?a|-)\s*[.]?\s*$', re.IGNORECASE)
+
+
+def is_empty_question(text):
+    """모델이 '질문 없음'을 질문 칸에 글자로 적어 보낸 경우. 그대로 두면 앱에 "없음"이 질문으로 뜬다."""
+    return not str(text or '').strip() or bool(_EMPTY_QUESTION.match(str(text)))
+
+
+def _similar_question(text_key, accepted_keys):
+    """같은 경험에 거의 같은 문장으로 두 번 묻는 질문을 가린다.
+
+    주제(topic)가 달라도 "직접 수행한 작업은?"과 "직접 수행한 작업과 그 결과는?"은 같은 질문이다.
+    """
+    # 2026-09-14 실제 첨삭 결과로 잰 값: 같은 질문 0.58~0.61, 다른 질문 0.14~0.55.
+    return any(SequenceMatcher(None, text_key, other).ratio() >= 0.57 for other in accepted_keys)
+
+
 def normalize_questions(generation, fields, answers, review_id):
     candidates = list(generation.questions)
     for sentence in generation.sentence_reviews:
+        if is_empty_question(sentence.confirmation_question):
+            sentence.confirmation_question = None
         if sentence.confirmation_question:
             candidates.append(ReviewQuestion(field_path=sentence.field_path, topic='other', question=sentence.confirmation_question, reason=sentence.reason))
     answered = {(a.field_path, re.sub(r'\W', '', a.question)) for a in answers}
+    # 답한 질문을 표현만 바꿔 다시 묻지 않는다. 글자가 같을 때만 거르면 재첨삭마다 모델이 같은 뜻의
+    # 질문을 새 문장으로 내서, 같은 프로젝트를 세 번 묻는 대화가 나왔다(2026-09-15 목업 첨삭).
+    accepted_text = {}
+    for a in answers:
+        accepted_text.setdefault(group(a.field_path), []).append(re.sub(r'\W', '', a.question))
     seen = set()
     questions = []
     for q in sorted(candidates, key=lambda q: q.priority):
         text_key = re.sub(r'\W', '', q.question)
-        key = (group(q.field_path), q.topic) if q.topic != 'other' else (group(q.field_path), text_key)
-        if q.field_path not in fields or not q.question.strip() or key in seen or (q.field_path, text_key) in answered:
+        if q.requirement_id:
+            # 요건마다 질문 하나. "Kafka 써봤나요?"와 "Linux 써봤나요?"는 문장 틀이 같아도 다른 질문이다.
+            key = ('requirement', q.requirement_id)
+        else:
+            key = (group(q.field_path), q.topic) if q.topic != 'other' else (group(q.field_path), text_key)
+        if q.field_path not in fields or is_empty_question(q.question) or key in seen or (q.field_path, text_key) in answered:
             continue
+        if not q.requirement_id and _similar_question(text_key, accepted_text.get(group(q.field_path), [])):
+            continue
+        accepted_text.setdefault(group(q.field_path), []).append(text_key)
         seen.add(key)
         q.question_id = digest([review_id, q.field_path, q.topic, text_key])[:24]
         questions.append(q)
@@ -540,7 +780,11 @@ def carry_forward_unanswered_questions(generation, previous, answers):
         known.add(key)
 
 
-def add_thin_self_introduction_questions(generation, fields):
+THIN_SELF_INTRO_MIN_CHARS = 200
+MAX_THIN_QUESTIONS_JOB = 2
+
+
+def add_thin_self_introduction_questions(generation, fields, star_checks=None, job_review=False):
     """Guarantee follow-up for self-introduction answers with too little detail.
 
     A model can return one strong project question and miss several thin
@@ -550,11 +794,20 @@ def add_thin_self_introduction_questions(generation, fields):
     needs more room than a project bullet to explain its context and evidence.
     """
     existing_paths = {question.field_path for question in generation.questions}
+    stars = star_by_path(star_checks or [])
     followups = []
     for path, body in fields.items():
         if not re.fullmatch(r'selfIntroduction\.[^.]+\.body', path):
             continue
-        if len(re.sub(r'\s+', '', body)) >= 280 or path in existing_paths:
+        if job_review and not STAR_TARGET.fullmatch(path):
+            # 공고 맞춤 첨삭의 지원동기·입사 후 포부는 공고 업무와 연결하는 질문이 따로 있다. "직접 한 행동을 더
+            # 알려 주세요"는 그 문항에 맞지 않아(2026-09-15 목업: 틀 질문 6개 중 4개가 지원동기) 경험 문항에만 붙인다.
+            continue
+        if len(re.sub(r'\s+', '', body)) >= THIN_SELF_INTRO_MIN_CHARS or path in existing_paths:
+            continue
+        # 길이만 보면 짧지만 행동과 결과가 이미 적힌 문항("로그를 모아 원인을 찾아 실패율을 0으로")에도 "직접 한
+        # 행동을 더 알려 주세요"를 붙였다(2026-09-15). STAR 판정에서 행동·결과가 모두 있으면 묻지 않는다.
+        if has_elements(stars.get(path), 'action', 'result'):
             continue
         section = path.split('.')[1]
         label = {
@@ -573,12 +826,16 @@ def add_thin_self_introduction_questions(generation, fields):
                 '구체적으로 알려 주세요. 결과·배운 점이 있다면 함께 적어 주세요.'
             ),
             reason='문항 내용이 충분하지 않아 경험의 근거와 직무 연관성을 확인하기 어렵습니다.',
-            priority=1,
+            priority=3,
         ))
         existing_paths.add(path)
-    # Preserve these coverage questions when the model already used its full
-    # question budget for another section.
-    generation.questions = followups + generation.questions
+    if job_review:
+        # 공고 맞춤 첨삭은 요건·경험 질문이 먼저다. 문항마다 같은 문장인 틀 질문은 두 개까지만 붙인다.
+        followups = followups[:MAX_THIN_QUESTIONS_JOB]
+    # 문항마다 같은 문장으로 묻는 질문이라 모델 질문 뒤에 둔다. 예전에는 맨 앞(priority 1)에
+    # 넣어, 앱이 보여주는 질문 7개 중 4~5개를 이 질문이 차지하고 공고 요건·프로젝트 질문이
+    # 밀려났다(2026-09-14 개발용 목업 첨삭).
+    generation.questions = generation.questions + followups
 
 
 def add_missing_job_technology_question(generation, fields, job_text):
@@ -595,39 +852,53 @@ def add_missing_job_technology_question(generation, fields, job_text):
         return
     if any(question.reason.startswith('공고에 언급된 기술') for question in generation.questions):
         return
-    targets = _project_description_targets(fields)
+    targets = _item_description_targets(fields)
     if not targets:
         return
     target_path = targets[0][0]  # Transport path only; the answer reroutes it.
     named_terms = ', '.join(missing_terms[:3])
-    project_options = ', '.join(
-        f'{index + 1}번 {name}' for index, (_, name) in enumerate(targets)
-    )
     generation.questions.insert(0, ReviewQuestion(
         field_path=target_path,
         topic='scope',
         question=(
-            f'선택 공고에 언급된 {named_terms}을(를) 실제로 사용했다면 어느 '
-            f'프로젝트에서 사용했나요? 프로젝트 번호 또는 이름({project_options})과 '
-            '본인이 직접 수행한 작업을 함께 알려 주세요. 사용 경험이 없다면 없다고 답해 주세요.'
+            f'선택 공고에 언급된 {named_terms}을(를) 실제로 사용해 본 적이 있나요? 있다면 이력서의 어느 '
+            '항목(프로젝트·경력 등)에서 무엇을 직접 했는지 항목 이름과 함께 알려 주세요. '
+            '사용 경험이 없다면 없다고 답해 주세요.'
         ),
         reason=MISSING_JOB_TECH_REASON,
         priority=1,
     ))
 
 
-def prefer_project_evidence_over_surface_edit(generation, fields, answers):
-    """Ask for missing project evidence instead of offering a cosmetic rewrite.
+def item_display_name(fields, path):
+    """질문에 넣을 항목 이름. "'LMS 출결 관리 서비스' 프로젝트", "'(주)예시커머스' 경력".
 
-    A one-line project description can always be made grammatically smoother,
-    but that does not make it a stronger application record.  Until the user
-    confirms the problem, personal scope, or result, job-tailored review keeps
-    the conversation focused on evidence rather than sentence endings.
+    "이 프로젝트에서 해결하려던 문제는?"처럼 이름 없이 물으면 사용자는 어느 프로젝트인지 몰라 다른 프로젝트
+    이야기를 답하고, 답이 항목과 맞지 않아 수정안이 나오지 않는다(2026-09-15 목업: 반영 실패 7건 중 5건).
+    """
+    match = re.match(r'^(projects|experience|awards|otherActivities|trainingExperience)\[(\d+)\]', path)
+    if not match:
+        return ''
+    section, index = match.group(1), match.group(2)
+    name_key = {'projects': 'name', 'experience': 'company', 'awards': 'name',
+                'otherActivities': 'name', 'trainingExperience': 'course'}[section]
+    suffix = {'projects': '프로젝트', 'experience': '경력', 'awards': '수상', 'otherActivities': '활동',
+              'trainingExperience': '교육'}[section]
+    name = str(fields.get(f'{section}[{index}].{name_key}') or '').strip()
+    return f"'{name}' {suffix}" if name else f'{int(index) + 1}번 {suffix}'
+
+
+def prefer_project_evidence_over_surface_edit(generation, fields, answers, star_checks=None):
+    """한 줄짜리 프로젝트 설명을 다듬은 수정안에 문제·담당 범위·결과 질문을 함께 붙인다.
+
+    문장만 매끄럽게 해서는 지원 근거가 강해지지 않으므로 질문으로 사실을 더 받는다. 다만 다듬은
+    문장 자체는 지우지 않는다(사용자가 고르게 둔다).
     """
     answered_paths = {
         answer.field_path for answer in answers if str(answer.answer).strip()
     }
     questioned_paths = {question.field_path for question in generation.questions}
+    stars = star_by_path(star_checks or [])
     for review in generation.sentence_reviews:
         path = review.field_path
         original = fields.get(path, '')
@@ -643,16 +914,227 @@ def prefer_project_evidence_over_surface_edit(generation, fields, answers):
             path in answered_paths
         ):
             continue
-        review.suggested_revision = None
-        review.status = 'needs_confirmation'
-        review.edit_type = 'none'
-        review.reason = '표현 교정보다 프로젝트의 문제·담당 범위·확인 결과를 먼저 확인하는 편이 좋습니다.'
+        # 예전에는 이 수정안을 지우고 질문만 남겼다. 그러면 한 줄짜리 프로젝트 설명이 많은 이력서는
+        # 자동 수정안이 거의 나오지 않았다(2026-09-15 목업: 첫 첨삭 수정안 26개 중 6개가 여기서 사라짐).
+        # 다듬은 문장은 그대로 보여 주고, 문제·담당 범위·결과 질문을 함께 붙인다.
+        if has_elements(stars.get(path), 'action', 'result'):
+            continue  # 행동·결과가 이미 적힌 설명("N+1 제거로 p95 1.2s→0.5s")은 파고들지 않는다.
         if path not in questioned_paths and not review.confirmation_question:
+            target = item_display_name(fields, path) or '이 프로젝트'
             review.confirmation_question = (
-                '이 프로젝트에서 해결하려던 기존 문제와 본인이 맡은 구현 범위, '
+                f'{target}에서 해결하려던 기존 문제와 본인이 맡은 구현 범위, '
                 '확인한 결과를 알려 주세요.'
             )
             questioned_paths.add(path)
+
+
+# 모델이 요건과 연결하지 않고 직접 묻는 지원 조건 질문. "6개월 풀타임 근무가 가능한가요?", "지원 지역이 어디인가요?"
+# (2026-09-14 A/B에서 진단을 넣든 빼든 나왔다). 답해도 이력서에 적을 문장이 없다.
+_ELIGIBILITY_QUESTION = re.compile(
+    r'(근무(?:가|를|는)?\s*가능|근무\s*형태|풀타임|출근\s*가능|입사\s*가능|지원\s*지역|거주\s*지|병역|군\s*복무|'
+    r'경력(?:으로)?\s*인정|(?:경력|경험)\s*(?:기간|연수)[^?]*(?:이하|이상|넘)|\d+\s*년\s*(?:이하|이상)인지)'
+)
+# 사용자에게 보이는 문장에 새어 나온 내부 이름. "coreCompetencies.text 필드", "field_path 기준으로".
+# 한글 조사가 바로 붙으므로("description의") \b 대신 영문·숫자 경계를 쓴다.
+_INTERNAL_PATH = re.compile(
+    r'(?<![A-Za-z0-9_])(?:coreCompetencies|selfIntroduction|trainingExperience|otherActivities|techStack|projects|'
+    r'experience|awards|certifications|education|basicInfo)(?:\[\d+\])?(?:\.[A-Za-z]+)+(?![A-Za-z0-9_])'
+)
+_INTERNAL_WORD = re.compile(
+    r'(?<![A-Za-z0-9_])(?:field_path|requirement_id|edit_type|sentence_reviews|original_quote|evidence_quotes)'
+    r'(?![A-Za-z0-9_])|필드\s*경로'
+)
+_SECTION_WORDS = {'coreCompetencies': '핵심역량', 'selfIntroduction': '자기소개서', 'trainingExperience': '교육',
+                  'otherActivities': '활동', 'techStack': '기술 스택', 'projects': '프로젝트', 'experience': '경력',
+                  'awards': '수상', 'certifications': '자격증', 'education': '학력', 'basicInfo': '기본 정보'}
+
+
+def humanize_internal_terms(text, fields):
+    """내부 경로·필드 이름을 사용자가 아는 이름으로 바꾼다."""
+    if not text:
+        return text
+
+    def path_name(match):
+        path = match.group(0)
+        name = item_display_name(fields, path)
+        if name:
+            return name
+        return _SECTION_WORDS.get(re.match(r'[A-Za-z]+', path).group(0), '이력서 항목')
+
+    text = _INTERNAL_PATH.sub(path_name, text)
+    return _INTERNAL_WORD.sub('항목', text)
+
+
+def filter_questions_by_resume_facts(generation, fields, star_checks):
+    """답해도 이력서에 적을 게 없거나 이미 적힌 것을 묻는 질문을 거르고, 보이는 문장의 내부 용어를 바꾼다.
+
+    - 요건과 연결되지 않은 지원 조건 질문(근무 가능 여부·지역·경력 인정)은 버린다.
+    - 요건과 연결되지 않은 경험 질문 중, 묻는 요소(topic)가 이미 원문에 있는 것은 버린다. "결과는 무엇이었나요?"를
+      "240ms→80ms"가 적힌 항목에 묻지 않는다.
+    """
+    stars = star_by_path(star_checks or [])
+    targets = _item_description_targets(fields)
+    kept = []
+    for question in generation.questions:
+        question.question = humanize_internal_terms(question.question, fields)
+        question.reason = humanize_internal_terms(question.reason, fields)
+        # 이름·역할·기술 스택 이름 같은 짧은 칸에 붙은 질문. 답이 그 칸으로 가면 문장이 될 수 없어 보류되고, 같은 칸에
+        # 확인 질문이 이어져 세 턴이 헛돌았다(2026-09-15 새 케이스 v16e). 항목 설명 칸으로 옮기고, 기술 스택 질문은
+        # 답에 적힌 항목 이름으로 옮기는 경로(MISSING_JOB_TECH_REASON)를 탄다.
+        nominal = re.fullmatch(
+            r'(?:techStack\[\d+\]\.(?:name|level))|((?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\])'
+            r'\.(?:name|company|role|course|organization|techStack)', question.field_path)
+        if nominal:
+            item_description = f'{nominal.group(1)}.description' if nominal.group(1) else None
+            if item_description in fields:
+                question.field_path = item_description
+            elif targets:
+                question.field_path = targets[0][0]
+                question.reason = MISSING_JOB_TECH_REASON
+            else:
+                continue
+        if not question.requirement_id and _ELIGIBILITY_QUESTION.search(question.question):
+            continue
+        check = stars.get(question.field_path)
+        if not question.requirement_id and (
+            (question.topic in STAR_LABELS and has_elements(check, question.topic))
+            # 행동과 결과가 모두 적힌 항목은 topic이 other·scope여도 더 파고들지 않는다. "○○ 외에 추가로 확인한 결과가
+            # 있나요?"가 topic=other로 와서 거르기를 빠져나갔다(2026-09-15 새 케이스 v16f).
+            or (has_elements(check, 'action', 'result') and STAR_TARGET.fullmatch(question.field_path))
+        ):
+            continue
+        kept.append(question)
+    generation.questions = kept
+    for review in generation.sentence_reviews:
+        review.reason = humanize_internal_terms(review.reason, fields)
+        if review.confirmation_question:
+            review.confirmation_question = humanize_internal_terms(review.confirmation_question, fields)
+    generation.summary = humanize_internal_terms(generation.summary, fields)
+
+
+REQUIREMENT_QUESTION_REASON = '공고 요건과 관련된 실제 경험이 있는지 확인합니다.'
+MAX_REQUIREMENT_QUESTIONS = 4
+
+
+def add_requirement_questions(generation, fields, requirement_rows, max_preferred=2):
+    """근거를 찾지 못한 공고 요건마다 질문이 하나씩 있게 한다.
+
+    모델이 요건 질문을 빠뜨리면 사용자는 공고와 무엇이 맞지 않는지 모른 채 문장 수정만 받는다.
+    필수 요건은 모두, 우대 요건은 두 개까지 묻는다. 기술 요건은 어느 프로젝트에서 썼는지 답하게 해
+    그 프로젝트 항목으로 답을 옮긴다(MISSING_JOB_TECH_REASON 경로).
+    """
+    asked = {q.requirement_id for q in generation.questions if q.requirement_id}
+    targets = _item_description_targets(fields)
+    preferred_added = 0
+    for row in requirement_rows:
+        if row['status'] not in {'unconfirmed', 'partial'} or row['group'] == 'task' or row['id'] in asked:
+            continue
+        if row.get('kind') == 'eligibility':
+            continue  # 경력 연수·학력·면허·근무 조건은 이력서 문장으로 고칠 게 없다. 표에 "확인만"으로 둔다.
+        if row['group'] == 'preferred':
+            if preferred_added >= max_preferred:
+                continue
+            preferred_added += 1
+        label = row['label']
+        kind = '필수' if row['group'] == 'must' else '우대'
+        is_technology = bool(technology_mentions(label) or re.search(r'[A-Za-z]', label))
+        # 일부 근거가 기술 스택 이름 같은 짧은 칸에만 있으면("Fastlane") 그 칸에 질문을 붙이지 않는다. 답이 그 칸을 문장으로
+        # 덮어썼다(2026-09-15 새 케이스). 설명 칸이 아니면 아래 기술 요건 질문으로 내려가 답의 항목 이름으로 옮긴다.
+        narrative_evidence = [p for p in row.get('evidence_paths') or [] if re.fullmatch(
+            r'(?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\]\.description|coreCompetencies\.text', p)]
+        if row['status'] == 'partial' and narrative_evidence:
+            path = narrative_evidence[0]
+            where = item_display_name(fields, path)
+            question = (f"공고 {kind} 요건인 '{label}'은(는) 이력서에 일부만 드러나 있어요. "
+                        f"{where + '에서 ' if where else ''}직접 한 일을 조금 더 알려 주세요. "
+                        '해 본 적이 없다면 없다고 답해 주세요.')
+            reason = REQUIREMENT_QUESTION_REASON
+        elif is_technology and targets:
+            # 특정 항목을 지목하면("'산업체 현장실습'에서 써 봤나요?") 그 항목 이야기로만 답하게 된다. 어느 항목인지는
+            # 사용자가 고르게 하고, 답에 적힌 항목 이름으로 옮긴다(resolve_missing_technology_project).
+            path = targets[0][0]
+            question = (f"공고 {kind} 요건인 '{label}'을(를) 실제로 써 본 적이 있나요? 있다면 이력서의 어느 항목"
+                        '(프로젝트·경력 등)에서 무엇을 직접 했는지 항목 이름과 함께 알려 주세요. 없다면 없다고 답해 주세요.')
+            reason = MISSING_JOB_TECH_REASON
+        else:
+            path = 'coreCompetencies.text' if 'coreCompetencies.text' in fields else next(iter(fields), '')
+            question = (f"공고 {kind} 요건인 '{label}'과(와) 관련된 실제 경험이 있나요? 있다면 어디서 무엇을 "
+                        '직접 했는지 알려 주세요. 없다면 없다고 답해 주세요.')
+            reason = REQUIREMENT_QUESTION_REASON
+        if not path:
+            continue
+        generation.questions.append(ReviewQuestion(
+            field_path=path, topic='scope', question=question, reason=reason,
+            priority=1 if row['group'] == 'must' else 2, requirement_id=row['id'],
+        ))
+        asked.add(row['id'])
+
+
+def _review_stage(field_path, requirement_id=None, edit_type=None):
+    """대화 단계: 1 문장 다듬기 · 2 공고 요건 확인 · 3 경험 보완 · 4 지원동기 · 5 자기소개서.
+
+    모델에게 순서를 맡기면 첨삭마다 달라진다. 앱이 단계 줄을 그리려면 서버가 고정해야 한다.
+    문장 다듬기(새 사실 없는 표현 수정)는 앱이 한 카드로 묶어 먼저 한 번에 적용하게 하고, 그 뒤에
+    질문으로 사실을 받는다. 답변 재첨삭은 적용된 최신 문장 위에서 이어진다.
+    """
+    if edit_type in {'spelling', 'tone', 'clarity'}:
+        return 1
+    if requirement_id:
+        return 2
+    if field_path.startswith('selfIntroduction.motivation'):
+        return 4
+    if field_path.startswith('selfIntroduction'):
+        return 5
+    return 3
+
+
+def assign_review_stages(generation, requirement_rows):
+    """질문·수정안에 단계를 매기고, 질문을 단계 → 중요도 순으로 세운다."""
+    open_ids = {row['id'] for row in requirement_rows if row['status'] in {'unconfirmed', 'partial'}}
+    known_ids = {row['id'] for row in requirement_rows}
+    rows_by_id = {row['id']: row for row in requirement_rows}
+    requirement_reasons = {REQUIREMENT_QUESTION_REASON, MISSING_JOB_TECH_REASON}
+    kept = []
+    for question in generation.questions:
+        if question.requirement_id and question.requirement_id not in known_ids:
+            question.requirement_id = None
+        row = rows_by_id.get(question.requirement_id) if question.requirement_id else None
+        if row is not None and row.get('kind') == 'eligibility':
+            continue  # 지원 자격에 붙은 질문은 답해도 이력서에 적을 게 없다.
+        if row is not None and row.get('group') == 'task' and row.get('status') == 'unconfirmed':
+            # 주요 업무는 이력서에 비슷한 경험이 있을 때(partial)만 묻는다. 근거가 전혀 없는 업무를 물으면
+            # "그런 경험은 없어요"만 쌓인다.
+            continue
+        if question.requirement_id and question.requirement_id not in open_ids:
+            if question.reason in requirement_reasons:
+                continue  # 요건을 확인하려던 질문인데 이미 확인됐거나 없다고 답했다.
+            # 모델이 경험 질문("주문 조회 개선에서 직접 한 일은?")을 이미 충족된 요건에 붙인 경우다.
+            # 버리면 경험 보완 질문이 통째로 사라진다(2026-09-15 목업: 26개 → 4개). 요건 연결만 끊는다.
+            question.requirement_id = None
+        question.stage = _review_stage(question.field_path, question.requirement_id)
+        kept.append(question)
+    # 요건 질문은 한 번에 MAX_REQUIREMENT_QUESTIONS개까지. 공고 요건만 여섯 번 묻다 보면 경험 보완·문장
+    # 다듬기에 닿기 전에 사용자가 지친다(2026-09-15 목업: 첫 7개 질문 중 36/56이 요건 질문). 필수 → 우대 →
+    # 주요 업무 순으로 남기고, 넘치는 것 중 서버가 만든 요건 질문은 버리고 모델의 질문은 경험 질문으로 돌린다.
+    group_order = {row['id']: {'must': 0, 'preferred': 1}.get(row.get('group'), 2) for row in requirement_rows}
+    linked = sorted((q for q in kept if q.requirement_id), key=lambda q: (group_order.get(q.requirement_id, 3), q.priority))
+    overflow = {id(q) for q in linked[MAX_REQUIREMENT_QUESTIONS:]}
+    capped = []
+    for question in kept:
+        if id(question) in overflow:
+            if question.reason in requirement_reasons:
+                continue
+            question.requirement_id = None
+            question.stage = _review_stage(question.field_path)
+        capped.append(question)
+    kept = capped
+    kept.sort(key=lambda q: (q.stage, group_order.get(q.requirement_id, 3) if q.requirement_id else 0, q.priority))
+    generation.questions = kept
+    generation.confirmation_questions = [q.question for q in kept[:3]]
+    for item in generation.sentence_reviews:
+        if item.requirement_id and item.requirement_id not in known_ids:
+            item.requirement_id = None
+        item.stage = _review_stage(item.field_path, item.requirement_id, item.edit_type)
 
 
 def run_review(service, id_token, request):
@@ -708,6 +1190,7 @@ def run_review(service, id_token, request):
     if request.expected_input_hash and request.expected_input_hash != snapshot_hash:
         raise ReviewConflict('resume_version_changed')
     job_source = {}
+    job_conditions = {}
     job_text = request.job_posting_text
     if request.review_mode == 'general' and (request.selected_job_id or job_text):
         raise ReviewInputError('general_review_cannot_include_job')
@@ -717,6 +1200,7 @@ def run_review(service, id_token, request):
             raise ReviewInputError('selected_job_and_client_text_are_mutually_exclusive')
         job = load_selected_job(service._settings.matching_job_store_path, request.selected_job_id)
         job_source, job_text = job['source'], job['text']
+        job_conditions = job.get('conditions') or {}
         if request.expected_job_hash and request.expected_job_hash != job_source['snapshot_hash']:
             raise ReviewConflict('selected_job_changed')
         if request.tailored_resume_id and resume.get('jobId') != request.selected_job_id:
@@ -763,8 +1247,40 @@ def run_review(service, id_token, request):
     telemetry = {'model': service._settings.openai_model, 'prompt_version': PROMPT_VERSION,
                  'input_tokens': None, 'output_tokens': None, 'elapsed_ms': None, 'status': 'processing'}
     started = time.monotonic()
+    # "없음" 카드처럼 답 전체가 경험 없음·모름이면 모델을 부르지 않는다. 고칠 사실이 없는데 재첨삭을
+    # 한 번 돌리면 사용자는 10초를 기다리고, 모델이 그 답으로 문장을 만들 위험만 생긴다. 답은 그대로
+    # 기록해 두어 누락 점검이 같은 것을 다시 묻지 않게 한다.
+    skip_model = bool(current_answers) and not is_gap_audit and all(
+        is_none_answer(answer.answer) for answer in current_answers
+    )
+    # 공고 요건 표. 첫 첨삭은 공고당 한 번 정리해 둔 요건을 쓰고, 후속·누락 점검은 이전 표를 이어받는다.
+    previous_rows = list((previous or {}).get('requirement_map') or [])
+    previous_questions = {q.get('question_id'): q for q in (previous or {}).get('questions', [])}
+    answered_requirement_ids = {
+        previous_questions.get(answer.question_id, {}).get('requirement_id') for answer in current_answers
+    } - {None}
+    requirements = []
+    if request.review_mode == 'job' and job_text:
+        if previous_rows:
+            requirements = [JobRequirement(id=row['id'], group=row['group'], label=row['label'],
+                                           posting_quote=row['posting_quote']) for row in previous_rows]
+        elif not is_focused_followup and not is_gap_audit:
+            requirement_started = time.monotonic()
+            try:
+                requirements = load_or_extract_requirements(
+                    db, getattr(service, '_requirement_extractor', None), job_text, job_source,
+                )
+            except Exception as exc:  # noqa: BLE001 — 요건 정리가 실패해도 문장 첨삭은 한다
+                telemetry['requirements_error'] = type(exc).__name__
+            telemetry['requirements_ms'] = round((time.monotonic() - requirement_started) * 1000)
+    requirements = classify_requirements(requirements, job_conditions)
+    prompt_requirements = requirements
+    if is_focused_followup:
+        prompt_requirements = [r for r in requirements if r.id in answered_requirement_ids]
     try:
-        generated = service._generator({
+        generated = ResumeReviewGeneration(
+            summary=str((previous or {}).get('summary') or ''), section_reviews=[],
+        ) if skip_model else service._generator({
             'resume_text': prompt_resume_text,
             'confirmed_answers': json.dumps(
                 [a.model_dump(exclude={'question_id'}) for a in prompt_answers], ensure_ascii=False,
@@ -774,6 +1290,12 @@ def run_review(service, id_token, request):
                 ensure_ascii=False,
             ),
             'job_posting_text': redact(prompt_job_text),
+            'job_requirements': requirements_prompt_text(prompt_requirements),
+            # STAR는 첫 첨삭에서만 모델이 판정한다. 후속 첨삭마다 다시 받으면 재첨삭이 3.5초 느려졌다(2026-09-15 목업).
+            'star_targets': json.dumps(
+                star_targets(prompt_fields) if not is_gap_audit and not is_focused_followup else [],
+                ensure_ascii=False,
+            ),
             'resume_time_context': prompt_time_context,
             'review_scope': (
                 '누락 점검 단계입니다. 기존 첨삭을 다시 쓰거나 수정안을 만들지 마세요. '
@@ -783,7 +1305,7 @@ def run_review(service, id_token, request):
                     '첫 검토입니다. 이력서 전체와 선택 공고를 비교해 검토하세요.'
                     if not is_focused_followup
                     else '후속 첨삭입니다. 이번 답변의 field_path와 같은 이력서 항목만 수정하세요. '
-                    '다른 항목의 새 진단·수정·질문은 만들지 마세요.'
+                    '다른 항목의 새 진단·수정·질문은 만들지 마세요. ' + NEW_PROJECT_RULE
                 )
             ),
             'review_mode': (
@@ -792,7 +1314,11 @@ def run_review(service, id_token, request):
                 else '공고 맞춤 첨삭 — 선택 공고와 이력서 원문을 비교'
             ),
             'review_focus': redact(request.review_focus or '전체 검토'),
+            # 후속 첨삭만 새 프로젝트 제안 칸이 있는 출력 스키마를 쓴다. 생성기가 프롬프트에 넣기 전에 뺀다.
+            'allow_new_projects': is_focused_followup and not is_gap_audit,
         })
+        if skip_model:
+            telemetry.update(input_tokens=0, output_tokens=0, model_skipped='none_answer')
         # Structured output with include_raw preserves usage without logging content.
         if isinstance(generated, dict) and 'parsed' in generated:
             raw = generated.get('raw')
@@ -808,20 +1334,34 @@ def run_review(service, id_token, request):
             for section in generated.section_reviews:
                 section.suggested_revision = None
         grounded, warnings = enforce_resume_review_grounding('\n'.join(fields.values()), generated)
-        warnings.extend(ground_sentences(fields, answers, grounded))
+        warnings.extend(ground_sentences(fields, answers, grounded, job_text or ""))
         warnings.extend(require_answer_reflection(grounded, current_answers))
+        new_project_reviews = []
+        if not is_gap_audit and is_focused_followup:
+            project_warnings, new_project_answer_ids = add_new_project_proposals(
+                grounded, fields, raw_content, current_answers, previous_questions,
+            )
+            warnings.extend(project_warnings)
+            # 새 항목 수정안은 기존 칸의 원문 위치가 없어 아래 재검증(ground_sentences)을 통과할 수 없다. 따로 두었다 붙인다.
+            new_project_reviews = [review for review in grounded.sentence_reviews if review.new_item is not None]
+            grounded.sentence_reviews = [review for review in grounded.sentence_reviews if review.new_item is None]
+        else:
+            grounded.new_projects = []
+            new_project_answer_ids = set()
         if not is_gap_audit:
             review_count_before_fallback = len(grounded.sentence_reviews)
             warnings.extend(
-                add_substantive_answer_fallback(grounded, fields, current_answers)
+                add_substantive_answer_fallback(
+                    grounded, fields,
+                    [answer for answer in current_answers if answer.question_id not in new_project_answer_ids],
+                )
             )
             if len(grounded.sentence_reviews) > review_count_before_fallback:
                 # The deterministic fallback must pass the same provenance,
                 # uniqueness and overlap checks as a model-generated edit.
-                warnings.extend(ground_sentences(fields, answers, grounded))
+                warnings.extend(ground_sentences(fields, answers, grounded, job_text or ""))
                 warnings.extend(require_answer_reflection(grounded, current_answers))
-        if request.review_mode == 'job':
-            prefer_project_evidence_over_surface_edit(grounded, fields, answers)
+        grounded.sentence_reviews.extend(new_project_reviews)
         if not is_gap_audit:
             apply_selected_job_identity_revisions(
                 grounded,
@@ -833,21 +1373,72 @@ def run_review(service, id_token, request):
                     and not is_focused_followup
                 ),
             )
+        # STAR 판정. 첫 첨삭은 모델이 모든 경험 칸을 판정한다. 후속 첨삭은 이전 판정을 잇고, 이번 답변이 수정안에
+        # 실제로 반영됐으면 그 질문이 묻던 요소만 "있음"으로 바꾼다(모델을 다시 부르지 않는다).
+        previous_stars = list((previous or {}).get('star_checks') or [])
+        if is_gap_audit or skip_model:
+            star_rows = [check for check in previous_stars if check.get('field_path') in fields]
+        elif is_focused_followup:
+            star_rows = mark_answered_star_elements(
+                [check for check in previous_stars if check.get('field_path') in fields],
+                current_answers, previous_questions, grounded.sentence_reviews,
+            )
+        else:
+            judged = star_targets(prompt_fields)
+            star_rows, star_warnings = ground_star_judgements(
+                grounded.star_judgements, fields, answers, previous_stars, judged,
+            )
+            warnings.extend(star_warnings)
+            star_rows = [row.model_dump() for row in star_rows]
+        grounded.star_judgements = []
+        if request.review_mode == 'job':
+            prefer_project_evidence_over_surface_edit(grounded, fields, answers, star_rows)
         changes = normalize_diagnostics(grounded, fields, bool(job_text), previous)
+        # normalize_diagnostics가 이전 방식대로 star_checks를 비우므로 확정한 판정을 그 뒤에 싣는다.
+        grounded.star_checks = list(star_by_path(star_rows).values())
+        requirement_rows = previous_rows
+        if requirements and not is_gap_audit:
+            matches = grounded.requirement_matches
+            if is_focused_followup:
+                matches = [m for m in matches if m.requirement_id in answered_requirement_ids]
+            rows, requirement_warnings = ground_requirement_matches(
+                requirements, matches, fields, answers, previous_rows,
+            )
+            warnings.extend(requirement_warnings)
+            requirement_rows = [row.model_dump() for row in rows]
+            for answer in current_answers:
+                requirement_id = previous_questions.get(answer.question_id, {}).get('requirement_id')
+                if requirement_id and is_none_answer(answer.answer):
+                    requirement_rows = mark_requirement_absent(requirement_rows, requirement_id)
+        is_first_job_review = not is_focused_followup and not is_gap_audit and request.review_mode == 'job'
         if not is_focused_followup and not is_gap_audit:
-            add_thin_self_introduction_questions(grounded, fields)
-            if request.review_mode == 'job':
+            add_thin_self_introduction_questions(
+                grounded, fields, star_rows, job_review=request.review_mode == 'job',
+            )
+            if request.review_mode == 'job' and not requirement_rows:
                 add_missing_job_technology_question(grounded, fields, job_text)
         elif not is_gap_audit:
             carry_forward_unanswered_questions(grounded, previous, answers)
+        # 비슷한 질문 거르기보다 먼저 거른다. 뒤에서만 거르면 "직접 한 방법은?"(이미 적힘)이 남고 비슷한
+        # "확인한 결과는?"(빠짐)이 먼저 버려져, 필요한 질문까지 사라진다. 수정안에 붙은 질문은 정리 뒤에 한 번 더 본다.
+        filter_questions_by_resume_facts(grounded, fields, star_rows)
         normalize_questions(grounded, fields, answers, request.request_id)
         filter_verified_project_time_questions(grounded, time_context)
+        filter_questions_by_resume_facts(grounded, fields, star_rows)
+        if is_first_job_review and requirement_rows:
+            # 걸러진 뒤에 남은 질문을 보고 빠진 요건 질문을 채운다. 모델이 요건 질문을 만들었는데 그 질문이
+            # 위에서 걸러지면(이력서에 없는 칸, "없음" 같은 빈 질문) 요건은 "이미 물었다"로 남아 아무도 묻지
+            # 않았다(2026-09-15 최종 확인: React 필수 요건에 질문이 없었다).
+            add_requirement_questions(grounded, fields, requirement_rows)
+            normalize_questions(grounded, fields, answers, request.request_id)
+        assign_review_stages(grounded, requirement_rows)
         telemetry.update(status='complete', elapsed_ms=round((time.monotonic() - started) * 1000))
         response = FirestoreResumeReviewResponse(
             **grounded.model_dump(), review_id=request.request_id, cohort_id=request.cohort_id,
             resume_id=request.resume_id, grounding_warnings=warnings, input_fields=fields,
             input_hash=snapshot_hash, item_refs=refs, excluded_fields=excluded,
             confirmed_answers=answers, changes=changes, telemetry=telemetry, job_source=job_source,
+            requirement_map=requirement_rows,
             tailored_resume_id=request.tailored_resume_id)
         # Persist the response on the claimed document; repeat requests recover it.
         if request.tailored_resume_id:

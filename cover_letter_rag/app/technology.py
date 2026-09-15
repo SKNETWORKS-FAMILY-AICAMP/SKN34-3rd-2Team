@@ -51,6 +51,31 @@ def comparison_terms(text: str) -> set[str]:
     return known | set(re.findall(r"[a-z][a-z0-9.+#/-]*", remainder))
 
 
+_NUMBER_WITH_UNIT = re.compile(r"\d+(?:[.,]\d+)*\s*(?:ms|sec|min|s|h)(?![a-z])")
+
+
+def grounding_terms(text: str) -> set[str]:
+    """이력서 첨삭 수정안을 원문과 견줄 때 쓰는 영문·기술 토큰.
+
+    comparison_terms를 그대로 쓰면 문장을 다듬기만 해도 사실이 바뀐 것으로 본다.
+    원문 "p95 1.2s→0.5s"의 단위 `s`가 영단어로 잡혀 "1.2초에서 0.5초로"가 사실을 빠뜨린
+    것이 되고, "ECS+GitHub"가 한 덩어리라 "ECS와 GitHub"가 새 기술어가 된다(2026-09-14
+    A/B에서 수정안 24개 중 이 둘로 버려진 것이 대부분이었다). 숫자에 붙은 단위는 숫자 검사가
+    따로 맡으므로 떼고, `+`·`/`로 이어 쓴 이름은 나눠 본다.
+    """
+    cleaned = _NUMBER_WITH_UNIT.sub(" ", _normalize(text))
+    terms = set()
+    for term in comparison_terms(cleaned):
+        if term.startswith("tech:"):
+            terms.add(term)
+            continue
+        for part in re.split(r"[+/]", term):
+            part = part.strip(".-")
+            if part:
+                terms.add(part)
+    return terms
+
+
 def technology_in_text(name: str, text: str) -> bool:
     canonical = canonical_technology(name)
     if canonical in ALIASES:
