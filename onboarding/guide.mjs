@@ -16,8 +16,8 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { serveBuild, waitForApp, go, outRoot, deliverRoot, sleep } from './lib/app.mjs';
 import {
-  size, installCursor, highlight, resetMouse, tapAt, tapIf, hover, typeInto,
-  btn, btnLike, openMenu, login, themeOption, scrollCoachPanelToTop,
+  size, installCursor, highlight, highlightRect, railRect, resetMouse, tapAt, tapIf, hover, typeInto,
+  btn, btnLike, openMenu, login, themeOption, scrollCoachPanelToTop, todayCell, writeResumeFeedback, showTourStart,
 } from './lib/actions.mjs';
 
 const reuse = process.argv.includes('--reuse');
@@ -47,15 +47,6 @@ const roleLabel = { student: '학생', instructor: '강사', admin: '관리자' 
 // beat: { label: 자막 바 왼쪽 이름, say: 읽을 문장, text?: 자막(없으면 say), chapter?: 유튜브 챕터로 쓸지, do?: 화면 조작 }
 // 음성은 '플레이데이터'로 읽고 자막은 PLAYDATA로 보이도록 text를 따로 둔다.
 const BRAND_SAY = '플레이데이터';
-
-/// 이용 안내 투어는 첫 말풍선만 보여 주고 닫는다. 전부 넘기면 역할마다 1분 가까이 걸린다.
-async function showTourStart(page, holdMs = 3200) {
-  await highlight(page, btn(page, '다음'), holdMs - 400);
-  await sleep(holdMs);
-  if (!(await tapIf(page, btn(page, '다시 보지 않기'), { pause: 1000 }))) {
-    await tapIf(page, btnLike(page, /^(건너뛰기|닫기)$/), { pause: 1000 });
-  }
-}
 
 const cards = {
   intro: {
@@ -126,7 +117,8 @@ const parts = [
         say: '화면 왼쪽 사이드바에서 메뉴를 고르고, 오른쪽 위에서 내 계정과 기수를 확인합니다. 역할에 따라 보이는 메뉴가 다릅니다.',
         do: async (page) => {
           await go(page, '/', 1200);
-          await highlight(page, btn(page, '대시보드'), 2600);
+          const menu = await railRect(page, '대시보드');
+          if (menu) await highlightRect(page, { ...menu, height: menu.height + 10 * 44 }, 2600);
           await sleep(2600);
           await highlight(page, btnLike(page, /^학생 SK네트웍스/), 2600);
         },
@@ -136,7 +128,8 @@ const parts = [
         chapter: true,
         say: '사이드바 맨 아래 설정에서는 화면 테마와 사이드바 색, 화면 밀도를 고를 수 있습니다.',
         do: async (page) => {
-          await highlight(page, btn(page, '설정'), 2000);
+          const settings = await railRect(page, '설정');
+          if (settings) await highlightRect(page, settings, 2000);
           await sleep(1400);
           await openMenu(page, '설정', '/settings');
         },
@@ -167,7 +160,7 @@ const parts = [
         say: '대시보드는 로그인하면 가장 먼저 보이는 홈입니다. 출석 캘린더와 시스템 공지, 이번 주 학습 추천, 설문을 한 화면에서 확인합니다.',
         do: async (page) => {
           await openMenu(page, '대시보드', '/');
-          await highlight(page, btnLike(page, /^Monday, September 14/), 2400, 10);
+          await highlight(page, todayCell(page), 2400, 10);
         },
       },
       {
@@ -235,15 +228,17 @@ const parts = [
       },
       {
         label: '수정안 적용',
-        say: '수정안을 확인하고 이 문장으로 바꾸기를 누르면 이력서에 반영되고, 되돌리기로 언제든 되돌릴 수 있습니다. 이력서에 없는 내용은 지어내지 않습니다.',
+        say: '수정안을 확인하고 이 문장으로 바꾸기를 누르면 이력서에 반영되고, 되돌리기로 언제든 되돌릴 수 있습니다. 첨삭 완료를 누르면 공고별 맞춤 이력서로 저장됩니다.',
         do: async (page) => {
           await highlight(page, btn(page, '이 문장으로 바꾸기'), 1600);
           await sleep(1400);
           await tapIf(page, btn(page, '이 문장으로 바꾸기'), { pause: 3000 });
           await highlight(page, btn(page, '되돌리기'), 2000);
           await sleep(2200);
-          await tapIf(page, btn(page, '첨삭 완료'), { pause: 1200 });
-          await tapIf(page, btn(page, '닫기'), { pause: 600 });
+          // 데모 모드는 첨삭 완료(서버 저장)를 지원하지 않아 누르지 않고 가리키기만 한다.
+          await highlight(page, btn(page, '첨삭 완료'), 1800);
+          await sleep(2000);
+          await tapIf(page, btn(page, '닫기'), { pause: 1000 });
         },
       },
       {
@@ -430,12 +425,13 @@ const parts = [
       {
         label: '이력서 피드백',
         chapter: true,
-        say: '이력서관리에서는 학생이 피드백을 요청한 이력서에 섹션별로 피드백을 남깁니다.',
+        say: '이력서관리에서는 학생이 피드백을 요청한 이력서를 검토하기로 열고, 항목을 골라 피드백을 남깁니다. 검토가 끝나면 승인을 누릅니다.',
         do: async (page) => {
           await openMenu(page, '이력서관리', '/instructor/resumes');
-          if (await tapIf(page, btnLike(page, /피드백 작성/), { pause: 1100 })) {
-            await typeInto(page, page.getByRole('textbox').last(), '프로젝트 성과를 수치로 적어 보세요.');
-            await tapIf(page, btn(page, '등록'), { pause: 900 });
+          await highlight(page, btn(page, '검토하기'), 1400);
+          await sleep(1200);
+          if (await writeResumeFeedback(page, '핵심역량/강점', '프로젝트 성과를 수치로 적어 보세요.')) {
+            await highlight(page, btn(page, '승인'), 2000);
           }
         },
       },
@@ -519,8 +515,8 @@ const parts = [
     role: 'admin',
     color: roleColor.admin,
     title: '관리자 화면 안내',
-    intro: '기수 운영에 필요한 승인과 피드백, 공지, 출석, 설문, 마일리지, 기수 관리를 살펴봅니다.',
-    cardSay: 'PART 4, 관리자 화면입니다. 기수 운영에 필요한 승인과 피드백, 공지, 출석, 설문, 마일리지, 기수 관리를 살펴봅니다.',
+    intro: '기수 운영에 필요한 승인과 피드백, 공지, 출석, 설문, 마일리지, AI 기능을 점검하는 LLMOps, 기수 관리를 살펴봅니다.',
+    cardSay: 'PART 4, 관리자 화면입니다. 기수 운영에 필요한 승인과 피드백, 공지, 출석, 설문, 마일리지, AI 기능을 점검하는 LLMOps, 기수 관리를 살펴봅니다.',
     beats: [
       {
         label: '로그인',
@@ -560,12 +556,11 @@ const parts = [
       {
         label: '이력서 피드백',
         chapter: true,
-        say: '이력서 메뉴에서는 피드백 요청이 들어온 이력서에 피드백을 남기고, 검토가 끝나면 승인합니다.',
+        say: '이력서 메뉴에서는 피드백 요청이 들어온 이력서를 검토하기로 열어 항목별 피드백을 남기고, 검토가 끝나면 승인합니다.',
         do: async (page) => {
           await openMenu(page, '이력서', '/admin/resumes');
-          if (await tapIf(page, btnLike(page, /피드백 작성/), { pause: 1100 })) {
-            await typeInto(page, page.getByRole('textbox').last(), '연락처 형식을 통일해 주세요.');
-            await tapIf(page, btn(page, '등록'), { pause: 900 });
+          if (await writeResumeFeedback(page, '기본정보', '연락처 형식을 통일해 주세요.')) {
+            await highlight(page, btn(page, '승인'), 2000);
           }
         },
       },
@@ -586,7 +581,7 @@ const parts = [
         say: '출석 관리에서는 기수별 당일 출석을 조회하고 수정합니다. 고용24 입퇴실 기록과 출결 폼 반영 여부를 한 표에서 확인합니다.',
         do: async (page) => {
           await go(page, '/admin/attendance', 1800);
-          await highlight(page, btnLike(page, /^출석 \d/), 2200);
+          await highlight(page, btnLike(page, /^김하늘 /), 2200);
         },
       },
       {
@@ -625,6 +620,26 @@ const parts = [
           await highlight(page, btnLike(page, /^구매 요청 처리/), 2000);
           await sleep(2200);
           await tapIf(page, btnLike(page, /^상품 관리/), { pause: 800 });
+        },
+      },
+      {
+        label: 'LLMOps',
+        chapter: true,
+        say: '시스템 메뉴의 LLMOps에서는 문제 생성, 공고 챗봇, 추천, 첨삭, 학생 챗봇 같은 AI 기능의 요청 수와 성공률, 응답 시간, 토큰 사용량을 한눈에 봅니다. 화면의 숫자는 예시입니다.',
+        text: '「시스템 → LLMOps」에서 AI 기능의 요청 수 · 성공률 · 응답 시간 · 토큰 사용량을 봅니다. 화면의 숫자는 예시입니다.',
+        do: async (page) => {
+          await go(page, '/admin/ai-quality', 1600);
+          await highlight(page, page.getByRole('checkbox', { name: '전체', exact: true }), 2200);
+        },
+      },
+      {
+        label: 'LLMOps 로그',
+        say: '위쪽 필터로 기능을 골라 좁혀 보고, 아래에서 최근 평가 결과와 프롬프트 버전별 채택률, 오류가 난 요청까지 확인할 수 있습니다.',
+        do: async (page) => {
+          await tapIf(page, page.getByRole('checkbox', { name: '문제생성', exact: true }), { pause: 2000 });
+          await tapIf(page, page.getByRole('checkbox', { name: '전체', exact: true }), { pause: 800 });
+          await page.mouse.move(size.width / 2, size.height / 2, { steps: 10 });
+          await page.mouse.wheel(0, 700);
         },
       },
       {

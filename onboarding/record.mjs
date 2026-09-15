@@ -11,8 +11,8 @@ import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 import { serveBuild, waitForApp, go, outRoot, deliverRoot, sleep } from './lib/app.mjs';
 import {
-  size, installCursor, resetMouse, moveTo, tap, tapIf, hover, typeInto, btn, btnLike, openMenu, login, walkTour, themeOption,
-  scrollCoachPanelToTop,
+  size, installCursor, resetMouse, moveTo, tap, tapIf, hover, typeInto, btn, btnLike, openMenu, login, showTourStart, themeOption,
+  scrollCoachPanelToTop, todayCell, writeResumeFeedback,
 } from './lib/actions.mjs';
 
 const only = process.argv[2];
@@ -124,12 +124,13 @@ const scripts = {
     await login(page, 'student');
 
     await step('이용 안내 투어', '처음 로그인하면 메뉴를 하나씩 짚어 줍니다. 「다음」으로 넘겨 보세요');
-    await walkTour(page);
+    await caption('닫아도 「마이페이지 → 이용 안내 다시보기」에서 다시 볼 수 있습니다', '', 200);
+    await showTourStart(page);
 
     // 대시보드
     await step('대시보드', '출석 캘린더 · 시스템 공지 · 이번 주 학습 추천 · 설문을 한 화면에서 봅니다');
     await go(page, '/', 1200);
-    await hover(page, btnLike(page, /^Monday, September 14/), 1200);
+    await hover(page, todayCell(page), 1200);
     await caption('지각·조퇴·외출은 오른쪽 위 「출결 폼」으로 냅니다', '구글 폼이 새 창으로 열립니다', 1400);
     await hover(page, btn(page, '출결 폼'), 1200);
 
@@ -150,8 +151,10 @@ const scripts = {
     await tapIf(page, btnLike(page, /첨삭 시작/), { pause: 4800 });
     await caption('「이 문장으로 바꾸기」로 반영, 「되돌리기」로 되돌리기', '이력서에 없는 내용은 지어내지 않습니다', 1200);
     await tapIf(page, btn(page, '이 문장으로 바꾸기'), { pause: 3200 });
-    await tapIf(page, btn(page, '첨삭 완료'), { pause: 1200 });
-    await tapIf(page, btn(page, '닫기'), { pause: 600 });
+    // 데모 모드는 첨삭 완료(서버 저장)를 지원하지 않아 누르지 않고 가리키기만 한다.
+    await caption('「첨삭 완료」를 누르면 공고별 맞춤 이력서로 저장됩니다', '', 600);
+    await hover(page, btn(page, '첨삭 완료'), 1600);
+    await tapIf(page, btn(page, '닫기'), { pause: 1000 });
     await caption('공고와 관계없이 문장만 다듬을 때는 「이력서 첨삭」', '피드백이 오면 위의 종 아이콘에 표시됩니다', 600);
     await scrollCoachPanelToTop(page);
     await hover(page, btn(page, '이력서 첨삭'), 1600);
@@ -233,8 +236,9 @@ const scripts = {
     await step('강사로 로그인', '발급받은 강사 계정으로 로그인합니다', 900);
     await login(page, 'instructor');
 
-    await step('이용 안내 투어', '강사 메뉴를 하나씩 짚어 줍니다');
-    await walkTour(page);
+    await step('이용 안내 투어', '처음 로그인하면 강사 메뉴를 하나씩 짚어 줍니다');
+    await caption('닫아도 「마이페이지 → 이용 안내 다시보기」에서 다시 볼 수 있습니다', '', 200);
+    await showTourStart(page);
 
     // 자리 확인
     await go(page, '/instructor', 1500);
@@ -245,14 +249,12 @@ const scripts = {
     await caption('누를 때마다 다음 학생으로 넘어가고 위에 집계됩니다', '보류한 학생은 오른쪽에 모여 다시 확인할 수 있습니다', 2400);
 
     // 이력서 피드백
-    await step('이력서 피드백', '피드백을 요청한 이력서에 섹션별 의견을 남깁니다');
+    await step('이력서 피드백', '피드백을 요청한 이력서를 「검토하기」로 열고 항목별 의견을 남깁니다');
     await openMenu(page, '이력서관리', '/instructor/resumes');
-    if (await tapIf(page, btnLike(page, /피드백 작성/), { pause: 1200 })) {
-      await typeInto(page, page.getByRole('textbox').last(), '프로젝트 성과를 수치로 적어 보세요.');
-      await sleep(500);
-      await tapIf(page, btn(page, '등록'), { pause: 1500 });
+    if (await writeResumeFeedback(page, '핵심역량/강점', '프로젝트 성과를 수치로 적어 보세요.')) {
+      await caption('검토가 끝나면 오른쪽 위 「승인」', '학생은 알림 종에서 피드백을 받고 답글을 답니다', 600);
+      await hover(page, btn(page, '승인'), 1600);
     }
-    await caption('학생은 알림 종에서 피드백을 받고 답글을 답니다', '', 1600);
 
     // 공지 작성 (목록을 먼저 열면 데모 스트림이 갱신되지 않아 작성 화면으로 바로 간다)
     await step('공지 작성', '게시물관리 → 「공지 작성」으로 반 전체에 공지를 올립니다');
@@ -314,8 +316,9 @@ const scripts = {
     await step('관리자로 로그인', '관리자 계정으로 로그인합니다', 900);
     await login(page, 'admin');
 
-    await step('이용 안내 투어', '사이드바 메뉴 전체를 하나씩 짚어 줍니다');
-    await walkTour(page, 1700);
+    await step('이용 안내 투어', '처음 로그인하면 사이드바 메뉴를 하나씩 짚어 줍니다');
+    await caption('닫아도 「마이페이지 → 이용 안내 다시보기」에서 다시 볼 수 있습니다', '', 200);
+    await showTourStart(page);
 
     // 대시보드
     await go(page, '/admin', 1200);
@@ -333,14 +336,12 @@ const scripts = {
     await hover(page, btn(page, '반려'), 1200);
 
     // 이력서 피드백
-    await step('이력서 피드백', '학생이 피드백을 요청한 이력서에 섹션별 의견을 남깁니다');
+    await step('이력서 피드백', '피드백을 요청한 이력서를 「검토하기」로 열고 항목별 의견을 남깁니다');
     await openMenu(page, '이력서', '/admin/resumes');
-    if (await tapIf(page, btnLike(page, /피드백 작성/), { pause: 1200 })) {
-      await typeInto(page, page.getByRole('textbox').last(), '연락처 형식을 통일해 주세요.');
-      await sleep(500);
-      await tapIf(page, btn(page, '등록'), { pause: 1500 });
+    if (await writeResumeFeedback(page, '기본정보', '연락처 형식을 통일해 주세요.')) {
+      await caption('검토가 끝나면 오른쪽 위 「승인」', '학생은 알림 종에서 피드백을 받고 답글을 답니다', 600);
+      await hover(page, btn(page, '승인'), 1600);
     }
-    await caption('학생은 알림 종에서 피드백을 받고 답글을 답니다', '', 1600);
 
     // 공지 작성 (게시판 목록을 먼저 열어 두면 데모 스트림이 등록 전 값에 머문다)
     await step('공지 작성', '게시판 → 「공지 작성」으로 기수 전체에 공지를 올립니다');
@@ -354,7 +355,7 @@ const scripts = {
     // 출석 관리
     await step('출석 관리', '고용24 입퇴실 기록과 출결 폼을 한 표에서 확인합니다');
     await go(page, '/admin/attendance', 2000);
-    await hover(page, btnLike(page, /^출석 \d/), 1000);
+    await hover(page, btnLike(page, /^김하늘 /), 1000);
     await caption('「매일 08:30 공지 등록」', '출결 폼 안내 공지를 매일 아침 자동으로 올립니다', 600);
     await hover(page, btnLike(page, /08:30 공지 등록/), 1600);
 
@@ -365,6 +366,18 @@ const scripts = {
     await step('마일리지 관리', '상품 · 구매 요청 승인 · 수동 지급 · 적립 규칙을 관리합니다');
     await go(page, '/admin/mileage', 1500);
     await tapIf(page, btnLike(page, /^상품 관리/), { pause: 2400 });
+
+    await step('LLMOps (AI 품질)', '문제 생성 · 공고 챗봇 · 추천 · 첨삭 · 학생 챗봇의 요청 수, 성공률, 지연, 토큰을 봅니다 (화면의 숫자는 예시)');
+    await go(page, '/admin/ai-quality', 2000);
+    await hover(page, page.getByRole('checkbox', { name: '전체', exact: true }), 1200);
+    await caption('기능별로 좁혀 보기', '위쪽 필터에서 문제생성 · 공고챗봇 · 추천 · 첨삭 · 학생챗봇을 고릅니다', 400);
+    await tapIf(page, page.getByRole('checkbox', { name: '문제생성', exact: true }), { pause: 1800 });
+    await caption('문제 생성은 채택률 · 수정률로 강사가 AI 초안을 얼마나 썼는지 봅니다', '', 1600);
+    await tapIf(page, page.getByRole('checkbox', { name: '전체', exact: true }), { pause: 800 });
+    await caption('최근 평가 실행 · 프롬프트 버전별 · 최근 생성 로그', '오류가 난 요청은 로그 카드에 사유가 표시됩니다', 400);
+    await moveTo(page, size.width / 2, size.height / 2);
+    await page.mouse.wheel(0, 700);
+    await sleep(2600);
 
     await step('기수 관리', '진행 중 · 예정 기수와 교육 기간을 관리합니다');
     await go(page, '/admin/cohorts', 2200);

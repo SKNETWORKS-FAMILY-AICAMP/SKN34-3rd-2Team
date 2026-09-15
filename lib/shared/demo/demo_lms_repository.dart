@@ -126,17 +126,30 @@ class DemoLmsRepository {
     final seededContent = demoResumeContent.copyWith(
       basicInfo: demoResumeContent.basicInfo.copyWith(phone: ''),
     );
+    // 피드백을 요청한 이력서는 편집 화면 오른쪽에 AI 코치 대신 피드백 패널이 뜬다.
+    // 그래서 학생 시연용 기본 이력서는 작성 중으로 두고, 강사·관리자가 검토할
+    // 피드백 요청 이력서를 따로 하나 둔다.
     _resumes = [
       ResumeModel(
         id: 'r-demo-1',
         userId: DemoAccounts.studentUid,
         title: '데이터 분석가 지원 이력서',
-        status: 'submitted',
+        status: 'draft',
         content: seededContent,
         sections: seededContent.computeSections(),
         isBaseResume: true,
         revisionCount: 1,
         updatedAt: now.subtract(const Duration(hours: 5)),
+      ),
+      ResumeModel(
+        id: 'r-demo-2',
+        userId: DemoAccounts.studentUid,
+        title: '데이터 엔지니어 지원 이력서',
+        status: 'submitted',
+        content: demoResumeContent,
+        sections: demoResumeContent.computeSections(),
+        revisionCount: 1,
+        updatedAt: now.subtract(const Duration(days: 1)),
       ),
     ];
     _attendances = [];
