@@ -99,6 +99,14 @@ void main() {
     expect(find.text('이력서 첨삭 완료'), findsOneWidget);
     expect(client.reviews, 1);
     expect(closedWith, 'not closed', reason: '끝났다고 창을 닫지는 않는다');
+    expect(find.text('이력서 첨삭이 끝났어요.'), findsOneWidget, reason: '내려둔 동안 끝나면 알림이 뜬다');
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      find.text('이력서 첨삭이 끝났어요.'),
+      findsNothing,
+      reason: '단추가 달려 있어도 안내 알림은 누르지 않으면 저절로 닫힌다',
+    );
 
     await tester.tap(find.text('열기').first);
     await tester.pumpAndSettle();

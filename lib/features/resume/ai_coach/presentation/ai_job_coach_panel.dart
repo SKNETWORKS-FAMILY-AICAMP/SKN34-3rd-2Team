@@ -144,7 +144,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   }
 
   Future<void> _showLinkedJob() async {
-    if (_loading) return;
+    if (_loading || _linkedJobLoading) return;
     var jobId = _resolvedLinkedJobId;
     if (jobId.isEmpty) {
       await _restoreLinkedJobId();
@@ -155,8 +155,10 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
       if (mounted) setState(() => _error = '연결된 맞춤 공고를 불러올 수 없습니다.');
       return;
     }
+    // 새로 추천하는 게 아니라 연결된 공고 하나를 읽어 온다. 추천용 로봇 로딩(4단계가 계속 "대기")과 "분석 중"
+    // 배지를 띄우면 추천을 다시 도는 것처럼 보였다(2026-09-15 앱). 짧은 안내 줄만 보인다.
     setState(() {
-      _loading = true;
+      _linkedJobLoading = true;
       _error = null;
       _recommendationError = null;
     });
@@ -205,7 +207,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
     } on JobRecommendApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _linkedJobLoading = false);
     }
   }
 
@@ -378,6 +380,8 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   AiJobCoachResult? _result;
   bool _chatMode = false;
   bool _loading = false;
+  // 맞춤 이력서에 연결된 공고를 읽어 오는 중. 추천(_loading)과 달리 로봇 로딩을 띄우지 않는다.
+  bool _linkedJobLoading = false;
   bool _recommendationCompleted = false;
   // 직전 추천을 남긴 로그의 id. 그 추천으로 무엇을 했는지(첨삭으로 넘어갔는지)를
   // 나중에 이 id에 붙인다. 추천을 다시 돌리면 새 id로 덮인다.
@@ -745,7 +749,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
   }
 
   Future<void> _run() async {
-    if (_loading || !_guard(AiCoachFeature.jobRecommendation)) return;
+    if (_loading || _linkedJobLoading || !_guard(AiCoachFeature.jobRecommendation)) return;
     final requestedContent = widget.draftContent;
     bool resumeUnchanged() => sameResumeContent(
       widget.draftContent,
@@ -932,7 +936,7 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                                 icon: Icons.star_rounded,
                                 iconColor: Color(0xFFF4C430),
                                 label: _hasLinkedJob ? '맞춤 공고 보기' : '맞춤 공고 추천',
-                                loading: _loading,
+                                loading: _loading || _linkedJobLoading,
                                 // 필수 항목이 하나라도 비면 추천하지 않는다.
                                 enabled:
                                     _hasLinkedJob ||
@@ -969,8 +973,13 @@ class _AiJobCoachPanelState extends ConsumerState<AiJobCoachPanel> {
                           SizedBox(height: AppSpace.s(14)),
                           _ErrorCard(message: _error!),
                         ],
+                        if (_linkedJobLoading) ...[
+                          SizedBox(height: AppSpace.s(18)),
+                          const _LinkedJobLoadingLine(),
+                        ],
                         if (_result == null &&
                             !_loading &&
+                            !_linkedJobLoading &&
                             _error == null &&
                             _recommendationError == null) ...[
                           SizedBox(height: AppSpace.s(26)),
@@ -1954,6 +1963,34 @@ class _Section extends StatelessWidget {
         ],
         SizedBox(height: AppSpace.s(9)),
         child,
+      ],
+    );
+  }
+}
+
+/// 맞춤 이력서에 연결된 공고를 읽어 오는 동안의 한 줄 안내.
+class _LinkedJobLoadingLine extends StatelessWidget {
+  const _LinkedJobLoadingLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: const ValueKey('linked-job-loading'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.primary,
+          ),
+        ),
+        SizedBox(width: AppSpace.s(8)),
+        Text(
+          '이 이력서와 연결된 공고를 불러오는 중이에요',
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
       ],
     );
   }

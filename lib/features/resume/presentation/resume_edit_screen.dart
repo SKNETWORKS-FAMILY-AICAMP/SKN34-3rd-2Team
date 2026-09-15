@@ -19,6 +19,7 @@ import '../ai_coach/presentation/ai_job_coach_panel.dart';
 import '../services/resume_pdf_exporter.dart';
 import 'widgets/feedback_bell.dart';
 import 'widgets/resume_edit_feedback_panel.dart';
+import 'widgets/section_feedback_thread.dart';
 import 'widgets/resume_section_nav.dart';
 import 'widgets/tech_stack_editor.dart';
 import '../../../core/theme/app_space.dart';
@@ -52,7 +53,6 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   bool _dirty = false;
   bool _showAiCoach = false;
   bool _coachVisibilityInitialized = false;
-  bool _studentFeedbackMode = false;
 
   static const _coachVisibilityPreference = 'resume_ai_coach_open';
 
@@ -70,7 +70,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   Future<void> _restoreCoachVisibility() async {
     final preferences = await SharedPreferences.getInstance();
     final saved = preferences.getBool(_coachVisibilityPreference);
-    if (!mounted || saved == null || _studentFeedbackMode) return;
+    if (!mounted || saved == null) return;
     setState(() => _showAiCoach = saved);
   }
 
@@ -95,6 +95,9 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
 
   /// 배너를 닫았나. 닫아도 배지는 그대로다 — 읽은 것이 아니기 때문이다.
   bool _bannerDismissed = false;
+
+  /// 댓글을 펼쳐 둔 항목. 종에서 넘어오면 그 항목이 여기 들어간다.
+  final Set<String> _openThreads = <String>{};
 
   /// 오른쪽 패널 너비. 왼쪽 가장자리를 끌어 바꾼다.
   /// 최소값은 첨삭 브랜치 쪽을 따른다 — 패널이 280이면 첨삭 대화가 접힌다.
@@ -200,14 +203,10 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     _content = resume.content;
     _initialized = true;
     // 검토자는 읽는 사람이라 문서 모드로 연다. 승인된 이력서라도 본인은 편집 모드다.
-    final isReviewer = ref.read(canReviewResumesProvider);
-    _studentFeedbackMode = !isReviewer && resume.isFeedbackRequested;
-    if (isReviewer) {
+    // 학생은 피드백을 요청한 뒤에도 같은 화면(오른쪽 AI 코치, 항목 밑 댓글)을 쓴다. 한때 피드백 요청
+    // 상태면 학생에게도 검토자용 오른쪽 패널을 띄웠는데, 학생 화면은 댓글형을 유지하기로 했다(2026-09-15).
+    if (ref.read(canReviewResumesProvider)) {
       _viewMode = _ResumeViewMode.doc;
-    } else if (_studentFeedbackMode &&
-        MediaQuery.sizeOf(context).width >= 1000) {
-      // 피드백 요청 목록에서 연 이력서는 채용공고 코치 대신 댓글 패널을 바로 보여준다.
-      _showAiCoach = true;
     }
     if (_pendingInitialScroll && widget.initialSection != null) {
       _pendingInitialScroll = false;
@@ -415,7 +414,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
   }
 
   void _syncReviewerSectionFromScroll() {
-    if ((!_isReviewer && !_studentFeedbackMode) ||
+    if (!_isReviewer ||
         _programmaticSectionScroll ||
         !_scrollController.hasClients ||
         _sectionSyncScheduled) {
@@ -424,9 +423,7 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     _sectionSyncScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _sectionSyncScheduled = false;
-      if (!mounted ||
-          (!_isReviewer && !_studentFeedbackMode) ||
-          _programmaticSectionScroll) {
+      if (!mounted || !_isReviewer || _programmaticSectionScroll) {
         return;
       }
 
@@ -475,19 +472,36 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
     }
   }
 
-  /// 항목 하나. 피드백 작성 UI는 관리자 오른쪽 패널에서만 제공한다.
-  Widget _section(String key, Widget child) => KeyedSubtree(
+  /// 항목 하나. 학생에게는 아래에 그 항목의 댓글을 붙인다. 검토자는 오른쪽 패널에서 쓴다.
+  /// 여기 한 곳만 고치면 모든 항목에 붙는다.
+  Widget _section(String key, Widget child, ResumeModel resume) => KeyedSubtree(
     key: _sectionKeys[key],
-    child: child,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        child,
+        if (!_isReviewer)
+          SectionFeedbackThread(
+            resume: resume,
+            sectionKey: key,
+            expanded: _openThreads.contains(key),
+            onToggle: () => setState(() {
+              _openThreads.contains(key)
+                  ? _openThreads.remove(key)
+                  : _openThreads.add(key);
+            }),
+          ),
+      ],
+    ),
   );
 
-  Widget Function(String, Widget) _sectionOf() => _section;
+  /// 부르는 곳마다 resume 을 적지 않도록 한 번 묶어 둔다.
+  Widget Function(String, Widget) _sectionOf(ResumeModel resume) =>
+      (key, child) => _section(key, child, resume);
 
-  /// 종에서 선택한 피드백의 이력서 항목으로 이동한다.
-  void _goToFeedbackSection(String key) {
-    if (_studentFeedbackMode && !_showAiCoach) {
-      _setCoachVisible(true);
-    }
+  /// 종에서 넘어왔다. 그 항목으로 굴러가 댓글을 펼친다.
+  void _openThread(String key) {
+    setState(() => _openThreads.add(key));
     _scrollToSection(key);
   }
 
@@ -664,580 +678,598 @@ class _ResumeEditScreenState extends ConsumerState<ResumeEditScreen> {
               context.go(RoutePaths.resume);
             }
           },
-          child: Scaffold(
-            appBar: AppBar(
-              // 검토자는 남의 이력서를 연다. 지금 누구 것을 보고 있는지 머리말에
-              // 적어 둔다. 학생 자신은 굳이 알 필요가 없어 비워 둔다.
-              title: isReviewer
-                  ? Text(
-                      resume.displayTitle(asReviewer: true),
-                      style: const TextStyle(fontSize: 15),
-                    )
-                  : const SizedBox.shrink(),
-              leading: TextButton.icon(
-                onPressed: _goBack,
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: const Text('목록으로'),
-              ),
-              leadingWidth: 110,
-              actions: [
-                if (MediaQuery.sizeOf(context).width < 1000)
-                  IconButton(
-                    tooltip: _showAiCoach
-                        ? (isReviewer || resume.isFeedbackRequested
-                              ? '피드백 접기'
-                              : 'AI 코치 접기')
-                        : (isReviewer || resume.isFeedbackRequested
-                              ? '피드백 열기'
-                              : 'AI 코치 열기'),
-                    onPressed: () => _setCoachVisible(!_showAiCoach),
-                    icon: Icon(
-                      _showAiCoach
-                          ? Icons.keyboard_arrow_down
-                          : (isReviewer || resume.isFeedbackRequested
-                                ? Icons.chat_bubble_outline
-                                : Icons.auto_awesome),
-                    ),
+          // 본문이 오른쪽 패널을 옆에 둘 만큼 넓은지는 여기서 한 번만 잰다. 창 전체
+          // 폭(MediaQuery)은 사이드 레일까지 포함해 본문보다 넓어, 그것으로 재면
+          // 본문은 좁게 배치됐는데 앱바의 열기 단추는 숨는 구간이 생긴다. 좁은
+          // 배치에서 코치를 닫으면 이 단추 말고는 다시 열 길이 없다.
+          child: LayoutBuilder(
+            builder: (context, outer) {
+              final wide = outer.maxWidth >= (isReviewer ? 1120 : 1000);
+              return Scaffold(
+                appBar: AppBar(
+                  // 검토자는 남의 이력서를 연다. 지금 누구 것을 보고 있는지 머리말에
+                  // 적어 둔다. 학생 자신은 굳이 알 필요가 없어 비워 둔다.
+                  title: isReviewer
+                      ? Text(
+                          resume.displayTitle(asReviewer: true),
+                          style: const TextStyle(fontSize: 15),
+                        )
+                      : const SizedBox.shrink(),
+                  leading: TextButton.icon(
+                    onPressed: _goBack,
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text('목록으로'),
                   ),
-                // 종. 누르면 아래로 말풍선이 내려온다. 오른쪽 패널을 쓰지 않으므로
-                // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
-                if (!isReviewer)
-                  FeedbackBell(
-                    resume: resume,
-                    onGoToSection: _goToFeedbackSection,
-                    openOnStart: widget.openFeedback,
-                  ),
-                SizedBox(width: AppSpace.s(8)),
-                // 승인된 이력서도 학생이 편집·문서 보기를 오갈 수 있다. 승인은
-                // "여기까지 봤다"는 표시일 뿐 잠금이 아니다.
-                _ModeToggle(
-                  isEdit: _viewMode == _ResumeViewMode.edit,
-                  onEdit: () =>
-                      setState(() => _viewMode = _ResumeViewMode.edit),
-                  onDoc: () => setState(() => _viewMode = _ResumeViewMode.doc),
-                ),
-                if (_viewMode == _ResumeViewMode.doc) ...[
-                  SizedBox(width: AppSpace.s(8)),
-                  IconButton(
-                    tooltip: 'PDF 내보내기',
-                    onPressed: () => _exportPdf(resume),
-                    icon: const Icon(Icons.picture_as_pdf_outlined),
-                  ),
-                ],
-                if (!isReviewer &&
-                    resume.canStudentEdit &&
-                    _viewMode == _ResumeViewMode.edit) ...[
-                  SizedBox(width: AppSpace.s(8)),
-                  OutlinedButton(
-                    onPressed: _isSaving ? null : () => _save(resume: resume),
-                    child: const Text('저장'),
-                  ),
-                  if (!resume.isSubmitted) ...[
-                    SizedBox(width: AppSpace.s(8)),
-                    FilledButton.icon(
-                      onPressed: _isSaving
-                          ? null
-                          : () => _submitRequest(resume),
-                      icon: const Icon(Icons.send, size: 16),
-                      label: const Text('피드백 요청'),
-                    ),
-                  ],
-                  SizedBox(width: AppSpace.s(8)),
-                ],
-                if (isReviewer && resume.isSubmitted && !resume.isApproved) ...[
-                  FilledButton.icon(
-                    onPressed: _isSaving ? null : () => _approve(resume),
-                    icon: const Icon(Icons.check_circle_outline, size: 16),
-                    label: const Text('승인'),
-                  ),
-                  SizedBox(width: AppSpace.s(8)),
-                ],
-                if (_isSaving)
-                  Padding(
-                    padding: EdgeInsets.only(right: AppSpace.s(12)),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-              ],
-            ),
-            body: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ResumeProgressHeader(
-                  completed: completed,
-                  total: AppConstants.resumeSections.length,
-                  revisionCount: resume.revisionCount,
-                  statusLabel: resume.statusLabel,
-                ),
-                if (!isReviewer) _feedbackBanner(resume),
-                if (resume.isSubmitted && !resume.isApproved && !isReviewer)
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppSpace.s(16),
-                      vertical: AppSpace.s(8),
-                    ),
-                    color: AppColors.primaryLight,
-                    child: Text(
-                      '피드백 요청됨 — 계속 수정할 수 있습니다.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
+                  leadingWidth: 110,
+                  actions: [
+                    if (!wide)
+                      IconButton(
+                        tooltip: _showAiCoach
+                            ? (isReviewer ? '피드백 접기' : 'AI 코치 접기')
+                            : (isReviewer ? '피드백 열기' : 'AI 코치 열기'),
+                        onPressed: () => _setCoachVisible(!_showAiCoach),
+                        icon: Icon(
+                          _showAiCoach
+                              ? Icons.keyboard_arrow_down
+                              : (isReviewer
+                                    ? Icons.chat_bubble_outline
+                                    : Icons.smart_toy_outlined),
+                        ),
                       ),
+                    // 종. 누르면 아래로 말풍선이 내려온다. 오른쪽 패널을 쓰지 않으므로
+                    // 이력서 너비를 뺏지 않고, AI 코치와 자리를 다투지도 않는다.
+                    if (!isReviewer)
+                      FeedbackBell(
+                        resume: resume,
+                        onGoToSection: _openThread,
+                        openOnStart: widget.openFeedback,
+                      ),
+                    SizedBox(width: AppSpace.s(8)),
+                    // 승인된 이력서도 학생이 편집·문서 보기를 오갈 수 있다. 승인은
+                    // "여기까지 봤다"는 표시일 뿐 잠금이 아니다.
+                    _ModeToggle(
+                      isEdit: _viewMode == _ResumeViewMode.edit,
+                      onEdit: () =>
+                          setState(() => _viewMode = _ResumeViewMode.edit),
+                      onDoc: () =>
+                          setState(() => _viewMode = _ResumeViewMode.doc),
                     ),
-                  ),
-                // 학생에게 하는 안내다. 강사·관리자는 위 진행 줄의 "승인 완료"로 충분하다.
-                if (resume.isApproved && !isReviewer)
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppSpace.s(16),
-                      vertical: AppSpace.s(8),
+                    if (_viewMode == _ResumeViewMode.doc) ...[
+                      SizedBox(width: AppSpace.s(8)),
+                      IconButton(
+                        tooltip: 'PDF 내보내기',
+                        onPressed: () => _exportPdf(resume),
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                      ),
+                    ],
+                    if (!isReviewer &&
+                        resume.canStudentEdit &&
+                        _viewMode == _ResumeViewMode.edit) ...[
+                      SizedBox(width: AppSpace.s(8)),
+                      OutlinedButton(
+                        onPressed: _isSaving
+                            ? null
+                            : () => _save(resume: resume),
+                        child: const Text('저장'),
+                      ),
+                      if (!resume.isSubmitted) ...[
+                        SizedBox(width: AppSpace.s(8)),
+                        FilledButton.icon(
+                          onPressed: _isSaving
+                              ? null
+                              : () => _submitRequest(resume),
+                          icon: const Icon(Icons.send, size: 16),
+                          label: const Text('피드백 요청'),
+                        ),
+                      ],
+                      SizedBox(width: AppSpace.s(8)),
+                    ],
+                    if (isReviewer &&
+                        resume.isSubmitted &&
+                        !resume.isApproved) ...[
+                      FilledButton.icon(
+                        onPressed: _isSaving ? null : () => _approve(resume),
+                        icon: const Icon(Icons.check_circle_outline, size: 16),
+                        label: const Text('승인'),
+                      ),
+                      SizedBox(width: AppSpace.s(8)),
+                    ],
+                    if (_isSaving)
+                      Padding(
+                        padding: EdgeInsets.only(right: AppSpace.s(12)),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                  ],
+                ),
+                body: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ResumeProgressHeader(
+                      completed: completed,
+                      total: AppConstants.resumeSections.length,
+                      revisionCount: resume.revisionCount,
+                      statusLabel: resume.statusLabel,
                     ),
-                    color: AppColors.success.withValues(alpha: 0.12),
-                    child: Text(
-                      '승인 완료 — 계속 수정할 수 있습니다.',
-                      style: TextStyle(fontSize: 12, color: AppColors.success),
-                    ),
-                  ),
-                if (!isReviewer && !_studentFeedbackMode)
-                  ResumeSectionNav(
-                    sections: AppConstants.resumeSections,
-                    completedSections: liveSections,
-                    selectedKey: _selectedSection,
-                    onSelected: _scrollToSection,
-                  ),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final wide =
-                          constraints.maxWidth >= (isReviewer ? 1120 : 1000);
-
-                      final resumeScroll = SingleChildScrollView(
-                        controller: _scrollController,
-                        padding: EdgeInsets.all(AppSpace.s(16)),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: wide ? double.infinity : 720,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _TitleSection(
-                                  title: _title,
-                                  readOnly: readOnly,
-                                  onChanged: (v) {
-                                    // 제목도 입력칸이 스스로 보여 준다. 화면 위쪽의
-                                    // 이력서 이름만 잠시 뒤 따라잡으면 된다.
-                                    _title = v;
-                                    _markDirty();
-                                    _scheduleDerivedRefresh();
-                                  },
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'basicInfo',
-                                  _BasicInfoSection(
-                                    info: _content.basicInfo,
-                                    readOnly: readOnly,
-                                    onChanged: (info) {
-                                      _updateContent(
-                                        _content.copyWith(basicInfo: info),
-                                      );
-                                      _markDirty();
-                                    },
-                                    onPrefill: readOnly
-                                        ? null
-                                        : () {
-                                            final changed =
-                                                _prefillBasicInfoFromProfile(
-                                                  resume,
-                                                  announce: false,
-                                                );
-                                            setState(() {});
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  changed
-                                                      ? '마이페이지 정보로 빈 칸을 채웠습니다.'
-                                                      : '채울 빈 칸이 없거나 마이페이지에 정보가 없습니다.',
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'coreCompetencies',
-                                  _CoreCompetenciesSection(
-                                    data: _content.coreCompetencies,
-                                    readOnly: readOnly,
-                                    onChanged: (d) {
-                                      _updateContent(
-                                        _content.copyWith(
-                                          coreCompetencies: d,
-                                        ),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'experience',
-                                  _ExperienceSection(
-                                    items: _content.experience,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(experience: items),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'education',
-                                  _EducationSection(
-                                    items: _content.education,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(education: items),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'techStack',
-                                  _TechStackSection(
-                                    items: _content.techStack,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(techStack: items),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'certifications',
-                                  _CertificationsSection(
-                                    items: _content.certifications,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(
-                                          certifications: items,
-                                        ),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'awards',
-                                  _AwardsSection(
-                                    items: _content.awards,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(awards: items),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'trainingExperience',
-                                  _TrainingSection(
-                                    items: _content.trainingExperience,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(
-                                          trainingExperience: items,
-                                        ),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'otherActivities',
-                                  _ActivitiesSection(
-                                    items: _content.otherActivities,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(
-                                          otherActivities: items,
-                                        ),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'projects',
-                                  _ProjectsSection(
-                                    items: _content.projects,
-                                    readOnly: readOnly,
-                                    onChanged: (items) {
-                                      _updateContent(
-                                        _content.copyWith(projects: items),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(24)),
-                                _sectionOf()(
-                                  'selfIntroduction',
-                                  _SelfIntroSection(
-                                    data: _content.selfIntroduction,
-                                    readOnly: readOnly,
-                                    onChanged: (d) {
-                                      _updateContent(
-                                        _content.copyWith(
-                                          selfIntroduction: d,
-                                        ),
-                                      );
-                                      _markDirty();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(height: AppSpace.s(32)),
-                              ],
-                            ),
+                    if (!isReviewer) _feedbackBanner(resume),
+                    if (resume.isSubmitted && !resume.isApproved && !isReviewer)
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppSpace.s(16),
+                          vertical: AppSpace.s(8),
+                        ),
+                        color: AppColors.primaryLight,
+                        child: Text(
+                          '피드백 요청됨 — 계속 수정할 수 있습니다.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
                           ),
                         ),
-                      );
+                      ),
+                    // 학생에게 하는 안내다. 강사·관리자는 위 진행 줄의 "승인 완료"로 충분하다.
+                    if (resume.isApproved && !isReviewer)
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppSpace.s(16),
+                          vertical: AppSpace.s(8),
+                        ),
+                        color: AppColors.success.withValues(alpha: 0.12),
+                        child: Text(
+                          '승인 완료 — 계속 수정할 수 있습니다.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ),
+                    if (!isReviewer)
+                      ResumeSectionNav(
+                        sections: AppConstants.resumeSections,
+                        completedSections: liveSections,
+                        selectedKey: _selectedSection,
+                        onSelected: _scrollToSection,
+                      ),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final resumeScroll = SingleChildScrollView(
+                            controller: _scrollController,
+                            padding: EdgeInsets.all(AppSpace.s(16)),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: wide ? double.infinity : 720,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _TitleSection(
+                                      title: _title,
+                                      readOnly: readOnly,
+                                      onChanged: (v) {
+                                        // 제목도 입력칸이 스스로 보여 준다. 화면 위쪽의
+                                        // 이력서 이름만 잠시 뒤 따라잡으면 된다.
+                                        _title = v;
+                                        _markDirty();
+                                        _scheduleDerivedRefresh();
+                                      },
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'basicInfo',
+                                      _BasicInfoSection(
+                                        info: _content.basicInfo,
+                                        readOnly: readOnly,
+                                        onChanged: (info) {
+                                          _updateContent(
+                                            _content.copyWith(basicInfo: info),
+                                          );
+                                          _markDirty();
+                                        },
+                                        onPrefill: readOnly
+                                            ? null
+                                            : () {
+                                                final changed =
+                                                    _prefillBasicInfoFromProfile(
+                                                      resume,
+                                                      announce: false,
+                                                    );
+                                                setState(() {});
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      changed
+                                                          ? '마이페이지 정보로 빈 칸을 채웠습니다.'
+                                                          : '채울 빈 칸이 없거나 마이페이지에 정보가 없습니다.',
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'coreCompetencies',
+                                      _CoreCompetenciesSection(
+                                        data: _content.coreCompetencies,
+                                        readOnly: readOnly,
+                                        onChanged: (d) {
+                                          _updateContent(
+                                            _content.copyWith(
+                                              coreCompetencies: d,
+                                            ),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'experience',
+                                      _ExperienceSection(
+                                        items: _content.experience,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(
+                                              experience: items,
+                                            ),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'education',
+                                      _EducationSection(
+                                        items: _content.education,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(education: items),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'techStack',
+                                      _TechStackSection(
+                                        items: _content.techStack,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(techStack: items),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'certifications',
+                                      _CertificationsSection(
+                                        items: _content.certifications,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(
+                                              certifications: items,
+                                            ),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'awards',
+                                      _AwardsSection(
+                                        items: _content.awards,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(awards: items),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'trainingExperience',
+                                      _TrainingSection(
+                                        items: _content.trainingExperience,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(
+                                              trainingExperience: items,
+                                            ),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'otherActivities',
+                                      _ActivitiesSection(
+                                        items: _content.otherActivities,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(
+                                              otherActivities: items,
+                                            ),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'projects',
+                                      _ProjectsSection(
+                                        items: _content.projects,
+                                        readOnly: readOnly,
+                                        onChanged: (items) {
+                                          _updateContent(
+                                            _content.copyWith(projects: items),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(24)),
+                                    _sectionOf(resume)(
+                                      'selfIntroduction',
+                                      _SelfIntroSection(
+                                        data: _content.selfIntroduction,
+                                        readOnly: readOnly,
+                                        onChanged: (d) {
+                                          _updateContent(
+                                            _content.copyWith(
+                                              selfIntroduction: d,
+                                            ),
+                                          );
+                                          _markDirty();
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpace.s(32)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
 
-                      // 두 패널을 갈아끼우지 않고 **숨기기만** 한다. 트리에서 빼면 AI
-                      // 코치의 대화와 좁혀 둔 검색 조건이 함께 사라져, 접었다 펴는 것만으로
-                      // 처음부터 다시 말해야 한다. 대화를 어디에도 저장하지 않는 것은
-                      // 그대로다 — 화면을 떠나면 사라진다.
-                      //
-                      // `Offstage`는 자식을 배치·그리지 않을 뿐 상태는 남긴다. AI 코치는
-                      // initState도 네트워크 호출도 없어 숨어 있는 동안 아무 일도 하지 않는다.
-                      //
-                      // 반대로 피드백 패널은 **보일 때만** 만든다. 이쪽은 Firestore 스트림을
-                      // 구독하므로 숨은 채로 남겨 두면 AI 코치를 보는 내내 없던 구독이
-                      // 열려 있게 된다. 이 패널은 남길 상태도 없다.
-                      //
-                      // `passthrough`로 지금과 같은 제약을 그대로 넘긴다(넓은 화면에서는
-                      // 높이를 채우고, 좁은 화면에서는 내용만큼만 차지한다).
-                      // 닫혀 있는 동안에는 **직전에 만든 위젯을 그대로 넘긴다.**
-                      // `Offstage`는 배치·그리기만 건너뛸 뿐 자식을 만들기는 한다.
-                      // 그래서 숨어 있어도 키 입력마다 코치 화면이 다시 만들어졌다.
-                      // 같은 위젯 객체를 넘기면 Flutter가 그 아래를 통째로 건너뛴다.
-                      final usesFeedbackPanel =
-                          isReviewer || resume.isFeedbackRequested;
-                      if (!usesFeedbackPanel &&
-                          (_showAiCoach || _coachPanel == null)) {
-                        _coachPanel = AiJobCoachPanel(
-                          key: _coachKey,
-                          resumeId: widget.resumeId,
-                          resumeTitle: _title,
-                          baseResumeId: resume.baseResumeId,
-                          sourceTailoredResumeId: resume.sourceTailoredResumeId,
-                          linkedJobId: resume.linkedJobId,
-                          draftContent: _content,
-                          hasUnsavedChanges: _dirty || _isSaving,
-                          onSaveRequested: isReviewer
-                              ? null
-                              : () async {
-                                  await _save(resume: resume);
-                                  return !_dirty;
-                                },
-                          onResumeChanged: isReviewer
-                              ? null
-                              : (content) => setState(() {
-                                  _content = content;
-                                  _dirty = false;
-                                }),
-                          isSidebar: wide,
-                          onClose: () => _setCoachVisible(false),
-                        );
-                      }
-                      final rightPanel = usesFeedbackPanel
-                          ? ResumeEditFeedbackPanel(
-                              key: ValueKey('review-feedback-${resume.id}'),
-                              resume: resume,
-                              isAdmin: isReviewer,
-                              isVisible: _showAiCoach,
-                              selectedSectionKey: _selectedSection,
-                              completedSections: liveSections,
-                              isSidebar: true,
-                              showSectionSidebar: wide,
-                              onSectionChanged: _scrollToSection,
-                            )
-                          : Stack(
-                              fit: StackFit.passthrough,
+                          // 두 패널을 갈아끼우지 않고 **숨기기만** 한다. 트리에서 빼면 AI
+                          // 코치의 대화와 좁혀 둔 검색 조건이 함께 사라져, 접었다 펴는 것만으로
+                          // 처음부터 다시 말해야 한다. 대화를 어디에도 저장하지 않는 것은
+                          // 그대로다 — 화면을 떠나면 사라진다.
+                          //
+                          // `Offstage`는 자식을 배치·그리지 않을 뿐 상태는 남긴다. AI 코치는
+                          // initState도 네트워크 호출도 없어 숨어 있는 동안 아무 일도 하지 않는다.
+                          //
+                          // 반대로 피드백 패널은 **보일 때만** 만든다. 이쪽은 Firestore 스트림을
+                          // 구독하므로 숨은 채로 남겨 두면 AI 코치를 보는 내내 없던 구독이
+                          // 열려 있게 된다. 이 패널은 남길 상태도 없다.
+                          //
+                          // `passthrough`로 지금과 같은 제약을 그대로 넘긴다(넓은 화면에서는
+                          // 높이를 채우고, 좁은 화면에서는 내용만큼만 차지한다).
+                          // 닫혀 있는 동안에는 **직전에 만든 위젯을 그대로 넘긴다.**
+                          // `Offstage`는 배치·그리기만 건너뛸 뿐 자식을 만들기는 한다.
+                          // 그래서 숨어 있어도 키 입력마다 코치 화면이 다시 만들어졌다.
+                          // 같은 위젯 객체를 넘기면 Flutter가 그 아래를 통째로 건너뛴다.
+                          final usesFeedbackPanel = isReviewer;
+                          if (!usesFeedbackPanel &&
+                              (_showAiCoach || _coachPanel == null)) {
+                            _coachPanel = AiJobCoachPanel(
+                              key: _coachKey,
+                              resumeId: widget.resumeId,
+                              resumeTitle: _title,
+                              baseResumeId: resume.baseResumeId,
+                              sourceTailoredResumeId:
+                                  resume.sourceTailoredResumeId,
+                              linkedJobId: resume.linkedJobId,
+                              draftContent: _content,
+                              hasUnsavedChanges: _dirty || _isSaving,
+                              onSaveRequested: isReviewer
+                                  ? null
+                                  : () async {
+                                      await _save(resume: resume);
+                                      return !_dirty;
+                                    },
+                              onResumeChanged: isReviewer
+                                  ? null
+                                  : (content) => setState(() {
+                                      _content = content;
+                                      _dirty = false;
+                                    }),
+                              isSidebar: wide,
+                              onClose: () => _setCoachVisible(false),
+                            );
+                          }
+                          final rightPanel = usesFeedbackPanel
+                              ? ResumeEditFeedbackPanel(
+                                  key: ValueKey('review-feedback-${resume.id}'),
+                                  resume: resume,
+                                  isAdmin: isReviewer,
+                                  isVisible: _showAiCoach,
+                                  selectedSectionKey: _selectedSection,
+                                  completedSections: liveSections,
+                                  isSidebar: true,
+                                  showSectionSidebar: wide,
+                                  onSectionChanged: _scrollToSection,
+                                )
+                              : Stack(
+                                  fit: StackFit.passthrough,
+                                  children: [
+                                    Offstage(
+                                      offstage: !_showAiCoach,
+                                      child: _coachPanel,
+                                    ),
+                                  ],
+                                );
+
+                          // 작성 중인 학생은 AI 코치, 피드백 요청 상태의 학생과 검토자는
+                          // 같은 댓글 패널을 오른쪽에서 사용한다.
+                          final hasRightPanel = _showAiCoach;
+
+                          // 닫아도 트리에서 빼지 않는다. 빼면 상태가 버려져 받아 둔
+                          // 맞춤 공고가 사라지고, 다시 열면 빈 화면이 나온다. `Offstage`가
+                          // 이미 안쪽에 있어 닫힌 동안에는 자리를 차지하지 않는다.
+                          if (!wide) {
+                            // 이력서 본문을 최소 200px 남기고, 패널도 200px을 지킨다.
+                            final panelMaxHeight =
+                                (constraints.maxHeight -
+                                        _minResumeHeight -
+                                        _handleWidth)
+                                    .clamp(_panelMinHeight, 900)
+                                    .toDouble();
+                            return Column(
                               children: [
+                                Expanded(child: resumeScroll),
+                                // 닫혀 있으면 손잡이도 패널도 자리를 차지하지 않는다.
+                                // 넓은 화면과 같은 이유로 트리에서 빼지는 않는다.
                                 Offstage(
-                                  offstage: !_showAiCoach,
-                                  child: _coachPanel,
+                                  offstage: !hasRightPanel,
+                                  child: _PanelResizeHandle(
+                                    axis: Axis.horizontal,
+                                    onStart: () =>
+                                        _dragStartHeight = _panelHeight.value,
+                                    onUpdate: (dy) {
+                                      // 위로 끌면(거리가 음수) 높아진다.
+                                      _panelHeight.value =
+                                          ((_dragStartHeight ??
+                                                      _panelHeight.value) -
+                                                  dy)
+                                              .clamp(
+                                                _panelMinHeight,
+                                                panelMaxHeight,
+                                              );
+                                    },
+                                    onReset: () => _panelHeight.value =
+                                        _panelDefaultHeight,
+                                  ),
+                                ),
+                                ValueListenableBuilder<double>(
+                                  valueListenable: _panelHeight,
+                                  child: rightPanel,
+                                  builder: (context, raw, panel) => SizedBox(
+                                    height: hasRightPanel
+                                        ? raw.clamp(
+                                            _panelMinHeight,
+                                            panelMaxHeight,
+                                          )
+                                        : 0,
+                                    child: panel,
+                                  ),
                                 ),
                               ],
                             );
+                          }
 
-                      // 작성 중인 학생은 AI 코치, 피드백 요청 상태의 학생과 검토자는
-                      // 같은 댓글 패널을 오른쪽에서 사용한다.
-                      final hasRightPanel = _showAiCoach;
+                          // 이력서 본문을 최소 560px 남기고, 오른쪽 패널은 최소 360px을 지킨다.
+                          // 화면 크기가 달라져도 조절해 둔 폭을 안전한 범위 안에서만 쓴다.
+                          final panelMinWidth = usesFeedbackPanel
+                              ? _reviewPanelMinWidth
+                              : _panelMinWidth;
+                          final panelMaxWidth =
+                              (constraints.maxWidth -
+                                      _minResumeWidth -
+                                      _handleWidth)
+                                  .clamp(panelMinWidth, 900)
+                                  .toDouble();
 
-                      // 닫아도 트리에서 빼지 않는다. 빼면 상태가 버려져 받아 둔
-                      // 맞춤 공고가 사라지고, 다시 열면 빈 화면이 나온다. `Offstage`가
-                      // 이미 안쪽에 있어 닫힌 동안에는 자리를 차지하지 않는다.
-                      if (!wide) {
-                        // 이력서 본문을 최소 200px 남기고, 패널도 200px을 지킨다.
-                        final panelMaxHeight =
-                            (constraints.maxHeight -
-                                    _minResumeHeight -
-                                    _handleWidth)
-                                .clamp(_panelMinHeight, 900)
-                                .toDouble();
-                        return Column(
-                          children: [
-                            Expanded(child: resumeScroll),
-                            // 닫혀 있으면 손잡이도 패널도 자리를 차지하지 않는다.
-                            // 넓은 화면과 같은 이유로 트리에서 빼지는 않는다.
-                            Offstage(
-                              offstage: !hasRightPanel,
-                              child: _PanelResizeHandle(
-                                axis: Axis.horizontal,
-                                onStart: () =>
-                                    _dragStartHeight = _panelHeight.value,
-                                onUpdate: (dy) {
-                                  // 위로 끌면(거리가 음수) 높아진다.
-                                  _panelHeight.value =
-                                      ((_dragStartHeight ??
-                                                  _panelHeight.value) -
-                                              dy)
-                                          .clamp(
-                                            _panelMinHeight,
-                                            panelMaxHeight,
-                                          );
-                                },
-                                onReset: () =>
-                                    _panelHeight.value = _panelDefaultHeight,
-                              ),
-                            ),
-                            ValueListenableBuilder<double>(
-                              valueListenable: _panelHeight,
-                              child: rightPanel,
-                              builder: (context, raw, panel) => SizedBox(
-                                height: hasRightPanel
-                                    ? raw.clamp(
-                                        _panelMinHeight,
-                                        panelMaxHeight,
-                                      )
-                                    : 0,
-                                child: panel,
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-
-                      // 이력서 본문을 최소 560px 남기고, 오른쪽 패널은 최소 360px을 지킨다.
-                      // 화면 크기가 달라져도 조절해 둔 폭을 안전한 범위 안에서만 쓴다.
-                      final panelMinWidth = usesFeedbackPanel
-                          ? _reviewPanelMinWidth
-                          : _panelMinWidth;
-                      final panelMaxWidth =
-                          (constraints.maxWidth -
-                                  _minResumeWidth -
-                                  _handleWidth)
-                              .clamp(panelMinWidth, 900)
-                              .toDouble();
-
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: resumeScroll),
-                          // 닫혀 있어도 같은 자리·같은 깊이로 남는다. 트리에서 빼거나
-                          // 감싸는 위젯 수를 바꾸면 패널 상태가 버려져 받아 둔 맞춤
-                          // 공고가 사라진다. 닫을 때는 폭을 0으로 만들 뿐이다.
-                          ValueListenableBuilder<double>(
-                            valueListenable: _panelWidth,
-                            // 패널 자체는 여기 그대로 넘어와 다시 만들어지지 않는다.
-                            child: rightPanel,
-                            builder: (context, raw, panel) {
-                              final width = raw.clamp(
-                                panelMinWidth,
-                                panelMaxWidth,
-                              );
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if (hasRightPanel)
-                                    _PanelResizeHandle(
-                                      onStart: () => _dragStartWidth = width,
-                                      onUpdate: (dx) {
-                                        // 왼쪽으로 끌면(거리가 음수) 넓어진다.
-                                        _panelWidth.value =
-                                            ((_dragStartWidth ?? width) - dx)
-                                                .clamp(
-                                                  panelMinWidth,
-                                                  panelMaxWidth,
-                                                );
-                                      },
-                                      onReset: () =>
-                                          _panelWidth.value = usesFeedbackPanel
-                                          ? _reviewPanelDefaultWidth
-                                          : _panelDefaultWidth,
-                                      onToggle: () => _setCoachVisible(false),
-                                    )
-                                  else
-                                    _CoachEdgeToggle(
-                                      expanded: false,
-                                      onPressed: () => _setCoachVisible(true),
-                                    ),
-                                  SizedBox(
-                                    width: hasRightPanel ? width : 0,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        border: Border(
-                                          left: BorderSide(
-                                            color: hasRightPanel
-                                                ? AppColors.border
-                                                : Colors.transparent,
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: resumeScroll),
+                              // 닫혀 있어도 같은 자리·같은 깊이로 남는다. 트리에서 빼거나
+                              // 감싸는 위젯 수를 바꾸면 패널 상태가 버려져 받아 둔 맞춤
+                              // 공고가 사라진다. 닫을 때는 폭을 0으로 만들 뿐이다.
+                              ValueListenableBuilder<double>(
+                                valueListenable: _panelWidth,
+                                // 패널 자체는 여기 그대로 넘어와 다시 만들어지지 않는다.
+                                child: rightPanel,
+                                builder: (context, raw, panel) {
+                                  final width = raw.clamp(
+                                    panelMinWidth,
+                                    panelMaxWidth,
+                                  );
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (hasRightPanel)
+                                        _PanelResizeHandle(
+                                          onStart: () =>
+                                              _dragStartWidth = width,
+                                          onUpdate: (dx) {
+                                            // 왼쪽으로 끌면(거리가 음수) 넓어진다.
+                                            _panelWidth.value =
+                                                ((_dragStartWidth ?? width) -
+                                                        dx)
+                                                    .clamp(
+                                                      panelMinWidth,
+                                                      panelMaxWidth,
+                                                    );
+                                          },
+                                          onReset: () => _panelWidth.value =
+                                              usesFeedbackPanel
+                                              ? _reviewPanelDefaultWidth
+                                              : _panelDefaultWidth,
+                                          onToggle: () =>
+                                              _setCoachVisible(false),
+                                        )
+                                      else
+                                        _CoachEdgeToggle(
+                                          expanded: false,
+                                          onPressed: () =>
+                                              _setCoachVisible(true),
+                                        ),
+                                      SizedBox(
+                                        width: hasRightPanel ? width : 0,
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            border: Border(
+                                              left: BorderSide(
+                                                color: hasRightPanel
+                                                    ? AppColors.border
+                                                    : Colors.transparent,
+                                              ),
+                                            ),
                                           ),
+                                          child: panel,
                                         ),
                                       ),
-                                      child: panel,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         );
       },

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.review_workflow import PROMPT_VERSION
 from app.firebase_gateway import FirebaseAuthenticationError, ResumeNotFoundError
 from app.main import app, get_resume_review_service
 from app.models import (
@@ -121,7 +122,7 @@ def test_review_reads_owned_resume_and_saves_separate_review() -> None:
     assert response.input_fields['projects[0].description'] == SAMPLE_CONTENT['projects'][0]['description']
     assert 'basicInfo' in response.excluded_fields
     assert firebase.saved is not None
-    assert firebase.saved['telemetry']['prompt_version'] == 'resume-v11-role-linked-motivation'
+    assert firebase.saved['telemetry']['prompt_version'] == PROMPT_VERSION
     assert "content" not in firebase.saved
 
 

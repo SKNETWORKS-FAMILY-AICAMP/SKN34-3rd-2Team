@@ -315,6 +315,17 @@ class FirebaseGateway:
         )
         return document.id
 
+    def get_job_requirements(self, key: str) -> list[dict] | None:
+        """공고별로 한 번 정리해 둔 요건 목록. 공고 원문에서 뽑은 것이라 사용자 데이터가 아니다."""
+        snapshot = self._db.collection(self._settings.firestore_job_requirements_collection).document(key).get()
+        return (snapshot.to_dict() or {}).get('requirements')
+
+    def save_job_requirements(self, key: str, requirements: list[dict]) -> None:
+        self._db.collection(self._settings.firestore_job_requirements_collection).document(key).set({
+            'requirements': requirements,
+            'createdAt': firestore.SERVER_TIMESTAMP,
+        })
+
     def _resume_ref(self, cohort_id: str, resume_id: str):
         return (
             self._db.collection(self._settings.firestore_cohorts_collection)

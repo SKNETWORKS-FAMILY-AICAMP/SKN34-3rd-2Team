@@ -33,6 +33,15 @@ class SectionFeedbackThread extends ConsumerStatefulWidget {
       _SectionFeedbackThreadState();
 }
 
+/// 작성 시각 오름차순. 시각이 아직 없는 글(방금 보내 서버 시각을 기다리는 글)은 맨 아래로 둔다.
+int _byCreatedAt(ResumeFeedbackModel a, ResumeFeedbackModel b) {
+  final at = a.createdAt, bt = b.createdAt;
+  if (at == null && bt == null) return 0;
+  if (at == null) return 1;
+  if (bt == null) return -1;
+  return at.compareTo(bt);
+}
+
 class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
   final _input = TextEditingController();
   bool _sending = false;
@@ -124,6 +133,7 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
           resumeId: widget.resume.id,
           feedbackIds: ids,
           asReviewer: ref.read(canReviewResumesProvider),
+          viewerId: ref.read(currentUserSyncProvider)?.uid,
         );
   }
 
@@ -173,10 +183,11 @@ class _SectionFeedbackThreadState extends ConsumerState<SectionFeedbackThread> {
           data: (list) => list,
           orElse: () => const <ResumeFeedbackModel>[],
         );
+    // 대화처럼 오래된 글이 위, 새 글이 아래로 오게 시간순으로 놓는다. 스트림은 최신순으로 온다.
     final items = [
       for (final f in all)
         if (f.sectionKey == widget.sectionKey) f,
-    ];
+    ]..sort(_byCreatedAt);
     final asReviewer = ref.watch(canReviewResumesProvider);
     final unread = unreadFeedback(
       items,

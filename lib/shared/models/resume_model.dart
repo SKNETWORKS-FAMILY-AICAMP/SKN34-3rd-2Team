@@ -275,10 +275,22 @@ List<ResumeFeedbackModel> unreadFeedback(
     for (final item in items)
       if (!_isMine(item, viewerId) &&
           item.isReplyOn(resume) == asReviewer &&
-          !read.contains(item.id))
+          !read.contains(
+            asReviewer ? reviewerReadKey(viewerId, item.id) : item.id,
+          ))
         item,
   ];
 }
+
+/// 검토자 읽음 기록 한 칸. 강사·관리자는 여럿이라 **사람마다** 따로 센다.
+///
+/// 예전에는 피드백 ID만 적어서, 강사와 관리자 중 한 명이 읽으면 둘 다 알림이 사라졌다
+/// (2026-09-15). 같은 `reviewerReadFeedbackIds` 목록에 "검토자uid:피드백ID"로 적는다.
+/// 새 필드를 만들면 보안 규칙(강사가 고칠 수 있는 필드 목록)도 바꿔 배포해야 해서 자리는 그대로 둔다.
+/// 예전에 ID만 적힌 기록은 누가 읽었는지 몰라 검토자 각자에게 한 번 더 안 읽음으로 보인다.
+/// [viewerId]를 모르면 예전처럼 ID만 쓴다.
+String reviewerReadKey(String? viewerId, String feedbackId) =>
+    viewerId == null ? feedbackId : '$viewerId:$feedbackId';
 
 /// 실을 여는 글들. 답글은 여기 안 들어간다.
 ///

@@ -154,3 +154,5 @@ test/tmp_dump/
 
 # ppt 산출물
 /presentation
+# 첨삭 평가 실행 결과 (모델 출력·비용 발생 산출물)
+cover_letter_rag/evaluation/runs/
