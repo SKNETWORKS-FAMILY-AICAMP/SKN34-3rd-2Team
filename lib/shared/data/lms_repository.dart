@@ -1659,16 +1659,16 @@ class LmsRepository {
   }
 
   Future<void> deleteFormTask(String cohortId, String taskId) async {
-    final responses = await cohortSub(cohortId, 'formTasks')
-        .doc(taskId)
-        .collection('responses')
-        .get();
-    final batch = _firestore.batch();
-    for (final doc in responses.docs) {
-      batch.delete(doc.reference);
+    final taskRef = cohortSub(cohortId, 'formTasks').doc(taskId);
+    final responses = await taskRef.collection('responses').get();
+    final refs = [...responses.docs.map((doc) => doc.reference), taskRef];
+    for (var i = 0; i < refs.length; i += 400) {
+      final batch = _firestore.batch();
+      for (final ref in refs.skip(i).take(400)) {
+        batch.delete(ref);
+      }
+      await batch.commit();
     }
-    batch.delete(cohortSub(cohortId, 'formTasks').doc(taskId));
-    await batch.commit();
   }
 
   // ── User Profile ──
