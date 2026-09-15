@@ -8,7 +8,11 @@ from difflib import SequenceMatcher
 from app.models import (
     Diagnostic, FirestoreResumeReviewResponse, NewResumeItem, ResumeReviewGeneration, ReviewQuestion, SentenceReview,
 )
-from app.prompts import NEW_PROJECT_RULE
+from app.prompts import MIXED_ANSWER_RULE, NEW_PROJECT_RULE
+from app.review_rules import (
+    EXPERIENCE_DESCRIPTION, EXPERIENCE_ITEM, EXPERIENCE_SECTION_PATTERN, GENERIC_NAME_TOKENS, ITEM_NAME_KEYS,
+    NEW_PROJECT_NAME_GENERIC, PROJECT_FORM_WORDS, ROLE_EXPANSION_WORDS, SECTION_NAMES,
+)
 from app.technology import technology_mentions
 from app.star_checks import (
     STAR_LABELS, STAR_TARGET, ground_star_judgements, has_elements, mark_answered_star_elements, star_by_path, star_targets,
@@ -19,7 +23,7 @@ from app.job_requirements import (
     mark_requirement_absent, requirements_prompt_text,
 )
 
-PROMPT_VERSION = 'resume-v16o-keep-original-numbers'
+PROMPT_VERSION = 'resume-v16q-mentioned-stays-put'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 
@@ -418,14 +422,10 @@ def _project_description_targets(fields):
     return targets
 
 
-_ITEM_NAME_KEYS = {'projects': 'name', 'experience': 'company', 'trainingExperience': 'course',
-                   'awards': 'name', 'otherActivities': 'name'}
-
-
 def _item_description_targets(fields):
     """기술 요건 답을 옮길 수 있는 경험 칸. 프로젝트 → 경력 → 교육 → 수상 → 활동 순."""
     targets = []
-    for section, name_key in _ITEM_NAME_KEYS.items():
+    for section, name_key in ITEM_NAME_KEYS.items():
         indices = sorted({
             int(match.group(1)) for path in fields
             if (match := re.fullmatch(rf'{section}\[(\d+)\]\.description', path))
@@ -437,14 +437,9 @@ def _item_description_targets(fields):
     return targets
 
 
-# 항목 이름에 흔히 붙어 어느 항목인지 가려 주지 못하는 낱말.
-_GENERIC_NAME_TOKENS = {'개발', '서비스', '시스템', '프로젝트', '기반', '관리', '구축', '과정', '교육', '참여', '팀',
-                        '웹', '앱', '플랫폼', '구현', '활동', '동아리', '수상', '대회', '주식회사', '(주)'}
-
-
 def _name_tokens(name):
     return [token.casefold() for token in re.findall(r'[0-9A-Za-z가-힣+#]{2,}', name)
-            if token.casefold() not in _GENERIC_NAME_TOKENS]
+            if token.casefold() not in GENERIC_NAME_TOKENS]
 
 
 def resolve_missing_technology_project(answer_text, fields):
@@ -492,12 +487,91 @@ def resolve_missing_technology_project(answer_text, fields):
 _SEPARATE_WORK = re.compile(
     r'(?:개인|토이|사이드|부트캠프|수업|학교|동아리|별도|따로)\s*(?:의\s*)?(?:과제|프로젝트|작업)|혼자\s*만든|따로\s*만든'
 )
-# 새 프로젝트 이름에 흔히 붙어 사실을 담지 않는 낱말. 이름 검사에서 세지 않는다.
-_NEW_PROJECT_NAME_GENERIC = _GENERIC_NAME_TOKENS | {'과제', '개인', '토이', '사이드', '화면', '기능', '페이지', '연동', '만들기'}
-_ROLE_EXPANSION = ('주도', '총괄', '리드', '책임', '달성')
-# 프로젝트 이름이 이 낱말로만 되어 있으면 형태만 적힌 이름이다.
-_PROJECT_FORM_WORDS = {'부트캠프', '개인', '과제', '토이', '사이드', '프로젝트', '수업', '학교', '동아리', '팀', '졸업', '캡스톤',
-                       '미니', '실습', '교육', '과정', '팀프로젝트', '개인과제'}
+
+
+MAX_MENTIONED_ITEMS = 2
+
+
+def mentioned_item_answers(current_answers, fields, refs, previous):
+    """이번 답에서 질문한 항목이 아닌 다른 경험 항목을 이름으로 말한 문장을, 그 항목에 붙인 답으로 만든다.
+
+    후속 첨삭은 속도 때문에 답한 항목만 모델에 보여 준다. 그래서 "LMS에서 X를 했고, 숙소 예약 클론에서도 Y를 했어요"의
+    Y는 넣을 곳이 없어 사라졌다(2026-09-15). 항목 이름이 문장에 분명히 나올 때만(resolve_missing_technology_project와 같은
+    기준) 그 문장만 그 항목의 답으로 붙인다. 다른 문장은 옮기지 않아 사실이 섞이지 않게 한다. 저장하지 않고 이번 재첨삭의
+    모델 입력·근거 검증에만 쓴다.
+    """
+    from app.resume_review import _split_answer_sentences
+
+    item_refs = (previous or {}).get('item_refs', {})
+    extra = []
+    for answer in current_answers:
+        if is_none_answer(answer.answer):
+            continue
+        by_path = {}
+        for sentence in _split_answer_sentences(answer.answer):
+            path = resolve_missing_technology_project(sentence, fields)
+            if not path or group(path) == group(answer.field_path):
+                continue
+            if refs.get(path, 'legacy:').startswith('legacy:') or item_refs.get(path) != refs[path]:
+                continue
+            by_path.setdefault(path, []).append(sentence)
+        for path, sentences in list(by_path.items())[:MAX_MENTIONED_ITEMS]:
+            extra.append(answer.model_copy(update={
+                'question_id': None, 'field_path': path, 'answer': ' '.join(sentences),
+            }))
+    return extra
+
+
+def without_mentioned_sentences(answers, mentioned_answers):
+    """다른 항목으로 떼어 낸 문장을 원래 답에서 뺀다. 문장이 모두 빠진 답은 목록에서 뺀다.
+
+    떼어 낸 문장을 질문한 칸의 근거에도 그대로 두면, 모델이 그 문장을 질문한 칸 수정안에도 넣었다. 교육 칸 질문에 회사
+    프로젝트에서 한 일을 답하자 그 문장이 교육 설명에도 들어가 교육 과정에서 한 일처럼 읽혔다(2026-09-15 한 번도 안 본
+    케이스). 저장하는 답은 그대로 두고, 이번 재첨삭의 모델 입력·근거 검증에만 쓴다.
+    """
+    from app.resume_review import _split_answer_sentences
+
+    moved = {sentence for answer in mentioned_answers for sentence in _split_answer_sentences(answer.answer)}
+    if not moved:
+        return list(answers)
+    trimmed = []
+    for answer in answers:
+        kept = [sentence for sentence in _split_answer_sentences(answer.answer) if sentence not in moved]
+        if len(kept) == len(_split_answer_sentences(answer.answer)):
+            trimmed.append(answer)
+        elif kept:
+            trimmed.append(answer.model_copy(update={'answer': ' '.join(kept)}))
+    return trimmed
+
+
+def withhold_moved_sentences(generation, answered_paths, mentioned_answers, fields):
+    """질문한 칸 수정안에 다른 항목으로 떼어 낸 문장이 들어가면 그 수정안을 뺀다. 확인 질문은 붙이지 않는다."""
+    from app.resume_review import _split_answer_sentences
+
+    squash = lambda text: re.sub(r'[\s\W_]+', '', str(text or '')).casefold()  # noqa: E731
+    warnings = []
+    for mentioned in mentioned_answers:
+        match = EXPERIENCE_DESCRIPTION.fullmatch(mentioned.field_path)
+        name = squash(fields.get(f'{match.group(1)}[{match.group(2)}].{ITEM_NAME_KEYS[match.group(1)]}')) if match else ''
+        moved = [squash(sentence) for sentence in _split_answer_sentences(mentioned.answer)]
+        for review in generation.sentence_reviews:
+            revision = review.suggested_revision
+            if (not revision or review.new_item is not None or review.field_path not in answered_paths
+                    or group(review.field_path) == group(mentioned.field_path)):
+                continue
+            names_other_item = bool(name) and name in squash(revision) and name not in squash(review.original_quote)
+            copies_sentence = any(
+                SequenceMatcher(None, squash(sentence), moved_sentence).ratio() >= 0.6
+                for sentence in _split_answer_sentences(revision) for moved_sentence in moved
+            )
+            if names_other_item or copies_sentence:
+                review.suggested_revision = None
+                review.status = 'unchanged'
+                review.edit_type = 'none'
+                review.confirmation_question = None
+                review.validation_issues = [*review.validation_issues, 'moved_to_other_item']
+                warnings.append(f'다른 항목 이야기가 들어간 수정안을 제외했습니다: {review.field_path}')
+    return warnings
 
 
 def add_new_project_proposals(generation, fields, raw_content, answers, previous_questions=None):
@@ -538,7 +612,7 @@ def add_new_project_proposals(generation, fields, raw_content, answers, previous
             issues.append('empty')
         # 영문 낱말(기술 이름)은 모두 답에 있어야 하고, 한글 낱말은 절반 이상이 답에 있어야 한다. 이름은 이름표라
         # 조사·어미를 바꿔 짓는 건 받아 주되, 답에 없는 사실("실시간 추천")을 이름으로 들여오지 못하게 한다.
-        tokens = [t for t in re.findall(r'[0-9A-Za-z가-힣+#]{2,}', name) if t.casefold() not in _NEW_PROJECT_NAME_GENERIC]
+        tokens = [t for t in re.findall(r'[0-9A-Za-z가-힣+#]{2,}', name) if t.casefold() not in NEW_PROJECT_NAME_GENERIC]
         ascii_tokens = [t for t in tokens if re.fullmatch(r'[0-9A-Za-z+#]+', t)]
         korean_tokens = [t for t in tokens if t not in ascii_tokens]
         korean_hits = sum(t in compact for t in korean_tokens)
@@ -553,7 +627,7 @@ def add_new_project_proposals(generation, fields, raw_content, answers, previous
             issues.append('unsupported_number')
         if grounding_terms(written) - grounding_terms(evidence):
             issues.append('unsupported_term')
-        if any(term in written and term not in evidence for term in _ROLE_EXPANSION):
+        if any(term in written and term not in evidence for term in ROLE_EXPANSION_WORDS):
             issues.append('unsupported_role')
         compact_name = squash(name)
         for existing in existing_names:
@@ -572,7 +646,7 @@ def add_new_project_proposals(generation, fields, raw_content, answers, previous
         if role and squash(role) not in compact:
             role = ''  # 역할은 답에 적힌 말일 때만 채운다. 없으면 사용자가 채운다.
         if stack_items and not [t for t in re.findall(r'[0-9A-Za-z가-힣+#]{2,}', name)
-                                if t.casefold() not in _PROJECT_FORM_WORDS]:
+                                if t.casefold() not in PROJECT_FORM_WORDS]:
             # "부트캠프 개인 과제"처럼 형태만 적힌 이름은 무엇을 만든 과제인지 안 보인다(2026-09-15 새 케이스 v16l).
             # 답에 있는 기술 이름과 형태로 다시 짓는다. 사용자는 추가한 뒤 고칠 수 있다.
             name = f"{stack_items[0]} {role or '프로젝트'}"
@@ -582,8 +656,7 @@ def add_new_project_proposals(generation, fields, raw_content, answers, previous
         generation.sentence_reviews = [
             review for review in generation.sentence_reviews
             if not (review.field_path == answer.field_path
-                    and re.fullmatch(r'(?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\]\.description',
-                                     review.field_path)
+                    and EXPERIENCE_DESCRIPTION.fullmatch(review.field_path)
                     and review.suggested_revision
                     and _answer_is_reflected(review.original_quote, review.suggested_revision, description))
         ]
@@ -876,7 +949,7 @@ def item_display_name(fields, path):
     "이 프로젝트에서 해결하려던 문제는?"처럼 이름 없이 물으면 사용자는 어느 프로젝트인지 몰라 다른 프로젝트
     이야기를 답하고, 답이 항목과 맞지 않아 수정안이 나오지 않는다(2026-09-15 목업: 반영 실패 7건 중 5건).
     """
-    match = re.match(r'^(projects|experience|awards|otherActivities|trainingExperience)\[(\d+)\]', path)
+    match = EXPERIENCE_ITEM.match(path)
     if not match:
         return ''
     section, index = match.group(1), match.group(2)
@@ -944,11 +1017,6 @@ _INTERNAL_WORD = re.compile(
     r'(?<![A-Za-z0-9_])(?:field_path|requirement_id|edit_type|sentence_reviews|original_quote|evidence_quotes)'
     r'(?![A-Za-z0-9_])|필드\s*경로'
 )
-_SECTION_WORDS = {'coreCompetencies': '핵심역량', 'selfIntroduction': '자기소개서', 'trainingExperience': '교육',
-                  'otherActivities': '활동', 'techStack': '기술 스택', 'projects': '프로젝트', 'experience': '경력',
-                  'awards': '수상', 'certifications': '자격증', 'education': '학력', 'basicInfo': '기본 정보'}
-
-
 def humanize_internal_terms(text, fields):
     """내부 경로·필드 이름을 사용자가 아는 이름으로 바꾼다."""
     if not text:
@@ -959,7 +1027,7 @@ def humanize_internal_terms(text, fields):
         name = item_display_name(fields, path)
         if name:
             return name
-        return _SECTION_WORDS.get(re.match(r'[A-Za-z]+', path).group(0), '이력서 항목')
+        return SECTION_NAMES.get(re.match(r'[A-Za-z]+', path).group(0), '이력서 항목')
 
     text = _INTERNAL_PATH.sub(path_name, text)
     return _INTERNAL_WORD.sub('항목', text)
@@ -982,7 +1050,7 @@ def filter_questions_by_resume_facts(generation, fields, star_checks):
         # 확인 질문이 이어져 세 턴이 헛돌았다(2026-09-15 새 케이스 v16e). 항목 설명 칸으로 옮기고, 기술 스택 질문은
         # 답에 적힌 항목 이름으로 옮기는 경로(MISSING_JOB_TECH_REASON)를 탄다.
         nominal = re.fullmatch(
-            r'(?:techStack\[\d+\]\.(?:name|level))|((?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\])'
+            rf'(?:techStack\[\d+\]\.(?:name|level))|((?:{EXPERIENCE_SECTION_PATTERN})\[\d+\])'
             r'\.(?:name|company|role|course|organization|techStack)', question.field_path)
         if nominal:
             item_description = f'{nominal.group(1)}.description' if nominal.group(1) else None
@@ -1040,8 +1108,8 @@ def add_requirement_questions(generation, fields, requirement_rows, max_preferre
         is_technology = bool(technology_mentions(label) or re.search(r'[A-Za-z]', label))
         # 일부 근거가 기술 스택 이름 같은 짧은 칸에만 있으면("Fastlane") 그 칸에 질문을 붙이지 않는다. 답이 그 칸을 문장으로
         # 덮어썼다(2026-09-15 새 케이스). 설명 칸이 아니면 아래 기술 요건 질문으로 내려가 답의 항목 이름으로 옮긴다.
-        narrative_evidence = [p for p in row.get('evidence_paths') or [] if re.fullmatch(
-            r'(?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\]\.description|coreCompetencies\.text', p)]
+        narrative_evidence = [p for p in row.get('evidence_paths') or []
+                              if EXPERIENCE_DESCRIPTION.fullmatch(p) or p == 'coreCompetencies.text']
         if row['status'] == 'partial' and narrative_evidence:
             path = narrative_evidence[0]
             where = item_display_name(fields, path)
@@ -1214,8 +1282,15 @@ def run_review(service, id_token, request):
         raise ReviewInputError('too many accumulated answers')
     current_answer_ids = {answer.question_id for answer in request.answers}
     current_answers = [answer for answer in answers if answer.question_id in current_answer_ids]
+    # 답에 이름이 나온 다른 경험 항목도 이번 재첨삭에서 고칠 수 있게 한다(저장하지 않는다).
+    mentioned_answers = (
+        [] if is_gap_audit else mentioned_item_answers(current_answers, fields, refs, previous)
+    )
+    # 떼어 낸 문장은 질문한 칸의 근거에서 뺀다(저장하는 답은 그대로).
+    evidence_answers = without_mentioned_sentences(answers, mentioned_answers) + mentioned_answers
+    turn_answers = without_mentioned_sentences(current_answers, mentioned_answers) + mentioned_answers
     prompt_fields, prompt_answers, is_focused_followup = focused_followup_context(
-        fields, answers, current_answers,
+        fields, evidence_answers, current_answers + mentioned_answers,
     )
     prompt_resume_text = json.dumps(prompt_fields, ensure_ascii=False)
     prompt_job_text = (
@@ -1286,7 +1361,7 @@ def run_review(service, id_token, request):
                 [a.model_dump(exclude={'question_id'}) for a in prompt_answers], ensure_ascii=False,
             ),
             'current_turn_answers': json.dumps(
-                [a.model_dump(exclude={'question_id'}) for a in current_answers],
+                [a.model_dump(exclude={'question_id'}) for a in turn_answers],
                 ensure_ascii=False,
             ),
             'job_posting_text': redact(prompt_job_text),
@@ -1305,7 +1380,7 @@ def run_review(service, id_token, request):
                     '첫 검토입니다. 이력서 전체와 선택 공고를 비교해 검토하세요.'
                     if not is_focused_followup
                     else '후속 첨삭입니다. 이번 답변의 field_path와 같은 이력서 항목만 수정하세요. '
-                    '다른 항목의 새 진단·수정·질문은 만들지 마세요. ' + NEW_PROJECT_RULE
+                    '다른 항목의 새 진단·수정·질문은 만들지 마세요. ' + MIXED_ANSWER_RULE + ' ' + NEW_PROJECT_RULE
                 )
             ),
             'review_mode': (
@@ -1334,8 +1409,8 @@ def run_review(service, id_token, request):
             for section in generated.section_reviews:
                 section.suggested_revision = None
         grounded, warnings = enforce_resume_review_grounding('\n'.join(fields.values()), generated)
-        warnings.extend(ground_sentences(fields, answers, grounded, job_text or ""))
-        warnings.extend(require_answer_reflection(grounded, current_answers))
+        warnings.extend(ground_sentences(fields, evidence_answers, grounded, job_text or ""))
+        warnings.extend(require_answer_reflection(grounded, turn_answers))
         new_project_reviews = []
         if not is_gap_audit and is_focused_followup:
             project_warnings, new_project_answer_ids = add_new_project_proposals(
@@ -1353,14 +1428,19 @@ def run_review(service, id_token, request):
             warnings.extend(
                 add_substantive_answer_fallback(
                     grounded, fields,
-                    [answer for answer in current_answers if answer.question_id not in new_project_answer_ids],
+                    [answer for answer in without_mentioned_sentences(current_answers, mentioned_answers)
+                     if answer.question_id not in new_project_answer_ids],
                 )
             )
             if len(grounded.sentence_reviews) > review_count_before_fallback:
                 # The deterministic fallback must pass the same provenance,
                 # uniqueness and overlap checks as a model-generated edit.
-                warnings.extend(ground_sentences(fields, answers, grounded, job_text or ""))
-                warnings.extend(require_answer_reflection(grounded, current_answers))
+                warnings.extend(ground_sentences(fields, evidence_answers, grounded, job_text or ""))
+                warnings.extend(require_answer_reflection(grounded, turn_answers))
+        if mentioned_answers:
+            warnings.extend(withhold_moved_sentences(
+                grounded, {answer.field_path for answer in current_answers}, mentioned_answers, fields,
+            ))
         grounded.sentence_reviews.extend(new_project_reviews)
         if not is_gap_audit:
             apply_selected_job_identity_revisions(
@@ -1439,6 +1519,7 @@ def run_review(service, id_token, request):
             input_hash=snapshot_hash, item_refs=refs, excluded_fields=excluded,
             confirmed_answers=answers, changes=changes, telemetry=telemetry, job_source=job_source,
             requirement_map=requirement_rows,
+            answer_scope_paths=sorted({answer.field_path for answer in mentioned_answers}),
             tailored_resume_id=request.tailored_resume_id)
         # Persist the response on the claimed document; repeat requests recover it.
         if request.tailored_resume_id:

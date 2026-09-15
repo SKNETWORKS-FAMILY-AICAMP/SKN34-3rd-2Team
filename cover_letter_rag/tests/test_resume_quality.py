@@ -514,3 +514,40 @@ def test_single_sentence_answer_restatement_is_still_allowed():
         evidence_quotes=[answer_text])])
     ground_sentences({path: original}, [answer], result)
     assert result.sentence_reviews[0].suggested_revision == answer_text
+
+
+def test_fallback_keeps_the_fact_sentences_of_an_answer_that_also_says_none():
+    # "없어요"가 한 문장 섞였다고 답 전체를 버리지 않는다(2026-09-15 새 케이스 v16m, 모델도 수정안을 내지 않았다).
+    from app.resume_review import add_substantive_answer_fallback
+    path = 'selfIntroduction.strengthsWeaknesses.body'
+    original = '장점은 꼼꼼한 것 입니다. 단점은 조금 느린 것 입니다.'
+    answer = ConfirmationAnswer(
+        question_id='q1', field_path=path, question='꼼꼼함이 드러난 상황과 느린 점을 보완한 행동이 있나요?',
+        answer='숙소 예약 클론에서 MySQL 트랜잭션과 `SELECT ... FOR UPDATE`를 적용한 뒤 동시 요청 50건 테스트로 중복 예약이 0건인지 확인하며 '
+               '꼼꼼하게 검증했습니다. 개인적으로 느린 점을 보완하기 위해 한 행동은 없어요.')
+    result = ResumeReviewGeneration(summary='', section_reviews=[])
+    add_substantive_answer_fallback(result, {path: original}, [answer])
+    assert len(result.sentence_reviews) == 1
+    revision = result.sentence_reviews[0].suggested_revision
+    assert '50건' in revision and '0건' in revision
+    assert '없어요' not in revision and '한 행동은' not in revision
+    # 답 전체가 "없다"면 여전히 만들지 않는다.
+    result = ResumeReviewGeneration(summary='', section_reviews=[])
+    add_substantive_answer_fallback(result, {path: original}, [answer.model_copy(update={
+        'answer': '느린 점을 보완하기 위해 따로 한 행동은 없어요. 꼼꼼함이 드러난 개발 상황도 딱히 기억나지 않습니다.'})])
+    assert not result.sentence_reviews
+
+
+def test_reported_restated_answer_case_keeps_the_40_percent_result():
+    # 2026-09-15 한 번도 안 본 케이스에서 사용자가 알려 준 원문·수정안 그대로. v16o부터 보류된다.
+    path = 'projects[0].description'
+    original = ('기존 리포트는 원본 로그 테이블을 매번 전체 조회해 느리고 비용이 컸습니다. 캠페인·일자 단위 집계 테이블을 '
+                '새로 만들고 날짜 파티션을 적용해 리포트 조회 비용을 월 약 40% 줄였습니다.')
+    revision = '캠페인·일자 단위 집계 테이블을 설계하고 날짜 파티션을 적용해 리포트 조회 비용을 줄이는 업무를 맡았습니다.'
+    answer = ConfirmationAnswer(question_id='q1', field_path=path, question='파티션을 어떻게 적용했나요?', answer=revision)
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path=path, original_quote=original, suggested_revision=revision, reason='답변 반영', edit_type='content',
+        evidence_quotes=[revision])])
+    ground_sentences({path: original}, [answer], result)
+    item = result.sentence_reviews[0]
+    assert item.suggested_revision is None and 'missing_fact_anchor' in item.validation_issues

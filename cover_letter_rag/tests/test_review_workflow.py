@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 import pytest
 
@@ -671,3 +672,111 @@ def test_new_project_name_made_of_form_words_is_renamed_from_answer_tech():
     added = [review for review in result.sentence_reviews if review.new_item]
     assert len(added) == 1 and added[0].new_item.name == '카카오맵 API 개인 과제'
     assert "'카카오맵 API 개인 과제'" in added[0].reason
+
+
+TWO_PROJECT_CONTENT = {
+    **SAMPLE_CONTENT,
+    'projects': [
+        SAMPLE_CONTENT['projects'][0],
+        {'id': 'project-2', 'name': '숙소 예약 클론', 'role': '백엔드', 'techStack': 'Node.js',
+         'description': '숙소 예약 API를 구현했습니다.'},
+    ],
+}
+
+
+class TwoProjectFirebase(FakeFirebase):
+    def get_owned_resume(self, cohort_id, resume_id, uid):
+        super().get_owned_resume(cohort_id, resume_id, uid)
+        return {'userId': 'user-1', 'content': TWO_PROJECT_CONTENT}
+
+
+def test_answer_naming_another_item_lets_the_followup_edit_that_item_with_only_its_sentence():
+    # "LMS에서 X를 했고, 숙소 예약 클론에서도 Y를 했어요"의 Y는 답한 항목만 보는 재첨삭에서 넣을 곳이 없어 사라졌다.
+    calls = []
+    answer_text = ('LMS 프로젝트에서 Redis 캐시를 적용해 응답 시간을 20% 개선했습니다. '
+                   '숙소 예약 클론에서는 트랜잭션으로 동시 요청 50건의 중복 예약을 0건으로 막았습니다.')
+
+    def generate(data):
+        calls.append(data)
+        if len(calls) == 1:
+            return ResumeReviewGeneration(summary='검토', section_reviews=[], questions=[ReviewQuestion(
+                field_path='projects[0].description', topic='action', question='LMS 프로젝트에서 어떻게 개선했나요?',
+                reason='r', priority=1)])
+        return ResumeReviewGeneration(summary='검토', section_reviews=[], sentence_reviews=[
+            SentenceReview(field_path='projects[0].description', original_quote='API 응답 시간을 20% 개선했습니다.',
+                           suggested_revision='Redis 캐시를 적용해 API 응답 시간을 20% 개선했습니다.', reason='답변 반영',
+                           edit_type='content', evidence_quotes=['Redis 캐시를 적용해']),
+            SentenceReview(field_path='projects[1].description', original_quote='숙소 예약 API를 구현했습니다.',
+                           suggested_revision='숙소 예약 API를 구현하고, 트랜잭션으로 동시 요청 50건의 중복 예약을 0건으로 막았습니다.',
+                           reason='답변 반영', edit_type='content', evidence_quotes=['동시 요청 50건의 중복 예약을 0건으로']),
+        ])
+
+    service = ResumeReviewService(Settings(openai_api_key='test'), TwoProjectFirebase(), generate)
+    first = service.review('valid-token', FirestoreResumeReviewRequest(cohort_id='cohort-1', resume_id='resume-1'))
+    q = first.questions[0]
+    result = service.review('valid-token', FirestoreResumeReviewRequest(
+        cohort_id='cohort-1', resume_id='resume-1', previous_review_id=first.review_id,
+        expected_input_hash=first.input_hash,
+        answers=[ConfirmationAnswer(question_id=q.question_id, field_path=q.field_path, question=q.question,
+                                    answer=answer_text)]))
+
+    # 모델은 이름이 나온 항목도 보고, 그 항목에는 그 문장만 받는다. 질문한 칸의 답에서는 그 문장을 뺀다.
+    assert '숙소 예약 API를 구현했습니다.' in calls[1]['resume_text']
+    turn = {a['field_path']: a['answer'] for a in json.loads(calls[1]['current_turn_answers'])}
+    assert turn['projects[1].description'].startswith('숙소 예약 클론에서는')
+    assert 'Redis' not in turn['projects[1].description']
+    assert '숙소 예약 클론' not in turn['projects[0].description']
+    assert result.answer_scope_paths == ['projects[1].description']
+    edited = {r.field_path: r.suggested_revision for r in result.sentence_reviews if r.suggested_revision}
+    assert '50건' in edited['projects[1].description'], '그 항목의 답 문장이 근거가 되어 수정안이 남는다'
+    assert 'Redis' in edited['projects[0].description']
+    # 저장되는 확인 답은 사용자가 보낸 답 그대로다.
+    assert [(a.field_path, a.answer) for a in result.confirmed_answers] == [('projects[0].description', answer_text)]
+
+
+def test_other_item_edit_cannot_borrow_facts_from_sentences_about_the_answered_item():
+    # 이름이 나온 항목에는 그 항목 문장만 근거로 준다. LMS 문장의 "Redis·20%"를 숙소 예약 클론에 넣으면 버린다.
+    from app.review_workflow import mentioned_item_answers
+    fields = {'projects[0].name': 'LMS 프로젝트', 'projects[0].description': 'API 응답 시간을 20% 개선했습니다.',
+              'projects[1].name': '숙소 예약 클론', 'projects[1].description': '숙소 예약 API를 구현했습니다.'}
+    refs = {path: f'projects:p{path[9]}' for path in fields}
+    answer = ConfirmationAnswer(question_id='q1', field_path='projects[0].description', question='q',
+                                answer='LMS 프로젝트에서 Redis 캐시를 적용했습니다. 숙소 예약 클론에서는 트랜잭션을 적용했습니다.')
+    extra = mentioned_item_answers([answer], fields, refs, {'item_refs': refs})
+    assert [(a.field_path, a.answer) for a in extra] == [('projects[1].description', '숙소 예약 클론에서는 트랜잭션을 적용했습니다.')]
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path='projects[1].description', original_quote='숙소 예약 API를 구현했습니다.', edit_type='content',
+        suggested_revision='숙소 예약 API를 Redis 캐시로 구현했습니다.', reason='r')])
+    ground_sentences(fields, [answer, *extra], result)
+    assert result.sentence_reviews[0].suggested_revision is None
+    # 이름이 없거나 "없음" 답이면 만들지 않는다.
+    assert mentioned_item_answers([answer.model_copy(update={'answer': '캐시를 적용했습니다.'})], fields, refs, {'item_refs': refs}) == []
+    assert mentioned_item_answers([answer.model_copy(update={'answer': '없어요'})], fields, refs, {'item_refs': refs}) == []
+
+
+def test_sentence_moved_to_another_item_is_withheld_from_the_answered_field():
+    # 교육 칸 질문에 회사 프로젝트에서 한 일을 답했더니, 그 문장이 교육 설명 수정안에도 들어가 교육 과정에서 한 일처럼
+    # 읽혔다(2026-09-15 한 번도 안 본 케이스). 질문한 칸 수정안에 떼어 낸 문장이 들어가면 뺀다.
+    from app.review_workflow import withhold_moved_sentences
+    fields = {'trainingExperience[0].course': '데이터 엔지니어링 과정', 'trainingExperience[0].description': 'Airflow를 배웠습니다.',
+              'projects[0].name': '물류 대시보드', 'projects[0].description': '물류 지표 대시보드를 만들었습니다.'}
+    moved = ConfirmationAnswer(question_id=None, field_path='projects[0].description', question='q',
+                               answer='물류 대시보드에서 Airflow로 매일 적재 작업을 자동화했습니다.')
+    generation = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[
+        SentenceReview(field_path='trainingExperience[0].description', original_quote='Airflow를 배웠습니다.',
+                       suggested_revision='Airflow를 배우고 매일 적재 작업을 자동화했습니다.', reason='r', status='improved'),
+        SentenceReview(field_path='projects[0].description', original_quote='물류 지표 대시보드를 만들었습니다.',
+                       suggested_revision='물류 지표 대시보드를 만들고 Airflow로 매일 적재 작업을 자동화했습니다.', reason='r',
+                       status='improved'),
+    ])
+    warnings = withhold_moved_sentences(generation, {'trainingExperience[0].description'}, [moved], fields)
+    training, project = generation.sentence_reviews
+    assert training.suggested_revision is None and 'moved_to_other_item' in training.validation_issues
+    assert training.confirmation_question is None and warnings
+    assert project.suggested_revision, '떼어 낸 문장이 원래 속한 항목의 수정안은 그대로 둔다'
+    # 질문한 칸만의 사실을 더한 수정안은 그대로 둔다.
+    generation.sentence_reviews[0] = SentenceReview(
+        field_path='trainingExperience[0].description', original_quote='Airflow를 배웠습니다.',
+        suggested_revision='Airflow로 DAG를 짜는 실습을 3주 동안 했습니다.', reason='r', status='improved')
+    withhold_moved_sentences(generation, {'trainingExperience[0].description'}, [moved], fields)
+    assert generation.sentence_reviews[0].suggested_revision

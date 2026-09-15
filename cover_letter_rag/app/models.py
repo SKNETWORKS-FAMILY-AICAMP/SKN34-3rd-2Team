@@ -508,6 +508,8 @@ class FirestoreResumeReviewResponse(ResumeReviewGeneration):
     changes: dict[str, list[str]] = Field(default_factory=dict)
     # 공고 맞춤 첨삭의 요건 표. app.job_requirements.RequirementStatusRow를 dict로 담는다.
     requirement_map: list[dict] = Field(default_factory=list)
+    # 후속 첨삭에서 답에 이름이 나와 함께 고칠 수 있었던 다른 항목 칸. 앱은 답한 칸과 이 칸의 수정안을 보여 준다.
+    answer_scope_paths: list[str] = Field(default_factory=list)
     telemetry: dict = Field(default_factory=dict)
     notice: str = (
         "원본 이력서는 변경하지 않았습니다. 확인된 이력서 근거만 사용한 첨삭이며 "

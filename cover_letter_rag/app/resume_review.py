@@ -22,6 +22,10 @@ from app.models import (
 from app.prompts import RESUME_REVIEW_PROMPT
 from app.service import NUMBER_PATTERN
 from app.technology import comparison_terms, grounding_terms
+from app.review_rules import (
+    EXPERIENCE_DESCRIPTION, EXPERIENCE_SECTION_PATTERN, ITEM_NAME_KEYS, NARRATIVE_FIELD, NEGATION, NOT_NEGATION_WORDS,
+    ROLE_EXPANSION_WORDS, SECTION_NAMES, WORK_NEGATION,
+)
 
 # 같은 양을 가리키는 단위 표기. "1.2s"와 "1.2초", "40min"과 "40분"은 같은 사실이다.
 _UNIT_ALIASES = {
@@ -284,21 +288,10 @@ def extract_review_fields(content: Any) -> tuple[dict[str, str], list[str]]:
 
 
 _SCOPE_CLARIFIED = re.compile(r'직접|맡았|맡아|담당|제가|본인이|혼자|단독')
-_NEGATION = r'않|못|없|아니|미완료|미구현'
-# 한 일 자체를 부정하는 표현. 뒤집히면 하지 않은 일을 한 것처럼 쓰게 되니 계속 막는다.
-_WORK_NEGATION = re.compile(
-    r'않았|못|없었|아니었|미완료|미구현|(?:경험|사용한\s*적|해\s*본\s*적|써\s*본\s*적)(?:은|이)?\s*없'
-)
-# "없"·"아니"·"못"이 들어 있지만 부정이 아닌 낱말. "끊임없이 배우고 성장하겠습니다"를 부정으로 잡아 안내가 붙었다
-# (2026-09-15 새 케이스 v16m). 부정 검사 전에 지운다.
-_NOT_NEGATION_WORDS = re.compile(
-    r'끊임\s*없|어김\s*없|틀림\s*없|빠짐\s*없|거침\s*없|아낌\s*없|쉴\s*새\s*없|빈틈\s*없|변함\s*없|다름\s*없|손색\s*없|'
-    r'하염\s*없|상관\s*없|관계\s*없|뿐(?:만)?\s*아니|못지\s*않|마지\s*않'
-)
 
 
 def _without_non_negation_words(text: str) -> str:
-    return _NOT_NEGATION_WORDS.sub(' ', text or '')
+    return NOT_NEGATION_WORDS.sub(' ', text or '')
 
 
 def _negation_notice(original: str, revision: str, answer_text: str = '') -> str | None:
@@ -311,9 +304,9 @@ def _negation_notice(original: str, revision: str, answer_text: str = '') -> str
     """
     original, revision, answer_text = (
         _without_non_negation_words(original), _without_non_negation_words(revision), _without_non_negation_words(answer_text))
-    if not re.search(_NEGATION, original) or re.search(_NEGATION, revision):
+    if not re.search(NEGATION, original) or re.search(NEGATION, revision):
         return None
-    if _WORK_NEGATION.search(original) and not _WORK_NEGATION.search(answer_text):
+    if WORK_NEGATION.search(original) and not WORK_NEGATION.search(answer_text):
         return None
     for stem, ending in re.findall(r'(\S+?)지\s*않(\S*)', original):
         if ending and f'{stem}{ending}' in revision:
@@ -332,7 +325,7 @@ def _meaning_risks(original, revision, answer_text=''):
     버렸다(2026-09-15 목업 첨삭에서 답 반영 실패 6건 중 4건).
     """
     patterns = {
-        'negation_changed': _NEGATION,
+        'negation_changed': NEGATION,
         'work_status_changed': r'예정|계획|진행\s*중|개발\s*중|구현\s*중|검토\s*중|학습\s*중',
         'ownership_changed': r'팀원|공동|협업|보조|지원받|도움|AI 코딩',
     }
@@ -383,7 +376,7 @@ def _change_rate(original: str, revision: str) -> float:
 _SURFACE_EDITS = {'spelling', 'tone', 'clarity'}
 # 문장이 아니라 짧은 값을 담는 칸. 여기에 답변 문장을 써 넣으면 안 된다.
 _NOMINAL_FIELD = re.compile(
-    r'techStack\[\d+\]\.(?:name|level)|(?:projects|experience|awards|otherActivities|trainingExperience|education|certifications)'
+    rf'techStack\[\d+\]\.(?:name|level)|(?:{EXPERIENCE_SECTION_PATTERN}|education|certifications)'
     r'\[\d+\]\.(?:name|company|role|course|organization|school|major|issuer|techStack|status)|selfIntroduction\.[^.]+\.subtitle'
 )
 
@@ -471,12 +464,6 @@ def _paragraphs(text: str) -> list[str]:
     return [part.strip() for part in re.split(r'\n\s*\n', text) if len(part.strip()) >= 40]
 
 
-_NARRATIVE_FIELD = re.compile(
-    r'coreCompetencies\.text|(?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\]\.description'
-    r'|selfIntroduction\.[^.]+\.body'
-)
-_FIELD_LABELS = {'coreCompetencies': '핵심역량', 'projects': '프로젝트', 'experience': '경력', 'awards': '수상',
-                 'otherActivities': '활동', 'trainingExperience': '교육', 'selfIntroduction': '자기소개서'}
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -490,16 +477,16 @@ def _cross_field_overlap(field_path: str, original_quote: str, revision: str, fi
     (유사도 0.9 이상)뿐이고, 비슷한 문장(0.72 이상)은 안내만 붙여 사용자가 고르게 한다(2026-09-15 새 케이스에서
     틀 질문 답의 프로젝트 성과가 자기소개·어려움 극복 칸에 그대로 들어갔다). 원문에 이미 있던 문장은 보지 않는다.
     """
-    if not _NARRATIVE_FIELD.fullmatch(field_path):
+    if not NARRATIVE_FIELD.fullmatch(field_path):
         return False, None
     squash = lambda t: re.sub(r'[\s\W_]+', '', t)  # noqa: E731
     own = [squash(s) for s in _split_sentences(original_quote)]
     # 경험 칸은 사례의 원래 자리다. 자기소개서·핵심역량이 같은 사례를 이미 쓰고 있어도 경험 칸 수정안에 안내를 붙이지 않는다
     # (2026-09-15 새 케이스 v16m: 프로젝트 설명 다듬기에 "자기소개서 칸과 비슷한 문장이 있어요"가 붙었다).
-    experience_field = bool(_EXPERIENCE_DESCRIPTION.fullmatch(field_path))
+    experience_field = bool(EXPERIENCE_DESCRIPTION.fullmatch(field_path))
     others = [(path, squash(s)) for path, text in fields.items()
-              if path != field_path and _NARRATIVE_FIELD.fullmatch(path)
-              and (not experience_field or _EXPERIENCE_DESCRIPTION.fullmatch(path))
+              if path != field_path and NARRATIVE_FIELD.fullmatch(path)
+              and (not experience_field or EXPERIENCE_DESCRIPTION.fullmatch(path))
               for s in _split_sentences(text)]
     verbatim, similar = False, set()
     for sentence in _split_sentences(revision):
@@ -511,7 +498,7 @@ def _cross_field_overlap(field_path: str, original_quote: str, revision: str, fi
             if ratio >= 0.9:
                 verbatim = True
             elif ratio >= 0.72:
-                similar.add(_FIELD_LABELS.get(re.match(r'[A-Za-z]+', path).group(0), path))
+                similar.add(SECTION_NAMES.get(re.match(r'[A-Za-z]+', path).group(0), path))
     if verbatim:
         return True, None
     if similar:
@@ -519,9 +506,6 @@ def _cross_field_overlap(field_path: str, original_quote: str, revision: str, fi
     return False, None
 
 
-_EXPERIENCE_DESCRIPTION = re.compile(r'(projects|experience|awards|otherActivities|trainingExperience)\[(\d+)\]\.description')
-_EXPERIENCE_NAME_KEYS = {'projects': 'name', 'experience': 'company', 'trainingExperience': 'course',
-                         'awards': 'name', 'otherActivities': 'name'}
 _BEFORE_AFTER = re.compile(r'(\d+(?:[.,]\d+)?)\s*\D{0,3}?\s*(?:에서|→|->|~)\s*(\d+(?:[.,]\d+)?)')
 
 
@@ -541,7 +525,7 @@ def _repeated_facts_notice(field_path: str, original_quote: str, revision: str, 
         return None
     best = None
     for path, text in fields.items():
-        match = _EXPERIENCE_DESCRIPTION.fullmatch(path)
+        match = EXPERIENCE_DESCRIPTION.fullmatch(path)
         if not match:
             continue
         found = new_numbers - _unsupported_numbers(revision, text)
@@ -556,8 +540,8 @@ def _repeated_facts_notice(field_path: str, original_quote: str, revision: str, 
         return None
     _, match, found = best
     section, index = match.groups()
-    name = str(fields.get(f'{section}[{index}].{_EXPERIENCE_NAME_KEYS[section]}') or '').strip()
-    label = f"'{name}' {_FIELD_LABELS[section]}" if name else _FIELD_LABELS[section]
+    name = str(fields.get(f'{section}[{index}].{ITEM_NAME_KEYS[section]}') or '').strip()
+    label = f"'{name}' {SECTION_NAMES[section]}" if name else SECTION_NAMES[section]
     facts = '·'.join(f'{value}{unit}' for value, unit in sorted(found, key=lambda f: revision.find(f[0]))[:3])
     return (f"{label} 칸에 이미 있는 {facts} 내용을 자기소개서에 다시 적었어요. "
             '자기소개서에서는 그 경험을 한 구절로만 가리키는 게 좋아요.')
@@ -755,6 +739,11 @@ def _concise_company_fit_answer(path: str, question: str, confirmed: str) -> str
     return ' '.join(selected)
 
 
+def _split_answer_sentences(text: str) -> list[str]:
+    """답변을 문장 부호와 줄바꿈으로 나눈다. "주요 업무"처럼 낱말 끝의 "요"에서는 나누지 않는다."""
+    return [part.strip() for part in re.split(r'(?<=[.!?])\s+|\n+', str(text or '').strip()) if part.strip()]
+
+
 def add_substantive_answer_fallback(generation, fields, answers):
     """Add a safe proposal if the model drops a substantive confirmed answer."""
     warnings = []
@@ -767,6 +756,15 @@ def add_substantive_answer_fallback(generation, fields, answers):
         confirmed = _concise_company_fit_answer(
             path, answer.question, answer.answer.strip(),
         )
+        # 사실과 "없다"가 섞인 답은 없다고 한 문장만 뺀다. 예전에는 "없어요"가 한 번만 들어 있어도 답 전체를 버려,
+        # "50건 테스트로 중복 예약 0건을 확인했습니다. 느린 점을 보완한 행동은 없어요."의 앞 문장까지 사라졌다
+        # (2026-09-15 새 케이스 v16m, 모델도 수정안을 내지 않았다).
+        factual = ' '.join(
+            sentence for sentence in _split_answer_sentences(confirmed)
+            if not negative_answer.search(sentence)
+        )
+        if factual and factual != confirmed:
+            confirmed = factual
         already_present = bool(original) and (
             re.sub(r'\s+', '', confirmed) in re.sub(r'\s+', '', original)
         )
@@ -896,7 +894,7 @@ def ground_sentences(fields, answers, generation, job_text=''):
                 # 기술 스택 이름 칸은 항목 하나에 이름 하나다. "Jest" → "Jest, supertest"처럼 이름을 덧붙이면 항목이 섞인다.
                 or (item.field_path.startswith('techStack[') and grounding_terms(revision) - grounding_terms(item.original_quote))):
             item.validation_issues.append('nominal_field_rewritten')
-        role_expansion = any(term in revision and term not in evidence for term in ("주도", "총괄", "리드", "책임", "달성"))
+        role_expansion = any(term in revision and term not in evidence for term in ROLE_EXPANSION_WORDS)
         if item.suggested_revision is not None and not revision.strip():
             item.validation_issues.append('empty_revision')
         if revision.strip():

@@ -12,10 +12,11 @@ from __future__ import annotations
 import re
 
 from app.models import STAR_ELEMENTS, StarCheck
+from app.review_rules import EXPERIENCE_SECTION_PATTERN
 
 # 경험을 서술하는 칸. 지원동기·입사 후 포부는 경험 서술이 아니라 판정하지 않는다.
 STAR_TARGET = re.compile(
-    r'(?:projects|experience|awards|otherActivities|trainingExperience)\[\d+\]\.description'
+    rf'(?:{EXPERIENCE_SECTION_PATTERN})\[\d+\]\.description'
     r'|selfIntroduction\.(?:intro|challenge|growth|strengthsWeaknesses)\.body'
 )
 STAR_LABELS = {'situation': '상황', 'task': '과제', 'action': '행동', 'result': '결과'}
