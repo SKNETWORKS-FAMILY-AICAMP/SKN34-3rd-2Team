@@ -251,3 +251,23 @@ def test_action_quote_with_only_role_or_learning_words_is_not_an_action():
     assert 'action' not in by_path['awards[0].description'].present
     assert 'action' in by_path['projects[0].description'].present, '방법이 있으면 그대로 행동이다'
     assert any('방법이 없음' in warning for warning in warnings)
+
+
+def test_result_quote_counts_only_when_the_model_says_it_is_a_result():
+    # 낱말 목록 대신 모델이 결과 인용의 종류를 고른다. 한 일만 적은 인용("3학기 동안 운영했습니다")은 결과가 아니다.
+    fields = {'otherActivities[0].description': '주 1회 문제 풀이 모임을 3학기 동안 운영했습니다.',
+              'projects[0].description': '실패율을 0으로 만들었습니다.'}
+    checks, warnings = ground_star_judgements([
+        StarJudgementOut(field_path='otherActivities[0].description', result_quote='3학기 동안 운영했습니다',
+                         result_kind='activity'),
+        StarJudgementOut(field_path='projects[0].description', result_quote='실패율을 0으로 만들었습니다',
+                         result_kind='metric_change'),
+    ], fields, [])
+    by_path = {check.field_path: check for check in checks}
+    assert 'result' not in by_path['otherActivities[0].description'].present
+    assert 'result' in by_path['projects[0].description'].present
+    assert any('결과가 아님' in warning for warning in warnings)
+    # 종류를 내지 않은 예전 판정은 그대로 받는다.
+    checks, _ = ground_star_judgements([StarJudgementOut(
+        field_path='projects[0].description', result_quote='실패율을 0으로 만들었습니다')], fields, [])
+    assert 'result' in checks[0].present

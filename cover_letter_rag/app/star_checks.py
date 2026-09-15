@@ -20,6 +20,9 @@ STAR_TARGET = re.compile(
     r'|selfIntroduction\.(?:intro|challenge|growth|strengthsWeaknesses)\.body'
 )
 STAR_LABELS = {'situation': '상황', 'task': '과제', 'action': '행동', 'result': '결과'}
+# 결과로 인정하는 인용 종류. 모델이 종류를 고르고 서버는 이 목록만 결과로 본다. 종류를 내지 않은 예전 판정(None)은
+# 그대로 받는다. 낱말 목록으로 결과를 가려내면 "0으로 만들었습니다" 같은 처음 보는 표현을 놓쳤다(2026-09-15).
+RESULT_KINDS = {'metric_change', 'state_change', 'verification', 'recognition', None}
 
 
 def _squash(text: str) -> str:
@@ -57,6 +60,8 @@ def ground_star_judgements(judgements, fields, answers, previous_checks=None, ju
                 warnings.append(f'STAR 인용 불일치: {path} {STAR_LABELS[element]}')
             elif element == 'action' and not star_action_quote_has_method(quote):
                 warnings.append(f'STAR 행동 인용에 방법이 없음: {path}')
+            elif element == 'result' and judgement.result_kind not in RESULT_KINDS:
+                warnings.append(f'STAR 결과 인용이 결과가 아님({judgement.result_kind}): {path}')
             else:
                 present.append(element)
                 quotes[element] = quote[:200]

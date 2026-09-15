@@ -577,3 +577,82 @@ def test_self_intro_repeating_numbers_that_the_same_answer_adds_to_a_project_get
         update={'overlap_notice': None})])
     add_pending_repeated_fact_notices(alone, fields)
     assert alone.sentence_reviews[0].overlap_notice is None
+
+
+def test_answer_appended_as_a_separate_also_paragraph_gets_a_flow_notice():
+    # 답을 원문 뒤에 "또한 …" 문단으로만 붙여 앞 문장과 이어지지 않았다(2026-09-15 한 번도 안 본 케이스).
+    from app.resume_review import add_flow_notices
+    path = 'selfIntroduction.intro.body'
+    original = '사용자가 불편하지 않은 서비스를 만들고 싶습니다.'
+    answer = ConfirmationAnswer(question_id='q1', field_path=path, question='q', answer='캐시로 응답을 줄였습니다.')
+    appended = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path=path, original_quote=original, reason='r', status='improved',
+        suggested_revision=original + '\n\n또한 캐시를 적용해 응답 시간을 줄였습니다.')])
+    add_flow_notices(appended, [answer])
+    assert appended.sentence_reviews[0].flow_notice
+    woven = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path=path, original_quote=original, reason='r', status='improved',
+        suggested_revision='캐시로 응답을 줄여 본 경험을 살려, 사용자가 불편하지 않은 서비스를 만들고 싶습니다.')])
+    add_flow_notices(woven, [answer])
+    assert woven.sentence_reviews[0].flow_notice is None
+
+
+def test_fact_checker_notice_only_uses_phrases_really_in_the_original():
+    # 검사 모델이 "구현했습니다 → 연동하기 위해"를 짚으면 안내를 붙이고, 원문에 없는 구절을 지어내면 무시한다.
+    from app.fact_check import FactKeepCheck, WeakenedFact, add_fact_notices
+    original = '숙소 예약 API를 만들었습니다. 결제 위젯 연동을 구현했습니다.'
+    revision = '숙소 예약 API를 만들고, 결제 승인 뒤 예약을 확정하도록 결제 위젯을 연동하기 위해 흐름을 설계했습니다.'
+
+    def review():
+        return ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+            field_path='projects[0].description', original_quote=original, suggested_revision=revision, reason='r',
+            edit_type='content', status='improved', change_rate=0.6)])
+
+    calls = []
+
+    def checker(o, r, a):
+        calls.append((o, r, a))
+        return FactKeepCheck(weakened=[WeakenedFact(original_phrase='결제 위젯 연동을 구현했습니다', revision_phrase='연동하기 위해',
+                                                    change='purpose')])
+
+    generation, telemetry = review(), {}
+    add_fact_notices(generation, [], checker, telemetry)
+    notice = generation.sentence_reviews[0].fact_notice
+    assert notice and "'결제 위젯 연동을 구현했습니다'" in notice and '목적 표현' in notice
+    assert telemetry['fact_checks'] == 1 and telemetry['fact_notices'] == 1
+
+    generation = review()
+    add_fact_notices(generation, [], lambda o, r, a: FactKeepCheck(weakened=[WeakenedFact(
+        original_phrase='원문에 없는 구절', change='dropped')]), {})
+    assert generation.sentence_reviews[0].fact_notice is None
+
+    # 조금만 바뀐 수정안이나 표현 다듬기는 묻지 않는다.
+    generation = review()
+    generation.sentence_reviews[0].change_rate = 0.1
+    calls.clear()
+    add_fact_notices(generation, [], checker, {})
+    assert calls == []
+    # 검사가 실패해도 수정안은 그대로다.
+    generation = review()
+    add_fact_notices(generation, [], lambda o, r, a: (_ for _ in ()).throw(RuntimeError('down')), {})
+    assert generation.sentence_reviews[0].suggested_revision == revision
+
+
+def test_statement_of_never_having_used_something_is_not_written_into_the_resume():
+    # 답이 "수업에서 개념만 배웠고 실제로 써 본 적은 없다"였는데, 핵심역량 수정안이 원문 문장을 지우고 그 말을 적었다.
+    # 답에 있는 표현이라 부정 표현 검사를 지나갔다(2026-09-15 한 번도 안 본 케이스).
+    path = 'coreCompetencies.text'
+    original = 'SQL로 매출 데이터를 집계했습니다. 엑셀 피벗으로 보고서를 만들 수 있습니다.'
+    answer = ConfirmationAnswer(question_id='q1', field_path=path, question='데이터 시각화 도구를 써 봤나요?',
+                                answer='시각화 도구는 수업에서 개념만 배웠고 실제로 써 본 적은 없어요.')
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path=path, original_quote=original, edit_type='content', reason='답변 반영',
+        suggested_revision='SQL로 매출 데이터를 집계했습니다. 시각화 도구는 수업에서 개념만 배웠습니다.')])
+    ground_sentences({path: original}, [answer], result)
+    item = result.sentence_reviews[0]
+    assert item.suggested_revision is None and 'absence_written' in item.validation_issues
+    assert item.confirmation_question is None
+    # 원문에 원래 있던 말은 그대로 둔다.
+    kept = review('실무에서는 써 본 적 없지만 개인 과제로 Docker를 다뤘습니다.', '실무 경험은 없지만 개인 과제로 Docker를 다뤘습니다.',
+                  edit_type='clarity')
+    assert 'absence_written' not in kept.validation_issues

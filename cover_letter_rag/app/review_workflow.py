@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 from app.models import (
     Diagnostic, FirestoreResumeReviewResponse, NewResumeItem, ResumeReviewGeneration, ReviewQuestion, SentenceReview,
 )
-from app.prompts import MIXED_ANSWER_RULE, NEW_PROJECT_RULE
+from app.prompts import ANSWER_FLOW_RULE, MIXED_ANSWER_RULE, NEW_PROJECT_RULE
 from app.review_rules import (
     EXPERIENCE_DESCRIPTION, EXPERIENCE_ITEM, EXPERIENCE_SECTION_PATTERN, GENERIC_NAME_TOKENS, ITEM_NAME_KEYS,
     NARRATIVE_FIELD, NEW_PROJECT_NAME_GENERIC, PROJECT_FORM_WORDS, ROLE_EXPANSION_WORDS, SECTION_NAMES,
@@ -24,7 +24,7 @@ from app.job_requirements import (
     mark_requirement_absent, requirements_prompt_text,
 )
 
-PROMPT_VERSION = 'resume-v16t-split-by-item-name'
+PROMPT_VERSION = 'resume-v16w-scope-guard-experience-only'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 
@@ -594,6 +594,11 @@ def without_mentioned_sentences(answers, mentioned_answers, fields):
         return list(answers)
     trimmed = []
     for answer in answers:
+        # 자기소개서·핵심역량은 원래 경험을 가리키며 쓰는 칸이라 다른 항목 이야기를 근거에서 빼지 않는다. 뺐더니 자기소개
+        # 답("사내 규정 챗봇에서 정답률을 62%에서 81%로")으로 만든 자기소개 수정안이 막혔다(2026-09-15 개발용 v16v).
+        if not EXPERIENCE_DESCRIPTION.fullmatch(answer.field_path):
+            trimmed.append(answer)
+            continue
         # mentioned_item_answers와 같은 기준으로 나눈 조각 중, 다른 항목으로 떼어 낸 조각만 뺀다.
         pieces = [piece for sentence in _split_answer_sentences(answer.answer)
                   for piece in _split_by_item_mentions(sentence, fields)]
@@ -623,6 +628,7 @@ def withhold_moved_sentences(generation, answered_paths, mentioned_answers, fiel
         for review in generation.sentence_reviews:
             revision = review.suggested_revision
             if (not revision or review.new_item is not None or review.field_path not in answered_paths
+                    or not EXPERIENCE_DESCRIPTION.fullmatch(review.field_path)
                     or group(review.field_path) == group(mentioned.field_path)):
                 continue
             names_other_item = bool(name) and name in squash(revision) and name not in squash(review.original_quote)
@@ -1273,7 +1279,9 @@ def assign_review_stages(generation, requirement_rows):
 
 def run_review(service, id_token, request):
     # Import here to keep pure helpers independent of model/provider construction.
+    from app.fact_check import add_fact_notices
     from app.resume_review import (
+        add_flow_notices,
         add_pending_repeated_fact_notices,
         add_substantive_answer_fallback,
         extract_review_fields,
@@ -1450,7 +1458,7 @@ def run_review(service, id_token, request):
                     '첫 검토입니다. 이력서 전체와 선택 공고를 비교해 검토하세요.'
                     if not is_focused_followup
                     else '후속 첨삭입니다. 이번 답변의 field_path와 같은 이력서 항목만 수정하세요. '
-                    '다른 항목의 새 진단·수정·질문은 만들지 마세요. ' + MIXED_ANSWER_RULE + ' ' + NEW_PROJECT_RULE
+                    '다른 항목의 새 진단·수정·질문은 만들지 마세요. ' + MIXED_ANSWER_RULE + ' ' + ANSWER_FLOW_RULE + ' ' + NEW_PROJECT_RULE
                 )
             ),
             'review_mode': (
@@ -1514,6 +1522,10 @@ def run_review(service, id_token, request):
         if not is_gap_audit:
             # 같은 응답의 경험 칸 수정안에 들어가는 숫자를 자기소개서에도 옮겨 적었으면 안내한다.
             add_pending_repeated_fact_notices(grounded, fields)
+        if is_focused_followup and not is_gap_audit and not skip_model:
+            # 답을 원문 뒤에 따로 붙인 수정안, 원문 사실이 빠지거나 약해진 수정안에 안내를 붙인다(막지 않는다).
+            add_flow_notices(grounded, turn_answers)
+            add_fact_notices(grounded, turn_answers, getattr(service, '_fact_checker', None), telemetry)
         grounded.sentence_reviews.extend(new_project_reviews)
         if not is_gap_audit:
             apply_selected_job_identity_revisions(

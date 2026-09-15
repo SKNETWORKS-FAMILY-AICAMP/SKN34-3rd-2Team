@@ -24,7 +24,7 @@ from app.service import NUMBER_PATTERN
 from app.technology import comparison_terms, grounding_terms
 from app.review_rules import (
     EXPERIENCE_DESCRIPTION, EXPERIENCE_SECTION_PATTERN, ITEM_NAME_KEYS, NARRATIVE_FIELD, NEGATION, NOT_NEGATION_WORDS,
-    ROLE_EXPANSION_WORDS, SECTION_NAMES, WORK_NEGATION,
+    ABSENCE_STATEMENT, ROLE_EXPANSION_WORDS, SECTION_NAMES, WORK_NEGATION,
 )
 
 # 같은 양을 가리키는 단위 표기. "1.2s"와 "1.2초", "40min"과 "40분"은 같은 사실이다.
@@ -134,6 +134,7 @@ class ResumeReviewService:
         firebase: FirebaseGateway,
         generator: Callable[[dict[str, str]], ResumeReviewGeneration] | None = None,
         requirement_extractor: Callable | None = None,
+        fact_checker: Callable | None = None,
     ) -> None:
         self._settings = settings
         self._firebase = firebase
@@ -143,6 +144,11 @@ class ResumeReviewService:
             from app.job_requirements import build_requirement_extractor
             requirement_extractor = build_requirement_extractor(settings)
         self._requirement_extractor = requirement_extractor
+        # 후속 첨삭 수정안이 원문 사실을 빼거나 약하게 바꿨는지 보는 검사 모델. 가짜 생성기 시험에서는 부르지 않는다.
+        if fact_checker is None and generator is None:
+            from app.fact_check import build_fact_checker
+            fact_checker = build_fact_checker(settings)
+        self._fact_checker = fact_checker
 
     @staticmethod
     def _build_generator(settings: Settings):
@@ -509,6 +515,29 @@ def _cross_field_overlap(field_path: str, original_quote: str, revision: str, fi
 _BEFORE_AFTER = re.compile(r'(\d+(?:[.,]\d+)?)\s*\D{0,3}?\s*(?:에서|→|->|~)\s*(\d+(?:[.,]\d+)?)')
 
 
+_APPENDED_PARAGRAPH = re.compile(r'^\s*(?:또한|그리고|아울러|더불어|이외에도|그\s*외에도|추가로|뿐만\s*아니라)[\s,]')
+
+
+def add_flow_notices(generation, answers) -> None:
+    """답을 원문 뒤에 "또한 …" 문단으로만 덧붙인 후속 첨삭 수정안에 안내를 붙인다. 막지 않는다.
+
+    자기소개서 수정안이 답을 원문 끝에 "또한 …" 별도 문단으로 붙여 앞 문장과 이어지지 않았다(2026-09-15 한 번도 안 본
+    케이스). 원문이 그대로 앞에 남고 뒤에 접속어로 시작하는 새 덩어리만 붙은 경우만 본다.
+    """
+    if not answers:
+        return
+    squash = lambda text: re.sub(r'\s+', '', str(text or ''))  # noqa: E731
+    for review in generation.sentence_reviews:
+        revision, original = review.suggested_revision or '', review.original_quote or ''
+        if not revision or not original or review.new_item is not None:
+            continue
+        if not squash(revision).startswith(squash(original)):
+            continue
+        tail = revision[len(original):] if revision.startswith(original) else revision.split(original.strip()[-8:], 1)[-1]
+        if _APPENDED_PARAGRAPH.match(tail):
+            review.flow_notice = '답변 내용이 원문 뒤에 따로 붙었어요. 앞 문장과 한 흐름으로 이어지는지 확인해 주세요.'
+
+
 def add_pending_repeated_fact_notices(generation, fields) -> None:
     """같은 응답에서 경험 칸에 새로 들어가는 수치가 자기소개서 수정안에도 둘 이상 들어가면 안내를 붙인다.
 
@@ -849,6 +878,8 @@ def ground_sentences(fields, answers, generation, job_text=''):
         item.change_rate_notice = None
         item.overlap_notice = None
         item.meaning_notice = None
+        item.fact_notice = None
+        item.flow_notice = None
         item.new_item = None  # 새 항목 수정안은 서버만 만든다(add_new_project_proposals).
         original = fields.get(item.field_path, "")
         if not item.original_quote.strip() or item.original_quote not in original:
@@ -939,6 +970,8 @@ def ground_sentences(fields, answers, generation, job_text=''):
                 item.validation_issues.append('missing_fact_anchor')
             if role_expansion:
                 item.validation_issues.append('unsupported_role')
+            if ABSENCE_STATEMENT.search(revision) and not ABSENCE_STATEMENT.search(item.original_quote):
+                item.validation_issues.append('absence_written')
             if '[연락처 삭제]' in revision or '[연락처 삭제]' in item.original_quote:
                 item.validation_issues.append('redacted_content')
         if (not item.validation_issues and item.edit_type in _SURFACE_EDITS and revision.strip()
@@ -959,6 +992,9 @@ def ground_sentences(fields, answers, generation, job_text=''):
                 # 표현만 다듬다 부정 표현("않도록" 등)이 흔들린 경우다. 원문은 사용자가 쓴 그대로이고 물을 사실이 없다.
                 # 예전에는 "원문의 수행 여부와 수정안의 의미가 달라질 수 있습니다. 실제 수행 여부를 확인해 주세요."가
                 # 질문으로 떠, 사용자는 무엇을 답할지 몰랐다(2026-09-15 자세한 이력서 목업).
+                item.confirmation_question = None
+            elif 'absence_written' in item.validation_issues:
+                # 해 보지 않았다는 말을 이력서에 적으려던 수정안. 사용자는 이미 답했고 물을 것이 없다.
                 item.confirmation_question = None
             elif 'nominal_field_rewritten' in item.validation_issues:
                 # 짧은 칸에 문장을 쓰려던 수정안. 답할 것이 없으니 묻지 않는다(v16e에서 같은 칸에 질문이 세 턴 이어졌다).

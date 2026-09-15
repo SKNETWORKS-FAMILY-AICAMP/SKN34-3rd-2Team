@@ -56,6 +56,16 @@ def star_action_quote_has_method(quote: str) -> bool:
     return bool(STAR_ACTION_CUE.search(STAR_ROLE_ONLY.sub('', quote)))
 
 
+# 해 보지 않았다는 말. 이력서는 한 일만 적는 문서라 수정안에 새로 들어가면 안 된다(지시문 22번). 답이 "개념만 배웠고
+# 실제로 써 본 적은 없다"였는데 핵심역량 수정안이 원문 문장을 지우고 그 말을 적었다(2026-09-15 한 번도 안 본 케이스).
+# 답에 있는 말을 옮긴 것이라 부정 표현 검사("답변에 있는 표현")를 지나갔다.
+ABSENCE_STATEMENT = re.compile(
+    r'(?:써|사용해|다뤄|적용해|해)\s*본\s*(?:적|경험)(?:은|이|도)?\s*없|경험(?:은|이|도)?\s*없|'
+    r'개념(?:만|\s*위주로)|이론(?:만|으로만)|수업에서만|강의로만|'
+    r'(?:실제로|직접|실무에서)(?:는)?\s*(?:써|사용해|다뤄|적용해)\s*보지\s*(?:는\s*)?(?:않|못)'
+)
+
+
 # 사용자에게 보이는 칸 이름. 내부 경로("coreCompetencies.text")를 문장에 쓰지 않을 때 쓴다.
 SECTION_NAMES = {'coreCompetencies': '핵심역량', 'selfIntroduction': '자기소개서', 'trainingExperience': '교육',
                  'otherActivities': '활동', 'techStack': '기술 스택', 'projects': '프로젝트', 'experience': '경력',

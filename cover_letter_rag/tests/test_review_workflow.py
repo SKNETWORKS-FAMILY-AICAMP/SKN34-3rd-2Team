@@ -834,3 +834,22 @@ def test_one_sentence_about_two_items_is_split_at_the_item_names():
     ground_sentences(fields, mentioned, result)
     assert result.sentence_reviews[0].suggested_revision is None
     assert 'unsupported_number' in result.sentence_reviews[0].validation_issues
+
+
+def test_self_introduction_may_point_to_a_named_project_without_being_withheld():
+    # 자기소개 답에 프로젝트 이름과 성과를 말했더니, 자기소개 수정안이 "다른 항목 이야기"로 막혔다(2026-09-15 개발용 v16v).
+    # 경험 칸끼리 섞이는 것만 막는다. 자기소개서는 경험을 가리키며 쓰는 칸이다.
+    from app.review_workflow import withhold_moved_sentences, without_mentioned_sentences, mentioned_item_answers
+    fields = {'projects[0].name': '사내 규정 질의응답 챗봇', 'projects[0].description': 'RAG 챗봇 개발에 참여했습니다.',
+              'selfIntroduction.intro.body': '생성형 AI로 불편을 해결하는 개발자입니다.'}
+    refs = {path: f'ref:{path}' for path in fields}
+    answer = ConfirmationAnswer(question_id='q1', field_path='selfIntroduction.intro.body', question='q',
+                                answer='사내 규정 질의응답 챗봇에서 청크를 조항 단위로 바꿔 정답률을 62%에서 81%로 높였습니다.')
+    mentioned = mentioned_item_answers([answer], fields, refs, {'item_refs': refs})
+    assert [a.field_path for a in mentioned] == ['projects[0].description']
+    assert without_mentioned_sentences([answer], mentioned, fields) == [answer], '자기소개 근거에서는 빼지 않는다'
+    generation = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path='selfIntroduction.intro.body', original_quote=fields['selfIntroduction.intro.body'], reason='r',
+        status='improved', suggested_revision='사내 규정 질의응답 챗봇에서 정답률을 62%에서 81%로 높인 경험으로, 생성형 AI로 불편을 해결하는 개발자입니다.')])
+    withhold_moved_sentences(generation, {'selfIntroduction.intro.body'}, mentioned, fields)
+    assert generation.sentence_reviews[0].suggested_revision

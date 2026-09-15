@@ -277,6 +277,10 @@ class SentenceReview(StrictModel):
     overlap_notice: str | None = None
     # 서버가 채운다. 원문의 바람·목적 부정 표현("불편을 겪지 않는")이 수정안에서 빠졌을 때의 안내. 막지 않고 알린다.
     meaning_notice: SkipJsonSchema[str | None] = None
+    # 서버가 채운다. 원문에 한 일·결과로 적힌 사실이 수정안에서 빠지거나 약해졌을 때의 안내(검사 모델 판단). 막지 않는다.
+    fact_notice: SkipJsonSchema[str | None] = None
+    # 서버가 채운다. 답을 원문 뒤에 "또한 …" 별도 문단으로만 덧붙인 수정안의 안내. 막지 않는다.
+    flow_notice: SkipJsonSchema[str | None] = None
     # 서버가 채운다. 기존 칸을 고치는 대신 새 항목을 추가하는 수정안이면 그 항목. field_path는 추가될 자리다.
     # 모델 출력 스키마에서는 뺀다(모델이 채울 칸이 아니고, 첫 첨삭마다 스키마만 길어진다).
     new_item: SkipJsonSchema[NewResumeItem | None] = None
@@ -428,6 +432,11 @@ class StarJudgementOut(StrictModel):
     task_quote: str | None = Field(default=None, description="맡은 역할·목표가 적힌 원문 인용. 없으면 null")
     action_quote: str | None = Field(default=None, description="본인이 직접 한 구체적 방법이 적힌 원문 인용. 없으면 null")
     result_quote: str | None = Field(default=None, description="결과·변화·확인한 내용이 적힌 원문 인용. 없으면 null")
+    result_kind: Literal['metric_change', 'state_change', 'verification', 'recognition', 'activity', 'learning', 'plan'] | None = Field(
+        default=None,
+        description="result_quote의 종류. metric_change 수치 변화, state_change 문제 해결·상태 변화, verification 검증·확인 결과, "
+                    "recognition 수상·선정·합격·병합, activity 한 일만 적음, learning 배운 점·깨달음, plan 목표·계획. 인용이 없으면 null",
+    )
     missing_reason: str = Field(default='', description="빠진 요소가 있으면 무엇이 왜 빠졌는지 한 문장. 사용자에게 보인다")
 
 
