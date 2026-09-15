@@ -5,11 +5,10 @@
 > 플레이데이터 부트캠프 **LMS를 LXP(Learning Experience Platform)로 전환**한 프로젝트.  
 > 기수 운영(출결·승인·CMS)은 유지하고, 학습자 경험은 **내외부 문서 RAG + 개인화 AI**로 확장한다.
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.12+-0055FF?logo=flutter&logoColor=white)](https://flutter.dev)
-[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Functions-FFCA28?logo=firebase&logoColor=111)](https://firebase.google.com)
-[![LangGraph](https://img.shields.io/badge/LangGraph-RAG-00C2D4)](https://github.com/langchain-ai/langgraph)
-[![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-7B5CFF)](https://www.pinecone.io)
-
+[![Flutter](https://img.shields.io/badge/Flutter-3.12+-white?style=for-the-badge&logo=flutter&logoColor=white&labelColor=0175C2&color=42A5F5)](https://flutter.dev)
+[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Functions-111?style=for-the-badge&logo=firebase&logoColor=111&labelColor=FFCA28&color=FFA000)](https://firebase.google.com)
+[![LangGraph](https://img.shields.io/badge/LangGraph-RAG-white?style=for-the-badge&logo=langchain&logoColor=white&labelColor=1C3C3C&color=00C2D4)](https://github.com/langchain-ai/langgraph)
+[![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-white?style=for-the-badge&logo=pinecone&logoColor=white&labelColor=000000&color=7B5CFF)](https://www.pinecone.io)
 | 항목 | 내용 |
 | --- | --- |
 | 과정 | SK네트웍스 Family AI 캠프 34기 |
