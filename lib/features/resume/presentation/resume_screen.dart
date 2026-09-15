@@ -79,6 +79,9 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
       ? _ResumeFilter.requested
       : _ResumeFilter.all;
 
+  // 기본 이력서 아래 공고별 맞춤 이력서 목록을 펼쳤는가. 처음에는 접어 둔다.
+  bool _tailoredExpanded = false;
+
   bool _matches(ResumeModel r) => switch (_filter) {
     _ResumeFilter.all => true,
     _ResumeFilter.writing => !r.isFeedbackRequested && !r.isApproved,
@@ -149,8 +152,48 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
           ),
       ];
     } else {
-      final others = shown.where((r) => !r.isBaseResume).toList();
+      // 공고별 맞춤 이력서는 만든 원본 이력서 밑에 묶어 보인다. 첨삭을 끝내 편집기로 옮긴 사본도 일반
+      // 이력서 문서라 예전에는 "다른 이력서" 표에 따로 한 줄씩 더 나왔다.
+      // - 지금 기본 이력서에서 만든 것: 기본 이력서 카드 밑.
+      // - 기본 이력서를 바꾸기 전 원본에서 만든 것: 표의 그 원본 줄을 누르면 밑으로 펼친다(2026-09-15 앱).
+      // - 원본이 지워졌거나 이 탭에 안 보이면: 찾을 길이 없어지므로 표에 한 줄로 남긴다.
+      // 피드백 요청·승인 탭은 상태로 고르는 곳이라 사본도 표에 그대로 둔다.
+      final groupTailored =
+          baseResume != null &&
+          (_filter == _ResumeFilter.all || _filter == _ResumeFilter.writing);
+      bool isTailoredCopy(ResumeModel r) => r.sourceTailoredResumeId.isNotEmpty;
+      final tableParents = {
+        for (final r in shown)
+          if (!r.isBaseResume && !isTailoredCopy(r)) r.id,
+      };
+      final copiesByOrigin = <String, List<ResumeModel>>{};
+      if (groupTailored) {
+        for (final r in shown) {
+          if (isTailoredCopy(r) && tableParents.contains(r.baseResumeId)) {
+            copiesByOrigin.putIfAbsent(r.baseResumeId, () => []).add(r);
+          }
+        }
+      }
+      bool nested(ResumeModel r) =>
+          groupTailored &&
+          isTailoredCopy(r) &&
+          (r.baseResumeId == baseResume.id ||
+              copiesByOrigin.containsKey(r.baseResumeId));
+      final others = shown.where((r) => !r.isBaseResume && !nested(r)).toList();
       final showBase = baseResume != null && _matches(baseResume);
+      void toggleTailored() =>
+          setState(() => _tailoredExpanded = !_tailoredExpanded);
+      final tailoredList = groupTailored
+          ? _TailoredResumeList(
+              baseResume: baseResume,
+              workspaceResumes: [
+                for (final r in resumes)
+                  if (isTailoredCopy(r) && r.baseResumeId == baseResume.id) r,
+              ],
+              expanded: _tailoredExpanded || !showBase,
+              onToggle: showBase ? toggleTailored : null,
+            )
+          : null;
       content = [
         if (baseResume == null && _filter == _ResumeFilter.all)
           _BaseResumeEmptyCard(
@@ -160,13 +203,12 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
           _BaseResumeCard(
             resume: baseResume,
             onChangeBase: () => _registerBaseResume(context, ref, resumes),
-          ),
-        if (baseResume != null &&
-            (_filter == _ResumeFilter.all ||
-                _filter == _ResumeFilter.writing)) ...[
-          SizedBox(height: AppSpace.s(14)),
-          _TailoredResumeList(baseResume: baseResume),
-        ],
+            tailored: tailoredList,
+            onToggleTailored: tailoredList == null ? null : toggleTailored,
+          )
+        else if (tailoredList != null)
+          // 기본 이력서가 이 탭에 안 맞으면 맞춤 이력서만 펼친 채 따로 보인다.
+          AppSectionCard(padding: EdgeInsets.zero, child: tailoredList),
         if (others.isNotEmpty) ...[
           if (showBase || baseResume == null && _filter == _ResumeFilter.all)
             SizedBox(height: AppSpace.s(14)),
@@ -175,6 +217,7 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
             child: _StudentTable(
               title: baseResume == null ? '이력서' : '다른 이력서',
               resumes: others,
+              copiesByOrigin: copiesByOrigin,
             ),
           ),
         ],
@@ -694,10 +737,19 @@ class _BaseResumeEmptyCard extends StatelessWidget {
 
 /// 기본 이력서. 첨삭·추천이 이 이력서를 쓰므로 맨 위에 따로 둔다.
 class _BaseResumeCard extends ConsumerWidget {
-  const _BaseResumeCard({required this.resume, required this.onChangeBase});
+  const _BaseResumeCard({
+    required this.resume,
+    required this.onChangeBase,
+    this.tailored,
+    this.onToggleTailored,
+  });
 
   final ResumeModel resume;
   final VoidCallback onChangeBase;
+
+  /// 카드 맨 아래에 붙는 공고별 맞춤 이력서 목록. 카드 윗부분을 누르면 [onToggleTailored]로 펼치고 접는다.
+  final Widget? tailored;
+  final VoidCallback? onToggleTailored;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -788,30 +840,33 @@ class _BaseResumeCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              AppSpace.s(20),
-              AppSpace.s(18),
-              AppSpace.s(12),
-              AppSpace.s(16),
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) => constraints.maxWidth >= 560
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: head),
-                        actions,
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        head,
-                        SizedBox(height: AppSpace.s(10)),
-                        actions,
-                      ],
-                    ),
+          InkWell(
+            onTap: onToggleTailored,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpace.s(20),
+                AppSpace.s(18),
+                AppSpace.s(12),
+                AppSpace.s(16),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) => constraints.maxWidth >= 560
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: head),
+                          actions,
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          head,
+                          SizedBox(height: AppSpace.s(10)),
+                          actions,
+                        ],
+                      ),
+              ),
             ),
           ),
           Divider(height: 1, color: AppColors.divider),
@@ -897,6 +952,10 @@ class _BaseResumeCard extends ConsumerWidget {
               ],
             ),
           ),
+          if (tailored != null) ...[
+            Divider(height: 1, color: AppColors.divider),
+            tailored!,
+          ],
         ],
       ),
     );
@@ -905,10 +964,24 @@ class _BaseResumeCard extends ConsumerWidget {
 
 /// 기본 이력서에서 갈라진 공고별 사본. 서버가 가진 고정 ID를 사용하므로
 /// 같은 공고를 다시 열어도 사본과 AI 첨삭 진행 상태가 중복 생성되지 않는다.
+///
+/// 기본 이력서 카드 안에 붙어 펼치고 접힌다. 첨삭을 끝내 편집기로 옮긴 사본([workspaceResumes])의 작성 상태도
+/// 같은 줄에 보인다. 예전에는 사본이 "다른 이력서" 표에 따로 한 줄씩 더 나왔다.
 class _TailoredResumeList extends ConsumerStatefulWidget {
-  const _TailoredResumeList({required this.baseResume});
+  const _TailoredResumeList({
+    required this.baseResume,
+    required this.workspaceResumes,
+    required this.expanded,
+    this.onToggle,
+  });
 
   final ResumeModel baseResume;
+  final List<ResumeModel> workspaceResumes;
+
+  final bool expanded;
+
+  /// 없으면 늘 펼친 채 보인다(접는 줄을 누를 수 없다).
+  final VoidCallback? onToggle;
 
   @override
   ConsumerState<_TailoredResumeList> createState() =>
@@ -1051,95 +1124,232 @@ class _TailoredResumeListState extends ConsumerState<_TailoredResumeList> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      FutureBuilder<List<Map<String, dynamic>>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const AppSectionCard(
-              child: LinearProgressIndicator(minHeight: 2),
-            );
-          }
-          if (snapshot.hasError) {
-            return AppSectionCard(
-              child: Text(
-                '맞춤 이력서를 불러오지 못했습니다.',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-            );
-          }
-          final items = snapshot.data ?? const [];
-          if (items.isEmpty) {
-            return AppSectionCard(
-              child: Text(
-                '공고를 선택해 맞춤 첨삭을 시작하면 회사별 이력서가 여기에 저장됩니다.',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-            );
-          }
-          return AppSectionCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpace.s(20),
-                    AppSpace.s(14),
-                    AppSpace.s(20),
-                    AppSpace.s(8),
-                  ),
-                  child: const Text(
-                    '공고별 맞춤 이력서',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                for (final item in items) ...[
-                  Divider(height: 1, color: AppColors.divider),
-                  ListTile(
-                    onTap: () => _open(item),
-                    title: Text(
-                      item['title'] as String? ?? '맞춤 이력서',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      item['job_title'] as String? ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _TailoredProgressBadge(
+  Widget build(
+    BuildContext context,
+  ) => FutureBuilder<List<Map<String, dynamic>>>(
+    future: _future,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return _header(count: null, completed: 0);
+      }
+      if (snapshot.hasError) {
+        return _note('맞춤 이력서를 불러오지 못했습니다.');
+      }
+      final items = snapshot.data ?? const [];
+      final workspaceById = {
+        for (final resume in widget.workspaceResumes) resume.id: resume,
+      };
+      final linked = {
+        for (final item in items) item['workspace_resume_id'] as String? ?? '',
+      };
+      // 목록에는 없는데 사본만 남은 이력서. 여기서 안 보이면 찾을 길이 없으니 편집기로 여는 줄로 붙인다.
+      final orphans = [
+        for (final resume in widget.workspaceResumes)
+          if (!linked.contains(resume.id)) resume,
+      ];
+      final total = items.length + orphans.length;
+      if (total == 0) {
+        return _note('공고를 선택해 맞춤 첨삭을 시작하면 회사별 이력서가 여기에 저장됩니다.');
+      }
+      // 사본만 남은 이력서는 첨삭을 끝내야 만들어지므로 완료로 센다.
+      final completed =
+          items.where((item) => item['review_progress'] == 'completed').length +
+          orphans.length;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(count: total, completed: completed),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: !widget.expanded
+                ? const SizedBox(width: double.infinity)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final item in items)
+                        _row(
+                          title: item['title'] as String? ?? '맞춤 이력서',
+                          subtitle: item['job_title'] as String? ?? '',
+                          workspace: workspaceById[item['workspace_resume_id']],
                           progress:
                               item['review_progress'] as String? ??
                               'not_started',
+                          onTap: () => _open(item),
+                          deleting: _deletingId == item['tailored_resume_id'],
+                          onDelete: () => _delete(item),
                         ),
-                        SizedBox(width: AppSpace.s(8)),
-                        IconButton(
-                          tooltip: '맞춤 이력서 삭제',
-                          onPressed: _deletingId == item['tailored_resume_id']
-                              ? null
-                              : () => _delete(item),
-                          icon: _deletingId == item['tailored_resume_id']
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.delete_outline),
+                      for (final resume in orphans)
+                        _row(
+                          title: resume.title,
+                          subtitle: '',
+                          workspace: resume,
+                          progress: 'completed',
+                          onTap: () => _openResume(context, ref, resume),
                         ),
-                        const Icon(Icons.chevron_right),
-                      ],
-                    ),
+                    ],
                   ),
-                ],
-              ],
-            ),
-          );
-        },
+          ),
+        ],
       );
+    },
+  );
+
+  Widget _note(String text) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      AppSpace.s(20),
+      AppSpace.s(14),
+      AppSpace.s(20),
+      AppSpace.s(14),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+    ),
+  );
+
+  /// "공고별 맞춤 이력서  3개 · 첨삭 완료 1  ⌄". [count]가 null이면 불러오는 중.
+  Widget _header({required int? count, required int completed}) {
+    final row = Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpace.s(20),
+        AppSpace.s(12),
+        AppSpace.s(16),
+        AppSpace.s(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.work_outline, size: 16, color: AppColors.primary),
+          SizedBox(width: AppSpace.s(8)),
+          const Text(
+            '공고별 맞춤 이력서',
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(width: AppSpace.s(8)),
+          if (count == null)
+            const SizedBox.square(
+              dimension: 12,
+              child: CircularProgressIndicator(strokeWidth: 1.6),
+            )
+          else
+            Flexible(
+              child: Text(
+                completed > 0 ? '$count개 · 첨삭 완료 $completed' : '$count개',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          const Spacer(),
+          if (widget.onToggle != null && count != null)
+            AnimatedRotation(
+              turns: widget.expanded ? 0.5 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: Icon(Icons.expand_more, color: AppColors.textSecondary),
+            ),
+        ],
+      ),
+    );
+    if (widget.onToggle == null || count == null) return row;
+    return Semantics(
+      button: true,
+      expanded: widget.expanded,
+      child: InkWell(
+        key: const ValueKey('tailored-resume-toggle'),
+        onTap: widget.onToggle,
+        child: row,
+      ),
+    );
+  }
+
+  Widget _row({
+    required String title,
+    required String subtitle,
+    required ResumeModel? workspace,
+    required String progress,
+    required VoidCallback onTap,
+    bool deleting = false,
+    VoidCallback? onDelete,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Divider(height: 1, indent: AppSpace.s(20), color: AppColors.divider),
+      InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.s(24),
+            AppSpace.s(10),
+            AppSpace.s(8),
+            AppSpace.s(10),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.subdirectory_arrow_right,
+                size: 18,
+                color: AppColors.textHint,
+              ),
+              SizedBox(width: AppSpace.s(10)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      SizedBox(height: AppSpace.s(2)),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              SizedBox(width: AppSpace.s(8)),
+              _TailoredProgressBadge(progress: progress),
+              // 편집기로 옮긴 사본이면 그 이력서의 작성 상태(작성 중·피드백 요청·승인)도 보인다.
+              if (workspace != null) ...[
+                SizedBox(width: AppSpace.s(6)),
+                _statusBadge(workspace),
+              ],
+              if (onDelete != null)
+                IconButton(
+                  tooltip: '맞춤 이력서 삭제',
+                  onPressed: deleting ? null : onDelete,
+                  icon: deleting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline),
+                )
+              else
+                SizedBox(width: AppSpace.s(40)),
+              Icon(Icons.chevron_right, color: AppColors.textHint),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class _TailoredProgressBadge extends StatelessWidget {
@@ -1176,134 +1386,268 @@ class _TailoredProgressBadge extends StatelessWidget {
 }
 
 /// 기본 이력서가 아닌 이력서들. 한 이력서를 한 줄로 본다.
-class _StudentTable extends ConsumerWidget {
-  const _StudentTable({required this.title, required this.resumes});
+///
+/// 이 이력서로 만든 공고별 맞춤 이력서([copiesByOrigin])가 있으면 줄을 눌러 바로 밑에 좁은 줄로 펼친다.
+/// 이 줄 자체는 ⋯ 메뉴의 "열기"로 연다.
+class _StudentTable extends ConsumerStatefulWidget {
+  const _StudentTable({
+    required this.title,
+    required this.resumes,
+    this.copiesByOrigin = const {},
+  });
 
   final String title;
   final List<ResumeModel> resumes;
 
-  static const _flex = [3, 2, 2, 3, 2, 1];
+  /// 원본 이력서 ID → 그 이력서로 만든 맞춤 이력서.
+  final Map<String, List<ResumeModel>> copiesByOrigin;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    Widget menu(ResumeModel resume) => PopupMenuButton<String>(
-      tooltip: '이력서 메뉴',
-      icon: Icon(Icons.more_horiz, color: AppColors.textSecondary),
-      onSelected: (value) {
-        if (value == 'open') _openResume(context, ref, resume);
-        if (value == 'delete') {
-          ref
-              .read(lmsRepositoryProvider)
-              .deleteResume(ref.read(effectiveCohortIdProvider)!, resume.id);
-        }
-      },
-      itemBuilder: (_) => [
-        const PopupMenuItem(value: 'open', child: Text('열기')),
-        // 승인된 이력서와 기본 이력서는 지우지 않는다. 예전 카드의 휴지통 조건과 같다.
-        if (!resume.isApproved && !resume.isBaseResume)
-          PopupMenuItem(
-            value: 'delete',
-            child: Text('삭제', style: TextStyle(color: AppColors.error)),
-          ),
-      ],
-    );
+  ConsumerState<_StudentTable> createState() => _StudentTableState();
+}
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= _kStudentTableMinWidth;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpace.s(20),
-                AppSpace.s(14),
-                AppSpace.s(20),
-                wide ? 0 : AppSpace.s(6),
-              ),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
+class _StudentTableState extends ConsumerState<_StudentTable> {
+  static const _flex = [3, 2, 2, 3, 2, 1];
+
+  final _expanded = <String>{};
+
+  void _toggle(String id) => setState(() {
+    if (!_expanded.remove(id)) _expanded.add(id);
+  });
+
+  Widget _menu(ResumeModel resume) => PopupMenuButton<String>(
+    tooltip: '이력서 메뉴',
+    icon: Icon(Icons.more_horiz, color: AppColors.textSecondary),
+    onSelected: (value) {
+      if (value == 'open') _openResume(context, ref, resume);
+      if (value == 'delete') {
+        ref
+            .read(lmsRepositoryProvider)
+            .deleteResume(ref.read(effectiveCohortIdProvider)!, resume.id);
+      }
+    },
+    itemBuilder: (_) => [
+      const PopupMenuItem(value: 'open', child: Text('열기')),
+      // 승인된 이력서와 기본 이력서는 지우지 않는다. 예전 카드의 휴지통 조건과 같다.
+      if (!resume.isApproved && !resume.isBaseResume)
+        PopupMenuItem(
+          value: 'delete',
+          child: Text('삭제', style: TextStyle(color: AppColors.error)),
+        ),
+    ],
+  );
+
+  /// 제목 옆 "맞춤 3 ⌄". 펼칠 것이 없으면 제목만.
+  Widget _title(ResumeModel resume, int copies) {
+    final text = Text(
+      resume.title,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+    );
+    if (copies == 0) return text;
+    final open = _expanded.contains(resume.id);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: text),
+        SizedBox(width: AppSpace.s(8)),
+        Container(
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.s(7),
+            AppSpace.s(2),
+            AppSpace.s(3),
+            AppSpace.s(2),
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight,
+            borderRadius: BorderRadius.circular(99),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '맞춤 $copies',
+                style: TextStyle(
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
                 ),
               ),
+              AnimatedRotation(
+                turns: open ? 0.5 : 0,
+                duration: const Duration(milliseconds: 160),
+                child: Icon(
+                  Icons.expand_more,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 펼친 맞춤 이력서 한 줄. 표 칸에 맞추되 위아래를 좁게 하고 제목 앞에 ↳를 붙인다.
+  Widget _copyRow(ResumeModel copy, bool wide) {
+    final title = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(width: AppSpace.s(6)),
+        Icon(
+          Icons.subdirectory_arrow_right,
+          size: 16,
+          color: AppColors.textHint,
+        ),
+        SizedBox(width: AppSpace.s(6)),
+        Flexible(
+          child: Text(
+            copy.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
+    );
+    if (wide) {
+      return _TableRow(
+        flex: _flex,
+        vertical: 3,
+        onTap: () => _openResume(context, ref, copy),
+        cells: [
+          title,
+          _statusBadge(copy),
+          _SectionProgress(resume: copy),
+          _FeedbackSummary(resume: copy, asReviewer: false),
+          _dateText(copy),
+          _menu(copy),
+        ],
+      );
+    }
+    return InkWell(
+      onTap: () => _openResume(context, ref, copy),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpace.s(20),
+          AppSpace.s(2),
+          AppSpace.s(8),
+          AppSpace.s(2),
+        ),
+        child: Row(
+          children: [
+            Expanded(child: title),
+            SizedBox(width: AppSpace.s(8)),
+            _statusBadge(copy),
+            _menu(copy),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dateText(ResumeModel resume) => Text(
+    resume.updatedAt == null
+        ? '—'
+        : AppDateUtils.formatDisplay(resume.updatedAt!),
+    style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+  );
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final wide = constraints.maxWidth >= _kStudentTableMinWidth;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpace.s(20),
+              AppSpace.s(14),
+              AppSpace.s(20),
+              wide ? 0 : AppSpace.s(6),
             ),
+            child: Text(
+              widget.title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (wide)
+            _TableRow(
+              flex: _flex,
+              vertical: 8,
+              cells: [
+                _headerText('제목'),
+                _headerText('상태'),
+                _headerText('채운 섹션'),
+                _headerText('피드백'),
+                _headerText('수정일'),
+                const SizedBox.shrink(),
+              ],
+            ),
+          for (final resume in widget.resumes) ...[
+            Divider(height: 1, color: AppColors.divider),
             if (wide)
               _TableRow(
                 flex: _flex,
-                vertical: 8,
+                onTap: _tapFor(resume),
                 cells: [
-                  _headerText('제목'),
-                  _headerText('상태'),
-                  _headerText('채운 섹션'),
-                  _headerText('피드백'),
-                  _headerText('수정일'),
-                  const SizedBox.shrink(),
+                  _title(resume, _copiesOf(resume).length),
+                  _statusBadge(resume),
+                  _SectionProgress(resume: resume),
+                  _FeedbackSummary(resume: resume, asReviewer: false),
+                  _dateText(resume),
+                  _menu(resume),
                 ],
-              ),
-            for (final resume in resumes) ...[
-              Divider(height: 1, color: AppColors.divider),
-              if (wide)
-                _TableRow(
-                  flex: _flex,
-                  onTap: () => _openResume(context, ref, resume),
-                  cells: [
-                    Text(
-                      resume.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    _statusBadge(resume),
-                    _SectionProgress(resume: resume),
-                    _FeedbackSummary(resume: resume, asReviewer: false),
-                    Text(
-                      resume.updatedAt == null
-                          ? '—'
-                          : AppDateUtils.formatDisplay(resume.updatedAt!),
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    menu(resume),
-                  ],
-                )
-              else
-                _NarrowRow(
-                  onTap: () => _openResume(context, ref, resume),
-                  title: Text(
-                    resume.title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+              )
+            else
+              _NarrowRow(
+                onTap: _tapFor(resume),
+                title: _title(resume, _copiesOf(resume).length),
+                details: [
+                  (child: _statusBadge(resume), width: 104),
+                  (child: _labeled('수정', _dateValue(resume)), width: 130),
+                  (
+                    child: _labeled('섹션', _SectionProgress(resume: resume)),
+                    width: 150,
                   ),
-                  details: [
-                    (child: _statusBadge(resume), width: 104),
-                    (child: _labeled('수정', _dateValue(resume)), width: 130),
-                    (
-                      child: _labeled('섹션', _SectionProgress(resume: resume)),
-                      width: 150,
-                    ),
-                    (
-                      child: _FeedbackSummary(
-                        resume: resume,
-                        asReviewer: false,
+                  (
+                    child: _FeedbackSummary(resume: resume, asReviewer: false),
+                    width: null,
+                  ),
+                ],
+                trailing: _menu(resume),
+              ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              alignment: Alignment.topCenter,
+              child: _expanded.contains(resume.id)
+                  ? Padding(
+                      padding: EdgeInsets.only(bottom: AppSpace.s(6)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final copy in _copiesOf(resume))
+                            _copyRow(copy, wide),
+                        ],
                       ),
-                      width: null,
-                    ),
-                  ],
-                  trailing: menu(resume),
-                ),
-            ],
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
           ],
-        );
-      },
-    );
-  }
+        ],
+      );
+    },
+  );
+
+  List<ResumeModel> _copiesOf(ResumeModel resume) =>
+      widget.copiesByOrigin[resume.id] ?? const [];
+
+  /// 맞춤 이력서가 딸린 줄은 눌러서 펼치고, 아니면 연다.
+  VoidCallback _tapFor(ResumeModel resume) => _copiesOf(resume).isEmpty
+      ? () => _openResume(context, ref, resume)
+      : () => _toggle(resume.id);
 }
 
 /// 좁은 화면의 세부 항목 하나. [width]가 있으면 그 폭을 차지해 줄끼리 세로로 맞는다.
