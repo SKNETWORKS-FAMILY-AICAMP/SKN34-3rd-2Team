@@ -159,6 +159,12 @@ powershell -ExecutionPolicy Bypass -File scripts\sync-functions-env.ps1
 
 > 루트 `.env`가 유일한 수동 설정 파일입니다. `functions/.env`는 배포 전 동기화 스크립트가 만드는 복사본이며 직접 수정하지 않습니다. `.env` 파일은 Git에 올라가지 않습니다. 팀 리더에게 값을 받으세요.
 
+학생 챗봇 프롬프트 버전은 `LMS_CHATBOT_PROMPT_VERSION`(기본 `student_chatbot_v2`)입니다. 라우팅 평가 요약을 관리자 LLMOps 화면에 올리려면 명시적으로 `--publish`를 붙입니다.
+
+```powershell
+.\playdata_venv\Scripts\python.exe -m chatbot_lab.evaluate_supervisor --production --publish
+```
+
 ### Functions 배포 (Blaze 플랜 필요)
 
 ```powershell
@@ -382,22 +388,18 @@ SKN34-3rd-2Team/
 강사가 구글시트를 CSV로 내려받아 업로드하면, 일수 구간을 골라 AI가 객관식/단답 초안을 만듭니다.
 Google Sheets API / Notion Integration은 사용하지 않습니다.
 
-### 1) OpenAI API 키 (루트 `.env`)
+### 1) OpenAI API 키 (Secret Manager)
+
+문항 생성은 **배포된 Cloud Functions**가 합니다. Functions는 루트 `.env`를 읽지 않고 Secret Manager 값을 씁니다. 공지 벡터 적재(`syncNoticeVector`)도 같은 Secret을 씁니다.
 
 ```powershell
-copy .env.example .env
-# OPENAI_API_KEY=sk-... 입력 (Git에 올리지 말 것)
-powershell -ExecutionPolicy Bypass -File scripts\sync-functions-env.ps1
+firebase functions:secrets:set OPENAI_API_KEY
+firebase deploy --only functions:generateAssessmentQuestions,functions:syncNoticeVector
 ```
 
-앱은 **배포된 Cloud Functions**를 호출합니다. `.env`는 Flutter `R`로는 안 먹고, 아래처럼 Functions를 다시 배포해야 반영됩니다.
+`OPENAI_API_KEY`를 `functions/.env`에 넣지 마세요. Secret과 일반 환경변수에 같은 이름이 있으면 배포가 400으로 실패합니다. `scripts/sync-functions-env.ps1`는 이 키를 자동으로 제외합니다.
 
-```powershell
-cd functions
-npm run build
-cd ..
-firebase deploy --only functions
-```
+Secret 값을 바꿨을 때도 위 배포를 다시 해야 반영됩니다. Flutter `R`만으로는 안 됩니다.
 
 CSV 업로드 permission-denied 가 나면 rules도 배포:
 
@@ -446,8 +448,8 @@ python -m uvicorn job_matching_bot.api.main:app --host 127.0.0.1 --port 8000
 python -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1 --port 8000
 ```
 
-`http://127.0.0.1:8000/health` 가 `{"status":"ok", ...}` 를 주면 됩니다. Pinecone·OpenAI 키는
-루트 `.env`에서 읽습니다. Functions 배포 전에는 `scripts/sync-functions-env.ps1`로 생성된 `functions/.env`가 사용됩니다.
+`http://127.0.0.1:8000/health` 가 `{"status":"ok", ...}` 를 주면 됩니다. 로컬 8000 서버는 Pinecone·OpenAI 키를
+루트 `.env`에서 읽습니다. Cloud Functions는 `.env`가 아니라 Secret Manager(`OPENAI_API_KEY`, `PINECONE_API_KEY2`)를 읽으므로, 팀원 각자 로컬 `.env`를 채우는 것과 별개로 프로젝트에 Secret이 한 번 등록돼 있어야 합니다.
 
 공부방(수업 노트 생성)도 이 통합 서버가 담당합니다. 관리자가 기수별 GitHub 주소를 등록하면
 서버가 `git clone`으로 자료를 읽고 AI 노트를 만듭니다. GitHub 토큰은 공개 저장소에 필요 없습니다.

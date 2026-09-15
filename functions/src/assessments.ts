@@ -1,4 +1,5 @@
 import {onCall, HttpsError, type CallableRequest} from "firebase-functions/v2/https";
+import {defineSecret} from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 
 import {db, ensureInitialized, fieldValue} from "./firebase";
@@ -10,6 +11,8 @@ import {
   buildAssessmentUserPrompt,
   type ReplaceHint,
 } from "./ai/assessmentPrompt";
+
+const openaiApiKey = defineSecret("OPENAI_API_KEY");
 
 const callOptions = {
   region: "asia-northeast3" as const,
@@ -595,14 +598,13 @@ export const adjustAssessmentScores = onCall(callOptions, async (request) => {
 });
 
 function resolveOpenaiApiKey(): string {
-  // 루트 .env를 동기화해 생성한 functions/.env → firebase deploy 시 환경변수로 주입됨
-  const fromEnv = process.env.OPENAI_API_KEY?.trim();
-  if (fromEnv) return fromEnv;
+  const fromSecret = openaiApiKey.value().trim();
+  if (fromSecret) return fromSecret;
 
   throw new HttpsError(
     "failed-precondition",
-    "OPENAI_API_KEY가 없습니다. 루트 .env에 OPENAI_API_KEY=... 를 넣고 동기화한 뒤 " +
-      "firebase deploy --only functions 로 배포하세요. (Flutter R만으로는 반영되지 않습니다)",
+    "OPENAI_API_KEY Secret이 없습니다. firebase functions:secrets:set OPENAI_API_KEY 후 " +
+      "firebase deploy --only functions:generateAssessmentQuestions 로 배포하세요.",
   );
 }
 
@@ -632,6 +634,7 @@ export const generateAssessmentQuestions = onCall(
     memory: "512MiB",
     cpu: 1,
     concurrency: 1,
+    secrets: [openaiApiKey],
   },
   async (request) => {
     try {

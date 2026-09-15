@@ -10,6 +10,7 @@ void main() {
       expect(AiOpsTypes.label(AiOpsTypes.jobRecommend), '추천');
       expect(AiOpsTypes.label(AiOpsTypes.resumeReview), '첨삭');
       expect(AiOpsTypes.label(AiOpsTypes.assessmentQuestions), '문제생성');
+      expect(AiOpsTypes.label(AiOpsTypes.studentChatbot), '학생챗봇');
     });
 
     test('usefulness by type', () {
@@ -46,6 +47,20 @@ void main() {
         AiOpsOutcomes.isUseful(
           AiOpsTypes.assessmentQuestions,
           AiOpsOutcomes.discarded,
+        ),
+        isFalse,
+      );
+      expect(
+        AiOpsOutcomes.isUseful(
+          AiOpsTypes.studentChatbot,
+          AiOpsOutcomes.helpful,
+        ),
+        isTrue,
+      );
+      expect(
+        AiOpsOutcomes.isUseful(
+          AiOpsTypes.studentChatbot,
+          AiOpsOutcomes.notHelpful,
         ),
         isFalse,
       );
@@ -87,9 +102,14 @@ void main() {
       final logs = [
         log(AiOpsTypes.jobChat),
         log(AiOpsTypes.jobRecommend),
+        log(AiOpsTypes.studentChatbot),
       ];
       expect(filterLogsByType(logs, AiOpsTypes.jobChat).single.type,
           AiOpsTypes.jobChat);
+      expect(
+        filterLogsByType(logs, AiOpsTypes.studentChatbot).single.type,
+        AiOpsTypes.studentChatbot,
+      );
     });
   });
 }

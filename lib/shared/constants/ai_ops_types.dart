@@ -5,6 +5,7 @@ abstract final class AiOpsTypes {
   static const jobChat = 'job_chat';
   static const jobRecommend = 'job_recommend';
   static const resumeReview = 'resume_review';
+  static const studentChatbot = 'student_chatbot';
 
   static const coachTypes = {jobChat, jobRecommend, resumeReview};
   static const assessmentTypes = {
@@ -17,6 +18,7 @@ abstract final class AiOpsTypes {
     jobChat => '공고챗봇',
     jobRecommend => '추천',
     resumeReview => '첨삭',
+    studentChatbot => '학생챗봇',
     _ => type,
   };
 }
@@ -39,6 +41,9 @@ abstract final class AiOpsOutcomes {
   static const partialApply = 'partial_apply';
   static const undone = 'undone';
   static const abandoned = 'abandoned';
+  // student_chatbot
+  static const helpful = 'helpful';
+  static const notHelpful = 'not_helpful';
 
   /// 기능별 "유용"으로 집계할 outcome
   static bool isUseful(String type, String outcome) {
@@ -56,6 +61,7 @@ abstract final class AiOpsOutcomes {
         outcome == applied ||
             outcome == partialApply ||
             outcome == undone,
+      AiOpsTypes.studentChatbot => outcome == helpful,
       _ => outcome == adopted || outcome == edited,
     };
   }
@@ -66,4 +72,5 @@ abstract final class AiOpsPromptVersions {
   static const jobChat = 'job_chat_v1';
   static const jobRecommend = 'job_recommend_v1';
   static const resumeReview = 'resume_review_v1';
+  static const studentChatbot = 'student_chatbot_v2';
 }

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from functools import lru_cache
 from typing import Any, Iterator
 
@@ -19,6 +20,11 @@ from chatbot.firebase_student_context import (
     load_student_context,
     load_unit_period_context,
     parse_schedule_date,
+)
+from chatbot.ops_log import (
+    build_done_event,
+    build_generation_log_payload,
+    write_generation_log,
 )
 from chatbot.student_chatbot import LmsStudentChatbot, create_student_chatbot
 
@@ -135,13 +141,42 @@ def initialize_chatbot(
     }
 
 
-def _ndjson(chunks: Iterator[str]) -> Iterator[str]:
+def _ndjson_chat(
+    bot: LmsStudentChatbot,
+    inputs: dict[str, Any],
+    session: dict[str, Any],
+) -> Iterator[str]:
+    started = time.perf_counter()
+    status = "success"
+    error_message: str | None = None
     try:
-        for chunk in chunks:
+        for chunk in bot.stream(inputs):
             yield json.dumps({"type": "token", "content": chunk}, ensure_ascii=False) + "\n"
-        yield '{"type":"done"}\n'
     except Exception:
-        yield json.dumps({"type": "error", "message": "답변 생성 중 오류가 발생했습니다"}, ensure_ascii=False) + "\n"
+        status = "error"
+        error_message = "답변 생성 중 오류가 발생했습니다"
+        yield json.dumps({"type": "error", "message": error_message}, ensure_ascii=False) + "\n"
+    latency_ms = max(0, round((time.perf_counter() - started) * 1000))
+    snapshot: dict[str, Any] = {}
+    try:
+        snapshot = bot.ops_snapshot(inputs)
+    except Exception:
+        snapshot = {}
+    payload = build_generation_log_payload(
+        cohort_id=str(session.get("cohort") or ""),
+        created_by=str(session.get("uid") or ""),
+        latency_ms=latency_ms,
+        status=status,
+        snapshot=snapshot,
+        error_message=error_message,
+        thread_id=str(inputs.get("thread_id") or ""),
+    )
+    log_id = ""
+    try:
+        log_id = write_generation_log(session["db"], payload)
+    except Exception:
+        log_id = ""
+    yield json.dumps(build_done_event(log_id, payload), ensure_ascii=False) + "\n"
 
 
 @router.post("/stream")
@@ -152,7 +187,7 @@ def stream_chat(
     inputs = _chat_inputs(request, session)
     inputs["question"] = request.question.strip()
     return StreamingResponse(
-        _ndjson(_ready_chatbot().stream(inputs)),
+        _ndjson_chat(_ready_chatbot(), inputs, session),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )

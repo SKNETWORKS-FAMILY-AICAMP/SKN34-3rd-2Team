@@ -4,7 +4,7 @@ import '../../core/utils/date_utils.dart';
 
 /// 루트 `aiGenerationLogs` — type discriminator
 /// assessment_questions | assessment_questions_regen |
-/// job_chat | job_recommend | resume_review
+/// job_chat | job_recommend | resume_review | student_chatbot
 class AiGenerationLogModel {
   const AiGenerationLogModel({
     required this.id,
@@ -36,6 +36,12 @@ class AiGenerationLogModel {
     this.appliedCount,
     this.requestIdHash,
     this.reviewMode,
+    this.route,
+    this.namespaces,
+    this.studentScopes,
+    this.blocked,
+    this.retrievalMs,
+    this.llmMs,
   });
 
   final String id;
@@ -67,6 +73,12 @@ class AiGenerationLogModel {
   final int? appliedCount;
   final String? requestIdHash;
   final String? reviewMode;
+  final String? route;
+  final String? namespaces;
+  final String? studentScopes;
+  final bool? blocked;
+  final int? retrievalMs;
+  final int? llmMs;
 
   bool get isAssessment =>
       type == 'assessment_questions' || type == 'assessment_questions_regen';
@@ -86,6 +98,24 @@ class AiGenerationLogModel {
       if (v is int) return v;
       if (v is num) return v.toInt();
       return int.tryParse('$v');
+    }
+
+    bool? toBoolOrNull(dynamic v) {
+      if (v == null) return null;
+      if (v is bool) return v;
+      final text = '$v'.toLowerCase();
+      if (text == 'true') return true;
+      if (text == 'false') return false;
+      return null;
+    }
+
+    String? csv(dynamic v) {
+      if (v == null) return null;
+      if (v is List) {
+        return v.map((e) => e.toString()).where((e) => e.isNotEmpty).join(',');
+      }
+      final text = v.toString();
+      return text.isEmpty ? null : text;
     }
 
     final rawDrafts = data['drafts'] as List? ?? const [];
@@ -126,6 +156,12 @@ class AiGenerationLogModel {
       appliedCount: toIntOrNull(data['appliedCount']),
       requestIdHash: data['requestIdHash']?.toString(),
       reviewMode: data['reviewMode']?.toString(),
+      route: data['route']?.toString(),
+      namespaces: csv(data['namespaces']),
+      studentScopes: csv(data['studentScopes']),
+      blocked: toBoolOrNull(data['blocked']),
+      retrievalMs: toIntOrNull(data['retrievalMs']),
+      llmMs: toIntOrNull(data['llmMs']),
     );
   }
 }
@@ -167,7 +203,8 @@ class AiGenerationDraftPreview {
 /// outcome: adopted|edited|discarded|
 /// clicked_job|followed_up|ignored|
 /// opened|selected_for_review|dismissed|
-/// applied|partial_apply|undone|abandoned
+/// applied|partial_apply|undone|abandoned|
+/// helpful|not_helpful
 class AiQuestionFeedbackModel {
   const AiQuestionFeedbackModel({
     required this.id,
@@ -227,6 +264,66 @@ class AiQuestionFeedbackModel {
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
       updatedAt: AppDateUtils.timestampToDateTime(data['updatedAt']),
       type: data['type']?.toString(),
+    );
+  }
+}
+
+/// 루트 `aiEvalRuns` — chatbot_lab evaluate_supervisor --publish
+class AiEvalRunModel {
+  const AiEvalRunModel({
+    required this.id,
+    required this.promptVersion,
+    required this.model,
+    required this.totalCases,
+    required this.passed,
+    this.accuracy = 0,
+    this.avgLatencyMs = 0,
+    this.createdAt,
+    this.source = 'chatbot_lab',
+    this.failedIds = const [],
+  });
+
+  final String id;
+  final String promptVersion;
+  final String model;
+  final int totalCases;
+  final int passed;
+  final double accuracy;
+  final int avgLatencyMs;
+  final DateTime? createdAt;
+  final String source;
+  final List<String> failedIds;
+
+  factory AiEvalRunModel.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data() ?? {};
+    int toInt(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse('$v') ?? 0;
+    }
+
+    double toDouble(dynamic v) {
+      if (v is double) return v;
+      if (v is num) return v.toDouble();
+      return double.tryParse('$v') ?? 0;
+    }
+
+    final rawIds = data['failedIds'];
+    return AiEvalRunModel(
+      id: doc.id,
+      promptVersion: data['promptVersion']?.toString() ?? '',
+      model: data['model']?.toString() ?? '',
+      totalCases: toInt(data['totalCases']),
+      passed: toInt(data['passed']),
+      accuracy: toDouble(data['accuracy']),
+      avgLatencyMs: toInt(data['avgLatencyMs']),
+      createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
+      source: data['source']?.toString() ?? 'chatbot_lab',
+      failedIds: rawIds is List
+          ? rawIds.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+          : const [],
     );
   }
 }
