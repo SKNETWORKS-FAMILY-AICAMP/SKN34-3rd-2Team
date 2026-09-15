@@ -4,6 +4,11 @@ import 'app_colors.dart';
 import '../widgets/app_dropdown.dart';
 
 abstract final class AppTheme {
+  /// 앱 글꼴. `ThemeData.fontFamily`는 textTheme에만 붙고, 칩·채움 버튼·스낵바·
+  /// 하단 내비 라벨처럼 테마에 TextStyle을 직접 주는 부품은 이 값을 따로 받아야
+  /// 기본 글꼴로 떨어지지 않는다(글자가 칩 안에서 눌리거나 다른 글꼴로 보인다).
+  static const fontFamily = 'Paperlogy';
+
   /// 삭제·위험 액션용 FilledButton 스타일
   static ButtonStyle get destructiveFilled => FilledButton.styleFrom(
     backgroundColor: AppColors.error,
@@ -43,7 +48,7 @@ abstract final class AppTheme {
       useMaterial3: true,
       brightness: dark ? Brightness.dark : Brightness.light,
       visualDensity: visualDensity,
-      fontFamily: 'Paperlogy',
+      fontFamily: fontFamily,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
       dividerColor: AppColors.divider,
@@ -105,6 +110,7 @@ abstract final class AppTheme {
           ),
           elevation: 0,
           textStyle: const TextStyle(
+            fontFamily: fontFamily,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -122,6 +128,7 @@ abstract final class AppTheme {
           ),
           elevation: 0,
           textStyle: const TextStyle(
+            fontFamily: fontFamily,
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
@@ -149,12 +156,17 @@ abstract final class AppTheme {
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return TextStyle(
+              fontFamily: fontFamily,
               color: primary,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             );
           }
-          return TextStyle(color: AppColors.textSecondary, fontSize: 12);
+          return TextStyle(
+            fontFamily: fontFamily,
+            color: AppColors.textSecondary,
+            fontSize: 12,
+          );
         }),
       ),
       navigationRailTheme: NavigationRailThemeData(
@@ -177,7 +189,11 @@ abstract final class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: primaryLight,
-        labelStyle: TextStyle(color: primary, fontSize: 12),
+        labelStyle: TextStyle(
+          fontFamily: fontFamily,
+          color: primary,
+          fontSize: 12,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
           side: BorderSide(color: AppColors.border),
@@ -205,6 +221,7 @@ abstract final class AppTheme {
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         contentTextStyle: TextStyle(
+          fontFamily: fontFamily,
           fontSize: 14,
           fontWeight: FontWeight.w500,
           color: Colors.white,

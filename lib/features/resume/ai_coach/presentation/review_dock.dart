@@ -217,6 +217,10 @@ class ReviewDockHostState extends State<ReviewDockHost> {
       ..showSnackBar(
         SnackBar(
           content: Text(text),
+          // 단추가 달린 스낵바는 Flutter가 기본으로 누를 때까지 남겨 둔다.
+          // 안내일 뿐이니 조금 더 보여 주고 저절로 닫는다.
+          persist: false,
+          duration: Duration(seconds: openAction ? 7 : 4),
           action: openAction
               ? SnackBarAction(
                   label: '열기',
