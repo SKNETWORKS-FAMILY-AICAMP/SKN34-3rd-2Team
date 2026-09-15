@@ -19,7 +19,7 @@ from app.job_requirements import (
     mark_requirement_absent, requirements_prompt_text,
 )
 
-PROMPT_VERSION = 'resume-v16n-notice-fixes'
+PROMPT_VERSION = 'resume-v16o-keep-original-numbers'
 CRITERIA = ('aspiration', 'emotion', 'abstract_result', 'ordering', 'relevance', 'duplication', 'company_fit')
 MISSING_JOB_TECH_REASON = '공고에 언급된 기술의 실제 사용 프로젝트를 확인합니다.'
 

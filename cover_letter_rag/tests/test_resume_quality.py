@@ -480,3 +480,37 @@ def test_experience_field_is_not_flagged_for_resembling_self_introduction():
     assert _cross_field_overlap('projects[0].description', fields['projects[0].description'], revision, fields) == (False, None)
     verbatim, _ = _cross_field_overlap('selfIntroduction.intro.body', '', fields['projects[0].description'], fields)
     assert verbatim, '자기소개서 쪽은 그대로 본다'
+
+
+def test_answer_restating_the_original_cannot_replace_several_sentences_and_drop_numbers():
+    # 사용자가 원문 내용을 되풀이해 답했고, 모델이 원문 두 문장(상황 + 숫자 결과)을 그 답 한 문장으로 바꿨다. "답변 문장을
+    # 그대로 옮긴 수정안" 예외로 사실 검사를 건너뛰어 숫자 결과와 상황 문장이 사라졌다(2026-09-15 한 번도 안 본 케이스).
+    from app.resume_review import _merge_original_with_confirmed_answer
+    path = 'projects[0].description'
+    original = '주문 조회 화면이 느리다는 고객 문의가 많았습니다. 인덱스를 추가해 주문 조회 시간을 2.4초에서 0.6초로 줄였습니다.'
+    answer_text = '주문 조회 API에 인덱스를 설계하고 적용해 주문 조회 화면이 느린 문제를 줄이는 업무를 맡았습니다.'
+    answer = ConfirmationAnswer(question_id='q1', field_path=path, question='인덱스를 어떻게 적용했나요?', answer=answer_text)
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path=path, original_quote=original, suggested_revision=answer_text, reason='답변 반영', edit_type='content',
+        evidence_quotes=[answer_text])])
+    ground_sentences({path: original}, [answer], result)
+    item = result.sentence_reviews[0]
+    assert item.suggested_revision is None and 'missing_fact_anchor' in item.validation_issues
+    assert item.confirmation_question is None, '이미 답한 사용자에게 뜻 모를 확인 질문을 붙이지 않는다'
+
+    # 답을 원문에 합치는 대체 수정안도 원문의 숫자 결과 문장을 남긴다.
+    merged = _merge_original_with_confirmed_answer(original, answer_text)
+    assert '2.4초에서 0.6초로' in merged and answer_text in merged
+
+
+def test_single_sentence_answer_restatement_is_still_allowed():
+    # 한 문장짜리 원문을 답변 문장으로 바꾸는 건 그대로 허용한다. 원문 영단어를 모두 되풀이할 필요는 없다.
+    path = 'projects[0].description'
+    original = 'REST API 연동 담당.'
+    answer_text = 'React Query로 매물 조회와 필터 조건 조회를 백엔드와 연동했습니다.'
+    answer = ConfirmationAnswer(question_id='q1', field_path=path, question='무엇을 연동했나요?', answer=answer_text)
+    result = ResumeReviewGeneration(summary='', section_reviews=[], sentence_reviews=[SentenceReview(
+        field_path=path, original_quote=original, suggested_revision=answer_text, reason='답변 반영', edit_type='content',
+        evidence_quotes=[answer_text])])
+    ground_sentences({path: original}, [answer], result)
+    assert result.sentence_reviews[0].suggested_revision == answer_text

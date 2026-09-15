@@ -651,7 +651,9 @@ def _merge_original_with_confirmed_answer(original: str, confirmed: str) -> str:
     # A detailed answer that covers most of the original paragraph is already
     # the integrated replacement. Keeping old sentences would merely repeat it.
     stable_overlap = original_stable & answer_stable
-    if overall_overlap >= 0.3 and (
+    # 답이 원문 내용을 되풀이해도 원문의 숫자 결과를 모두 담지 않았으면 답으로 통째 바꾸지 않는다(2026-09-15 한 번도
+    # 안 본 케이스: 원문 상황 문장과 숫자 결과가 답 한 문장으로 바뀌며 사라졌다).
+    if overall_overlap >= 0.3 and not _unsupported_numbers(original, confirmed) and (
         not original_stable or stable_overlap or len(answer_content) >= 12
     ):
         return confirmed
@@ -666,7 +668,8 @@ def _merge_original_with_confirmed_answer(original: str, confirmed: str) -> str:
         content_covered = bool(sentence_content) and (
             len(shared) / len(sentence_content) >= 0.45
         )
-        if not stable_covered and not content_covered:
+        numbers_lost = bool(_unsupported_numbers(sentence, confirmed))
+        if numbers_lost or (not stable_covered and not content_covered):
             preserved.append(sentence)
     parts = [*preserved, confirmed]
     return ' '.join(dict.fromkeys(part for part in parts if part))
@@ -866,7 +869,11 @@ def ground_sentences(fields, answers, generation, job_text=''):
         original_terms = grounding_terms(item.original_quote)
         # A user-confirmed replacement can legitimately restate the field without
         # repeating every token in the abbreviated original quote.
-        answer_restates_revision = any(revision.strip() and revision.strip() in answer.answer for answer in answers)
+        # 다만 원문이 여러 문장이면 답 한 문장으로 통째 바꾸면서 답과 무관한 문장의 사실이 사라진다. 사용자가 원문 내용을
+        # 되풀이해 답했을 때 원문 2문장(상황 + 숫자 결과)이 답 1문장으로 바뀌어 결과 숫자와 상황이 빠졌다(2026-09-15
+        # 한 번도 안 본 케이스). 이 예외는 한 문장짜리 원문에만 둔다.
+        answer_restates_revision = len(_sentences(item.original_quote)) <= 1 and any(
+            revision.strip() and revision.strip() in answer.answer for answer in answers)
         # 답변을 근거로 문단을 새로 짠 내용 수정은 원문의 영단어를 모두 남길 필요가 없다("생성형 AI에
         # 관심" → 답변의 실제 업무로 바꿔 쓴 지원동기). 표현만 다듬는 수정은 계속 원문 사실을 지킨다.
         answer_text = "\n".join(answer_source_map.values())
@@ -879,8 +886,9 @@ def ground_sentences(fields, answers, generation, job_text=''):
         )
         missing_terms = set() if answer_restates_revision or rebuilt_from_answer else original_terms - grounding_terms(revision)
         # 원문 숫자가 수정안에서 사라진 것도 사실이 빠진 것이다. 영문 기술어만 보던 때는 "매물 500건을 한 번에 받던 것을"에서
-        # 500건이 빠진 수정안이 통과했다(2026-09-15 새 케이스 v16m). 답변 문장을 그대로 옮긴 수정안만 예외다.
-        missing_numbers = set() if answer_restates_revision else _unsupported_numbers(item.original_quote, revision)
+        # 500건이 빠진 수정안이 통과했다(2026-09-15 새 케이스 v16m). 숫자는 예외 없이 본다. 답변 문장을 그대로 옮긴
+        # 수정안이라도 원문의 숫자 결과가 사라지면 사실이 빠진 것이다(2026-09-15 한 번도 안 본 케이스).
+        missing_numbers = _unsupported_numbers(item.original_quote, revision)
         # 이름·역할·기술 이름처럼 짧은 값을 담는 칸에 문장을 써 넣는 수정. "Fastlane"이 "Fastlane — ○○ 프로젝트 TestFlight
         # 배포 자동화, 40분 → 10분"이 됐다(2026-09-15). 답의 사실은 그 항목의 설명 칸에 들어가야 한다.
         if _NOMINAL_FIELD.fullmatch(item.field_path) and revision.strip() and (
@@ -940,6 +948,10 @@ def ground_sentences(fields, answers, generation, job_text=''):
             elif 'negation_changed' in item.validation_issues:
                 # 부정 표현이 흔들린 내용 수정. 이 문구는 항목 이름도 바뀐 표현도 없어 답할 수 없고, 같은 칸을 세 턴 연속
                 # 묻게 했다(2026-09-15 새 케이스). 수정안만 버리고 묻지 않는다. 원문은 사용자가 쓴 그대로다.
+                item.confirmation_question = None
+            elif item.validation_issues == ['missing_fact_anchor'] and answer_text:
+                # 답변을 반영하다 원문 사실이 빠진 수정안. 사용자는 이미 답했고 원문 사실도 이력서에 그대로 있다. 이 질문은
+                # 무엇을 답할지 알 수 없어 헛질문이 됐다. 수정안만 버리고, 답은 원문 사실을 살린 대체 수정안이 받는다.
                 item.confirmation_question = None
             else:
                 item.confirmation_question = "원문 의미를 유지하기 위해 직접 수행한 행동과 확인 가능한 결과를 알려 주세요. 수치는 없어도 됩니다."
