@@ -77,6 +77,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   final Set<int> _selected = {};
   final Set<int> _appliedSuggestionIndices = {};
   final TextEditingController _answerController = TextEditingController();
+  // 답변 입력칸의 포커스를 직접 쥔다. "없음" 칩이 나타났다 사라지면서 입력칸이 새로 만들어져도
+  // 이 노드로 다시 포커스를 줄 수 있다.
+  final FocusNode _answerFocus = FocusNode();
   final ScrollController _chatScrollController = ScrollController();
   final List<_ReviewChatMessage> _messages = [];
   final Set<String> _answeredQuestionIds = {};
@@ -398,6 +401,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       );
     }
     _answerController.dispose();
+    _answerFocus.dispose();
     _chatScrollController.dispose();
     _previewFraction.dispose();
     super.dispose();
@@ -1243,6 +1247,8 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       if (next != null) _messages.add(_ReviewChatMessage.question(next!));
     });
     if (next != null) _focusPreviewField(next!['field_path'] as String?);
+    // 칩을 누르면 포커스가 칩으로 간다. 다음 질문이 떴으니 입력칸으로 돌려준다.
+    _refocusAnswerField();
     _pendingNoneAnswers++;
     _noneAnswerChain = _noneAnswerChain
         .then((_) => _recordNoneAnswer(question))
@@ -1366,16 +1372,37 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
   }
 
   /// 서버가 이미 뺀 질문에 답하려 할 때. 보내지 않고 다음 질문으로 넘어간다.
-  void _skipStaleQuestion(Map<String, dynamic> question) {
+  ///
+  /// 예전에는 친 답을 입력칸에 그대로 두었는데, 보내지지도 않은 글이 회색으로 남아 사용자는 답이
+  /// 전송된 줄 알았다(2026-09-16 앱). 이제 입력칸을 비우고, 무슨 일이 있었는지 대화에 적는다.
+  /// 친 글은 안내 안에 그대로 실어 다시 쓸 수 있게 한다.
+  void _skipStaleQuestion(Map<String, dynamic> question, {String? typed}) {
     Map<String, dynamic>? next;
+    final text = (typed ?? _answerController.text).trim();
+    _answerController.clear();
     setState(() {
       final questionId = question['question_id'] as String?;
       if (questionId != null) _answeredQuestionIds.add(questionId);
+      // 보내려다 거절당한 경우엔 사용자 말풍선을 이미 붙여 두었다. 답이 두 번 보이지 않게 걷어낸다.
+      if (typed != null &&
+          _messages.isNotEmpty &&
+          _messages.last.isUser &&
+          _messages.last.text == text) {
+        _messages.removeLast();
+      }
+      _messages.add(
+        _ReviewChatMessage.assistant(
+          text.isEmpty
+              ? '앞 질문이 정리돼 넘어갈게요.'
+              : '앞 질문이 정리돼 이 답은 보내지 못했어요. 필요하면 다시 붙여 넣어 주세요.\n\n$text',
+        ),
+      );
       next = _takeNextQuestion();
       if (next != null) _messages.add(_ReviewChatMessage.question(next!));
     });
     if (next != null) {
       _focusPreviewField(next!['field_path'] as String?);
+      _refocusAnswerField();
     } else {
       _scheduleGapAudit();
     }
@@ -1383,16 +1410,27 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
 
   /// 서버는 응답마다 남은 질문에 새 번호를 매긴다. 이미 화면에 띄운 질문도 새 번호로 답해야 받아 준다.
   void _adoptReissuedQuestionIds(List<Map> questions) {
+    void adopt(Map<String, dynamic>? target, String key, Object? reissuedId) {
+      if (target == null || _questionKey(target) != key) return;
+      final currentId = target['question_id'] as String?;
+      if (currentId != null && _answeredQuestionIds.contains(currentId)) return;
+      target['question_id'] = reissuedId;
+    }
+
     for (final raw in questions) {
       final reissued = Map<String, dynamic>.from(raw);
       final key = _questionKey(reissued);
+      final reissuedId = reissued['question_id'];
       for (final message in _messages) {
-        final shown = message.question;
-        if (shown == null || _questionKey(shown) != key) continue;
-        final shownId = shown['question_id'] as String?;
-        if (shownId != null && _answeredQuestionIds.contains(shownId)) continue;
-        shown['question_id'] = reissued['question_id'];
+        adopt(message.question, key, reissuedId);
       }
+      // 아직 띄우지 않은 질문도 새 번호를 받아야 한다. 화면에 뜬 질문만 갈아 주던 때는 대기열에서
+      // 꺼낸 질문이 죽은 번호를 들고 있어, 답을 보내지 못하고 조용히 건너뛰었다(친 답은 입력칸에
+      // 남고 다음 질문만 쌓였다). 서버는 첨삭마다 남은 질문에 새 번호를 매긴다.
+      for (final queued in _questionQueue) {
+        adopt(queued, key, reissuedId);
+      }
+      adopt(_pendingQuestion, key, reissuedId);
     }
   }
 
@@ -1415,11 +1453,9 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       if (!mounted) return;
       setState(() => _busy = false);
     }
-    if (!_isQuestionStillOpen(question)) {
-      // 기다리는 사이 서버가 이 질문을 정리했다. 적은 답은 입력칸에 남겨 두고 다음 질문을 띄운다.
-      _skipStaleQuestion(question);
-      return;
-    }
+    // 보내기 전에 "이 질문은 죽었다"고 앱이 미리 판단하지 않는다. 그 판단이 틀리면 멀쩡한 답이
+    // 조용히 버려졌다(2026-09-16 앱: 서버는 질문을 알고 있는데도 답이 전송되지 않았다).
+    // 일단 보내고, 서버가 모르는 질문이라고 거절할 때만(422) 안내하고 넘어간다.
     final previous = _result!;
     _answerController.clear();
     setState(() {
@@ -1450,7 +1486,16 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
           },
         ],
       };
-      _result = await widget.client.review(nextRequest);
+      final Map<String, dynamic> response;
+      try {
+        response = await widget.client.review(nextRequest);
+      } on ResumeReviewApiException catch (error) {
+        if (error.statusCode != 422) rethrow;
+        // 서버가 이미 정리한 질문이다. 답은 남겨 보여 주고 다음 질문으로 넘어간다.
+        _skipStaleQuestion(question, typed: answer);
+        return;
+      }
+      _result = response;
       // The server rebases the previous review after an applied edit.  This
       // new review now owns the latest resume snapshot and can accept another
       // selected revision in the same chat flow.
@@ -1469,6 +1514,19 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
       );
       await _persistSession();
     }, kind: _ReviewBusyKind.answer);
+    // 답을 보내고 나면 다음 질문이 바로 뜬다. 포커스를 입력칸에 돌려줘야 클릭 없이 이어서 칠 수 있다.
+    _refocusAnswerField();
+  }
+
+  /// 다음 질문에 바로 답할 수 있게 입력칸에 포커스를 돌려준다.
+  ///
+  /// 입력칸이 꺼져 있으면(처리 중·질문 없음) 아무것도 하지 않는다. 꺼진 칸에 포커스를 주면
+  /// 커서만 깜빡이고 글자는 안 들어간다.
+  void _refocusAnswerField() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _busy || _error != null) return;
+      if (_hasUnansweredDisplayedQuestion) _answerFocus.requestFocus();
+    });
   }
 
   Future<void> _applySuggestion(List<int> indices) async {
@@ -1750,6 +1808,7 @@ class _JobResumeReviewDialogState extends State<JobResumeReviewDialog> {
                       awaitingSuggestionApply: _pendingQuestion != null,
                       generalReview: widget.generalReview,
                       answerController: _answerController,
+                      answerFocusNode: _answerFocus,
                       scrollController: _chatScrollController,
                       activeQuestion: activeQuestion,
                       appliedSuggestionIndices: _appliedSuggestionIndices,
@@ -1962,7 +2021,9 @@ class _ResumeDraftPreview extends StatelessWidget {
     final info = Map<String, dynamic>.from(map['basicInfo'] as Map);
     return ColoredBox(
       color: AppColors.tint(const Color(0xFFF8FAFC)),
-      child: SingleChildScrollView(
+      // 이력서 문장을 드래그해 복사할 수 있게 한다. 첨삭 결과를 다른 곳에 옮겨 적는 일이 많다.
+      child: SelectionArea(
+        child: SingleChildScrollView(
         padding: EdgeInsets.all(AppSpace.s(20)),
         child: Container(
           padding: EdgeInsets.all(AppSpace.s(22)),
@@ -2046,6 +2107,7 @@ class _ResumeDraftPreview extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -2533,6 +2595,7 @@ class _ReviewChatPane extends StatelessWidget {
     required this.awaitingSuggestionApply,
     required this.generalReview,
     required this.answerController,
+    required this.answerFocusNode,
     required this.scrollController,
     required this.activeQuestion,
     required this.appliedSuggestionIndices,
@@ -2563,6 +2626,7 @@ class _ReviewChatPane extends StatelessWidget {
   final bool awaitingSuggestionApply;
   final bool generalReview;
   final TextEditingController answerController;
+  final FocusNode answerFocusNode;
   final ScrollController scrollController;
   final Map<String, dynamic>? activeQuestion;
   final Set<int> appliedSuggestionIndices;
@@ -2657,6 +2721,9 @@ class _ReviewChatPane extends StatelessWidget {
             includeRequirementStage: requirementRows.isNotEmpty,
           ),
         Expanded(
+          // 대화 글을 드래그해 복사할 수 있게 SelectionArea로 감싼다. 예전에 이걸 빼 둔 것은
+          // 타이핑이 안 되는 원인으로 의심했기 때문인데, 실제 원인은 "없음" 칩이 사라질 때
+          // 자리가 없어지는 것과 readOnly 토글이었다(2026-09-16 앱). 둘을 고쳤으므로 되돌린다.
           child: SelectionArea(
             child: ListView(
               controller: scrollController,
@@ -2734,8 +2801,18 @@ class _ReviewChatPane extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (onNoneAnswer != null && !busy)
-                  Padding(
+                // 칩을 통째로 빼지 않고 빈 자리로 둔다. 자식 수가 바뀌면 아래 입력칸의 자리 번호가
+                // 밀려 위젯이 새로 만들어지고, 웹에서는 그때 브라우저 입력 연결이 끊겨 글자가
+                // 들어가지 않았다(2026-09-16 앱: 답변 전송·수정안 반영 직후마다 입력 불가).
+                Visibility(
+                  visible: onNoneAnswer != null && !busy,
+                  // maintainState만으로는 자리가 사라진다. 자리가 사라지면 레이어가 버려지면서
+                  // 입력칸이 위치를 엔진에 알리다 터지고(domElement != null), DOM 포커스를 옮기는
+                  // 마지막 단계가 실행되지 않아 focus=true인데 글자가 안 들어간다(2026-09-16 앱).
+                  maintainState: true,
+                  maintainAnimation: true,
+                  maintainSize: true,
+                  child: Padding(
                     padding: EdgeInsets.only(bottom: AppSpace.s(8)),
                     child: ActionChip(
                       key: const ValueKey('review-none-answer'),
@@ -2750,7 +2827,13 @@ class _ReviewChatPane extends StatelessWidget {
                           '해 본 적이 없거나 기억나지 않으면 누르세요. 이력서에 넣지 않고 다음 질문으로 넘어갑니다.',
                     ),
                   ),
+                ),
                 Focus(
+                  // 고정 키가 있어야 한다. 위의 "없음" 칩이 busy에 따라 나타났다 사라지면 이 위젯의
+                  // 자리 번호가 밀리는데, 키가 없으면 Flutter가 앞자리의 다른 타입 위젯과 맞추려다
+                  // 실패해 입력칸을 통째로 새로 만든다. 그러면 포커스가 날아가, 답변을 보낸 직후마다
+                  // 글자가 입력되지 않았다(2026-09-16 앱: 닫았다 열면 잠깐 되던 것도 이 때문이다).
+                  key: const ValueKey('review-answer-input'),
                   onKeyEvent: (_, event) {
                     if (event is KeyDownEvent &&
                         event.logicalKey == LogicalKeyboardKey.enter &&
@@ -2762,16 +2845,33 @@ class _ReviewChatPane extends StatelessWidget {
                   },
                   child: TextField(
                     controller: answerController,
-                    enabled: !busy && activeQuestion != null,
+                    focusNode: answerFocusNode,
+                    // 입력칸은 항상 편집 가능하게 둔다. enabled는 물론 readOnly도 껐다 켜면 웹에서
+                    // 입력 연결이 닫히고, 그 뒤 입력칸이 위치를 엔진에 알리다 터진다
+                    // (domElement != null). 그러면 focus=true인데 글자가 안 들어간다
+                    // (2026-09-16 앱: 답변 전송·수정안 반영 직후마다 재현).
+                    // 처리 중 전송은 _submitAnswer가 _busy로 막으므로 잠글 필요가 없다.
+                    // 못 쓰는 상태는 힌트와 바탕색으로만 알린다.
+                    readOnly: false,
                     minLines: 1,
                     maxLines: 3,
                     decoration: InputDecoration(
-                      hintText: activeQuestion == null
+                      // 입력칸이 꺼지는 조건(busy·질문 없음)을 힌트가 그대로 말해야 한다. 예전에는 꺼져
+                      // 있어도 "답변을 입력하세요"가 떠서, 쓸 수 있는 줄 알고 치다가 왜 안 되는지
+                      // 알 수 없었다(2026-09-16 앱).
+                      hintText: busy
+                          ? '처리 중입니다. 끝나면 입력할 수 있어요.'
+                          : activeQuestion == null
                           ? awaitingSuggestionApply
                                 ? '수정안을 반영하면 다음 질문을 이어갑니다.'
                                 : '현재 추가 확인 질문이 없습니다.'
                           : '답변을 입력하세요. (Enter 전송 · Shift+Enter 줄바꿈)',
                       isDense: true,
+                      // readOnly는 회색으로 흐려지지 않으므로, 못 쓰는 상태는 바탕색으로 알린다.
+                      filled: true,
+                      fillColor: busy || activeQuestion == null
+                          ? AppColors.surfaceVariant
+                          : AppColors.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -3661,12 +3761,19 @@ class _ReviewChatBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ?questionTag,
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.45,
-                color: isUser ? Colors.white : AppColors.textPrimary,
+            // 내 말풍선은 파란 바탕에 흰 글씨라 기본 선택 강조색(파랑)이 묻혀, 드래그해도
+            // 선택이 안 된 것처럼 보였다. 이 말풍선 안에서만 흰 강조색을 쓴다.
+            DefaultSelectionStyle(
+              selectionColor: isUser
+                  ? const Color(0x66FFFFFF)
+                  : DefaultSelectionStyle.of(context).selectionColor,
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.45,
+                  color: isUser ? Colors.white : AppColors.textPrimary,
+                ),
               ),
             ),
           ],

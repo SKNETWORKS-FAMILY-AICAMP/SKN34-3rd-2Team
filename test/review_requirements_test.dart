@@ -831,7 +831,8 @@ void main() {
     expect(find.textContaining('처음부터 다시 첨삭했어요'), findsOneWidget);
     expect(find.textContaining('새 검토 요약'), findsOneWidget);
     expect(find.textContaining('추가한 프로젝트에서'), findsOneWidget, reason: '새 첨삭의 질문이 보인다');
-    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isTrue);
+    // 입력칸은 쓸 수 있어야 한다. enabled를 껐다 켜면 웹에서 입력 연결이 끊기므로 readOnly로 막는다.
+    expect(tester.widget<TextField>(find.byType(TextField)).readOnly, isFalse);
     expect(client.reviews, 1);
     client.close();
   });
