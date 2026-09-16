@@ -395,6 +395,32 @@ _NOMINAL_FIELD = re.compile(
 
 def _sentences(text: str) -> list[str]:
     return [s for s in re.split(r'(?<=[.!?다요])\s+|\n', str(text or '').strip()) if len(s.strip()) >= 6]
+
+# "여러 방법을 시도해 해결했습니다"처럼 무엇을 했는지 없는 해결 문장. 지시문 49번이 action 근거로 치지 않는 표현이다.
+_VAGUE_RESOLUTION = re.compile(r'(?:여러|다양한|이것저것)\s*(?:가지\s*)?(?:방법|방식|시도|것)')
+
+
+def _drop_superseded_vague_sentence(original_quote: str, revision: str) -> str:
+    """답변으로 방법을 채우면서 원문의 막연한 해결 문장을 지우지 않은 수정안에서 그 문장만 덜어낸다.
+
+    모델이 "'여러 방법을 시도해 해결했습니다'를 구체화했습니다"라고 적어 놓고 그 문장을 그대로 두어,
+    "라우터를 제가 직접 만들었습니다. 팀원들과 여러 방법을 시도해 해결했습니다."처럼 앞뒤가 어긋난
+    수정안이 나왔다(2026-09-16 앱). 원문에 있던 그 문장만 빼고 나머지는 모델이 쓴 그대로 둔다.
+    """
+    sentences = _sentences(revision)
+    if len(sentences) <= 1:
+        return revision
+    # 답이 반영돼 새 문장이 들어온 수정안에만 손댄다. 원문을 그대로 돌려준 수정안에서 문장을 빼면
+    # 고치지도 않은 사실이 사라진다.
+    if not [s for s in sentences if s.strip() not in original_quote]:
+        return revision
+    kept = [s for s in sentences
+            if not (_VAGUE_RESOLUTION.search(s) and s.strip() in original_quote)]
+    if len(kept) == len(sentences) or not kept:
+        return revision
+    return ' '.join(s.strip() for s in kept)
+
+
 # 합니다체가 아닌 문장 끝: "API 개발.", "만들었음.", "개발 중이에요."
 _NON_FORMAL_ENDING = re.compile(r'[가-힣A-Za-z0-9)](?<!다)\.(?:\s|$)|[가-힣](?<!다)$')
 _FORMAL_ENDING = re.compile(r'다\.(?:\s|$)|다$')
@@ -960,6 +986,13 @@ def ground_sentences(fields, answers, generation, job_text=''):
         if item.original_quote not in quotes:
             quotes.insert(0, item.original_quote)
         revision = item.suggested_revision or ""
+        # 답변으로 방법을 채운 수정안에 원문의 막연한 해결 문장이 그대로 남으면 덜어낸다.
+        if revision.strip() and answer_source_map:
+            repaired = _drop_superseded_vague_sentence(item.original_quote, revision)
+            if repaired != revision:
+                revision = repaired
+                item.suggested_revision = repaired
+                item.flow_notice = '답변으로 방법이 드러나, 원문의 "여러 방법을 시도" 문장은 뺐습니다.'
         # Confirmed answers are grounding even when the model paraphrases them or
         # forgets to repeat the answer verbatim in evidence_quotes.
         evidence = "\n".join([*quotes, *answer_source_map.values()])

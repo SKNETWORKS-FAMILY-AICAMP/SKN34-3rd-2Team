@@ -909,3 +909,27 @@ def test_self_introduction_may_point_to_a_named_project_without_being_withheld()
         status='improved', suggested_revision='사내 규정 질의응답 챗봇에서 정답률을 62%에서 81%로 높인 경험으로, 생성형 AI로 불편을 해결하는 개발자입니다.')])
     withhold_moved_sentences(generation, {'selfIntroduction.intro.body'}, mentioned, fields)
     assert generation.sentence_reviews[0].suggested_revision
+
+
+def test_answer_revision_drops_superseded_vague_sentence():
+    # 모델이 "'여러 방법을 시도해 해결했습니다'를 구체화했다"고 적고도 그 문장을 그대로 두어,
+    # "제가 직접 만들었습니다" 뒤에 "팀원들과 여러 방법을 시도해"가 붙어 앞뒤가 어긋났다(2026-09-16 앱).
+    from app.resume_review import _drop_superseded_vague_sentence
+
+    original = ('LMS 챗봇을 만들때 공지를 물어봤는데 규정 문서가 검색되는 문제가 있었습니다. '
+                '팀원들과 여러 방법을 시도해서 해결했습니다.')
+    revision = ('LMS 챗봇을 만들 때 공지를 물어보면 규정 문서가 검색되는 문제가 있었습니다. '
+                '문서를 종류별 네임스페이스로 나눠 다시 적재하고 질문 분류 라우터를 제가 직접 만들었습니다. '
+                '팀원들과 여러 방법을 시도해서 해결했습니다. '
+                '평가 질문 40개로 확인했더니 맞는 문서를 가져온 질문이 25개에서 36개로 늘었습니다.')
+
+    repaired = _drop_superseded_vague_sentence(original, revision)
+    assert '여러 방법을 시도' not in repaired
+    assert '제가 직접 만들었습니다' in repaired
+    assert '25개에서 36개로' in repaired
+
+    # 원문을 그대로 돌려준 수정안에서 문장을 빼면 고치지도 않은 사실이 사라진다.
+    assert _drop_superseded_vague_sentence(original, original) == original
+    # 답변으로 새로 들어온 문장이면 막연해 보여도 남긴다.
+    added = '원문입니다. 여러 방법을 시도했습니다. 새 사실을 적었습니다.'
+    assert '여러 방법' in _drop_superseded_vague_sentence('원문입니다. 다른 문장입니다.', added)
