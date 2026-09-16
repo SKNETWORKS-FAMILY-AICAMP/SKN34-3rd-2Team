@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="assets/readme_image/playdata_logo_inline.svg" alt="PLAYDATA" width="168" height="32" align="middle"> LXP · AI 취업·학습 코치
+# <img src="assets/readme_image/playdata_logo_inline.svg" alt="PLAYDATA" width="191" height="36" align="top"> LXP · AI 취업·학습 코치
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.12+-white?style=for-the-badge&logo=flutter&logoColor=white&labelColor=0175C2&color=42A5F5)](https://flutter.dev)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Functions-111?style=for-the-badge&logo=firebase&logoColor=111&labelColor=FFCA28&color=FFA000)](https://firebase.google.com)
