@@ -11,27 +11,32 @@
 
 ## 목차
 
-- [팀 소개](#팀-소개)
-- [역할 분담](#역할-분담)
-- [프로젝트 목표](#프로젝트-목표)
-- [주요 기능](#주요-기능)
-- [WBS](#wbs)
-- [시스템 아키텍처](#시스템-아키텍처)
-- [RAG 구성](#rag-구성)
-- [프롬프트 템플릿](#프롬프트-템플릿)
-- [데이터 ERD](#데이터-erd)
-- [데이터 수집 및 전처리](#데이터-수집-및-전처리)
-- [기술 스택](#기술-스택)
-- [테스트 계획 및 결과](#테스트-계획-및-결과)
-- [테스트 시나리오](#테스트-시나리오)
-- [트러블슈팅](#트러블슈팅)
-- [실행 방법](#실행-방법)
-- [폴더 구조](#폴더-구조)
-- [필수 산출물 위치](#필수-산출물-위치)
-- [향후 개선](#향후-개선)
-- [협업 방식](#협업-방식)
+- [1. 팀 소개](#1-팀-소개)
+- [2. 역할 분담](#2-역할-분담)
+- [3. 프로젝트 소개](#3-프로젝트-소개)
+- [4. 프로젝트 필요성 (배경)](#4-프로젝트-필요성-배경)
+- [5. 프로젝트 목표](#5-프로젝트-목표)
+- [6. 주요 기능](#6-주요-기능)
+- [7. WBS](#7-wbs)
+- [8. 시스템 아키텍처](#8-시스템-아키텍처)
+- [9. RAG 구성](#9-rag-구성)
+- [10. 프롬프트 템플릿](#10-프롬프트-템플릿)
+- [11. 데이터 ERD](#11-데이터-erd)
+- [12. 데이터 수집 및 전처리](#12-데이터-수집-및-전처리)
+- [13. 기술 스택](#13-기술-스택)
+- [14. 테스트 계획 및 결과](#14-테스트-계획-및-결과)
+- [15. 테스트 시나리오](#15-테스트-시나리오)
+- [16. 트러블슈팅](#16-트러블슈팅)
+- [17. 실행 방법](#17-실행-방법)
+- [18. 폴더 구조](#18-폴더-구조)
+- [19. 필수 산출물 위치](#19-필수-산출물-위치)
+- [20. 향후 개선](#20-향후-개선)
+- [21. 협업 방식](#21-협업-방식)
+- [22. 회고](#22-회고)
 
-## 팀 소개
+---
+
+## 1. 팀 소개
 
 | 이름 | GitHub |
 | --- | --- |
@@ -40,7 +45,9 @@
 | 문성호 | [MoonSungHo](https://github.com/MoonSungHo-D) |
 | 최성욱 | [Overlay1010](https://github.com/Overlay1010) |
 
-## 역할 분담
+---
+
+## 2. 역할 분담
 
 | 담당자 | 담당 영역 |
 |---|---|
@@ -49,11 +56,13 @@
 | 문성호 | 앱 공통 테마·UI, AI 코치 화면 및 사용자 경험 |
 | 최성욱 | 이력서 첨삭 워크플로우, 온보딩, 테스트·문서화 |
 
+---
+
+## 3. 프로젝트 소개
+
 ### 프로젝트 명
 
 **PLAYDATA LXP** — PLAYDATA All-in-One LMS를 학습 경험 플랫폼으로 확장
-
-## 프로젝트 소개
 
 기존 부트캠프 LMS는 관리자·강사 중심의 **운영 시스템**이다. 출결, 좌석, 제출 승인, 공지, 마일리지, 평가를 기수(`cohort`) 단위로 닫아 관리한다.
 
@@ -66,7 +75,9 @@
 
 운영 데이터(Firestore)와 문서 벡터(Pinecone)를 한 질의에서 같이 쓰므로, “규정이 뭐냐”와 “내 출석률이 얼마냐”를 같은 챗봇이 답한다.
 
-## 프로젝트 필요성 (배경)
+---
+
+## 4. 프로젝트 필요성 (배경)
 
 | 기존 LMS의 한계 | LXP로 바꾸는 이유 |
 | --- | --- |
@@ -77,7 +88,9 @@
 
 3차 과제 주제는 **LLM을 연동한 내외부 문서 기반 질의응답**이다. 우리 팀은 이를 데모용 챗봇이 아니라, 실제 부트캠프 운영 LMS 안의 LXP 기능으로 구현했다.
 
-## 프로젝트 목표
+---
+
+## 5. 프로젝트 목표
 
 | 과제 목표 | 이 프로젝트에서 |
 |---|---|
@@ -85,7 +98,9 @@
 | 문서를 임베딩해 벡터 DB에 저장·검색 | 채용공고 2.3만 건, 훈련 정책·FAQ, 기수 공지, 전 기수 프로젝트를 Pinecone에 적재 |
 | LangChain으로 벡터 DB와 LLM 연동 | `ChatPromptTemplate` + 구조화 출력, `OpenAIEmbeddings`, LangGraph 라우팅 그래프 |
 
-## 주요 기능
+---
+
+## 6. 주요 기능
 
 AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마다 README가 따로 있다.**
 
@@ -108,11 +123,15 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 | [scripts/](scripts/README.md) | 서버 실행, Firebase 시드, 환경 변수 동기화 |
 | [config/firebase/](config/firebase) | Firestore·Storage 보안 규칙, 인덱스 |
 
-## WBS
+---
+
+## 7. WBS
 
 ![WBS](assets/readme_image/WBS.png)
 
-## 시스템 아키텍처
+---
+
+## 8. 시스템 아키텍처
 
 ![시스템 아키텍처](assets/readme_image/system_architecture.png)
 
@@ -124,7 +143,9 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 추천봇의 인덱싱·추천·챗봇 흐름도는 [job_matching_bot/docs/architecture.md](job_matching_bot/docs/architecture.md)에 더 자세히 있다.
 
-## RAG 구성
+---
+
+## 9. RAG 구성
 
 ### 벡터 인덱스
 
@@ -162,7 +183,9 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 | Streaming | 학생 챗봇 토큰 스트리밍(NDJSON), 추천 단계 진행 SSE |
 | 병목 측정 | 추천 단계별 시간을 로그 `[추천 시간]`과 응답 `timings_ms`에 남김 |
 
-## 프롬프트 템플릿
+---
+
+## 10. 프롬프트 템플릿
 
 모든 LLM 호출은 LangChain `ChatPromptTemplate`(system 규칙 + human 입력 변수)로 조립하고,
 답을 앱이나 다음 단계가 읽어야 하는 곳은 `with_structured_output`으로 **Pydantic·JSON 스키마를 강제**한다.
@@ -198,13 +221,93 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 - **합격 가능성을 말하거나 지원자를 점수화하지 않는다.**
 - 채용 도구의 답은 사용자가 반말로 물어도 존댓말로 쓴다(`TONE_RULE`).
 
-## 데이터 ERD
+---
+
+## 11. 데이터 ERD
+
+### Firebase/Firestore ERD
 
 ![Firestore ERD](assets/readme_image/firestore_erd.png)
 
+아래 표는 위 ERD의 노드와 주요 필드를 정리한 것이다. 경로 약어는 `C = cohorts/{cohortId}`, `U = users/{uid}`, `A = C/assessments/{assessmentId}`, `F = C/formTasks/{taskId}`, `R = C/resumes/{resumeId}`, `T = R/tailoredResumes/{tailoredId}`를 뜻한다. 문서 ID와 다른 노드에 대한 참조도 함께 표기했다.
+
+| 영역 | 노드 / 경로 | 주요 속성·메타데이터 | 비고 |
+|---|---|---|---|
+| 사용자·기수 | Firebase Auth | `uid`, `email`, `disabled` | `uid`로 `users`와 연결하는 인증 계정 |
+| 사용자·기수 | `cohorts` | `cohortId`, `name`, `status`, `startDate`, `endDate`, `isActive` | 한 기수에 여러 사용자 연결 |
+| 사용자·기수 | `users` | `uid`, `cohortId`, `role`, `displayName`, `mileageBalance` | `cohortId`로 소속 기수 참조 |
+| 사용자·기수 | `studentintakes` | `uid`, `cohortId`, `displayName`, `passwordChanged` | 사용자·기수를 참조하는 학생 등록 정보 |
+| 사용자·기수 | `U/todos` | `todoId`, `title`, `isCompleted`, `createdAt` | 사용자별 할 일 |
+| 사용자·기수 | `U/studyNotes` | `noteId`, `sourceId`, `status`, `reportMarkdown`, `files[]` | `sourceId`로 기수의 `studySources` 참조 |
+| 사용자·기수 | `U/alertPopupDismissed` | `popupId`, `dateKey`, `updatedAt` | `popupId`로 팝업 참조, 사용자별 닫기 기록 |
+| 학습 자료 | `C/curriculum` | `meta`, `fullPdfUrl`, `fullFileName`, `published` | 커리큘럼 PDF 연결 |
+| 학습 자료 | `C/curriculumSheets` | `sheetId`, `title`, `rows[]`, `storagePath`, `uploadedBy` | 커리큘럼 CSV와 업로드 정보 |
+| 학습 자료 | `C/studySources` | `sourceId`, `repoUrl`, `branch`, `allowedPrefixes[]`, `isActive` | 노트 생성에 사용할 GitHub 저장소·허용 경로 |
+| 학습 자료 | `C/youtubeCurriculumCache` | `cacheId`, `weekKey`, `topics[]`, `videos[]`, `cacheVersion`, `fetchedAt` | 커리큘럼 기반 추천 결과 캐시 |
+| 공지·팝업 | `C/notices` | `noticeId`, `title`, `content`, `authorId` | `authorId`로 사용자 참조, 공지 벡터 동기화 대상 |
+| 공지·팝업 | `C/scheduledNotices` | `scheduledId`, `repeatType`, `publishAt`, `nextPublishAt`, `isActive` | 예약 시각에 공지 발행 |
+| 공지·팝업 | `C/alertPopups` | `popupId`, `title`, `content`, `authorId`, `isActive` | 작성자 참조 및 팝업 활성 상태 |
+| 공지·팝업 | `C/vectorMetadata` | `counterDoc`, `nextIndex` | 공지 벡터 색인 카운터 |
+| 출결·제출 | `C/attendances` | `attendanceId`, `userId`, `dateKey`, `status`, `checkInTime` | 사용자별 일자 출결 |
+| 출결·제출 | `C/rollCalls` | `dateKey`, `period`, `periodId`, `confirmedUserIds[]`, `heldUserId[]` | 시간대별 출석 확인 |
+| 출결·제출 | `C/submissions` | `submissionId`, `userId`, `type`, `status`, `fileUrls[]` | 사용자 및 제출 증빙 파일 참조 |
+| 출결·제출 | `C/formTasks` | `taskId`, `title`, `formUrl`, `dueAt`, `published`, `responseCount` | 폼 과제 하나에 여러 응답 연결 |
+| 출결·제출 | `F/responses` | `responseId`, `userId`, `taskId`, `source`, `submittedAt` | 폼 과제 및 응답자 참조 |
+| 평가 | `C/assessments` | `assessmentId`, `title`, `published`, `startAt`, `endAt`, `curriculumSource` | 평가 문항·제출 결과의 기준 노드 |
+| 평가 | `A/questions` | `questionId`, `type`, `prompt`, `points`, `aiGenerationLogs` | 평가별 문항과 AI 생성 정보 |
+| 평가 | `C/assessmentSubmissions` | `submissionId`, `assessmentId`, `userId`, `answers[]`, `totalScore` | 평가·사용자 참조 및 채점 결과 |
+| 좌석·팀 | `C/seatingRooms` | `roomId`, `layout[]`, `createdAt`, `updatedAt` | 좌석 배치도 |
+| 좌석·팀 | `C/seatingAssignments` | `assignmentDoc`, `status`, `assignmentSeatId`, `userId`, `publishedAt` | 좌석·사용자 배정 정보 |
+| 좌석·팀 | `C/seatingMeta` | `metaDoc`, `publishedRoomId` | 현재 공개된 `seatingRooms` 참조 |
+| 좌석·팀 | `C/projectTeams` | `teamId`, `name`, `members[]`, `sortOrder` | 팀원 사용자 목록 참조 |
+| 좌석·팀 | `C/seating` | `legacyDoc`, `layout`, `assignment` | 기존 좌석 데이터, 런타임 폴백 |
+| 마일리지 | `C/mileageProducts` | `productId`, `name`, `category`, `pricingType`, `fixedPrice`, `isActive` | 구매 가능한 상품과 가격 정책 |
+| 마일리지 | `C/mileageCart` | `userId`, `items[]`, `updatedAt` | `items[].productId`로 상품 참조 |
+| 마일리지 | `C/purchaseRequests` | `requestId`, `userId`, `items[]`, `totalAmount`, `status` | 상품·사용자 참조 및 구매 승인 상태 |
+| 마일리지 | `C/mileageTransactions` | `transactionId`, `userId`, `amount`, `type`, `relatedId` | 구매 승인·미션 보상의 거래 이력 |
+| 마일리지 | `C/missionProgress` | `userId`, `studyCertCount`, `quizPassCount`, `blogWeeks[]` | 사용자별 미션 수행 기록 |
+| 이력서·첨삭 | `C/resumes` | `resumeId`, `userId`, `title`, `status`, `content{}` | 기본 이력서, 사용자 참조 |
+| 이력서·첨삭 | `R/tailoredResumes` | `tailoredResumeId`, `baseResumeId`, `userId`, `jobId`, `content{}` | 기본 이력서에서 파생된 공고별 맞춤 이력서 |
+| 이력서·첨삭 | `R/revisions` | `revisionId`, `content{}`, `savedAt` | 이력서 저장 버전 |
+| 이력서·첨삭 | `R/feedback` | `feedbackId`, `authorId`, `sectionKey`, `content`, `parentId` | 작성자 참조, `parentId`로 답글 연결 |
+| 이력서·첨삭 | `R/aiReviews` | `reviewId`, `userId`, `status`, `response{}`, `telemetry{}` | 기본 이력서 AI 첨삭 결과 |
+| 이력서·첨삭 | `R/aiApplications` | `operationId`, `source_id`, `kind`, `before`, `after`, `hash` | 첨삭 결과를 참조하는 적용·되돌리기 기록 |
+| 이력서·첨삭 | `T/aiReviews` | `reviewId`, `userId`, `status`, `response{}`, `telemetry{}` | 맞춤 이력서 AI 첨삭 결과 |
+| 이력서·첨삭 | `T/aiApplications` | `operationId`, `source_id`, `kind`, `before`, `after`, `hash` | 맞춤 이력서 첨삭의 적용·되돌리기 기록 |
+| AI 운영 | `aiGenerationLogs` | `logId`, `cohortId`, `createdBy`, `type`, `model`, `status`, `latencyMs` | AI 요청·생성 로그 |
+| AI 운영 | `aiQuestionFeedback` | `feedbackId`, `logId`, `assessmentId`, `questionId`, `outcome` | 생성 로그·평가 문항 참조, 로그 하나에 여러 피드백 연결 |
+| AI 운영 | `aiEvalRuns` | `runId`, `model`, `promptVersion`, `totalCases`, `passed`, `accuracy` | 평가 실행 결과 |
+| AI 운영 | `systemCache` | `qualExamSchedules_{year}`, `year`, `items[]`, `totalCount`, `syncedAt` | 자격시험 일정 캐시 |
+| Storage | `U/profile/{file}` | `users.photoStoragePath` | 사용자 프로필 이미지 |
+| Storage | `C/assessments/{assessmentId}/thumbnails/{file}` | `thumbnailPath` | 평가 썸네일 |
+| Storage | `C/curriculum/full/{file}` | `fullPdfUrl` | 커리큘럼 PDF |
+| Storage | `C/curriculumSheets/{sheetId}/{file}` | `storagePath` | 커리큘럼 CSV |
+| Storage | `C/records/{uid}/{submissionId}/{file}` | `fileUrls[]` | 제출 증빙 파일 |
+| Storage | `job_matching_bot/job_store_share.sqlite.gz` | 공유 SQLite 압축 파일 | 백엔드 시작 시 다운로드하는 채용공고 원문 DB |
+
+### Pinecone ERD
+
 ![Pinecone ERD](assets/readme_image/pinecone_erd.png)
 
-## 데이터 수집 및 전처리
+아래 표는 위 ERD의 데이터 원본, 벡터 저장소, 조회 노드를 정리한 것이다. `student`와 `job-posting`은 서로 다른 인덱스·계정으로 분리되며, API 키 항목은 비밀값이 아닌 환경 변수 이름이다.
+
+| 구분 | 노드 | 주요 속성·메타데이터 | 비고 |
+|---|---|---|---|
+| 원본 | Policy / FAQ 문서 | 정책·FAQ·훈련 가이드 원문 | 정규화 → 분류 → 청킹 → 임베딩 후 `student/policy`에 적재 |
+| 원본 | Firestore 공지 | `cohorts/{cohortId}/notices/{noticeId}` | Cloud Functions로 `student/notice`에 증분 동기화 |
+| 원본 | Project Reference CSV | 기수, 프로젝트 차수, GitHub 주소 | CSV 한 행을 문서 하나·벡터 하나로 적재 |
+| 원본 | 채용공고 | `job_store.sqlite`, JSONL, 공고 요건 구간 | 공고당 벡터 하나를 `job-posting`에 적재 |
+| 인덱스 | `student` | 1536차원, cosine, `text-embedding-3-small`, `PINECONE_API_KEY2` | 학생 챗봇용 인덱스, 세 namespace로 분리 |
+| Namespace | `student/policy` | 벡터 ID: `{type}_{seq}`<br>`page_content`, `doc_id`, `type`, `created_at` | 정책·FAQ·규정 검색, `policy_ingestion.py`에서 관리 |
+| Namespace | `student/notice` | 벡터 ID: `{cohort}_{seq}`<br>`page_content`, `doc_id`, `cohort`, `title`, `author_id`, `author_name`, `is_favorite`, `priority`, `created_at`, `updated_at` | 공지 하나에 여러 청크 연결, `_vectorIndexes[]`로 추적, `noticeVectors.ts`에서 관리 |
+| Namespace | `student/project_reference` | 벡터 ID: `cohort_round_seq`<br>`page_content`, `doc_id`, `cohort`, `project_round`, `github_url` | 기수·차수 필터 검색, `project_reference_ingestion.py`에서 관리 |
+| 인덱스 | `job-posting` / 기본 namespace | 벡터 ID: `job.job_id`, cosine, `PINECONE_API_KEY1`<br>`job_id`, `company`, `title`, `source`, `source_url`, `status`, `deadline`<br>`regions[]`, `nationwide`, `region_text`, `career_type`, `min_career_years`, `education`, `employment_type`<br>`required_skills[]`, `preferred_skills[]`, `tech_stack[]`, `body_is_image`, `excerpt`, `embed_hash`, `content_hash` | 조건 필터·공고 카드·증분 동기화용 평면 메타데이터 |
+| 조회 | Student Chatbot / `ScopedPineconeVectorStore` | `route`, namespace, 공지의 `cohort` 필터, 프로젝트의 `project_round` 필터 | 세 namespace 병렬 조회 후 중복 제거 |
+| 조회 | Job Matching API | 의미 검색, 메타데이터 하드 필터, LLM 재정렬 | `job_matching_bot`·`cover_letter_rag`에서 사용 |
+
+---
+
+## 12. 데이터 수집 및 전처리
 
 | 데이터 | 출처 · 규모 | 전처리 | 문서 |
 |---|---|---|---|
@@ -217,7 +320,9 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 채용공고 원본(375MB)과 수집 원본은 레포에 올리지 않는다. 팀원은 매일 밤 Firebase Storage에 올라가는
 공유본을 `scripts/start-backend.ps1`로 받는다.
 
-## 기술 스택
+---
+
+## 13. 기술 스택
 
 | 영역 | 기술 |
 |---|---|
@@ -230,7 +335,9 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 | 인프라 | Firebase Auth · Firestore · Storage · Cloud Functions(TypeScript, Node 20) |
 | 문서 제작 | Playwright, ffmpeg, edge-tts |
 
-## 테스트 계획 및 결과
+---
+
+## 14. 테스트 계획 및 결과
 
 | 대상 | 방법 | 결과 | 문서 |
 |---|---|---|---|
@@ -244,7 +351,9 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 추천 응답 시간은 중앙값 18.6초이고, 그중 LLM 재정렬이 11.0초(60%)다.
 
-## 테스트 시나리오
+---
+
+## 15. 테스트 시나리오
 
 사용자가 무엇을 입력하면 무엇이 나와야 하는지를 기능별로 정리했다. 입력과 기대 결과는 레포의 평가 케이스·테스트에서
 가져왔고, **결과 칸에는 실제로 돌려 확인한 것만** 적었다.
@@ -332,7 +441,9 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 첨삭 테스트 127개 전체를 2026-09-15에 돌려 모두 통과했다. 이것은 서버 검증 규칙이 동작한다는 뜻이고,
 실제 모델이 좋은 수정안을 내는지는 [사람 대조 기준](cover_letter_rag/docs/resume-review-quality.md)으로 따로 봐야 한다.
 
-## 트러블슈팅
+---
+
+## 16. 트러블슈팅
 
 | 문제 | 원인 | 해결 | 결과 |
 |---|---|---|---|
@@ -345,7 +456,9 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 전체 목록은 [test_report.md 4장](job_matching_bot/docs/test_report.md#4-트러블슈팅)에 있다.
 
-## 실행 방법
+---
+
+## 17. 실행 방법
 
 ### 1. 준비
 
@@ -388,7 +501,9 @@ python -m vectordb.project_reference_ingestion               # 전 기수 프로
 python -m job_matching_bot.sync                              # 채용공고 증분 적재
 ```
 
-## 폴더 구조
+---
+
+## 18. 폴더 구조
 
 ```text
 SKN34-3rd-2Team/
@@ -408,17 +523,21 @@ SKN34-3rd-2Team/
 └── .env.example        #    환경 변수 목록 (실제 값은 .env, Git 제외)
 ```
 
-## 필수 산출물 위치
+---
+
+## 19. 필수 산출물 위치
 
 | 산출물 | 위치 |
 |---|---|
 | 수집된 데이터 및 데이터 전처리 문서 | [job_matching_bot/docs/data_preprocessing.md](job_matching_bot/docs/data_preprocessing.md), [vectordb/README.md](vectordb/README.md), `vectordb/data/` |
-| 시스템 아키텍처 | 이 문서의 [시스템 아키텍처](#시스템-아키텍처), [job_matching_bot/docs/architecture.md](job_matching_bot/docs/architecture.md), [chatbot/README.md](chatbot/README.md#동작-구조) |
+| 시스템 아키텍처 | 이 문서의 [8. 시스템 아키텍처](#8-시스템-아키텍처), [job_matching_bot/docs/architecture.md](job_matching_bot/docs/architecture.md), [chatbot/README.md](chatbot/README.md#동작-구조) |
 | RAG 기반 LLM과 벡터 DB 연동 코드 | [chatbot/](chatbot), [vectordb/](vectordb), [job_matching_bot/](job_matching_bot), [cover_letter_rag/](cover_letter_rag) |
-| 프롬프트 템플릿 | 이 문서의 [프롬프트 템플릿](#프롬프트-템플릿) |
-| 테스트 계획 및 결과 보고서 | 이 문서의 [테스트 시나리오](#테스트-시나리오), [job_matching_bot/docs/test_report.md](job_matching_bot/docs/test_report.md), [cover_letter_rag/docs/resume-review-quality.md](cover_letter_rag/docs/resume-review-quality.md), [chatbot_lab/README.md](chatbot_lab/README.md) |
+| 프롬프트 템플릿 | 이 문서의 [10. 프롬프트 템플릿](#10-프롬프트-템플릿) |
+| 테스트 계획 및 결과 보고서 | 이 문서의 [15. 테스트 시나리오](#15-테스트-시나리오), [job_matching_bot/docs/test_report.md](job_matching_bot/docs/test_report.md), [cover_letter_rag/docs/resume-review-quality.md](cover_letter_rag/docs/resume-review-quality.md), [chatbot_lab/README.md](chatbot_lab/README.md) |
 
-## 향후 개선
+---
+
+## 20. 향후 개선
 
 - **추천 속도.** 추천 한 번에 중앙값 18.6초, 60%가 LLM 재정렬이다. 재정렬 건수·모델·추론 강도를 사람 채점과 함께 조정한다.
 - **배포 전 인증.** 추천·공고 찾기 챗봇 API에는 아직 Firebase 인증이 없다. 공개 배포 전에 붙여야 한다.
@@ -427,7 +546,9 @@ SKN34-3rd-2Team/
 - **야간 배치 서버 이전.** 공고 수집이 노트북 한 대의 작업 스케줄러에서 돌아 노트북이 꺼진 밤은 건너뛴다.
 - **평가 확대.** 추천 채점 표본이 회차당 50건 안팎이고 채점자가 한 명이다. 표본과 채점자를 늘린다.
 
-## 협업 방식
+---
+
+## 21. 협업 방식
 
 | 항목 | 규칙 |
 |---|---|
@@ -436,10 +557,14 @@ SKN34-3rd-2Team/
 | 이슈 관리 | Jira `S32-XX` |
 | 비밀값 | 루트 `.env` 한 곳에만. `functions/.env`는 `scripts/sync-functions-env.ps1`로 생성 |
 
-## 회고
+---
+
+## 22. 회고
 | 이름 | 회고 |
 | --- | --- |
 | 김기호 |  |
 | 김대호 |  |
 | 문성호 |  |
 | 최성욱 |  |
+
+---
