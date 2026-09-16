@@ -187,6 +187,64 @@ def filter_verified_project_time_questions(generation, context):
     ]
 
 
+# "…하고 싶어서 지원하게 되었습니다."처럼 지원 사실만 적고 회사·직무는 빠진 마무리 문장.
+# 어미를 그대로 두고 그 앞에만 회사명·직무명을 끼워 넣으려고 끝 부분만 잡는다.
+_IDENTITY_APPLY_TAIL = re.compile(
+    r'지원(?:하게\s*되었습니다|하게\s*됐습니다|하게\s*되었어요|했습니다|하였습니다|합니다|하고자\s*합니다)'
+    r'\s*[.!?]?\s*$'
+)
+
+
+# 이유를 잇는 "-아서/어서"가 줄어든 꼴은 "서" 앞이 받침 없는 ㅏ·ㅓ·ㅕ·ㅐ·ㅘ·ㅝ다.
+# (싶어서·맞아서·위해서·배워서·만들어서…) 한글 음절을 풀어 이 모양일 때만 "서"를 뗀다.
+# 조사 "에서"(ㅔ), 연결어미 "-면서"(받침 있음), "로서"(ㅗ)는 이 조건에 걸리지 않는다.
+_CAUSAL_VOWELS = frozenset({0, 1, 4, 6, 9, 14})  # ㅏ ㅐ ㅓ ㅕ ㅘ ㅝ
+# 위 조건에는 걸리지만 "서"를 떼면 말이 안 되는 접속부사.
+_CAUSAL_SHORTEN_BLOCKED = ('그래서', '따라서')
+
+
+def _is_causal_seo(syllable):
+    """이 글자가 "-아서/어서"의 줄어든 꼴 끝인가. 받침이 없고 모음이 위 여섯 중 하나여야 한다."""
+    code = ord(syllable) - 0xAC00
+    if not 0 <= code < 11172:
+        return False
+    return code % 28 == 0 and (code // 28) % 21 in _CAUSAL_VOWELS
+
+
+def _shorten_causal_ending(head):
+    """끼워 넣을 자리 바로 앞의 "-아서/어서"를 "-아/어"로 줄인다.
+
+    회사명·직무명이 들어가면 문장이 길어지는데, "-어서"와 "지원하게 되었습니다"가 둘 다 이유를
+    짚어 늘어진다. 줄이면 앞말이 뒷말에 그대로 이어진다. 바로 앞 한 곳만 건드린다.
+    """
+    stripped = head.rstrip()
+    if len(stripped) < 2 or not stripped.endswith('서'):
+        return head
+    if stripped.endswith(_CAUSAL_SHORTEN_BLOCKED) or not _is_causal_seo(stripped[-2]):
+        return head
+    return stripped[:-1] + head[len(stripped):]
+
+
+def _weave_identity_into_application(text, company, title):
+    """지원 사실만 적힌 마무리 문장 안에 회사명·직무명을 끼워 넣는다.
+
+    문장을 하나 더 붙이는 대신 있는 문장을 쓰므로 첫 첨삭 결과가 바로 읽을 만해진다.
+    어미는 손대지 않는다. 직무명이 이미 적혀 있으면 같은 말이 두 번 나오므로 하지 않는다.
+    끼워 넣을 자리가 없으면 None을 돌려주고, 부르는 쪽이 독립 문장을 앞에 붙인다.
+    """
+    body = str(text or '').rstrip()
+    if not body.strip() or title in body:
+        return None
+    match = _IDENTITY_APPLY_TAIL.search(body)
+    if not match:
+        return None
+    role_label = title if title.endswith('직무') else f'{title} 직무'
+    head = _shorten_causal_ending(body[:match.start()])
+    # 앞말과 붙어 버리지 않게 한 칸 띄운다. 문장 맨 앞이면 띄우지 않는다.
+    separator = '' if not head or head.endswith((' ', '\n')) else ' '
+    return f'{head}{separator}{company}의 {role_label}에 {body[match.start():]}'
+
+
 def apply_selected_job_identity_revisions(
     generation,
     fields,
@@ -208,6 +266,7 @@ def apply_selected_job_identity_revisions(
     )
     replacements = {}
     auto_identity_paths = set()
+    woven_identity_paths = set()
     for field_path, original in fields.items():
         revised = original
         changed = []
@@ -277,19 +336,27 @@ def apply_selected_job_identity_revisions(
         )
         if field_path:
             original = fields[field_path]
-            if field_path.endswith('.motivation.body'):
-                role_label = title if title.endswith('직무') else f'{title} 직무'
-                identity_sentence = f'{company}의 {role_label}에 지원한 이유는 다음과 같습니다.'
+            # 있는 문장 안에 넣을 수 있으면 그렇게 한다. 독립 문장을 앞에 붙이면 "…지원한 이유는 다음과
+            # 같습니다. / …지원하게 되었습니다."처럼 지원 얘기가 두 번 나와, 사용자가 다음 첨삭에서 합치는
+            # 수정안을 한 번 더 받아야 했다(2026-09-16 앱 확인). 어미는 건드리지 않아 조사·의미는 그대로다.
+            woven = _weave_identity_into_application(original, company, title)
+            if woven:
+                replacements[field_path] = (original, woven, '회사명·직무명')
+                woven_identity_paths.add(field_path)
             else:
-                identity_sentence = (
-                    f'{company}에서 {_job_role_with_particle(title, "으로")} '
-                    '성장하고 싶습니다.'
+                if field_path.endswith('.motivation.body'):
+                    role_label = title if title.endswith('직무') else f'{title} 직무'
+                    identity_sentence = f'{company}의 {role_label}에 지원한 이유는 다음과 같습니다.'
+                else:
+                    identity_sentence = (
+                        f'{company}에서 {_job_role_with_particle(title, "으로")} '
+                        '성장하고 싶습니다.'
+                    )
+                replacements[field_path] = (
+                    original,
+                    f'{identity_sentence}\n{original}',
+                    '회사명·직무명',
                 )
-            replacements[field_path] = (
-                original,
-                f'{identity_sentence}\n{original}',
-                '회사명·직무명',
-            )
             auto_identity_paths.add(field_path)
     if not replacements:
         return
@@ -301,12 +368,15 @@ def apply_selected_job_identity_revisions(
         if review.field_path not in replacements
     ]
     for field_path, (original, revised, changed) in replacements.items():
-        reason = (
-            '선택한 공고의 회사명·직무명을 공고별 이력서에만 '
-            '안전한 문장 패턴으로 추가했습니다.'
-            if field_path in auto_identity_paths
-            else f'선택한 공고의 {changed} 확정값을 자리표시자에 반영했습니다.'
-        )
+        if field_path in woven_identity_paths:
+            reason = '선택한 공고의 회사명·직무명을 지원 문장 안에 넣었습니다.'
+        elif field_path in auto_identity_paths:
+            reason = (
+                '선택한 공고의 회사명·직무명을 공고별 이력서에만 '
+                '안전한 문장 패턴으로 추가했습니다.'
+            )
+        else:
+            reason = f'선택한 공고의 {changed} 확정값을 자리표시자에 반영했습니다.'
         generation.sentence_reviews.append(SentenceReview(
             field_path=field_path,
             original_quote=original,
@@ -1602,7 +1672,11 @@ def run_review(service, id_token, request):
             )
             if request.review_mode == 'job' and not requirement_rows:
                 add_missing_job_technology_question(grounded, fields, job_text)
-        elif not is_gap_audit:
+        else:
+            # 누락 점검도 남은 질문을 이어받아야 한다. 첨삭마다 question_id를 새로 매기므로, 이어받지
+            # 않으면 화면에 떠 있는 질문의 번호를 서버가 모르게 된다. 그러면 앱이 그 질문을 죽은 것으로
+            # 보고 답을 보내지 않고 넘겨, 사용자가 친 답이 입력칸에 남은 채 다음 질문만 쌓였다
+            # (2026-09-16 앱: 누락 점검 뒤 답변이 서버까지 가지 않았다).
             carry_forward_unanswered_questions(grounded, previous, answers)
         # 비슷한 질문 거르기보다 먼저 거른다. 뒤에서만 거르면 "직접 한 방법은?"(이미 적힘)이 남고 비슷한
         # "확인한 결과는?"(빠짐)이 먼저 버려져, 필요한 질문까지 사라진다. 수정안에 붙은 질문은 정리 뒤에 한 번 더 본다.

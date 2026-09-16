@@ -104,6 +104,62 @@ def test_gap_audit_allows_questions_but_never_rewrites_resume():
     assert [question.topic for question in audited.questions] == ['scope']
 
 
+def test_gap_audit_carries_forward_unanswered_questions():
+    """누락 점검도 남은 질문에 새 번호를 물려줘야 한다.
+
+    첨삭마다 question_id를 새로 매기므로, 이어받지 않으면 화면에 떠 있는 질문의 번호를 서버가
+    모르게 된다. 그러면 앱이 그 질문을 죽은 것으로 보고 답을 보내지 않고 넘겨, 사용자가 친 답이
+    입력칸에 남은 채 다음 질문만 쌓였다(2026-09-16 앱).
+    """
+    calls = []
+
+    def generate(data):
+        calls.append(data)
+        if len(calls) == 1:
+            return ResumeReviewGeneration(
+                summary='첫 검토',
+                section_reviews=[],
+                questions=[ReviewQuestion(
+                    field_path='projects[0].description',
+                    topic='scope',
+                    question='본인이 직접 담당한 API 범위는 어디까지인가요?',
+                    reason='담당 범위가 아직 확인되지 않았습니다.',
+                    priority=1,
+                )],
+            )
+        # 누락 점검은 새 질문만 낸다. 앞서 띄운 질문은 서버가 이어받아야 한다.
+        return ResumeReviewGeneration(summary='누락 점검', section_reviews=[])
+
+    service = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generate,
+    )
+    first = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1', resume_id='resume-1', request_id='carry-initial',
+        ),
+    )
+    assert len(first.questions) == 1
+
+    audited = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1',
+            resume_id='resume-1',
+            request_id='carry-gap-audit',
+            previous_review_id=first.review_id,
+            expected_input_hash=first.input_hash,
+            review_phase='gap_audit',
+        ),
+    )
+
+    carried = [q for q in audited.questions if q.topic == 'scope']
+    assert len(carried) == 1, '남은 질문이 누락 점검 응답에서 사라졌다'
+    # 번호는 이 첨삭 것으로 새로 매겨진다. 빈 번호로 나가면 앱이 답을 보낼 수 없다.
+    assert carried[0].question_id
+    assert carried[0].question_id != first.questions[0].question_id
+
+
 def test_gap_audit_requires_previous_review_and_no_answers():
     service = ResumeReviewService(
         Settings(openai_api_key='test'), FakeFirebase(), generation,

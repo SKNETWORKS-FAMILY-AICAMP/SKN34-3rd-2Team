@@ -830,6 +830,19 @@ def _split_answer_sentences(text: str) -> list[str]:
     return [part.strip() for part in re.split(r'(?<=[.!?])\s+|\n+', str(text or '').strip()) if part.strip()]
 
 
+# 답이 막연한 소감이 아니라 구체적인 일을 말했는가. 행동을 적은 말과 측정된 결과를 적은 말을 함께 본다.
+# 사용자는 "줄였습니다"(내가 줄임)보다 "줄었어요"(결과가 줄어듦)로 쓰는 일이 많다. 결과형이 빠져 있던 탓에
+# 숫자 근거가 다섯 개나 담긴 답이 통째로 버려졌다(2026-09-16 앱: "6초 걸리던 게 1.5초로 줄었어요.
+# 맞는 문서를 가져온 질문이 25에서 36개로 늘었고요" — 동사가 하나도 안 걸려 수정안이 안 떴다).
+_SUBSTANTIVE_ACTION = re.compile(
+    # 행동
+    r'(구현|개발|적용|측정|분석|확인|운영|설계|수정|개선|구축|처리|단축'
+    r'|바꾸|바꿔|바꿨|고치|고쳐|고친|고쳤|만들|붙였|나눴|추가|도입|교체|조정|튜닝'
+    # 결과
+    r'|줄였|줄어|줄었|늘렸|늘어|늘었|높였|높아|낮췄|낮아|빨라|올랐|올렸)'
+)
+
+
 def add_substantive_answer_fallback(generation, fields, answers):
     """Add a safe proposal if the model drops a substantive confirmed answer."""
     warnings = []
@@ -874,12 +887,7 @@ def add_substantive_answer_fallback(generation, fields, answers):
         ):
             continue
         stable, content = _answer_reflection_anchors(confirmed)
-        has_action = bool(
-            re.search(
-                r'(구현|개발|적용|측정|분석|확인|운영|설계|수정|개선|구축|처리|줄였|단축)',
-                confirmed,
-            )
-        )
+        has_action = bool(_SUBSTANTIVE_ACTION.search(confirmed))
         if not has_action or (not stable and len(content) < 6):
             continue
         scoped = _fallback_edit_scope(original, confirmed)
