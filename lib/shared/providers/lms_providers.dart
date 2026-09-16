@@ -170,6 +170,15 @@ final cohortStudentsProvider =
   return ref.watch(lmsRepositoryProvider).watchCohortStudents(cohortId);
 });
 
+/// 관리자 기수 목록에서 각 기수의 실제 재원생 수를 표시할 때 사용한다.
+/// `cohorts.studentCount`는 과거 데이터에서 누락될 수 있으므로 users를 기준으로 한다.
+final cohortStudentsByIdProvider = StreamProvider.autoDispose
+    .family<List<UserModel>, String>((ref, cohortId) {
+  final isAdmin = ref.watch(isAdminProvider);
+  if (!isAdmin) return Stream.value([]);
+  return ref.watch(lmsRepositoryProvider).watchCohortStudents(cohortId);
+});
+
 final instructorsStreamProvider =
     StreamProvider.autoDispose<List<UserModel>>((ref) {
   final isAdmin = ref.watch(isAdminProvider);

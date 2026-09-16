@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/notice_model.dart';
 import '../../../shared/providers/cohort_providers.dart';
 import '../../../shared/providers/lms_providers.dart';
+import '../../../shared/services/storage_service.dart';
 import '../../hub/presentation/widgets/board_ui.dart';
 import '../../../core/theme/app_space.dart';
 
@@ -26,6 +30,9 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
   var _isFavorite = false;
   var _loading = false;
   var _initialized = false;
+  Uint8List? _imageBytes;
+  String? _imageFileName;
+  String? _imageUrl;
 
   bool get _isEdit => widget.noticeId != null;
 
@@ -51,7 +58,38 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
     _titleController.text = notice.title;
     _contentController.text = notice.content;
     _isFavorite = notice.isFavorite;
+    _imageUrl = notice.imageUrl;
     _initialized = true;
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.image,
+    );
+    if (picked.isEmpty || !mounted) return;
+    final file = picked.first;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    if (bytes.length > 5 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이미지는 5MB 이하만 등록할 수 있습니다.')),
+      );
+      return;
+    }
+    setState(() {
+      _imageBytes = bytes;
+      _imageFileName = file.name;
+    });
+  }
+
+  String _imageContentType(String fileName) {
+    final extension = fileName.split('.').last.toLowerCase();
+    return switch (extension) {
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
   }
 
   Future<void> _save() async {
@@ -71,12 +109,26 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
     setState(() => _loading = true);
     try {
       final repo = ref.read(lmsRepositoryProvider);
+      var imageUrl = _imageUrl;
+      if (_imageBytes != null && _imageFileName != null) {
+        final storagePath = StorageService.noticeImagePath(
+          cohortId: cohortId,
+          userId: user.uid,
+          fileName: _imageFileName!,
+        );
+        imageUrl = await ref.read(storageServiceProvider).uploadAndGetUrl(
+          storagePath: storagePath,
+          bytes: _imageBytes!,
+          contentType: _imageContentType(_imageFileName!),
+        );
+      }
       final notice = NoticeModel(
         id: widget.noticeId ?? '',
         title: title,
         content: content,
         authorName: user.displayName,
         isFavorite: _isFavorite,
+        imageUrl: imageUrl,
       );
 
       if (_isEdit) {
@@ -188,26 +240,86 @@ class _AdminNoticeFormScreenState extends ConsumerState<AdminNoticeFormScreen> {
                 SizedBox(height: AppSpace.s(16)),
                 Divider(height: 1, color: AppColors.border),
                 SizedBox(height: AppSpace.s(20)),
-                Expanded(
-                  child: TextField(
-                    controller: _contentController,
-                    decoration: _borderless.copyWith(
-                      hintText: '학생에게 전달할 공지 내용을 작성하세요.',
-                      hintStyle: TextStyle(
-                        fontSize: 15,
-                        color: AppColors.textHint,
-                        height: 1.7,
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _pickImage,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: Text(
+                        _imageBytes != null || _imageUrl != null
+                            ? '사진 변경'
+                            : '사진 추가',
                       ),
-                      alignLabelWithHint: true,
                     ),
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.7,
-                      color: AppColors.textPrimary,
+                    if (_imageBytes != null || _imageUrl != null) ...[
+                      SizedBox(width: AppSpace.s(8)),
+                      TextButton.icon(
+                        onPressed: _loading
+                            ? null
+                            : () => setState(() {
+                                  _imageBytes = null;
+                                  _imageFileName = null;
+                                  _imageUrl = null;
+                                }),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('사진 제거'),
+                      ),
+                    ],
+                  ],
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _contentController,
+                          decoration: _borderless.copyWith(
+                            hintText: '학생에게 전달할 공지 내용을 작성하세요.',
+                            hintStyle: TextStyle(
+                              fontSize: 15,
+                              color: AppColors.textHint,
+                              height: 1.7,
+                            ),
+                            alignLabelWithHint: true,
+                          ),
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.7,
+                            color: AppColors.textPrimary,
+                          ),
+                          minLines: 12,
+                          maxLines: null,
+                          textAlignVertical: TextAlignVertical.top,
+                        ),
+                        if (_imageBytes != null || _imageUrl != null) ...[
+                          SizedBox(height: AppSpace.s(20)),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: _imageBytes != null
+                                ? Image.memory(
+                                    _imageBytes!,
+                                    width: double.infinity,
+                                    fit: BoxFit.contain,
+                                  )
+                                : Image.network(
+                                    _imageUrl!,
+                                    width: double.infinity,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, _, _) => Container(
+                                      height: 120,
+                                      alignment: Alignment.center,
+                                      color: AppColors.surfaceVariant,
+                                      child: const Text(
+                                        '이미지를 불러오지 못했습니다.',
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          SizedBox(height: AppSpace.s(16)),
+                        ],
+                      ],
                     ),
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
                   ),
                 ),
               ],

@@ -447,9 +447,39 @@ class LmsRepository {
   }
 
   Future<void> updateCohort(CohortModel cohort) async {
-    await _firestore.collection('cohorts').doc(cohort.cohortId).update(
-          cohort.toFirestore(),
-        );
+    final students = await _firestore
+        .collection(FirestorePaths.users)
+        .where('cohortId', isEqualTo: cohort.cohortId)
+        .where('role', isEqualTo: 'student')
+        .get();
+
+    final activeStudentCount = students.docs
+        .where((doc) => doc.data()['isActive'] != false)
+        .length;
+
+    await _firestore.collection('cohorts').doc(cohort.cohortId).update({
+      ...cohort.toFirestore(),
+      'studentCount': activeStudentCount,
+    });
+
+    // 기수명은 users에도 표시용으로 중복 저장되어 있으므로 함께 맞춘다.
+    // Firestore batch 제한에 여유를 두고 나눠 처리한다.
+    final namesToUpdate = students.docs
+        .where((doc) => doc.data()['cohortName'] != cohort.name)
+        .toList();
+    for (var offset = 0; offset < namesToUpdate.length; offset += 450) {
+      final end = (offset + 450 < namesToUpdate.length)
+          ? offset + 450
+          : namesToUpdate.length;
+      final batch = _firestore.batch();
+      for (final doc in namesToUpdate.sublist(offset, end)) {
+        batch.update(doc.reference, {
+          'cohortName': cohort.name,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
   }
 
   Stream<List<CohortWithResumes>> watchAllCohortsWithResumes() {

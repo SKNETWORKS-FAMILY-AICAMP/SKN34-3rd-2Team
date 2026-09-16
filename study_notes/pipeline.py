@@ -63,7 +63,7 @@ def study_notes_model_name() -> str:
     return (
         os.getenv("STUDY_NOTES_MODEL", "").strip()
         or os.getenv("LMS_NODE_MODEL", "").strip()
-        or "gpt-5.6-sol"
+        or "gpt-5.6-luna"
     )
 
 

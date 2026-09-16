@@ -16,7 +16,12 @@ class RoutingSignals:
     student_scopes: tuple[str, ...] = ()
 
 
-_NOTICE = re.compile(r"공지|최근\s*안내|운영\s*(?:변경|안내)|휴강|보강")
+_NOTICE = re.compile(
+    r"공지|최근\s*안내|운영\s*(?:변경|안내)|휴강|보강|코딩\s*테스트|코테|"
+    r"(?:시험|행사|특강|설명회|세미나)\s*(?:일정|날짜|시간|언제)|"
+    r"(?:신청|접수)\s*(?:일정|기간|마감|언제)",
+    re.IGNORECASE,
+)
 _PROJECT = re.compile(r"프로젝트|레퍼런스|깃허브|github|포트폴리오|capstone", re.IGNORECASE)
 _POLICY_TOPIC = re.compile(
     r"출결|출석|결석|지각|조퇴|외출|공가|장려금|훈련\s*수당|규정|기준|증빙|"

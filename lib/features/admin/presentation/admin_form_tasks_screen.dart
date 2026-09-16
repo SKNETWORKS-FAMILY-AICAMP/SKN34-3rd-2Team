@@ -17,6 +17,53 @@ import '../../../core/theme/app_space.dart';
 class AdminFormTasksScreen extends ConsumerWidget {
   const AdminFormTasksScreen({super.key});
 
+  Future<void> _deleteTask(
+    BuildContext context,
+    WidgetRef ref,
+    FormTaskModel task,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('설문 삭제'),
+        content: Text(
+          '「${task.title}」 설문을 삭제하시겠습니까?\n'
+          '연결된 제출 응답도 함께 삭제되며 되돌릴 수 없습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final cohortId = ref.read(effectiveCohortIdProvider);
+    if (cohortId == null) return;
+    try {
+      await ref.read(lmsRepositoryProvider).deleteFormTask(cohortId, task.id);
+      ref.invalidate(allFormTasksAdminProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('설문을 삭제했습니다.')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('설문을 삭제하지 못했습니다: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tasks = ref.watch(allFormTasksAdminProvider);
@@ -107,7 +154,34 @@ class AdminFormTasksScreen extends ConsumerWidget {
                           '제출 ${task.responseCount}명'
                           '${task.published ? '' : ' · 비공개'}',
                         ),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (task.isOverdue) ...[
+                              Chip(
+                                label: const Text(
+                                  '만료됨',
+                                  style: TextStyle(fontSize: 11),
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                backgroundColor: AppColors.error.withValues(
+                                  alpha: 0.1,
+                                ),
+                                side: BorderSide.none,
+                              ),
+                              SizedBox(width: AppSpace.s(6)),
+                            ],
+                            IconButton(
+                              tooltip: '설문 삭제',
+                              onPressed: () => _deleteTask(context, ref, task),
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: AppColors.error,
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
                         onTap: () => context.push(
                           RoutePaths.adminFormTaskDetailPath(task.id),
                         ),

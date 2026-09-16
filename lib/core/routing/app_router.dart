@@ -269,6 +269,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 pageBuilder: (_, state) => NoTransitionPage(
                   child: StudyRoomNoteSourceScreen(
                     sourceId: state.pathParameters['sourceId']!,
+                    initialNoteId: state.uri.queryParameters['noteId'],
                   ),
                 ),
               ),

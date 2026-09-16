@@ -15,9 +15,14 @@ import 'widgets/study_room_layout.dart';
 import '../../../core/theme/app_space.dart';
 
 class StudyRoomNoteSourceScreen extends ConsumerStatefulWidget {
-  const StudyRoomNoteSourceScreen({super.key, required this.sourceId});
+  const StudyRoomNoteSourceScreen({
+    super.key,
+    required this.sourceId,
+    this.initialNoteId,
+  });
 
   final String sourceId;
+  final String? initialNoteId;
 
   @override
   ConsumerState<StudyRoomNoteSourceScreen> createState() =>
@@ -44,6 +49,10 @@ class _StudyRoomNoteSourceScreenState
   void initState() {
     super.initState();
     Future.microtask(_loadTree);
+    final noteId = widget.initialNoteId;
+    if (noteId != null && noteId.isNotEmpty) {
+      Future.microtask(() => _openExisting(noteId));
+    }
   }
 
   Future<void> _loadTree() async {
@@ -422,7 +431,10 @@ class _GeneratingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: AppSpace.s(24), vertical: AppSpace.s(36)),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(24),
+        vertical: AppSpace.s(36),
+      ),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),

@@ -225,8 +225,7 @@ class DemoLmsRepository {
         title: '프로그래밍과 데이터 기초 예복습',
         subject: '프로그래밍과 데이터 기초',
         type: InflearnPackageType.review,
-        summary:
-            '첫번째 교과목 예복습에 필요한 6개 강의입니다. 파이썬 기초를 반복 학습해 주세요.',
+        summary: '첫번째 교과목 예복습에 필요한 6개 강의입니다. 파이썬 기초를 반복 학습해 주세요.',
         isPublished: true,
         sortOrder: 1,
         publishedAt: DateTime(2026, 7, 4),
@@ -437,8 +436,7 @@ class DemoLmsRepository {
       _inflearnPackageController.add(List.from(_inflearnPackages));
     }
     if (!_youtubeRecommendationController.isClosed) {
-      _youtubeRecommendationController
-          .add(List.from(_youtubeRecommendations));
+      _youtubeRecommendationController.add(List.from(_youtubeRecommendations));
     }
     if (!_assessmentSubmissionController.isClosed) {
       _assessmentSubmissionController.add(List.from(_assessmentSubmissions));
@@ -616,8 +614,10 @@ class DemoLmsRepository {
     String cohortId,
     String userId,
   ) {
-    return _startWith(List.of(_submissions), _submissionController.stream)
-        .map((list) => list.where((s) => s.userId == userId).toList());
+    return _startWith(
+      List.of(_submissions),
+      _submissionController.stream,
+    ).map((list) => list.where((s) => s.userId == userId).toList());
   }
 
   Stream<List<SubmissionModel>> watchAllSubmissions(String cohortId) {
@@ -746,7 +746,10 @@ class DemoLmsRepository {
     ];
   }
 
-  Stream<List<ResumeModel>> watchMyResumes(String cohortId, String userId) async* {
+  Stream<List<ResumeModel>> watchMyResumes(
+    String cohortId,
+    String userId,
+  ) async* {
     yield _resumes.where((r) => r.userId == userId).toList();
   }
 
@@ -1039,8 +1042,9 @@ class DemoLmsRepository {
     while (prev != null) {
       final prevKey = _rollCallKey(cohortId, dateKey, prev.id);
       if (_rollCallDocs.contains(prevKey)) {
-        _rollCallConfirmed[key] =
-            Set<String>.of(_rollCallConfirmed[prevKey] ?? const {});
+        _rollCallConfirmed[key] = Set<String>.of(
+          _rollCallConfirmed[prevKey] ?? const {},
+        );
         _rollCallHeld[key] = <String>{};
         _rollCallDocs.add(key);
         return;
@@ -1133,9 +1137,7 @@ class DemoLmsRepository {
 
       if (seed == DemoAttendanceSeed.checkIn) {
         checkInTime = missing ? null : inTime;
-        status = missing
-            ? AttendanceStatus.absent
-            : AttendanceStatus.present;
+        status = missing ? AttendanceStatus.absent : AttendanceStatus.present;
       } else {
         if (missing) continue;
         checkOutTime = outTime;
@@ -1279,15 +1281,18 @@ class DemoLmsRepository {
 
   Stream<List<InflearnPackageModel>> watchInflearnPackages(String cohortId) {
     return _startWith(
-        List.of(_inflearnPackages), _inflearnPackageController.stream);
+      List.of(_inflearnPackages),
+      _inflearnPackageController.stream,
+    );
   }
 
   Stream<List<InflearnPackageModel>> watchPublishedInflearnPackages(
     String cohortId,
   ) {
     return _startWith(
-            List.of(_inflearnPackages), _inflearnPackageController.stream)
-        .map((list) => list.where((p) => p.isPublished).toList());
+      List.of(_inflearnPackages),
+      _inflearnPackageController.stream,
+    ).map((list) => list.where((p) => p.isPublished).toList());
   }
 
   Future<String> createInflearnPackage({
@@ -1364,16 +1369,60 @@ class DemoLmsRepository {
     _emit();
   }
 
+  List<StudySourceModel> get _demoStudySources => const [
+    StudySourceModel(
+      id: 'demo-llm',
+      title: 'LLM파트',
+      repoUrl: 'https://github.com/skn-ai34-260616/LLM',
+      allowedPrefixes: ['LLM'],
+      sortOrder: 0,
+    ),
+    StudySourceModel(
+      id: 'demo-multimodal',
+      title: 'Multimodal',
+      repoUrl: 'https://github.com/skn-ai34-260616/multimodal',
+      allowedPrefixes: ['multimodal'],
+      sortOrder: 1,
+    ),
+    StudySourceModel(
+      id: 'demo-nlp',
+      title: 'NLP',
+      repoUrl: 'https://github.com/skn-ai34-260616/NLP',
+      allowedPrefixes: ['NLP'],
+      sortOrder: 2,
+    ),
+  ];
+
   Stream<List<StudySourceModel>> watchStudySources(String cohortId) async* {
-    yield [];
+    yield _demoStudySources;
   }
 
-  Stream<List<StudySourceModel>> watchActiveStudySources(String cohortId) async* {
-    yield [];
+  Stream<List<StudySourceModel>> watchActiveStudySources(
+    String cohortId,
+  ) async* {
+    yield _demoStudySources;
   }
 
   Stream<List<StudyNoteModel>> watchReadyStudyNotes(String uid) async* {
-    yield [];
+    yield const [
+      StudyNoteModel(
+        id: 'demo-note-0915',
+        status: 'ready',
+        sourceId: 'demo-llm',
+        scopeType: 'date',
+        scopeValue: '2026-09-15',
+        files: [
+          StudyNoteFileRef(
+            path: 'LLM/02_video_rag_frame_extraction.ipynb',
+            commit: 'demo',
+          ),
+          StudyNoteFileRef(
+            path: 'LLM/03_vector_search.ipynb',
+            commit: 'demo',
+          ),
+        ],
+      ),
+    ];
   }
 
   Future<String> createStudySource({
@@ -1392,8 +1441,10 @@ class DemoLmsRepository {
   Stream<List<YoutubeRecommendationModel>> watchYoutubeRecommendations(
     String cohortId,
   ) {
-    return _startWith(List.of(_youtubeRecommendations),
-        _youtubeRecommendationController.stream);
+    return _startWith(
+      List.of(_youtubeRecommendations),
+      _youtubeRecommendationController.stream,
+    );
   }
 
   Stream<List<YoutubeRecommendationModel>> watchPublishedYoutubeRecommendations(
@@ -1439,7 +1490,8 @@ class DemoLmsRepository {
     _youtubeRecommendations[i] = cur.copyWith(
       title: updates['title'] as String? ?? cur.title,
       youtubeUrl: nextUrl,
-      videoId: updates['videoId'] as String? ??
+      videoId:
+          updates['videoId'] as String? ??
           extractYoutubeVideoId(nextUrl) ??
           cur.videoId,
       thumbnailUrl: updates['thumbnailUrl'] as String? ?? cur.thumbnailUrl,
@@ -1478,8 +1530,10 @@ class DemoLmsRepository {
   }
 
   Stream<List<AssessmentModel>> watchPublishedAssessments(String cohortId) {
-    return _startWith(List.of(_assessments), _assessmentController.stream)
-        .map((list) => list.where((a) => a.published).toList());
+    return _startWith(
+      List.of(_assessments),
+      _assessmentController.stream,
+    ).map((list) => list.where((a) => a.published).toList());
   }
 
   Stream<AssessmentModel?> watchAssessment(
@@ -1549,8 +1603,7 @@ class DemoLmsRepository {
   }) async {
     _assessments.removeWhere((a) => a.id == assessmentId);
     _assessmentQuestions.remove(assessmentId);
-    _assessmentSubmissions
-        .removeWhere((s) => s.assessmentId == assessmentId);
+    _assessmentSubmissions.removeWhere((s) => s.assessmentId == assessmentId);
     _emit();
   }
 
@@ -1594,18 +1647,20 @@ class DemoLmsRepository {
     String cohortId,
     String userId,
   ) {
-    return _startWith(List.of(_assessmentSubmissions),
-            _assessmentSubmissionController.stream)
-        .map((list) => list.where((s) => s.userId == userId).toList());
+    return _startWith(
+      List.of(_assessmentSubmissions),
+      _assessmentSubmissionController.stream,
+    ).map((list) => list.where((s) => s.userId == userId).toList());
   }
 
   Stream<List<AssessmentSubmissionModel>> watchAssessmentSubmissions(
     String cohortId,
     String assessmentId,
   ) {
-    return _startWith(List.of(_assessmentSubmissions),
-            _assessmentSubmissionController.stream)
-        .map((list) => list.where((s) => s.assessmentId == assessmentId).toList());
+    return _startWith(
+      List.of(_assessmentSubmissions),
+      _assessmentSubmissionController.stream,
+    ).map((list) => list.where((s) => s.assessmentId == assessmentId).toList());
   }
 
   Stream<AssessmentSubmissionModel?> watchAssessmentSubmission(
@@ -1642,8 +1697,7 @@ class DemoLmsRepository {
         score = correct ? q.points : 0;
       } else {
         final norm = '$raw'.trim().toLowerCase();
-        correct = q.acceptedAnswers
-            .any((a) => a.trim().toLowerCase() == norm);
+        correct = q.acceptedAnswers.any((a) => a.trim().toLowerCase() == norm);
         score = correct ? q.points : 0;
       }
       graded[q.id] = AssessmentAnswerEntry(
@@ -1710,8 +1764,7 @@ class DemoLmsRepository {
         ),
       );
     }
-    final total =
-        answers.values.fold<int>(0, (sum, e) => sum + e.finalScore);
+    final total = answers.values.fold<int>(0, (sum, e) => sum + e.finalScore);
     _assessmentSubmissions[i] = AssessmentSubmissionModel(
       id: s.id,
       assessmentId: s.assessmentId,
@@ -1730,13 +1783,16 @@ class DemoLmsRepository {
 
   Stream<List<CurriculumSheetModel>> watchCurriculumSheets(String cohortId) {
     return _startWith(
-        List.of(_curriculumSheets), _curriculumSheetController.stream);
+      List.of(_curriculumSheets),
+      _curriculumSheetController.stream,
+    );
   }
 
   Stream<CurriculumSheetModel?> watchLatestCurriculumSheet(String cohortId) {
     return _startWith(
-            List.of(_curriculumSheets), _curriculumSheetController.stream)
-        .map((list) => list.isEmpty ? null : list.first);
+      List.of(_curriculumSheets),
+      _curriculumSheetController.stream,
+    ).map((list) => list.isEmpty ? null : list.first);
   }
 
   Stream<CurriculumSheetModel?> watchCurriculumSheet(
@@ -1744,8 +1800,9 @@ class DemoLmsRepository {
     String sheetId,
   ) {
     return _startWith(
-            List.of(_curriculumSheets), _curriculumSheetController.stream)
-        .map(
+      List.of(_curriculumSheets),
+      _curriculumSheetController.stream,
+    ).map(
       (list) => list.where((s) => s.id == sheetId).firstOrNull,
     );
   }
@@ -1820,7 +1877,10 @@ class DemoLmsRepository {
     required String uid,
     required String personalEmail,
   }) async {
-    await updateProfile(uid: uid, personalEmail: personalEmail.trim().toLowerCase());
+    await updateProfile(
+      uid: uid,
+      personalEmail: personalEmail.trim().toLowerCase(),
+    );
   }
 
   Stream<List<FormTaskModel>> watchFormTasks(String cohortId) async* {
@@ -1830,8 +1890,7 @@ class DemoLmsRepository {
   }
 
   Stream<List<FormTaskModel>> watchAllFormTasks(String cohortId) async* {
-    yield List.from(_formTasks)
-      ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
+    yield List.from(_formTasks)..sort((a, b) => a.dueAt.compareTo(b.dueAt));
   }
 
   Stream<FormTaskModel?> watchFormTask(String cohortId, String taskId) async* {

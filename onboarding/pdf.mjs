@@ -362,7 +362,11 @@ const htmlPath = path.join(outRoot, `${baseName}.html`);
 const pdfPath = path.join(deliverRoot, `${baseName}.pdf`);
 fs.writeFileSync(htmlPath, html);
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  executablePath: process.platform === 'win32'
+    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+    : undefined,
+});
 try {
   const page = await browser.newPage();
   await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'networkidle' });

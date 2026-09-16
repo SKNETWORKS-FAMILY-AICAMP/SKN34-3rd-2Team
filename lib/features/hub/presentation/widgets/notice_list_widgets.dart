@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
@@ -52,7 +54,10 @@ class StudentNoticeRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpace.s(14), vertical: AppSpace.s(11)),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpace.s(14),
+            vertical: AppSpace.s(11),
+          ),
           child: Row(
             children: [
               Icon(icon, size: 18, color: iconColor),
@@ -205,7 +210,12 @@ class StudentNoticeTile extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(AppSpace.s(14), AppSpace.s(14), AppSpace.s(12), AppSpace.s(14)),
+            padding: EdgeInsets.fromLTRB(
+              AppSpace.s(14),
+              AppSpace.s(14),
+              AppSpace.s(12),
+              AppSpace.s(14),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -352,7 +362,9 @@ class NoticeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (trailing == null) {
       return Padding(
-        padding: EdgeInsets.only(bottom: compact ? AppSpace.s(8) : AppSpace.s(10)),
+        padding: EdgeInsets.only(
+          bottom: compact ? AppSpace.s(8) : AppSpace.s(10),
+        ),
         child: StudentNoticeTile(
           notice: notice,
           onTap: onTap,
@@ -362,7 +374,9 @@ class NoticeCard extends StatelessWidget {
     }
 
     return Container(
-      margin: EdgeInsets.only(bottom: compact ? AppSpace.s(10) : AppSpace.s(12)),
+      margin: EdgeInsets.only(
+        bottom: compact ? AppSpace.s(10) : AppSpace.s(12),
+      ),
       decoration: BoardUi.cardDecoration(
         isFavorite: notice.isFavorite,
         isDiscord: notice.isFromDiscord,
@@ -460,106 +474,180 @@ class NoticeDetailSheet extends StatelessWidget {
   final NoticeModel notice;
 
   static Future<void> show(BuildContext context, NoticeModel notice) {
-    return showModalBottomSheet<void>(
+    return showDialog<void>(
       context: context,
-      isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (_) => NoticeDetailSheet(notice: notice),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.75,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(AppSpace.s(24), AppSpace.s(12), AppSpace.s(24), AppSpace.s(24)),
-          child: ListView(
-            controller: scrollController,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: AppSpace.s(24),
+        vertical: AppSpace.s(32),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 800,
+          maxHeight: screenHeight * 0.84,
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpace.s(24),
+                  AppSpace.s(14),
+                  AppSpace.s(24),
+                  AppSpace.s(32),
                 ),
-              ),
-              SizedBox(height: AppSpace.s(20)),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _NoticeIconBadge(notice: notice),
-                  SizedBox(width: AppSpace.s(12)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          notice.title,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            height: 1.35,
-                          ),
-                        ),
-                        SizedBox(height: AppSpace.s(8)),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: AppSpace.s(20)),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _NoticeIconBadge(notice: notice),
+                      SizedBox(width: AppSpace.s(12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (notice.isFavorite)
-                              const BoardMetaChip(
-                                label: '중요 공지',
-                                variant: BoardMetaChipVariant.favorite,
+                            Text(
+                              notice.title,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                height: 1.35,
                               ),
-                            BoardMetaChip(
-                              label: notice.displayLabel,
-                              variant: notice.isFromDiscord
-                                  ? BoardMetaChipVariant.discord
-                                  : BoardMetaChipVariant.neutral,
+                            ),
+                            SizedBox(height: AppSpace.s(8)),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                if (notice.isFavorite)
+                                  const BoardMetaChip(
+                                    label: '중요 공지',
+                                    variant: BoardMetaChipVariant.favorite,
+                                  ),
+                                BoardMetaChip(
+                                  label: notice.displayLabel,
+                                  variant: notice.isFromDiscord
+                                      ? BoardMetaChipVariant.discord
+                                      : BoardMetaChipVariant.neutral,
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: AppSpace.s(12)),
+                  Text(
+                    '${notice.authorName}'
+                    '${notice.createdAt != null ? ' · ${AppDateUtils.formatDateTime(notice.createdAt!)}' : ''}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
                     ),
                   ),
+                  SizedBox(height: AppSpace.s(20)),
+                  const Divider(height: 1),
+                  SizedBox(height: AppSpace.s(20)),
+                  MarkdownBody(
+                    data: notice.content.replaceAll(
+                      RegExp(r'^\s*•\s+', multiLine: true),
+                      '- ',
+                    ),
+                    selectable: true,
+                    softLineBreak: true,
+                    onTapLink: (_, href, _) {
+                      if (href == null) return;
+                      launchUrl(
+                        Uri.parse(href),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                    styleSheet: MarkdownStyleSheet(
+                      p: TextStyle(
+                        fontSize: 15,
+                        height: 1.8,
+                        color: AppColors.textPrimary,
+                      ),
+                      listBullet: TextStyle(
+                        fontSize: 15,
+                        height: 1.8,
+                        color: AppColors.textPrimary,
+                      ),
+                      strong: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      a: TextStyle(
+                        color: AppColors.primary,
+                        decoration: TextDecoration.underline,
+                        decorationColor: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  if (notice.imageUrl != null &&
+                      notice.imageUrl!.isNotEmpty) ...[
+                    SizedBox(height: AppSpace.s(20)),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        notice.imageUrl!,
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => Container(
+                          height: 120,
+                          alignment: Alignment.center,
+                          color: AppColors.surfaceVariant,
+                          child: const Text('이미지를 불러오지 못했습니다.'),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
-              SizedBox(height: AppSpace.s(12)),
-              Text(
-                '${notice.authorName}'
-                '${notice.createdAt != null ? ' · ${AppDateUtils.formatDateTime(notice.createdAt!)}' : ''}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
+            ),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(
+                horizontal: AppSpace.s(24),
+                vertical: AppSpace.s(12),
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('닫기'),
                 ),
               ),
-              SizedBox(height: AppSpace.s(20)),
-              const Divider(height: 1),
-              SizedBox(height: AppSpace.s(20)),
-              Text(
-                notice.content,
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.8,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

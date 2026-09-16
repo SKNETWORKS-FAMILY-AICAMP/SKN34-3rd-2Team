@@ -160,6 +160,13 @@ class LabSafetyTest(unittest.TestCase):
         self.assertEqual(fixed.namespaces, ["policy"])
         self.assertEqual(fixed.student_scopes, ["student_private"])
 
+    def test_coding_test_question_searches_notice(self) -> None:
+        for question in ("다음 코딩테스트 언제지", "다음 코테 언제야"):
+            with self.subTest(question=question):
+                signals = detect_routing_signals(question)
+                self.assertTrue(signals.lms)
+                self.assertIn("notice", signals.namespaces)
+
     def test_unrelated_personal_request_is_not_forced_into_lms(self) -> None:
         decision = SupervisorDecision(route="blocked", query="내 이력서 대신 써줘")
         fixed = reconcile_decision("내 이력서 대신 써줘", decision)

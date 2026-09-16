@@ -11,7 +11,11 @@ import { roles } from './scenes.mjs';
 
 const only = process.argv[2];
 const server = await serveBuild();
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  executablePath: process.platform === 'win32'
+    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+    : undefined,
+});
 const problems = [];
 
 async function waitForSpinners(page, maxMs = 6000) {

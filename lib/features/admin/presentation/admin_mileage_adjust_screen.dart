@@ -24,7 +24,8 @@ class AdminMileageAdjustScreen extends ConsumerStatefulWidget {
       _AdminMileageAdjustScreenState();
 }
 
-class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScreen> {
+class _AdminMileageAdjustScreenState
+    extends ConsumerState<AdminMileageAdjustScreen> {
   UserModel? _selectedStudent;
   final _amountController = TextEditingController();
   final _reasonController = TextEditingController();
@@ -71,7 +72,9 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
 
     setState(() => _submitting = true);
     try {
-      await ref.read(mileageFunctionsServiceProvider).adjustMileage(
+      await ref
+          .read(mileageFunctionsServiceProvider)
+          .adjustMileage(
             cohortId: cohortId,
             userId: student.uid,
             amount: amount,
@@ -144,18 +147,91 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                   data: (students) {
                     final filtered = students.where((s) {
                       if (_searchQuery.isEmpty) return true;
-                      return s.displayName
-                          .toLowerCase()
-                          .contains(_searchQuery.toLowerCase());
+                      return s.displayName.toLowerCase().contains(
+                        _searchQuery.toLowerCase(),
+                      );
                     }).toList();
 
-                    if (filtered.isEmpty) {
+                    if (_searchQuery.isNotEmpty) {
+                      if (filtered.isEmpty) {
+                        return Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppSpace.s(8),
+                          ),
+                          child: const Text('검색 결과가 없습니다.'),
+                        );
+                      }
+                      return Container(
+                        constraints: const BoxConstraints(maxHeight: 240),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppSpace.s(4),
+                          ),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: AppColors.border,
+                          ),
+                          itemBuilder: (_, index) {
+                            final student = filtered[index];
+                            final selected =
+                                _selectedStudent?.uid == student.uid;
+                            return ListTile(
+                              dense: true,
+                              selected: selected,
+                              selectedTileColor: AppColors.primaryLight,
+                              leading: CircleAvatar(
+                                radius: 16,
+                                backgroundColor: AppColors.primaryLight,
+                                child: Text(
+                                  student.displayName.isEmpty
+                                      ? '?'
+                                      : student.displayName.substring(0, 1),
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                student.displayName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              trailing: Text(
+                                formatMileageM(student.mileageBalance),
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              onTap: () => setState(() {
+                                _selectedStudent = student;
+                                _searchController.clear();
+                                _searchQuery = '';
+                              }),
+                            );
+                          },
+                        ),
+                      );
+                    }
+
+                    if (students.isEmpty) {
                       return const Text('학생이 없습니다.');
                     }
 
                     return AppDropdownField<String>(
-                      value: _selectedStudent != null &&
-                              filtered.any((s) => s.uid == _selectedStudent!.uid)
+                      value:
+                          _selectedStudent != null &&
+                              students.any(
+                                (s) => s.uid == _selectedStudent!.uid,
+                              )
                           ? _selectedStudent!.uid
                           : null,
                       decoration: const InputDecoration(
@@ -163,7 +239,7 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                         border: OutlineInputBorder(),
                       ),
                       items: [
-                        for (final s in filtered)
+                        for (final s in students)
                           AppDropdownItem(
                             value: s.uid,
                             label:
@@ -173,8 +249,9 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                       onChanged: (uid) {
                         if (uid == null) return;
                         setState(() {
-                          _selectedStudent =
-                              filtered.firstWhere((s) => s.uid == uid);
+                          _selectedStudent = students.firstWhere(
+                            (s) => s.uid == uid,
+                          );
                         });
                       },
                     );
@@ -195,8 +272,7 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                     visualDensity: VisualDensity.compact,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  onSelectionChanged: (s) =>
-                      setState(() => _isGrant = s.first),
+                  onSelectionChanged: (s) => setState(() => _isGrant = s.first),
                 ),
                 SizedBox(height: AppSpace.s(12)),
                 TextField(
@@ -244,7 +320,8 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                   return const Text('거래 내역이 없습니다.');
                 }
                 final nameById = {
-                  for (final s in studentsAsync.asData?.value ?? const <UserModel>[])
+                  for (final s
+                      in studentsAsync.asData?.value ?? const <UserModel>[])
                     s.uid: s.displayName,
                 };
                 return ListView.separated(
@@ -259,8 +336,8 @@ class _AdminMileageAdjustScreenState extends ConsumerState<AdminMileageAdjustScr
                     final displayName = storedName.isNotEmpty
                         ? storedName
                         : joinedName.isNotEmpty
-                            ? joinedName
-                            : '알 수 없는 학생';
+                        ? joinedName
+                        : '알 수 없는 학생';
                     final createdAt = tx.createdAt != null
                         ? AppDateUtils.formatDateTime(tx.createdAt!)
                         : '';

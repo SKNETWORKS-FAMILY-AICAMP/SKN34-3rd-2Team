@@ -86,6 +86,7 @@ class _InstructorAttendanceScreenState
   DateTime _day = DateTime.now();
   late ClassPeriod _period;
   String? _currentUid;
+  bool _rotateSeating180 = false;
   final _rollCallScrollKey = GlobalKey<_RollCallPaneState>();
 
   @override
@@ -322,6 +323,10 @@ class _InstructorAttendanceScreenState
                       highlightUserId: currentUid,
                       confirmedUserIds: confirmed,
                       heldUserIds: held,
+                      rotate180: _rotateSeating180,
+                      onToggleFlip: () => setState(
+                        () => _rotateSeating180 = !_rotateSeating180,
+                      ),
                     );
                     final roll = _RollCallPane(
                       key: _rollCallScrollKey,
@@ -651,6 +656,8 @@ class _SeatingPane extends StatelessWidget {
     required this.highlightUserId,
     required this.confirmedUserIds,
     required this.heldUserIds,
+    required this.rotate180,
+    required this.onToggleFlip,
   });
 
   final SeatingLayoutModel? layout;
@@ -659,6 +666,8 @@ class _SeatingPane extends StatelessWidget {
   final String? highlightUserId;
   final Set<String> confirmedUserIds;
   final Set<String> heldUserIds;
+  final bool rotate180;
+  final VoidCallback onToggleFlip;
 
   @override
   Widget build(BuildContext context) {
@@ -686,12 +695,22 @@ class _SeatingPane extends StatelessWidget {
                 children: [
                   Padding(
                     padding: EdgeInsets.only(left: AppSpace.s(4), bottom: AppSpace.s(4)),
-                    child: Text(
-                      '좌석 배치',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: Row(
+                      children: [
+                        const Text(
+                          '좌석 배치',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: onToggleFlip,
+                          icon: const Icon(Icons.rotate_right, size: 16),
+                          label: Text(rotate180 ? '원래 방향' : '180도 회전'),
+                        ),
+                      ],
                     ),
                   ),
                   Expanded(
@@ -710,6 +729,8 @@ class _SeatingPane extends StatelessWidget {
                         confirmedUserIds: confirmedUserIds,
                         heldUserIds: heldUserIds,
                         compact: true,
+                        showInstructorHint: false,
+                        rotate180: rotate180,
                         editable: false,
                       ),
                     ),
