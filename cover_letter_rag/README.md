@@ -1,235 +1,237 @@
-# ✍️ 공고 맞춤 이력서 첨삭
+# 공고 맞춤 이력서 첨삭 (cover_letter_rag)
 
-> 고른 채용공고와 학생 이력서를 대조해 **문장별 수정안과 확인 질문**을 주고, 답을 받아 그 사실로 다시 첨삭합니다.
-> 이력서와 답에 없는 사실은 수정안에 들어가지 못합니다.
+학생이 [채용공고 추천봇](../job_matching_bot/README.md)에서 고른 공고를 기준으로 **이력서 문장별 수정안**을
+만들고, 학생이 고른 수정안만 이력서에 적용한다. 적용한 것은 되돌릴 수 있다.
 
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
-![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?logo=langchain&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)
-![Firebase](https://img.shields.io/badge/Firestore-FFCA28?logo=firebase&logoColor=black)
-![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)
+핵심 원칙은 하나다. **이력서에 없는 경험·기술·수치를 만들지 않는다.** 모자란 정보는 지어 넣지 않고
+학생에게 확인 질문으로 묻는다.
 
-LMS 앱의 **공고 맞춤 첨삭 창**을 맡는 서버입니다. [채용공고 추천봇](../job_matching_bot/README.md)에서 공고를 고르면
-그 공고의 원문을 추천봇 저장소에서 읽어 첨삭합니다. 맞춤 이력서(공고별 사본) 만들기·수정안 적용·되돌리기도 맡습니다.
+> 폴더 이름은 처음 만든 자기소개서 첨삭 RAG에서 왔다. 지금 앱이 쓰는 기능은 아래 "공고 맞춤 첨삭"이고,
+> 초기 공고 검색·자기소개서 첨삭 API는 [레거시 API](#레거시-api-초기-rag-실험)로 남아 있다.
 
----
-
-## 📚 문서
-
-| 무엇 | 위치 |
-|---|---|
-| 입력 데이터 · 전처리 | 이력서 입력·개인정보 처리 [docs/resume-review-v2.md](docs/resume-review-v2.md) · 공고 요건 정리 [docs/resume-review-v3.md](docs/resume-review-v3.md) · 평가 케이스 [`evaluation/fixtures/`](evaluation/fixtures/) · 공고 수집·전처리는 [추천봇 문서](../job_matching_bot/docs/data_preprocessing.md) |
-| 시스템 아키텍처 | 아래 그림 · 추천봇과 연결 [docs/matching-integration.md](docs/matching-integration.md) |
-| 핵심 코드 | [`app/review_workflow.py`](app/review_workflow.py) 한 턴 흐름 · [`app/resume_review.py`](app/resume_review.py) 근거 검증 · [`app/fact_check.py`](app/fact_check.py) 사실 검사 · [`app/job_requirements.py`](app/job_requirements.py) 요건 정리 |
-| 테스트 계획 · 결과 | [docs/resume-review-v3.md](docs/resume-review-v3.md) (회차별 결과·남은 한계) · 적용 API [docs/resume-apply.md](docs/resume-apply.md) |
-
----
-
-## 🏗 시스템 아키텍처
+## 사용자 흐름
 
 ```mermaid
 flowchart LR
-  subgraph APP["📱 Flutter 앱"]
-    SEL["추천 목록에서 공고 선택"] --> TAIL["맞춤 이력서 만들기"]
-    TAIL --> WIN["첨삭 창<br>수정안 카드 · 질문 · 요건 표"]
-  end
-
-  subgraph SERVER["⚡ 첨삭 서버 · FastAPI (/resume-review)"]
-    CTX["review-context<br>이력서 + 선택 공고"]
-    REV["resumes/reviews<br>첫 첨삭 · 재첨삭 · 누락 점검"]
-    APPLY["적용 · 되돌리기"]
-  end
-
-  SQL[("추천봇 SQLite<br>공고 원문")] --> CTX & REV
-  FS[("Firestore<br>이력서 · 대화 · 요건 목록")] <--> CTX & REV & APPLY
-  OAI(["OpenAI<br>요건 정리 · 첨삭 · 사실 검사"]) -.-> REV
-  TAIL -.->|"만들 때 요건을 미리 정리"| OAI
-  WIN --> CTX & REV & APPLY
+  R["맞춤 공고 추천<br>또는 공고 찾기 챗봇"] --> P["공고 선택"]
+  P --> T["회사별 이력서 사본 만들기<br>/resumes/tailored"]
+  T --> V["문장별 첨삭<br>/resumes/reviews"]
+  V --> Q{"확인 질문"}
+  Q -->|답변| V
+  V --> A["고른 수정안만 적용<br>/reviews/apply"]
+  A --> U["되돌리기<br>/reviews/undo"]
+  A --> M["완성본을 일반 이력서로 꺼내기<br>/promote"]
 ```
 
-### 첨삭 한 턴의 흐름
+1. **공고 원문은 서버가 읽는다.** 앱은 `job_id`만 보낸다. 서버가 공고 원문 SQLite(`job_store.sqlite`)를 읽기 전용으로 열어 본문 전체를 가져온다. Pinecone에 있는 1,200자 요건 발췌로 대신하지 않는다.
+2. **원본 이력서를 건드리지 않는다.** 공고마다 이력서 사본(`tailoredResumes`)을 만들고 거기서 첨삭·적용한다. 같은 이력서·공고·공고 버전이면 같은 사본을 돌려준다(버튼을 여러 번 눌러도 하나).
+3. **이력서도 서버가 읽는다.** Firebase 토큰으로 본인·기수·활성 상태를 확인한 뒤 Firestore 저장본을 읽는다. 그래서 앱은 첨삭 전에 이력서를 먼저 저장한다.
+4. 모델이 문장별 수정안을 만들면 **서버가 규칙으로 한 번 더 검증**하고, 통과하지 못한 수정안은 보류한다.
+5. 학생이 체크한 수정안만 적용한다. 적용 전 내용은 백업해 두고, 그 뒤 수정이 없을 때만 되돌린다.
 
-```mermaid
-flowchart TB
-  A["답 정리<br>확신 없는 문장 · 다른 항목 이야기 · '없음' 가려내기"] --> B
-  B{"답이 전부 '없음'?"} -->|예| SKIP["모델을 부르지 않고 기록만"]
-  B -->|아니오| C["요건 목록 준비<br>공고당 한 번 정리해 둔 것 재사용"]
-  C --> D["LLM 첨삭<br>수정안 · 질문 · 요건 판정 · STAR 판정"]
-  D --> E["근거 검증 — 규칙<br>원문 위치 · 숫자 · 기술어 · 역할 · 부정 · 칸 사이 중복"]
-  E --> F["답이 빠졌으면 대체 수정안"]
-  F --> G["사실 검사 — LLM<br>빠진 사실 · 근거 없는 사실 · 확신 없는 답의 단정"]
-  G -->|걸림| H["그 곳만 다시 쓰기 → 다시 검증"]
-  G -->|통과| I
-  H --> I["단계 정렬 · 저장<br>① 문장 다듬기 ② 공고 요건 ③ 경험 보완 ④ 지원동기 ⑤ 자기소개서"]
-```
+## 처리 순서 (첨삭 한 번)
 
-| 설계 | 이유 |
+| 단계 | 하는 일 |
 |---|---|
-| 공고를 요건 목록으로 정리 | 공고 원문을 통째로 넣던 v2는 첫 첨삭 54.7초였습니다. 요건 목록 + 출력 줄이기로 30초대가 됐고, 맞춤본을 만들 때 미리 정리하면 첫 첨삭이 기다리지 않습니다 |
-| 요건 판정은 인용이 있을 때만 | `met`·`partial`은 이력서·답의 연속 인용이 실제로 있어야 남습니다. 없으면 서버가 `unconfirmed`로 낮춥니다 |
-| 규칙 검증 + 모델 사실 검사 | 규칙은 이미 본 모양(숫자 빠짐·기술어 추가)만 막고, 처음 보는 표현은 놓쳤습니다. 뜻 대조는 모델에 맡기되 모델이 짚은 구절이 원문에 실제로 있을 때만 믿습니다 |
-| 원문 옆에 붙이지 않고 다시 쓰기 | 답을 원문 옆에 따로 붙이면 사실은 지키지만 문장이 매끄럽지 않습니다. 매끄럽게 쓰고 틀린 곳만 짚어 한 번 더 쓰게 합니다 |
+| 인증·권한 | Firebase ID 토큰 → uid, `users/{uid}`의 `isActive`·`cohortId`, 이력서 `userId` 확인 |
+| 공고 확인 | 저장소에서 공고 조회. 마감(`status≠OPEN`, 마감일 지남)이면 409, 본문이 비었거나 이미지뿐이면 422 |
+| 버전 고정 | 이력서 내용 해시(`input_hash`)와 공고 스냅샷 해시를 요청에 싣는다. 읽은 뒤 바뀌면 409 |
+| 입력 만들기 | 이름·전화·이메일·생년월일, URL, 내부 ID를 빼고 필드별 원문(`input_fields`)을 만든다. 자유 서술 속 이메일·전화번호는 `[연락처 삭제]`로 가린다 |
+| 생성 | LangChain `ChatPromptTemplate` + OpenAI Responses API, JSON 스키마 구조화 출력. 자동 재시도 끔 |
+| 사후 검증 | 아래 표 |
+| 저장 | `aiReviews/{request_id}`에 `processing → complete / failed`. 같은 `request_id`로 다시 오면 저장된 결과를 준다 |
 
----
+### 서버가 보류하는 수정안
 
-## ✨ 주요 기능
+모델 출력을 그대로 믿지 않는다. 다음에 걸리면 `validation_issues`를 달고 적용할 수 없게 한다.
 
-| 기능 | 설명 |
+- 원문에 없는 **새 수치·기술명·역할**이 들어감 (공고에만 있는 기술을 지원자 경험처럼 넣는 것 포함)
+- 부정 → 긍정, 진행 중 → 완료, 참여 → 주도처럼 **사실 상태가 바뀜**
+- 수치의 부호가 바뀜, 가려진 연락처가 들어간 문장을 교체함
+- `original_quote`를 원문에서 찾을 수 없음, 이미 고른 수정 범위와 겹침
+- 다른 프로젝트의 답변·수치를 가져옴 (같은 경험의 필드와 그 경험에 단 답변만 근거로 인정)
+- 원문과 같거나 빈 수정안
+
+"만들어 줘", "지어내 줘" 같은 답변은 사실로 쓰지 않는다.
+
+### 응답에서 볼 것
+
+| 필드 | 의미 |
 |---|---|
-| 문장 다듬기 묶음 | 새 사실 없는 표현 수정(명사형 잇기·맞춤법·문체)을 한 카드로 묶어 고른 것만 한 번에 적용 |
-| 공고 요건 대조 | 필수·우대·주요 업무별로 이력서 근거를 찾고, 근거 없는 요건을 질문(지원 자격은 묻지 않고 "확인만") |
-| 답변 재첨삭 | 답한 항목을 그 사실로 다시 첨삭. 답에 다른 항목 이름이 나오면 그 항목 칸도 함께 고침 |
-| 새 프로젝트 제안 | "개인 과제로 만들었다"처럼 이력서에 없는 경험이면 기존 칸에 끼워 넣지 않고 새 프로젝트로 제안 |
-| STAR 점검 | 경험 칸마다 상황·과제·행동·결과가 원문에 인용으로 있는지 판정 |
-| 안내 표시 | 다른 칸과 비슷한 문장, 원문 표현이 빠진 곳, 한 일이 약해진 곳에 막지 않고 안내만 붙임 |
-| 적용 · 되돌리기 · 재첨삭 | 고른 수정안만 적용·묶음 단위로 되돌리기, 이력서를 고친 뒤에는 처음부터 다시 첨삭 |
+| `sentence_reviews` | 원문, 이유, 수정안, 근거 인용, 상태(`unchanged`/`formatting`/`improved`/`needs_confirmation`), 수정 종류(`spelling`/`tone`/`clarity`/`content`) |
+| `questions` | 최대 10개의 확인 질문과 `question_id` |
+| `diagnostics` | 7개 기준(희망 표현, 감상 위주, 추상적 성과, 배치, 직무 관련성, 중복, 기업 맞춤)별 `issue`/`clear`/`not_evaluated`. 공고가 없으면 직무 관련성·기업 맞춤은 `not_evaluated` |
+| `star_checks` | 경험별 상황·과제·행동·결과 중 빠진 것 |
+| `changes` | 이전 첨삭 대비 해결·미해결·새로 생긴 기준 |
+| `telemetry` | 모델, 프롬프트 버전, 지연, 토큰 수 |
 
-### 🧑‍💻 UX 흐름
+전체 계약은 [docs/resume-review-v2.md](docs/resume-review-v2.md), 검증 규칙은
+[docs/resume-review-quality.md](docs/resume-review-quality.md)에 있다.
 
-```mermaid
-flowchart LR
-  S["공고 선택"] --> T["맞춤 이력서"]
-  T --> O["첨삭 시작<br>(창을 내려두고 다른 화면 가능)"]
-  O --> P["① 문장 다듬기 카드<br>고른 것만 적용"]
-  P --> Q["② 공고 요건 질문"]
-  Q --> A["답하기 · '없음'"]
-  A --> R["수정안 카드<br>원문 ↔ 수정안 · 이유 · 안내"]
-  R -->|적용 / 건너뛰기| Q
-  R --> D["완료 · 요건 표"]
-  D -->|"이력서를 고쳤다면"| O
-```
+## API
 
----
+앱은 통합 서버(8000)의 `/resume-review` 아래로 부른다. 모두 `Authorization: Bearer <Firebase ID 토큰>`이 필요하다.
 
-## 🧪 테스트 계획 및 결과
-
-| 층 | 도구 | 무엇을 |
+| 메서드 | 경로 (`/resume-review` 뒤) | 설명 |
 |---|---|---|
-| ① 서버 테스트 | `tests/` (pytest 214개) | 근거 검증·답 정리·대체 수정안·사실 검사·적용·맞춤본. 외부 API 없이 가짜 생성기로 |
-| ② 대화 평가 | `evaluation/review_eval.py` | 목업 이력서로 첫 첨삭 → 질문마다 답 → 재첨삭 → 누락 점검을 끝까지. 답은 케이스의 `facts`(한 일)·`not_done`(안 한 일)만 아는 지원자 역할 모델이 씁니다 |
-| ③ 사람 말투 평가 | `review_eval.py --applicant human` | 짧은 답·항목 이름 줄여 부르기·다른 항목 섞기·"아마 ~했던 것 같아요"·오타 |
-| ④ 한 번도 안 본 케이스 | `fixtures/review_cases_unseen*.json` | 서버를 고치는 쪽이 내용을 보지 않은 케이스로 한 번만 측정 |
+| GET | `/api/v1/resumes/review-context` | 첨삭 전에 서버 저장본과 공고 스냅샷, 해시를 받는다. `Cache-Control: no-store` |
+| POST | `/api/v1/resumes/tailored` | 공고별 이력서 사본 만들기 |
+| GET | `/api/v1/resumes/{resume_id}/tailored` | 사본 목록과 첨삭 진행 상태 |
+| GET | `/api/v1/resumes/{resume_id}/tailored/{id}` | 사본 하나 |
+| PUT | `/api/v1/resumes/{resume_id}/tailored/{id}/session` | 첨삭 화면 진행 상태 저장(창을 닫았다 열어도 이어서) |
+| POST | `/api/v1/resumes/{resume_id}/tailored/{id}/promote` | 완성한 사본을 일반 이력서 편집기에서 열 수 있게 꺼낸다 |
+| DELETE | `/api/v1/resumes/{resume_id}/tailored/{id}` | 사본과 하위 첨삭·적용 기록 삭제 |
+| POST | `/api/v1/resumes/reviews` | 첨삭. 답변을 실어 다시 보내면 재첨삭 |
+| POST | `/api/v1/resumes/reviews/apply` | 고른 수정안 적용 ([명세](docs/resume-apply.md)) |
+| POST | `/api/v1/resumes/reviews/undo` | 적용 되돌리기 |
 
-**평가 원칙** — 개발용으로 고치고, 고칠 때 본 케이스로는 결과를 확인하지 않습니다. 결함을 찾는 데 쓴 세트는 확인용으로 다시 쓰지 않습니다.
-
-| 지표 (개발용 8케이스, 최신) | 결과 |
-|---|---|
-| 사실 답이 수정안에 반영 | **26/27** (직전 회차 28/28) |
-| 지어낸 숫자 · 기술어 · 안 한 일 새어 들어감 | **0 · 0 · 0** |
-| 요건 over-claim (근거 없는데 충족으로 판정) | **0** |
-| 문장 다듬기 제안 → 적용 | 56/56 |
-| STAR 행동·결과 판정 일치 | 89/96 |
-| 첫 첨삭 · 후속 첨삭 평균 | 39.2초 · 9.6초 |
-
-한 번도 안 본 케이스(5세트 × 5케이스)에서 도구로 센 지어낸 숫자·기술어는 매번 0이었습니다. 다만 사실이 빠지거나, 다른 항목에 들어가거나, 확신 없는 답을 단정하는 새 모양의 결함이 세트마다 1~2건 나와 모두 고쳤습니다(아래 트러블슈팅). 마지막 세트는 사람 말투 답 29턴 중 2턴이었고, 고친 뒤에는 새 케이스로 다시 재지 않았습니다.
-
-### ✅ 테스트 시나리오 (사용자 관점)
-
-| 입력 | 기대 결과 |
-|---|---|
-| "잘 모르겠는데 아마 테스트를 30개쯤 작성했던 것 같아요" | 30개를 단정문으로 적지 않음. 확인된 부분만 반영 |
-| "개념만 배웠고 실제로 써 본 적은 없어요" | "써 본 적 없다"는 말이 이력서에 들어가지 않음 |
-| 교육 칸 질문에 "회사 프로젝트에서 X를 했어요" | X는 그 프로젝트 칸에만, 교육 칸에는 들어가지 않음 |
-| 한 문장에 두 프로젝트를 섞어 답함 | 항목 이름 자리에서 나눠 각 칸에 해당 사실만 |
-| "없음" | 모델을 부르지 않고 기록, 요건은 "해당 없음" |
-| "부트캠프 개인 과제로 카카오맵 마커를 만들었어요" | 기존 팀 프로젝트에 끼워 넣지 않고 새 프로젝트 제안 |
-| 원문 "처리 시간을 2.4초에서 0.6초로 줄였습니다"를 되풀이해 답함 | 숫자 결과 문장이 사라지지 않음 |
-| 이력서를 고친 뒤 재첨삭 | 지난 대화를 정리하고 처음부터 첨삭 |
-
----
-
-## 🔧 트러블슈팅
-
-| 문제 | 원인 | 해결 | 결과 |
-|---|---|---|---|
-| 첫 첨삭 54.7초 · 대화 전체 277초 | 공고 원문 통째 입력, 앱이 안 쓰는 진단 출력 | 요건 목록 입력, 출력 칸 정리, "없음" 답은 모델 생략 | 첫 첨삭 30초대 · 대화 100초 안팎 |
-| 수정안이 평균 3개뿐 | 지시문이 "자연스러우면 바꾸지 않는다"로 수정을 누름 | 서술 칸을 모두 살피게 하고 다듬기를 한 카드로 묶음 | 7개 · 한 번에 적용 |
-| "재 보는"→"다시 보는" 같은 뜻 흔들리는 교체 | 숫자·기술어 검사로는 안 잡힘 | 6자 이하·5% 미만 표현 교체는 뺌(명사형 잇기 등은 예외) | 자세한 이력서 수정안 25 → 7 |
-| 원문을 되풀이한 답에 숫자 결과가 사라짐 | "수정안 = 답 문장"이면 원문 검사를 건너뛰는 예외 | 예외는 한 문장 원문에만, 원문 숫자 빠짐은 예외 없이 보류 | 재발 없음 |
-| 다른 항목 이야기가 질문한 칸에도 들어감 | 떼어 낸 문장을 질문한 칸 근거에 남김 | 질문한 칸 근거에서 빼고, 들어가면 `moved_to_other_item`으로 보류 | 재발 없음 |
-| "아마 ~했던 것 같아요"가 단정문이 됨 | 확신 없는 문장도 확인된 근거로 씀 | 확신 없는 문장을 근거에서 빼고, 내용이 들어가면 보류 | 서버 테스트로 고정 |
-| 새 케이스마다 새 모양의 결함 | 규칙은 이미 본 모양만 막음 | 사실 검사 모델이 뜻으로 대조하고 틀린 곳만 다시 쓰게 함 | 걸리지 않는 턴은 속도 그대로 |
-
-회차별 전체 기록은 [docs/resume-review-v3.md](docs/resume-review-v3.md)에 있습니다.
-
----
-
-## 🚀 RAG 성능 가이드 대응
-
-| 가이드 | 첨삭 서버 |
-|---|---|
-| 요청마다 인덱싱하지 않기 | 공고 요건 정리는 공고(내용 해시)당 한 번만 하고 Firestore에 저장, 맞춤본을 만들 때 미리 정리 |
-| 문서 고유 ID | 공고 `job_id` + 스냅샷 해시, 이력서 `input_hash`로 옛 판 위에 수정안이 적용되지 않게 함 |
-| 서버 시작 시 준비 · 재사용 | 통합 서버 한 프로세스, 설정 캐시 |
-| Context 길이 제한 | 후속 첨삭은 답한 항목(과 답에 이름이 나온 항목)만 모델에 보냄, 공고는 답한 요건만 |
-| LLM 호출 줄이기 | "없음" 답은 모델 생략, STAR 판정은 첫 첨삭에서만, 사실 검사는 크게 바뀐 수정안(턴당 4개)만 동시에 |
-| 병목 측정 | 턴마다 요건 정리·모델·사실 검사·다시 쓰기 시간을 텔레메트리로 남김 |
-| 체감 속도 | 첨삭 창을 내려두고 다른 화면을 볼 수 있고, 진행 단계를 카드로 보여 줌 |
-
----
-
-## 🔭 향후 개선 계획
-
-- **실제 이력서로 확인** — 목업 이력서와 지원자 역할 모델로만 쟀습니다. 동의받은 실제 이력서 몇 개로 직접 첨삭해 봅니다.
-- **수정안 차이 색으로 표시** — 빠진 부분·새로 들어간 부분을 앱에서 색으로 보여 주면 검사가 놓친 것을 사용자가 바로 봅니다.
-- **첫 첨삭에도 사실 검사** — 지금은 후속 첨삭에만 붙어 있습니다.
-- **첫 첨삭 시간 줄이기** — 39~45초입니다. 공고를 고르는 순간 요건을 미리 정리하는 것부터 검토합니다.
-- **STAR 판정 흔들림** — 사람 말투 케이스에서 과대 판정이 있어 필요한 질문이 빠질 수 있습니다.
-- **새 항목 제안 넓히기** — 지금은 프로젝트만, 경력·교육은 아직입니다.
-
----
-
-## ⚙️ 실행 방법
-
-설정은 저장소 루트 `.env` 하나를 씁니다(`copy .env.example .env` 후 값 채우기). 첨삭에는 `OPENAI_API_KEY`,
-`FIREBASE_PROJECT_ID`, 셸의 `GOOGLE_APPLICATION_CREDENTIALS`(저장소 밖 서비스 계정 JSON 경로)가 필요합니다.
-키와 서비스 계정 JSON은 Git이나 Flutter에 넣지 않습니다.
-
-```powershell
-# 저장소 루트에서 — 추천봇·첨삭·학생 챗봇·공부방 노트가 8000번 하나로 뜹니다
-.\playdata_venv\Scripts\python.exe -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1 --port 8000
-
-# 서버 테스트 · 대화 평가
-cd cover_letter_rag
-$env:PYTHONPATH=".."; python -m pytest -q tests
-python -m evaluation.review_eval --cases dev --label 이름 --apply-polish
+```json
+// POST /resume-review/api/v1/resumes/reviews
+{
+  "cohort_id": "cohort_34",
+  "resume_id": "resume-id",
+  "tailored_resume_id": "tailored_...",
+  "selected_job_id": "<공고 ID>",
+  "expected_job_hash": "review-context에서 받은 스냅샷 해시",
+  "request_id": "review-001"
+}
 ```
 
-| API (`/resume-review` 아래) | 설명 |
+| 상태 | 언제 |
 |---|---|
-| `GET /health` | 모델 이름과 Firebase 설정 여부 |
-| `GET /api/v1/resumes/review-context` | 첨삭 창에 보여 줄 이력서·선택 공고 |
-| `POST /api/v1/resumes/reviews` | 첫 첨삭, 답변 뒤 재첨삭, 누락 점검 |
-| `/api/v1/resumes/{resume_id}/tailored…` | 맞춤 이력서 만들기·조회·세션 저장·삭제·승격 |
-| 적용 · 되돌리기 | [docs/resume-apply.md](docs/resume-apply.md) |
+| 401 | 토큰 없음·만료 |
+| 403 | 다른 기수, 비활성 계정 |
+| 404 | 없는 이력서, 남의 이력서 |
+| 409 | 이력서·공고 버전이 바뀜, 공고 마감, 같은 `request_id`에 다른 입력, 이미 승인된 이력서에 적용 |
+| 422 | 입력 오류, 공고 본문 없음 |
+| 503 | 공고 저장소·Firebase·OpenAI를 쓸 수 없음 |
 
-**안전 규칙** — ID 토큰의 `uid`가 이력서 소유자일 때만 읽습니다(Admin SDK는 보안 규칙을 우회하므로 이 검사를 없애면 안 됩니다) ·
-이름·전화·이메일·생년월일·내부 ID/URL은 모델 입력에서 뺍니다 · 결과는 원본을 덮어쓰지 않고 `aiReviews`에 따로 저장합니다 ·
-합격 가능성을 단정하거나 점수화하지 않습니다.
-
-## 📁 폴더 구조
+## Firestore 저장 위치
 
 ```text
-cover_letter_rag/
-├── app/
-│   ├── integrated.py        # 통합 서버: 공고 추천(/), 첨삭(/resume-review), 학생 챗봇, 공부방 노트
-│   ├── main.py              # 첨삭·맞춤 이력서 라우트와 예외 변환
-│   ├── review_workflow.py   # 첨삭 한 턴의 흐름: 답 정리 → 모델 → 검증 → 사실 검사 → 저장
-│   ├── resume_review.py     # 첨삭 서비스, 수정안 근거 검증
-│   ├── fact_check.py        # 뜻 대조 사실 검사와 틀린 곳 다시 쓰기
-│   ├── review_rules.py      # 여러 검증이 함께 쓰는 칸 이름·낱말 목록
-│   ├── job_requirements.py  # 공고 요건 정리(공고당 한 번 저장)
-│   ├── star_checks.py       # 경험 칸 STAR 판정 검증
-│   ├── prompts.py           # 첨삭 지시문
-│   ├── models.py            # 요청·응답·모델 출력 스키마
-│   ├── technology.py        # 기술 이름 정규화
-│   ├── matching_handoff.py  # 추천봇 저장소에서 선택 공고 읽기
-│   ├── tailored_resumes.py  # 맞춤 이력서 만들기·목록·승격
-│   ├── resume_apply.py      # 수정안 적용·되돌리기 API
-│   ├── firebase_gateway.py  # Firebase 인증·Firestore 읽기/쓰기와 소유권 검사
-│   └── config.py            # 루트 .env 기반 설정
-├── evaluation/              # 대화 평가 도구와 케이스(dev · heldout · unseen …)
-├── docs/                    # v2 계약 · v3 요건 대조 · 적용 API · 추천봇 연결
-└── tests/                   # 외부 API 키 없이 도는 서버 테스트
+cohorts/{cohortId}/resumes/{resumeId}          원본 이력서. 공고 맞춤 첨삭은 이 문서를 바꾸지 않는다
+  └─ tailoredResumes/{tailoredId}              공고별 사본, 첨삭 진행 상태(reviewSession)
+       ├─ aiReviews/{requestId}                첨삭 결과
+       └─ aiApplications/{requestId}           적용 전 백업, 적용 후 해시
+cohorts/{cohortId}/resumes/matched_{...}       promote로 꺼낸 편집용 이력서
 ```
+
+`tailored_resume_id` 없이 요청하면(공고 없는 일반 첨삭) `aiReviews`·`aiApplications`가 원본 이력서 아래에 생긴다.
+
+Admin SDK는 Firestore 규칙을 우회한다. 그래서 **본인·기수·소유권 검사를 서버 코드에서 빼면 안 된다.**
+`aiReviews`·`aiApplications`에는 클라이언트 직접 읽기 규칙을 두지 않는다(백업에 원문 개인정보가 있다).
+
+## 실행
+
+레포 루트 `.env`에서 설정을 읽는다.
+
+```text
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_REASONING_EFFORT=medium
+FIREBASE_PROJECT_ID=skn34-3rd-2team
+MATCHING_JOB_STORE_PATH=         # 비우면 job_matching_bot/artifacts/job_store.sqlite
+CORS_ALLOW_ORIGIN_REGEX=http://(localhost|127\.0\.0\.1)(:\d+)?
+```
+
+서비스 계정 JSON은 레포 밖에 두고 `GOOGLE_APPLICATION_CREDENTIALS`에 경로를 지정한다.
+
+**공고 원문 DB가 있어야 한다.** 레포에 올리지 않는 파일이라(375MB), 아래 스크립트가 Firebase Storage의
+팀 공유본이 새로 올라왔을 때만 받아 검증·교체한 뒤 통합 서버를 켠다.
+
+```powershell
+.\scripts\start-backend.ps1
+```
+
+직접 켤 때:
+
+```powershell
+python -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1 --port 8000
+```
+
+| 주소 | 내용 |
+|---|---|
+| `http://127.0.0.1:8000/docs` | 추천봇 API 문서 |
+| `http://127.0.0.1:8000/resume-review/docs` | 첨삭 API 문서 |
+
+통합 서버(`app/integrated.py`)는 네 모듈을 한 프로세스로 묶는다. 추천봇과 이 모듈이 둘 다
+`/api/v1/jobs/recommend`를 갖고 있고 스키마가 달라서, 이 모듈은 `/resume-review` 아래로 분리했다.
+
+```text
+/api/v1/student-chatbot/*   chatbot/        학생 챗봇
+/api/v1/study-notes/*       study_notes/    공부방 노트
+/resume-review/*            cover_letter_rag 첨삭 (이 모듈)
+/*                          job_matching_bot 추천·공고 찾기 챗봇
+```
+
+## 테스트
+
+```powershell
+pip install -e ./cover_letter_rag[dev]
+$env:PYTHONPATH = (Get-Location).Path     # 레포 루트. 공고 저장소 읽기가 job_matching_bot을 import한다
+cd cover_letter_rag
+pytest
+```
+
+`tests/`의 14개 파일(127개 테스트)은 가짜 Firebase·가짜 LLM·임시 SQLite로 돈다. API 키가 필요 없다.
+
+| 파일 | 검증 |
+|---|---|
+| `test_review_workflow.py`, `test_resume_review.py` | 첨삭 흐름, 버전 충돌, 중복 요청, 재첨삭 |
+| `test_resume_quality.py` | 수치·기술·역할·부정·상태 변경 보류, 겹치는 수정안 제거 |
+| `test_resume_apply.py` | 수정안 적용·되돌리기 |
+| `test_tailored_resumes.py` | 같은 공고로 여러 번 눌러도 사본 하나, 목록, 진행 상태 복원, 선택한 사본만 삭제 |
+| `test_matching_handoff.py` | 공고 원문 전체 읽기, 쓸 수 없는 공고 거부, 이미지뿐인 공고, 통합 서버 경로 |
+| `test_grounding.py`, `test_technology.py` | 인용 근거 검증, 기술명 별칭 |
+| 나머지 | 레거시 검색·추천·인덱싱, Pinecone·Chroma 어댑터 |
+
+실제 Firebase·OpenAI와의 통합 성공이나 첨삭 품질을 증명하는 테스트는 아니다. 품질 평가 기준은
+[docs/resume-review-quality.md](docs/resume-review-quality.md)의 사람 대조 표를 따른다.
+
+## 레거시 API (초기 RAG 실험)
+
+처음에는 이 모듈이 공고 인덱스를 직접 만들고 검색했다. 지금 앱은 쓰지 않지만 코드와 테스트는 남아 있다.
+
+| 경로 | 설명 |
+|---|---|
+| `POST /api/v1/jobs/search` | 이력서로 공고 Top-k 검색 |
+| `POST /api/v1/profiles/analyze` | 이력서 직접 인용이 있는 기술·경험 추출 |
+| `POST /api/v1/jobs/recommend` | 분석 → 검색 → 근거 포함 추천 |
+| `POST /api/v1/jobs/compare` | 공고 요구사항과 이력서 근거 비교 |
+| `POST /api/v1/reviews` | 이력서·공고·문항·초안으로 자기소개서 첨삭 |
+
+인덱싱은 요청 중에 하지 않고 따로 실행한다.
+
+```powershell
+cd cover_letter_rag
+python -m scripts.index_jobs                               # data/jobs 정적 샘플 → 청킹 → 임베딩 → 저장
+```
+
+크롤링 JSONL은 `scripts/`의 JSONL 인덱싱 스크립트로 넣는다. `--validate-only`를 붙이면 중복 제거·품질 분류·청킹까지만 하고 비용이 들지 않는다.
+
+- 같은 `job_id`를 다시 넣으면 기존 벡터를 지운 뒤 넣어 오래된 청크가 섞이지 않는다.
+- 기존 인덱스의 차원·metric이 다르면 멈춘다.
+- `VECTOR_STORE_PROVIDER=chroma`로 바꾸면 비용 없이 로컬 Chroma(`chroma_db/`)로 시험할 수 있다.
+- `data/jobs/`의 샘플 공고는 채용 사이트 API 응답 형식을 검증하려고 만든 가짜 데이터다.
+
+## 파일
+
+| 파일 | 역할 |
+|---|---|
+| `app/integrated.py` | 통합 서버 진입점 |
+| `app/main.py` | 첨삭 FastAPI 앱, 예외 → 상태 코드 변환 |
+| `app/review_workflow.py` | 첨삭 오케스트레이션, 버전 해시, 연락처 가림, 중복 요청 처리 |
+| `app/resume_review.py` | 필드 추출, 생성기, 사후 근거 검증 |
+| `app/resume_apply.py` | 적용·되돌리기 트랜잭션 |
+| `app/tailored_resumes.py` | 공고별 이력서 사본 |
+| `app/matching_handoff.py` | 공고 원문 SQLite 읽기 |
+| `app/firebase_gateway.py` | Firebase 인증, 이력서·사본 읽기·쓰기 |
+| `app/prompts.py`, `app/models.py` | 프롬프트, 요청·응답·구조화 출력 스키마 |
+| `app/service.py`, `app/vector_store.py`, `app/crawled_jobs.py` | 레거시 검색·추천·첨삭, Pinecone/Chroma 어댑터, 크롤링 JSONL 정리 |
+| `docs/` | 통합·첨삭 계약·적용 API·품질 기준 문서 |
+
+## 알려진 한계
+
+- 의미가 미묘하게 바뀌는 환각까지 모두 잡지는 못한다. 규칙은 보수적인 문자열 비교라 오탐·누락이 있다. 최종 판단은 학생이 원문과 수정안을 비교해서 한다.
+- 추천봇 API 쪽에는 아직 Firebase 인증이 없다. 통합 서버를 그대로 공개 배포하면 안 된다.
+- 서버가 처리 중에 꺼지면 `processing` 상태가 남는다. 자동으로 만료·재실행하지 않는다.
