@@ -65,6 +65,13 @@ class StorageService {
   }) =>
       'cohorts/$cohortId/assessments/$assessmentId/thumbnails/$fileName';
 
+  static String noticeImagePath({
+    required String cohortId,
+    required String userId,
+    required String fileName,
+  }) =>
+      'cohorts/$cohortId/notices/$userId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+
   static String curriculumSheetCsvPath({
     required String cohortId,
     required String sheetId,

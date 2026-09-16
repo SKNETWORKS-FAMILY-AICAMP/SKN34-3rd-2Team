@@ -135,7 +135,22 @@ async function publishSingleScheduledNotice(
 ): Promise<void> {
   const data = scheduledDoc.data() as ScheduledNoticeData;
 
-  await cohortRef.collection("notices").add({
+  const noticesRef = cohortRef.collection("notices");
+  const publishedNoticeRef = noticesRef.doc(`scheduled_${scheduledDoc.id}`);
+  const previousNotices = await noticesRef
+    .where("scheduledNoticeId", "==", scheduledDoc.id)
+    .get();
+  const publishBatch = db.batch();
+
+  // 반복 예약 공지는 최신 게시물 하나만 남긴다. 기존 add() 방식으로
+  // 생성된 문서도 같은 scheduledNoticeId를 기준으로 함께 정리한다.
+  for (const previous of previousNotices.docs) {
+    if (previous.ref.path !== publishedNoticeRef.path) {
+      publishBatch.delete(previous.ref);
+    }
+  }
+
+  publishBatch.set(publishedNoticeRef, {
     title: data.title,
     content: data.content,
     authorId: data.authorId,
@@ -147,6 +162,7 @@ async function publishSingleScheduledNotice(
     createdAt: fieldValue.serverTimestamp(),
     updatedAt: fieldValue.serverTimestamp(),
   });
+  await publishBatch.commit();
 
   if (data.repeatType === "once") {
     await scheduledDoc.ref.update({

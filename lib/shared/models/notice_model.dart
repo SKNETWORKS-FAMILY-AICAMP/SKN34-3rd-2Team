@@ -14,6 +14,7 @@ class NoticeModel {
     this.source,
     this.channelLabel,
     this.scheduledNoticeId,
+    this.imageUrl,
     this.createdAt,
   });
 
@@ -27,6 +28,7 @@ class NoticeModel {
   final String? source;
   final String? channelLabel;
   final String? scheduledNoticeId;
+  final String? imageUrl;
   final DateTime? createdAt;
 
   bool get isFromDiscord => source == 'discord';
@@ -48,6 +50,7 @@ class NoticeModel {
       source: data['source'] as String?,
       channelLabel: data['channelLabel'] as String?,
       scheduledNoticeId: data['scheduledNoticeId'] as String?,
+      imageUrl: data['imageUrl'] as String?,
       createdAt: AppDateUtils.timestampToDateTime(data['createdAt']),
     );
   }
@@ -66,6 +69,7 @@ class NoticeModel {
         if (source != null) 'source': source,
         if (channelLabel != null) 'channelLabel': channelLabel,
         if (scheduledNoticeId != null) 'scheduledNoticeId': scheduledNoticeId,
+        if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -80,6 +84,8 @@ class NoticeModel {
         'isFavorite': isFavorite,
         if (authorId != null) 'authorId': authorId,
         if (authorName != null) 'authorName': authorName,
+        if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
+        if (imageUrl == null) 'imageUrl': FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -93,6 +99,7 @@ class NoticeModel {
     String? source,
     String? channelLabel,
     String? scheduledNoticeId,
+    String? imageUrl,
     DateTime? createdAt,
   }) {
     return NoticeModel(
@@ -105,6 +112,7 @@ class NoticeModel {
       source: source ?? this.source,
       channelLabel: channelLabel ?? this.channelLabel,
       scheduledNoticeId: scheduledNoticeId ?? this.scheduledNoticeId,
+      imageUrl: imageUrl ?? this.imageUrl,
       createdAt: createdAt ?? this.createdAt,
     );
   }

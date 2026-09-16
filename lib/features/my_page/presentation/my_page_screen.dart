@@ -30,6 +30,22 @@ class MyPageScreen extends ConsumerStatefulWidget {
 }
 
 class _MyPageScreenState extends ConsumerState<MyPageScreen> {
+  String _manualFileName(UserModel user) {
+    if (user.isAdmin) return 'admin_manual.pdf';
+    if (user.isInstructor) return 'instructor_manual.pdf';
+    return 'student_manual.pdf';
+  }
+
+  Future<void> _openRoleManual(UserModel user) async {
+    final uri = Uri.base.resolve('manuals/${_manualFileName(user)}');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF 매뉴얼을 열 수 없습니다.')),
+      );
+    }
+  }
+
   Future<void> _savePersonalEmail(UserModel user, String email) async {
     try {
       await ref
@@ -303,42 +319,53 @@ class _MyPageScreenState extends ConsumerState<MyPageScreen> {
                     SizedBox(height: AppSpace.s(12)),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          final notifier = ref.read(
-                            onboardingTourProvider.notifier,
-                          );
-                          if (user.isInstructor) {
-                            await notifier.restart(
-                              tourId: InstructorOnboarding.tourId,
-                              version: InstructorOnboarding.version,
-                              uid: user.uid,
-                              steps: InstructorOnboarding.steps,
-                            );
-                            if (!context.mounted) return;
-                            context.go(RoutePaths.instructor);
-                          } else if (user.isAdmin) {
-                            await notifier.restart(
-                              tourId: AdminOnboarding.tourId,
-                              version: AdminOnboarding.version,
-                              uid: user.uid,
-                              steps: AdminOnboarding.steps,
-                            );
-                            if (!context.mounted) return;
-                            context.go(RoutePaths.admin);
-                          } else {
-                            await notifier.restart(
-                              tourId: StudentOnboarding.tourId,
-                              version: StudentOnboarding.version,
-                              uid: user.uid,
-                              steps: StudentOnboarding.steps,
-                            );
-                            if (!context.mounted) return;
-                            context.go(RoutePaths.dashboard);
-                          }
-                        },
-                        icon: const Icon(Icons.tour_outlined, size: 18),
-                        label: const Text('이용 안내 다시보기'),
+                      child: Wrap(
+                        spacing: AppSpace.s(8),
+                        runSpacing: AppSpace.s(4),
+                        children: [
+                          TextButton.icon(
+                            onPressed: () async {
+                              final notifier = ref.read(
+                                onboardingTourProvider.notifier,
+                              );
+                              if (user.isInstructor) {
+                                await notifier.restart(
+                                  tourId: InstructorOnboarding.tourId,
+                                  version: InstructorOnboarding.version,
+                                  uid: user.uid,
+                                  steps: InstructorOnboarding.steps,
+                                );
+                                if (!context.mounted) return;
+                                context.go(RoutePaths.instructor);
+                              } else if (user.isAdmin) {
+                                await notifier.restart(
+                                  tourId: AdminOnboarding.tourId,
+                                  version: AdminOnboarding.version,
+                                  uid: user.uid,
+                                  steps: AdminOnboarding.steps,
+                                );
+                                if (!context.mounted) return;
+                                context.go(RoutePaths.admin);
+                              } else {
+                                await notifier.restart(
+                                  tourId: StudentOnboarding.tourId,
+                                  version: StudentOnboarding.version,
+                                  uid: user.uid,
+                                  steps: StudentOnboarding.steps,
+                                );
+                                if (!context.mounted) return;
+                                context.go(RoutePaths.dashboard);
+                              }
+                            },
+                            icon: const Icon(Icons.tour_outlined, size: 18),
+                            label: const Text('이용 안내 다시보기'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _openRoleManual(user),
+                            icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                            label: const Text('PDF 매뉴얼 보기'),
+                          ),
+                        ],
                       ),
                     ),
                   ],

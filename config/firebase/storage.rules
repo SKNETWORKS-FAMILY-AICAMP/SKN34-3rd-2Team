@@ -74,6 +74,14 @@ service firebase.storage {
         && request.resource.size < 5 * 1024 * 1024; // 5MB 제한
     }
 
+    // cohorts/{cohortId}/notices/{userId}/{fileName}
+    match /cohorts/{cohortId}/notices/{userId}/{fileName} {
+      allow read: if canAccessCohort(cohortId);
+      allow write: if (isAdmin() || isInstructorOfCohort(cohortId))
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     // cohorts/{cohortId}/assessments/{assessmentId}/thumbnails/{fileName}
     match /cohorts/{cohortId}/assessments/{assessmentId}/thumbnails/{fileName} {
       allow read: if canAccessCohort(cohortId)

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -108,11 +109,17 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
     String roomId,
     SeatingAssignmentModel? assignment,
   ) {
-    if (_assignmentSyncedRoomId == roomId) return;
     if (_assignmentDraftDirty) return;
+    final nextAssignments = Map<String, String>.from(
+      assignment?.assignments ?? const {},
+    );
+    if (_assignmentSyncedRoomId == roomId &&
+        mapEquals(_draftAssignments, nextAssignments)) {
+      return;
+    }
     _assignmentSyncedRoomId = roomId;
     setState(() {
-      _draftAssignments = Map.from(assignment?.assignments ?? {});
+      _draftAssignments = nextAssignments;
     });
   }
 
@@ -595,7 +602,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
     final studentsAsync = ref.watch(cohortStudentsProvider);
 
     final rooms = roomsAsync.asData?.value ?? [];
-    final students = studentsAsync.asData?.value ?? [];
+    final students = _deduplicateStudents(studentsAsync.asData?.value ?? []);
 
     // 틀 설정 탭: 첫 강의실 자동 선택
     if (_layoutRoomId == null && rooms.isNotEmpty && !_layoutDraftDirty) {
@@ -621,10 +628,10 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           .watch(seatingRoomProvider(_assignmentRoomId!))
           .asData
           ?.value;
-      final assignment = ref
-          .watch(seatingRoomAssignmentProvider(_assignmentRoomId!))
-          .asData
-          ?.value;
+      final assignmentAsync = ref.watch(
+        seatingRoomAssignmentProvider(_assignmentRoomId!),
+      );
+      final assignment = assignmentAsync.asData?.value;
       if (room != null && _assignmentLayout?.cells != room.layout.cells) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _assignmentRoomId == room.id) {
@@ -632,7 +639,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
           }
         });
       }
-      if (assignment != null || _assignmentSyncedRoomId != _assignmentRoomId) {
+      if (assignmentAsync.hasValue) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _assignmentRoomId != null) {
             _syncAssignmentFromProvider(_assignmentRoomId!, assignment);
@@ -694,6 +701,25 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
         ],
       ),
     );
+  }
+
+  List<UserModel> _deduplicateStudents(List<UserModel> students) {
+    final byName = <String, UserModel>{};
+    for (final student in students) {
+      final key = student.displayName.trim();
+      final existing = byName[key];
+      if (existing == null) {
+        byName[key] = student;
+        continue;
+      }
+      final existingCreated = existing.createdAt;
+      final candidateCreated = student.createdAt;
+      if (existingCreated == null ||
+          (candidateCreated != null && candidateCreated.isBefore(existingCreated))) {
+        byName[key] = student;
+      }
+    }
+    return byName.values.toList(growable: false);
   }
 
   String _appBarTitle(String? cohortName, String? roomNumber) {
@@ -935,7 +961,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
             child: _buildRoomSelector(
               rooms: rooms,
               selectedId: _assignmentRoomId,
-              hint: '배치할 강의실',
+              hint: '좌석을 확인할 강의실',
               onChanged: (room) => _selectAssignmentRoom(room?.id, room),
               width: 280,
             ),
@@ -944,7 +970,7 @@ class _AdminSeatingScreenState extends ConsumerState<AdminSeatingScreen>
             SizedBox(height: AppSpace.s(24)),
             Center(
               child: Text(
-                '배치할 강의실을 선택해주세요.',
+                '좌석을 확인할 강의실을 선택해주세요.',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             ),

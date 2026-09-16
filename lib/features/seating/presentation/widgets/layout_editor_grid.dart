@@ -28,6 +28,11 @@ class LayoutEditorGrid extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _PaletteBar(),
+        SizedBox(height: AppSpace.s(10)),
+        _TrashDropTarget(
+          onDeleteGroup: (groupId) =>
+              onLayoutChanged(layout.removeGroup(groupId)),
+        ),
         SizedBox(height: AppSpace.s(12)),
         Center(
           child: Text(
@@ -403,6 +408,57 @@ class LayoutEditorGrid extends StatelessWidget {
     }
 
     if (next != null) onLayoutChanged(next);
+  }
+}
+
+class _TrashDropTarget extends StatelessWidget {
+  const _TrashDropTarget({required this.onDeleteGroup});
+
+  final ValueChanged<String> onDeleteGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<LayoutDragPayload>(
+      onWillAcceptWithDetails: (details) => details.data.isTableMove,
+      onAcceptWithDetails: (details) {
+        final groupId = details.data.groupId;
+        if (groupId != null) onDeleteGroup(groupId);
+      },
+      builder: (context, candidates, _) {
+        final hovering = candidates.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: AppSpace.row(48),
+          decoration: BoxDecoration(
+            color: hovering
+                ? AppColors.error.withValues(alpha: 0.12)
+                : AppColors.tint(const Color(0xFFFFF7F7)),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: hovering ? AppColors.error : AppColors.border,
+              width: hovering ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.delete_outline,
+                color: hovering ? AppColors.error : AppColors.textSecondary,
+              ),
+              SizedBox(width: AppSpace.s(6)),
+              Text(
+                hovering ? '놓아서 좌석 삭제' : '좌석을 이곳에 끌어 놓아 삭제',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: hovering ? AppColors.error : AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

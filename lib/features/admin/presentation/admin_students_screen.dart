@@ -9,6 +9,8 @@ import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/filter_pill.dart';
 import '../../../core/widgets/loading_widgets.dart';
 import '../../../shared/models/student_intake_model.dart';
+import '../../../shared/providers/cohort_providers.dart';
+import '../data/student_admin_service.dart';
 import '../providers/student_admin_providers.dart';
 import 'widgets/admin_page_layout.dart';
 import '../../../core/theme/app_space.dart';
@@ -25,6 +27,14 @@ class AdminStudentsScreen extends ConsumerStatefulWidget {
 class _AdminStudentsScreenState extends ConsumerState<AdminStudentsScreen> {
   /// 0: 재원, 1: 퇴소
   int _filter = 0;
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,10 +66,41 @@ class _AdminStudentsScreenState extends ConsumerState<AdminStudentsScreen> {
                 onTap: () => setState(() => _filter = 1),
               ),
             ],
-            trailing: FilledButton.icon(
-              onPressed: () => context.push(RoutePaths.adminStudentsCreate),
-              icon: const Icon(Icons.person_add, size: 18),
-              label: const Text('상담 등록'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (value) => setState(
+                      () => _query = value.trim().toLowerCase(),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '학생 이름 또는 이메일 검색',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: '검색어 지우기',
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _query = '');
+                              },
+                              icon: const Icon(Icons.close, size: 18),
+                            ),
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                SizedBox(width: AppSpace.s(8)),
+                FilledButton.icon(
+                  onPressed: () => context.push(RoutePaths.adminStudentsCreate),
+                  icon: const Icon(Icons.person_add, size: 18),
+                  label: const Text('학생 등록'),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -73,23 +114,36 @@ class _AdminStudentsScreenState extends ConsumerState<AdminStudentsScreen> {
                   onRetry: () => ref.invalidate(cohortStudentIntakesProvider),
                 ),
                 data: (list) {
+                  bool matchesSearch(StudentIntakeModel student) {
+                    if (_query.isEmpty) return true;
+                    return student.displayName.toLowerCase().contains(_query) ||
+                        student.email.toLowerCase().contains(_query) ||
+                        (student.personalEmail ?? '')
+                            .toLowerCase()
+                            .contains(_query);
+                  }
+
                   final activeList = list
-                      .where((s) => s.isActive)
+                      .where((s) => s.isActive && matchesSearch(s))
                       .toList(growable: false);
                   final inactiveList = list
-                      .where((s) => !s.isActive)
+                      .where((s) => !s.isActive && matchesSearch(s))
                       .toList(growable: false);
 
                   if (_filter == 0) {
                     return _StudentList(
                       students: activeList,
-                      emptyMessage: '등록된 학생이 없습니다',
-                      showCreateButton: true,
+                      emptyMessage: _query.isEmpty
+                          ? '등록된 학생이 없습니다'
+                          : '검색 결과가 없습니다',
+                      showCreateButton: _query.isEmpty,
                     );
                   }
                   return _StudentList(
                     students: inactiveList,
-                    emptyMessage: '퇴소 처리된 학생이 없습니다',
+                    emptyMessage: _query.isEmpty
+                        ? '퇴소 처리된 학생이 없습니다'
+                        : '검색 결과가 없습니다',
                     showCreateButton: false,
                     isInactive: true,
                   );

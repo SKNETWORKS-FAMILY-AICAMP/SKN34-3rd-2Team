@@ -41,7 +41,7 @@ abstract final class DemoAccounts {
     uid: studentUid,
     email: studentEmail,
     personalEmail: 'student@gmail.com',
-    displayName: '학생',
+    displayName: '문성호',
     role: UserRole.student,
     cohortId: DemoConfig.cohortId,
     cohortName: DemoConfig.cohortName,

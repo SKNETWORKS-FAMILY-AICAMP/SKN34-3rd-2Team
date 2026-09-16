@@ -29,6 +29,16 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
     for (final s in widget.students) s.uid: s,
   };
 
+  int _visibleMemberCount(ProjectTeamModel team) =>
+      team.memberIds.where(_byId.containsKey).length;
+
+  String _visibleSizeLabel(ProjectTeamModel team) {
+    final count = _visibleMemberCount(team);
+    if (count == 0) return '비어 있음';
+    if (count >= ProjectTeamModel.minMembers) return '$count명 · 구성 완료';
+    return '$count명 · ${ProjectTeamModel.minMembers}명 이상 권장';
+  }
+
   Future<void> _createTeam(List<ProjectTeamModel> existing) async {
     final cohortId = ref.read(effectiveCohortIdProvider);
     final uid = ref.read(currentUserSyncProvider)?.uid;
@@ -143,14 +153,12 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
 
   Future<void> _addMember(ProjectTeamModel team, String userId) async {
     if (team.memberIds.contains(userId)) return;
-    if (team.memberCount >= ProjectTeamModel.maxMembers) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('팀은 최대 5명까지입니다.')),
-      );
-      return;
-    }
+    final activeIds = widget.students.map((student) => student.uid).toSet();
+    final validMemberIds = team.memberIds
+        .where(activeIds.contains)
+        .toList(growable: true);
     await _saveTeam(
-      team.copyWith(memberIds: [...team.memberIds, userId]),
+      team.copyWith(memberIds: [...validMemberIds, userId]),
     );
   }
 
@@ -268,67 +276,110 @@ class _ProjectTeamsPanelState extends ConsumerState<ProjectTeamsPanel> {
               return s.displayName.toLowerCase().contains(_query.toLowerCase());
             }).toList()..sort((a, b) => a.displayName.compareTo(b.displayName));
 
-        final completeCount = teams.where((t) => t.isComplete).length;
+        final completeCount = teams
+            .where((t) => _visibleMemberCount(t) >= ProjectTeamModel.minMembers)
+            .length;
 
         final pool = _UnassignedPool(
           students: unassigned,
           query: _query,
           onQueryChanged: (v) => setState(() => _query = v),
           onAddToTeam: (student) async {
-            final incomplete = teams
-                .where(
-                  (t) => t.memberCount < ProjectTeamModel.maxMembers,
-                )
-                .toList();
-            if (incomplete.isEmpty) {
+            final availableTeams = teams.toList();
+            if (availableTeams.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('자리가 남은 팀이 없습니다. 팀을 추가하세요.'),
+                  content: Text('팀이 없습니다. 팀을 먼저 추가하세요.'),
                 ),
               );
               return;
             }
-            final target = await showModalBottomSheet<ProjectTeamModel>(
+            final teamScrollController = ScrollController();
+            final target = await showDialog<ProjectTeamModel>(
               context: context,
-              showDragHandle: true,
-              builder: (context) => SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(AppSpace.s(20), AppSpace.s(4), AppSpace.s(20), AppSpace.s(12)),
-                      child: Text(
-                        '${student.displayName} 팀 선택',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
+              builder: (context) => Dialog(
+                insetPadding: const EdgeInsets.all(32),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          AppSpace.s(20),
+                          AppSpace.s(16),
+                          AppSpace.s(20),
+                          AppSpace.s(12),
                         ),
-                      ),
-                    ),
-                    for (final t in incomplete)
-                      ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: ProjectTeamColors.softOf(
-                            t.colorIndex,
-                          ),
-                          child: Text(
-                            t.name.isNotEmpty ? t.name[0] : 'T',
-                            style: TextStyle(
-                              color: ProjectTeamColors.accentOf(
-                                t.colorIndex,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${student.displayName} 팀 선택',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
                               ),
-                              fontWeight: FontWeight.w700,
                             ),
+                            IconButton(
+                              tooltip: '닫기',
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.sizeOf(context).height * 0.65,
+                        ),
+                        child: Scrollbar(
+                          controller: teamScrollController,
+                          thumbVisibility: true,
+                          interactive: true,
+                          child: ListView.builder(
+                            controller: teamScrollController,
+                            shrinkWrap: true,
+                            padding: EdgeInsets.only(
+                              left: AppSpace.s(8),
+                              right: AppSpace.s(16),
+                              bottom: AppSpace.s(16),
+                            ),
+                            itemCount: availableTeams.length,
+                            itemBuilder: (context, index) {
+                              final t = availableTeams[index];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: ProjectTeamColors.softOf(
+                                    t.colorIndex,
+                                  ),
+                                  child: Text(
+                                    t.name.isNotEmpty ? t.name[0] : 'T',
+                                    style: TextStyle(
+                                      color: ProjectTeamColors.accentOf(
+                                        t.colorIndex,
+                                      ),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(t.name),
+                                subtitle: Text(_visibleSizeLabel(t)),
+                                onTap: () => Navigator.pop(context, t),
+                              );
+                            },
                           ),
                         ),
-                        title: Text(t.name),
-                        subtitle: Text(t.sizeLabel),
-                        onTap: () => Navigator.pop(context, t),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
+            teamScrollController.dispose();
             if (target != null) {
               await _addMember(target, student.uid);
             }
@@ -762,8 +813,7 @@ class _TeamCard extends StatelessWidget {
     final soft = ProjectTeamColors.softOf(team.colorIndex);
 
     return DragTarget<String>(
-      onWillAcceptWithDetails: (_) =>
-          team.memberCount < ProjectTeamModel.maxMembers,
+      onWillAcceptWithDetails: (_) => true,
       onAcceptWithDetails: (details) => onAcceptStudent(details.data),
       builder: (context, candidate, _) {
         final hovering = candidate.isNotEmpty;
@@ -820,13 +870,15 @@ class _TeamCard extends StatelessWidget {
                           ),
                           SizedBox(height: AppSpace.s(2)),
                           Text(
-                            team.sizeLabel,
+                            members.isEmpty
+                                ? '비어 있음'
+                                : members.length >= ProjectTeamModel.minMembers
+                                ? '${members.length}명 · 구성 완료'
+                                : '${members.length}명 · ${ProjectTeamModel.minMembers}명 이상 권장',
                             style: TextStyle(
                               fontSize: 11,
-                              color: team.isComplete
+                              color: members.length >= ProjectTeamModel.minMembers
                                   ? AppColors.success
-                                  : team.isOverfull
-                                  ? AppColors.error
                                   : AppColors.textSecondary,
                               fontWeight: FontWeight.w600,
                             ),
@@ -899,8 +951,8 @@ class _TeamCard extends StatelessWidget {
                               ),
                             ),
                           ...List.generate(
-                            (ProjectTeamModel.maxMembers - members.length)
-                                .clamp(0, ProjectTeamModel.maxMembers),
+                            (ProjectTeamModel.minMembers - members.length)
+                                .clamp(0, ProjectTeamModel.minMembers),
                             (_) => Container(
                               width: 36,
                               height: 32,

@@ -447,9 +447,39 @@ class LmsRepository {
   }
 
   Future<void> updateCohort(CohortModel cohort) async {
-    await _firestore.collection('cohorts').doc(cohort.cohortId).update(
-          cohort.toFirestore(),
-        );
+    final students = await _firestore
+        .collection(FirestorePaths.users)
+        .where('cohortId', isEqualTo: cohort.cohortId)
+        .where('role', isEqualTo: 'student')
+        .get();
+
+    final activeStudentCount = students.docs
+        .where((doc) => doc.data()['isActive'] != false)
+        .length;
+
+    await _firestore.collection('cohorts').doc(cohort.cohortId).update({
+      ...cohort.toFirestore(),
+      'studentCount': activeStudentCount,
+    });
+
+    // 기수명은 users에도 표시용으로 중복 저장되어 있으므로 함께 맞춘다.
+    // Firestore batch 제한에 여유를 두고 나눠 처리한다.
+    final namesToUpdate = students.docs
+        .where((doc) => doc.data()['cohortName'] != cohort.name)
+        .toList();
+    for (var offset = 0; offset < namesToUpdate.length; offset += 450) {
+      final end = (offset + 450 < namesToUpdate.length)
+          ? offset + 450
+          : namesToUpdate.length;
+      final batch = _firestore.batch();
+      for (final doc in namesToUpdate.sublist(offset, end)) {
+        batch.update(doc.reference, {
+          'cohortName': cohort.name,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
   }
 
   Stream<List<CohortWithResumes>> watchAllCohortsWithResumes() {
@@ -1664,16 +1694,16 @@ class LmsRepository {
   }
 
   Future<void> deleteFormTask(String cohortId, String taskId) async {
-    final responses = await cohortSub(cohortId, 'formTasks')
-        .doc(taskId)
-        .collection('responses')
-        .get();
-    final batch = _firestore.batch();
-    for (final doc in responses.docs) {
-      batch.delete(doc.reference);
+    final taskRef = cohortSub(cohortId, 'formTasks').doc(taskId);
+    final responses = await taskRef.collection('responses').get();
+    final refs = [...responses.docs.map((doc) => doc.reference), taskRef];
+    for (var i = 0; i < refs.length; i += 400) {
+      final batch = _firestore.batch();
+      for (final ref in refs.skip(i).take(400)) {
+        batch.delete(ref);
+      }
+      await batch.commit();
     }
-    batch.delete(cohortSub(cohortId, 'formTasks').doc(taskId));
-    await batch.commit();
   }
 
   // ── User Profile ──

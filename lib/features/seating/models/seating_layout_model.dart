@@ -341,6 +341,20 @@ class SeatingLayoutModel {
     return copyWith(cells: grid).relabeled();
   }
 
+  /// 테이블 그룹 전체를 좌석 틀에서 제거하고 남은 좌석 번호를 다시 매긴다.
+  SeatingLayoutModel removeGroup(String groupId) {
+    final grid = cells.map((cell) {
+      if (cell.groupId != groupId) return cell;
+      return cell.copyWith(
+        type: SeatingCellType.empty,
+        seatId: '',
+        label: '',
+        clearGroupId: true,
+      );
+    }).toList();
+    return copyWith(cells: grid).relabeled();
+  }
+
   SeatingLayoutModel? moveGroup(String groupId, int targetRow, int targetCol) {
     final group = cellsInGroup(groupId);
     if (group.isEmpty) return null;

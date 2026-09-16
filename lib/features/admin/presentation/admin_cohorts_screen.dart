@@ -137,6 +137,8 @@ class _CohortList extends ConsumerWidget {
         itemBuilder: (_, i) {
           final c = cohorts[i];
           final isSelected = c.cohortId == selectedId;
+          final students = ref.watch(cohortStudentsByIdProvider(c.cohortId));
+          final actualStudentCount = students.asData?.value.length;
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
@@ -216,7 +218,9 @@ class _CohortList extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '${c.studentCount}명',
+                                  actualStudentCount == null
+                                      ? '…명'
+                                      : '$actualStudentCount명',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                   ),

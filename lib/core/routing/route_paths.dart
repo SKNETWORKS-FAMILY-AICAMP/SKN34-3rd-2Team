@@ -10,8 +10,12 @@ abstract final class RoutePaths {
   static const resume = '/resume';
   static const studyRoom = '/study-room';
   static const studyRoomNotes = '/study-room/notes';
-  static String studyRoomNoteSource(String sourceId) =>
-      '/study-room/notes/$sourceId';
+  static String studyRoomNoteSource(String sourceId, {String? noteId}) {
+    final path = '/study-room/notes/$sourceId';
+    if (noteId == null || noteId.isEmpty) return path;
+    return Uri(path: path, queryParameters: {'noteId': noteId}).toString();
+  }
+
   static const board = '/board';
   static const records = '/records';
   static const recordsCreate = '/records/create';

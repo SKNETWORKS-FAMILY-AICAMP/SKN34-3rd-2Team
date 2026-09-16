@@ -19,6 +19,7 @@ class SeatGrid extends StatelessWidget {
     this.editable = false,
     this.compact = false,
     this.showInstructorHint = true,
+    this.rotate180 = false,
     this.inactiveSeatIds = const {},
     this.confirmedUserIds = const {},
     this.heldUserIds = const {},
@@ -36,6 +37,7 @@ class SeatGrid extends StatelessWidget {
   final bool editable;
   final bool compact;
   final bool showInstructorHint;
+  final bool rotate180;
   final Set<String> inactiveSeatIds;
   final Set<String> confirmedUserIds;
   final Set<String> heldUserIds;
@@ -63,7 +65,7 @@ class SeatGrid extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.only(bottom: compact ? AppSpace.s(4) : AppSpace.s(12)),
               child: Text(
-                '▲ 강사석 방향',
+                rotate180 ? '▼ 강사석 방향' : '▲ 강사석 방향',
                 style: TextStyle(
                   fontSize: compact ? 8 : 12,
                   fontWeight: FontWeight.w600,
@@ -73,24 +75,43 @@ class SeatGrid extends StatelessWidget {
             ),
           ),
         ...List.generate(layout.rows, (row) {
+          final sourceRow = rotate180 ? layout.rows - 1 - row : row;
           return Padding(
             padding: EdgeInsets.only(bottom: _rowGap),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: List.generate(layout.cols, (col) {
-                final cell = layout.cellAt(row, col);
+                final sourceCol = rotate180 ? layout.cols - 1 - col : col;
+                final cell = layout.cellAt(sourceRow, sourceCol);
                 if (cell == null || cell.isEmpty) {
                   return SizedBox(width: _cellW, height: _cellH);
                 }
 
+                final sourceColToVisualLeft = rotate180
+                    ? sourceCol + 1
+                    : sourceCol - 1;
+                final sourceColToVisualRight = rotate180
+                    ? sourceCol - 1
+                    : sourceCol + 1;
                 final hPadLeft =
-                    col > 0 && sameCellGroup(layout, cell, row, col - 1)
+                    col > 0 &&
+                        sameCellGroup(
+                          layout,
+                          cell,
+                          sourceRow,
+                          sourceColToVisualLeft,
+                        )
                     ? 0.0
                     : _groupGap;
                 final hPadRight =
                     col < layout.cols - 1 &&
-                        sameCellGroup(layout, cell, row, col + 1)
+                        sameCellGroup(
+                          layout,
+                          cell,
+                          sourceRow,
+                          sourceColToVisualRight,
+                        )
                     ? 0.0
                     : _groupGap;
 
@@ -116,6 +137,7 @@ class SeatGrid extends StatelessWidget {
                     pulseHighlight: pulseHighlight,
                     editable: editable,
                     compact: compact,
+                    rotate180: rotate180,
                     cellW: _cellW,
                     cellH: _cellH,
                     onAssign: onAssign,
@@ -145,6 +167,7 @@ class _SeatCell extends StatelessWidget {
     required this.pulseHighlight,
     required this.editable,
     required this.compact,
+    required this.rotate180,
     required this.cellW,
     required this.cellH,
     this.teamTint,
@@ -165,10 +188,23 @@ class _SeatCell extends StatelessWidget {
   final bool pulseHighlight;
   final bool editable;
   final bool compact;
+  final bool rotate180;
   final double cellW;
   final double cellH;
   final void Function(String seatId, SeatDragPayload payload)? onAssign;
   final void Function(String fromSeatId, String toSeatId)? onSwap;
+
+  SeatGroupEdges _visualGroupEdges() {
+    final edges = computeGroupEdges(layout, cell);
+    if (!rotate180) return edges;
+    return SeatGroupEdges(
+      top: edges.bottom,
+      bottom: edges.top,
+      left: edges.right,
+      right: edges.left,
+      isGrouped: edges.isGrouped,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -183,7 +219,7 @@ class _SeatCell extends StatelessWidget {
       );
     }
 
-    final edges = computeGroupEdges(layout, cell);
+    final edges = _visualGroupEdges();
     final hasStudent = displayName.isNotEmpty && userId != null;
     final mineFill = isHighlighted && !pulseHighlight;
 
@@ -408,8 +444,8 @@ class _SeatCell extends StatelessWidget {
     required Color bg,
     required Color border,
   }) {
-    final edges = computeGroupEdges(layout, cell);
-    final leader = isFixtureLeader(layout, cell);
+    final edges = _visualGroupEdges();
+    final leader = edges.left;
     return Container(
       width: cellW,
       height: cellH,
