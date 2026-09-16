@@ -1,19 +1,81 @@
-# PLAYDATA LMS · AI 취업·학습 코치
+# PLAYDATA LXP · AI 취업·학습 코치
+[![Flutter](https://img.shields.io/badge/Flutter-3.12+-white?style=for-the-badge&logo=flutter&logoColor=white&labelColor=0175C2&color=42A5F5)](https://flutter.dev)
+[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Functions-111?style=for-the-badge&logo=firebase&logoColor=111&labelColor=FFCA28&color=FFA000)](https://firebase.google.com)
+[![LangGraph](https://img.shields.io/badge/LangGraph-RAG-white?style=for-the-badge&logo=langchain&logoColor=white&labelColor=1C3C3C&color=00C2D4)](https://github.com/langchain-ai/langgraph)
+[![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-white?style=for-the-badge&logo=pinecone&logoColor=white&labelColor=000000&color=7B5CFF)](https://www.pinecone.io)
 
-SK네트웍스 Family AI 캠프 34기 **2팀** 3차 프로젝트 — *LLM을 연동한 내외부 문서 기반 질의응답 시스템*
+> 플레이데이터 부트캠프 **LMS를 LXP(Learning Experience Platform)로 전환**한 프로젝트.  
+>부트캠프 LMS 안에서 학생이 **훈련 규정·공지·전 기수 프로젝트를 묻고**, **이력서로 맞는 채용공고를 찾고**, **고른 공고에 맞춰 이력서를 첨삭받는** 서비스다. 모든 답은 검색한 문서나 원문 인용을 근거로 하고, 근거가 없으면 지어내지 않고 모른다고 하거나 되묻는다.
 
-부트캠프 LMS 안에서 학생이 **훈련 규정·공지·전 기수 프로젝트를 묻고**, **이력서로 맞는 채용공고를 찾고**,
-**고른 공고에 맞춰 이력서를 첨삭받는** 서비스다. 모든 답은 검색한 문서나 원문 인용을 근거로 하고,
-근거가 없으면 지어내지 않고 모른다고 하거나 되묻는다.
+---
+
+## 목차
+
+- [팀 소개](#팀-소개)
+- [역할 분담](#역할-분담)
+- [프로젝트 목표](#프로젝트-목표)
+- [주요 기능](#주요-기능)
+- [WBS](#wbs)
+- [시스템 아키텍처](#시스템-아키텍처)
+- [RAG 구성](#rag-구성)
+- [프롬프트 템플릿](#프롬프트-템플릿)
+- [데이터 ERD](#데이터-erd)
+- [데이터 수집 및 전처리](#데이터-수집-및-전처리)
+- [기술 스택](#기술-스택)
+- [테스트 계획 및 결과](#테스트-계획-및-결과)
+- [테스트 시나리오](#테스트-시나리오)
+- [트러블슈팅](#트러블슈팅)
+- [실행 방법](#실행-방법)
+- [폴더 구조](#폴더-구조)
+- [필수 산출물 위치](#필수-산출물-위치)
+- [향후 개선](#향후-개선)
+- [협업 방식](#협업-방식)
 
 ## 팀 소개
 
-| 이름 |
-|---|
-| 김기호 |
-| 김대호 |
-| 문성호 |
-| 최성욱 |
+| 이름 | GitHub |
+| --- | --- |
+| 김기호 | [kyo-135](https://github.com/kyo-135) |
+| 김대호 | [jjhok6389](https://github.com/jjhok6389) |
+| 문성호 | [MoonSungHo](https://github.com/MoonSungHo-D) |
+| 최성욱 | [Overlay1010](https://github.com/Overlay1010) |
+
+## 역할 분담
+
+| 담당자 | 담당 영역 |
+|---|---|
+| 김기호 | 학생 LMS 챗봇, 정책·공지·프로젝트 레퍼런스 RAG |
+| 김대호 | 채용공고 추천·검색, 공부방 노트, 통합 백엔드·LLMOps |
+| 문성호 | 앱 공통 테마·UI, AI 코치 화면 및 사용자 경험 |
+| 최성욱 | 이력서 첨삭 워크플로우, 온보딩, 테스트·문서화 |
+
+### 프로젝트 명
+
+**PLAYDATA LXP** — PLAYDATA All-in-One LMS를 학습 경험 플랫폼으로 확장
+
+## 프로젝트 소개
+
+기존 부트캠프 LMS는 관리자·강사 중심의 **운영 시스템**이다. 출결, 좌석, 제출 승인, 공지, 마일리지, 평가를 기수(`cohort`) 단위로 닫아 관리한다.
+
+이 프로젝트는 그 위에 LXP를 얹는다. 학생은 같은 셸에서
+
+- 정책·공지·프로젝트 레퍼런스를 **RAG로 질문**하고
+- 수업 GitHub에서 **AI 학습 노트**를 만들고
+- 이력서로 **채용공고 추천·첨삭**을 받고
+- 커리큘럼 기반 **주간 학습 추천**을 본다
+
+운영 데이터(Firestore)와 문서 벡터(Pinecone)를 한 질의에서 같이 쓰므로, “규정이 뭐냐”와 “내 출석률이 얼마냐”를 같은 챗봇이 답한다.
+
+## 프로젝트 필요성 (배경)
+
+| 기존 LMS의 한계 | LXP로 바꾸는 이유 |
+| --- | --- |
+| 출결·공지·제출·이력서·평가가 폼·채널·시트로 흩어짐 | 역할별 셸 + 기수 격리로 운영을 한곳에 모은다 |
+| 규정·FAQ는 노션에 있고 학생은 매번 찾아 헤맴 | 내외부 문서를 임베딩해 RAG로 질의한다 |
+| 챗봇이 일반 LLM이면 규정을 지어냄 | 검색된 청크 + Firebase 실데이터만 근거로 답한다 |
+| 수업 자료·취업 준비는 LMS 밖 작업 | 공부방·Job Coach를 학습 경험으로 붙인다 |
+
+3차 과제 주제는 **LLM을 연동한 내외부 문서 기반 질의응답**이다. 우리 팀은 이를 데모용 챗봇이 아니라, 실제 부트캠프 운영 LMS 안의 LXP 기능으로 구현했다.
 
 ## 프로젝트 목표
 
@@ -46,52 +108,15 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 | [scripts/](scripts/README.md) | 서버 실행, Firebase 시드, 환경 변수 동기화 |
 | [config/firebase/](config/firebase) | Firestore·Storage 보안 규칙, 인덱스 |
 
+## WBS
+
+![WBS](assets/readme_image/WBS.png)
+
 ## 시스템 아키텍처
 
-```mermaid
-flowchart LR
-  subgraph APP["Flutter 앱 · Web / Android / Windows"]
-    S["학생"]
-    T["강사 · 관리자"]
-  end
+![시스템 아키텍처](assets/readme_image/system_architecture.png)
 
-  subgraph FB["Firebase"]
-    AU["Auth"]
-    FS[("Firestore<br>이력서 · 출결 · 공지 …")]
-    FN["Cloud Functions<br>계정 · 마일리지 · 평가 출제"]
-  end
-
-  subgraph API["통합 백엔드 · FastAPI :8000"]
-    CB["학생 챗봇<br>/api/v1/student-chatbot"]
-    JM["추천 · 공고 찾기 챗봇<br>/api/v1/jobs"]
-    RV["공고 맞춤 첨삭<br>/resume-review"]
-    SN["공부방 노트<br>/api/v1/study-notes"]
-  end
-
-  subgraph VDB["Pinecone"]
-    ST[("student<br>policy · notice · project_reference")]
-    JP[("job-posting<br>공고 요건 구간")]
-  end
-
-  SQL[("job_store.sqlite<br>공고 원문")]
-  OAI(["OpenAI<br>임베딩 · LLM"])
-  NIGHT["야간 배치<br>공고 수집 → 정제 → 증분 임베딩"]
-
-  S --> CB & JM & RV & SN
-  S & T --> AU
-  S & T --> FS
-  S & T --> FN
-  FS -->|공지 작성 시 자동| FN -->|syncNoticeVector| ST
-  CB --> ST
-  CB --> FS
-  JM --> JP
-  JM --> SQL
-  RV --> SQL
-  RV --> FS
-  NIGHT --> SQL
-  NIGHT --> JP
-  CB & JM & RV & SN -.-> OAI
-```
+![데이터 갱신 및 운영 흐름](assets/readme_image/data_update_operational_flow.png)
 
 - **인덱싱과 서비스를 나눈다.** 문서 로딩·청킹·임베딩은 적재 스크립트·야간 배치·Functions 트리거에서만 한다. 요청 때는 검색과 생성만 한다.
 - 파이썬 네 모듈은 코드는 나뉘어 있지만 `cover_letter_rag/app/integrated.py`가 한 프로세스(포트 8000)로 띄운다.
@@ -172,6 +197,12 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 - **원문에 없는 경험·기술·수치를 만들지 않는다.** 근거는 직접 인용으로만 쓰고, 서버가 인용이 원문에 있는지 다시 검사한다.
 - **합격 가능성을 말하거나 지원자를 점수화하지 않는다.**
 - 채용 도구의 답은 사용자가 반말로 물어도 존댓말로 쓴다(`TONE_RULE`).
+
+## 데이터 ERD
+
+![Firestore ERD](assets/readme_image/firestore_erd.png)
+
+![Pinecone ERD](assets/readme_image/pinecone_erd.png)
 
 ## 데이터 수집 및 전처리
 
@@ -351,8 +382,8 @@ flutter run -d chrome --dart-define=DEMO_MODE=true    # Firebase 없이 예시 �
 ### 4. 벡터 DB 적재 (필요할 때만)
 
 ```powershell
-python -m vectordb.policy_ingestion ingest --dry-run         # 정책·FAQ 청크 확인
-python -m vectordb.policy_ingestion ingest                   # 적재
+python -m vectordb.policy_ingestion.py ingest --source files # 정책·FAQ
+python -m vectordb.policy_ingestion.py ingest --source all   # 정책·FAQ (노션 토큰을 관리자에게 발급 받았을 때)
 python -m vectordb.project_reference_ingestion               # 전 기수 프로젝트
 python -m job_matching_bot.sync                              # 채용공고 증분 적재
 ```
@@ -404,3 +435,11 @@ SKN34-3rd-2Team/
 | 커밋 메시지 | `<종류> S32-XX) 설명` — Jira 이슈 키를 붙인다 (예: `fix S32-13) 커리어 코치 대화 진입 개선`) |
 | 이슈 관리 | Jira `S32-XX` |
 | 비밀값 | 루트 `.env` 한 곳에만. `functions/.env`는 `scripts/sync-functions-env.ps1`로 생성 |
+
+## 회고
+| 이름 | 회고 |
+| --- | --- |
+| 김기호 |  |
+| 김대호 |  |
+| 문성호 |  |
+| 최성욱 |  |
