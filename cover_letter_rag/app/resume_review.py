@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import re
-import json
-import hashlib
 from difflib import SequenceMatcher
 from collections.abc import Callable
 from typing import Any
@@ -20,12 +18,14 @@ from app.models import (
     SentenceReview,
 )
 from app.prompts import RESUME_REVIEW_PROMPT
-from app.service import NUMBER_PATTERN
 from app.technology import comparison_terms, grounding_terms
 from app.review_rules import (
     EXPERIENCE_DESCRIPTION, EXPERIENCE_SECTION_PATTERN, ITEM_NAME_KEYS, NARRATIVE_FIELD, NEGATION, NOT_NEGATION_WORDS,
     ABSENCE_STATEMENT, ROLE_EXPANSION_WORDS, SECTION_NAMES, WORK_NEGATION, split_uncertain_answer,
 )
+
+# 숫자와 단위("30%", "500건", "1.2초"). 앞에 영문·한글이 붙은 숫자("v2", "3차원")는 사실 숫자로 보지 않는다.
+NUMBER_PATTERN = re.compile(r"(?<![A-Za-z가-힣])\d+(?:[.,]\d+)*(?:%|명|건|개|개월|년|일|시간|분|초|ms)?")
 
 # 같은 양을 가리키는 단위 표기. "1.2s"와 "1.2초", "40min"과 "40분"은 같은 사실이다.
 _UNIT_ALIASES = {

@@ -1,176 +1,237 @@
-# Cover Letter RAG
+# 공고 맞춤 이력서 첨삭 (cover_letter_rag)
 
-선택한 문장의 원본 적용과 복원: [적용 API 명세](docs/resume-apply.md).
+학생이 [채용공고 추천봇](../job_matching_bot/README.md)에서 고른 공고를 기준으로 **이력서 문장별 수정안**을
+만들고, 학생이 고른 수정안만 이력서에 적용한다. 적용한 것은 되돌릴 수 있다.
 
-이력서 첨삭 최신 요청/저장 규격은 [v2 계약](docs/resume-review-v2.md)을 확인하세요.
-아래 초기 예시의 answers만 보내는 방식은 더 이상 허용되지 않습니다.
+핵심 원칙은 하나다. **이력서에 없는 경험·기술·수치를 만들지 않는다.** 모자란 정보는 지어 넣지 않고
+학생에게 확인 질문으로 묻는다.
 
-Flutter/Firebase LMS와 분리해 먼저 검증하는 FastAPI 기반 백엔드입니다. 채용공고는 별도 인덱싱 명령에서 로드·중복 제거·청킹·임베딩·VectorDB 저장을 완료하고, 서비스 요청에서는 이력서 분석·검색·생성만 수행합니다. 운영 기본 VectorDB는 Pinecone이며 Chroma는 로컬 개발·테스트 대체 수단으로 유지합니다.
+> 폴더 이름은 처음 만든 자기소개서 첨삭 RAG에서 왔다. 지금 앱이 쓰는 기능은 아래 "공고 맞춤 첨삭"이고,
+> 초기 공고 검색·자기소개서 첨삭 API는 [레거시 API](#레거시-api-초기-rag-실험)로 남아 있다.
 
-현재 추천 기준은 사용자가 별도로 등록한 기술 태그가 아니라 이력서 원문입니다. 선택적으로 받은 기존 자기소개서는 희망 직무나 도메인 의도만 보강하며, 이력서에 없는 기술·경험의 근거로 사용하지 않습니다.
+## 사용자 흐름
 
-## 구조
-
-```text
-cover_letter_rag/
-├── app/
-│   ├── main.py          # FastAPI 라우트와 예외 변환
-│   ├── config.py        # .env 기반 서버 설정
-│   ├── models.py        # 요청·응답 및 구조화 출력 스키마
-│   ├── prompts.py       # 사실성·안전 가드레일 프롬프트
-│   ├── crawled_jobs.py  # 크롤링 JSONL 중복 제거·정규화·품질 분류
-│   ├── vector_store.py  # Pinecone/Chroma 검색 어댑터
-│   └── service.py       # Retrieve + Generate와 사후 근거 검증
-├── scripts/
-│   ├── index_jobs.py    # 정적 샘플 로딩·청킹·임베딩·저장 CLI
-│   └── index_saramin_jsonl.py # 실제 크롤링 JSONL 인덱싱 CLI
-├── data/
-│   ├── jobs/            # 사람인 job-search 응답 형식의 정적 공고 JSON
-│   ├── job_enrichments/ # 사람인 응답에 없는 RAG용 상세 공고 내용
-│   └── sample_review_request.json
-├── tests/               # 외부 API 키 없이 실행되는 API/가드레일 테스트
-├── .env.example
-└── pyproject.toml
+```mermaid
+flowchart LR
+  R["맞춤 공고 추천<br>또는 공고 찾기 챗봇"] --> P["공고 선택"]
+  P --> T["회사별 이력서 사본 만들기<br>/resumes/tailored"]
+  T --> V["문장별 첨삭<br>/resumes/reviews"]
+  V --> Q{"확인 질문"}
+  Q -->|답변| V
+  V --> A["고른 수정안만 적용<br>/reviews/apply"]
+  A --> U["되돌리기<br>/reviews/undo"]
+  A --> M["완성본을 일반 이력서로 꺼내기<br>/promote"]
 ```
 
-`local_data/`는 크롤링 원본처럼 용량이 크고 재생성 가능한 로컬 데이터 전용이며 Git에서 제외됩니다.
+1. **공고 원문은 서버가 읽는다.** 앱은 `job_id`만 보낸다. 서버가 공고 원문 SQLite(`job_store.sqlite`)를 읽기 전용으로 열어 본문 전체를 가져온다. Pinecone에 있는 1,200자 요건 발췌로 대신하지 않는다.
+2. **원본 이력서를 건드리지 않는다.** 공고마다 이력서 사본(`tailoredResumes`)을 만들고 거기서 첨삭·적용한다. 같은 이력서·공고·공고 버전이면 같은 사본을 돌려준다(버튼을 여러 번 눌러도 하나).
+3. **이력서도 서버가 읽는다.** Firebase 토큰으로 본인·기수·활성 상태를 확인한 뒤 Firestore 저장본을 읽는다. 그래서 앱은 첨삭 전에 이력서를 먼저 저장한다.
+4. 모델이 문장별 수정안을 만들면 **서버가 규칙으로 한 번 더 검증**하고, 통과하지 못한 수정안은 보류한다.
+5. 학생이 체크한 수정안만 적용한다. 적용 전 내용은 백업해 두고, 그 뒤 수정이 없을 때만 되돌린다.
 
-## 실행 준비
+## 처리 순서 (첨삭 한 번)
 
-```powershell
-cd ..
-py -3.12 -m venv playdata_venv
-.\playdata_venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-```
+| 단계 | 하는 일 |
+|---|---|
+| 인증·권한 | Firebase ID 토큰 → uid, `users/{uid}`의 `isActive`·`cohortId`, 이력서 `userId` 확인 |
+| 공고 확인 | 저장소에서 공고 조회. 마감(`status≠OPEN`, 마감일 지남)이면 409, 본문이 비었거나 이미지뿐이면 422 |
+| 버전 고정 | 이력서 내용 해시(`input_hash`)와 공고 스냅샷 해시를 요청에 싣는다. 읽은 뒤 바뀌면 409 |
+| 입력 만들기 | 이름·전화·이메일·생년월일, URL, 내부 ID를 빼고 필드별 원문(`input_fields`)을 만든다. 자유 서술 속 이메일·전화번호는 `[연락처 삭제]`로 가린다 |
+| 생성 | LangChain `ChatPromptTemplate` + OpenAI Responses API, JSON 스키마 구조화 출력. 자동 재시도 끔 |
+| 사후 검증 | 아래 표 |
+| 저장 | `aiReviews/{request_id}`에 `processing → complete / failed`. 같은 `request_id`로 다시 오면 저장된 결과를 준다 |
 
-루트 `.env`의 `OPENAI_API_KEY`, `PINECONE_API_KEY1`에 실제 키를 넣습니다. 채용공고 인덱스는 공지·정책 인덱스와 계정이 달라 키 이름을 나눴습니다 — 공지·학생 챗봇용은 `PINECONE_API_KEY2`입니다. 키는 Flutter 앱이나 요청 본문에 넣지 않습니다. 공지 검색과 채용공고 추천은 데이터와 검색 목적이 다르므로, 이 서비스는 공지용 `student` 인덱스와 분리된 채용공고 전용 `job-postings` 인덱스를 사용합니다.
+### 서버가 보류하는 수정안
 
-## 1. 정적 공고 인덱싱
+모델 출력을 그대로 믿지 않는다. 다음에 걸리면 `validation_issues`를 달고 적용할 수 없게 한다.
 
-```powershell
-python -m scripts.index_jobs
-```
+- 원문에 없는 **새 수치·기술명·역할**이 들어감 (공고에만 있는 기술을 지원자 경험처럼 넣는 것 포함)
+- 부정 → 긍정, 진행 중 → 완료, 참여 → 주도처럼 **사실 상태가 바뀜**
+- 수치의 부호가 바뀜, 가려진 연락처가 들어간 문장을 교체함
+- `original_quote`를 원문에서 찾을 수 없음, 이미 고른 수정 범위와 겹침
+- 다른 프로젝트의 답변·수치를 가져옴 (같은 경험의 필드와 그 경험에 단 답변만 근거로 인정)
+- 원문과 같거나 빈 수정안
 
-인덱서는 `data/jobs/*.json`의 사람인 `job-search` 응답과 공고 ID가 같은
-`data/job_enrichments/*.json`을 결합합니다. 이후 공고 단위 문서를 재귀 청킹한 뒤
-`text-embedding-3-small`로 임베딩하여 Pinecone에 저장합니다. 서버 시작이나 API
-요청 중에는 인덱싱하지 않습니다.
+"만들어 줘", "지어내 줘" 같은 답변은 사실로 쓰지 않는다.
 
-기본 설정은 `job-postings` 인덱스, `saramin` namespace, cosine metric, 1536차원입니다. 기존 `job-postings` 인덱스가 이미 있으면 dimension과 metric이 일치해야 하며, 다르면 인덱싱을 중단합니다. 같은 공고를 다시 넣을 때는 `job_id`가 같은 기존 벡터를 삭제한 뒤 배치 업서트하므로 오래된 청크가 섞이지 않습니다. 향후 다른 공고 출처를 함께 검색해야 한다면 출처별 namespace 분리 여부를 검색 요구사항에 맞춰 다시 결정합니다.
+### 응답에서 볼 것
 
-샘플 공고는 실제 채용공고가 아닌 형식 검증용 데이터입니다. `jobs.job[]`의 필드와
-하이픈이 포함된 키 이름은 [사람인 채용정보 API 가이드](https://oapi.saramin.co.kr/guide/job-search)를 따릅니다.
-사람인 응답에는 자격요건 전문이 없으므로 이를 API 필드인 것처럼 추가하지 않고,
-RAG 비교에 필요한 직접 작성한 내용만 `job_enrichments`에 분리해 둡니다.
+| 필드 | 의미 |
+|---|---|
+| `sentence_reviews` | 원문, 이유, 수정안, 근거 인용, 상태(`unchanged`/`formatting`/`improved`/`needs_confirmation`), 수정 종류(`spelling`/`tone`/`clarity`/`content`) |
+| `questions` | 최대 10개의 확인 질문과 `question_id` |
+| `diagnostics` | 7개 기준(희망 표현, 감상 위주, 추상적 성과, 배치, 직무 관련성, 중복, 기업 맞춤)별 `issue`/`clear`/`not_evaluated`. 공고가 없으면 직무 관련성·기업 맞춤은 `not_evaluated` |
+| `star_checks` | 경험별 상황·과제·행동·결과 중 빠진 것 |
+| `changes` | 이전 첨삭 대비 해결·미해결·새로 생긴 기준 |
+| `telemetry` | 모델, 프롬프트 버전, 지연, 토큰 수 |
 
-사람인 응답의 지역·산업·직무·근무형태는 `code`와 `name`을 함께 보존합니다.
-향후 검색 조건은 사용자에게 이름을 보여 주고 `loc_cd`, `ind_cd`, `job_mid_cd`,
-`job_cd`, `job_type`에는 해당 코드를 전달합니다. VectorDB 메타데이터에도 코드와
-이름을 모두 저장하고, 의미 검색 문서에는 사람이 읽을 수 있는 이름을 포함합니다.
+전체 계약은 [docs/resume-review-v2.md](docs/resume-review-v2.md), 검증 규칙은
+[docs/resume-review-quality.md](docs/resume-review-quality.md)에 있다.
 
-### 크롤링 JSONL 검증 및 인덱싱
+## API
 
-팀원이 수집한 원본을 `local_data/saramin_detail.jsonl`에 둔 뒤 먼저 비용 없는 검증을 실행합니다.
+앱은 통합 서버(8000)의 `/resume-review` 아래로 부른다. 모두 `Authorization: Bearer <Firebase ID 토큰>`이 필요하다.
 
-```powershell
-python -m scripts.index_saramin_jsonl --validate-only
-```
-
-검증 명령은 `source_job_id`별 마지막 레코드를 남겨 중복을 제거하고, IT 공고 필터링과 상세본문 품질 분류, 청킹까지만 수행합니다. 실제 OpenAI 임베딩 API를 호출해 Pinecone에 저장하려면 별도로 다음 명령을 실행합니다.
-
-```powershell
-python -m scripts.index_saramin_jsonl
-```
-
-`needs_human_review=true`인 공고는 `NEEDS_CONFIRMATION`, 상세본문이 짧은 공고는 `LIMITED`로 보존합니다. 해당 공고를 선택해 상세 비교할 때는 사용자에게 최신 공고 원문 확인을 요청해야 합니다.
-
-비용 없이 로컬 Chroma로만 시험하려면 `.env`에서 `VECTOR_STORE_PROVIDER=chroma`로 바꿉니다. 이 경우 같은 명령이 `chroma_db`에 저장합니다.
-
-## 2. API 실행
-
-```powershell
-uvicorn app.main:app --reload --port 8001
-```
-
-- `GET /health`: 프로세스 상태와 인덱스 준비 여부
-- `POST /api/v1/jobs/search`: 이력서 기반 정적 공고 Top-k 검색
-- `POST /api/v1/profiles/analyze`: 이력서 직접 인용 근거가 있는 기술·경험과 검색 신호 추출
-- `POST /api/v1/jobs/recommend`: 이력서 분석 → VectorDB 공고 검색 → 근거 포함 추천
-- `POST /api/v1/jobs/compare`: 추천 공고 ID 선택 → 공고 요구사항과 이력서 근거·부족 정보 비교
-- `POST /api/v1/reviews`: 이력서·공고·문항·초안 기반 비교 및 첨삭
-- `POST /api/v1/resumes/reviews`: Firebase 인증 후 Firestore의 본인 이력서를 읽어 섹션별 첨삭
-
-Swagger UI는 `http://127.0.0.1:8001/docs`에서 확인할 수 있습니다.
-
-## 안전 규칙
-
-- 이력서의 직접 인용문만 요구사항 충족 근거로 인정합니다.
-- 모델이 반환한 인용문이 이력서 원문에 없으면 서버가 해당 근거를 제거하고 상태를 `확인 필요`로 바꿉니다.
-- 첨삭안에 입력 원문 어디에도 없는 숫자가 생기면 첨삭안을 반환하지 않고 원본 초안을 유지합니다.
-- 부족한 경험·기술·자격·성과·수치는 생성하지 않고 확인 질문으로 전환합니다.
-- 합격 가능성을 단정하거나 지원자를 점수화하지 않습니다. 검색 순위는 공고 검색 결과에만 적용합니다.
-
-## Firebase 이력서 첨삭
-
-### 문장별 첨삭과 추가 답변
-
-응답 `input_fields`는 요약하지 않은 실제 모델 입력값이며 `excluded_fields`는 제외한 필드,
-`input_hash`는 해당 입력의 SHA-256입니다. 개인정보가 자유 서술문에 들어 있다면 자동 익명화를 보장하지 않습니다.
-`sentence_reviews`는 `field_path`, `original_quote`, `reason`, `suggested_revision`,
-`evidence_quotes`, `confirmation_question`으로 원문과 수정안을 비교합니다.
-기존 섹션별 진단은 유지하지만 `section_reviews[].suggested_revision`은 null이며 문장별 수정안을 사용합니다.
-
-같은 POST 요청에 아래 `answers`를 추가하면 현재 저장된 이력서와 추가 사실로 재첨삭합니다.
-배열 위치는 현재 입력 기준입니다. 이력서를 수정했다면 새 결과의 경로를 사용하세요.
+| 메서드 | 경로 (`/resume-review` 뒤) | 설명 |
+|---|---|---|
+| GET | `/api/v1/resumes/review-context` | 첨삭 전에 서버 저장본과 공고 스냅샷, 해시를 받는다. `Cache-Control: no-store` |
+| POST | `/api/v1/resumes/tailored` | 공고별 이력서 사본 만들기 |
+| GET | `/api/v1/resumes/{resume_id}/tailored` | 사본 목록과 첨삭 진행 상태 |
+| GET | `/api/v1/resumes/{resume_id}/tailored/{id}` | 사본 하나 |
+| PUT | `/api/v1/resumes/{resume_id}/tailored/{id}/session` | 첨삭 화면 진행 상태 저장(창을 닫았다 열어도 이어서) |
+| POST | `/api/v1/resumes/{resume_id}/tailored/{id}/promote` | 완성한 사본을 일반 이력서 편집기에서 열 수 있게 꺼낸다 |
+| DELETE | `/api/v1/resumes/{resume_id}/tailored/{id}` | 사본과 하위 첨삭·적용 기록 삭제 |
+| POST | `/api/v1/resumes/reviews` | 첨삭. 답변을 실어 다시 보내면 재첨삭 |
+| POST | `/api/v1/resumes/reviews/apply` | 고른 수정안 적용 ([명세](docs/resume-apply.md)) |
+| POST | `/api/v1/resumes/reviews/undo` | 적용 되돌리기 |
 
 ```json
+// POST /resume-review/api/v1/resumes/reviews
 {
-  "cohort_id": "cohort-id",
+  "cohort_id": "cohort_34",
   "resume_id": "resume-id",
-  "answers": [{
-    "field_path": "projects[0].description",
-    "question": "어떤 변화가 있었나요?",
-    "answer": "컴포넌트를 독립적으로 확인하는 환경을 구축했습니다."
-  }]
+  "tailored_resume_id": "tailored_...",
+  "selected_job_id": "<공고 ID>",
+  "expected_job_hash": "review-context에서 받은 스냅샷 해시",
+  "request_id": "review-001"
 }
 ```
 
-답변은 사용자가 확인한 진술이며 외부 검증된 사실을 의미하지 않습니다. 수정안의 인용·수치·영문 기술명·일부 역할 과장을 해당 필드 근거와 비교합니다.
-의미적 환각 전체를 차단하는 검증은 아니며 사용자 검토가 필요합니다.
-매 호출은 새로운 결과를 저장하며 원본 적용/Flutter 비교 화면/선택 공고 ID 조회는 아직 구현하지 않았습니다.
-선택 공고 본문은 기존 `job_posting_text`로 전달할 수 있습니다.
+| 상태 | 언제 |
+|---|---|
+| 401 | 토큰 없음·만료 |
+| 403 | 다른 기수, 비활성 계정 |
+| 404 | 없는 이력서, 남의 이력서 |
+| 409 | 이력서·공고 버전이 바뀜, 공고 마감, 같은 `request_id`에 다른 입력, 이미 승인된 이력서에 적용 |
+| 422 | 입력 오류, 공고 본문 없음 |
+| 503 | 공고 저장소·Firebase·OpenAI를 쓸 수 없음 |
 
-이력서 첨삭 API는 Flutter가 이력서 원문을 다시 보내는 대신 아래 값만 받습니다.
-
-- `Authorization: Bearer <Firebase ID token>`
-- `cohort_id`, `resume_id`
-- 선택 입력: `job_posting_text`, `review_focus`
-
-서버는 ID 토큰을 검증해 얻은 `uid`가
-`cohorts/{cohortId}/resumes/{resumeId}.userId`와 일치할 때만 `content`를 읽습니다.
-Firebase Admin SDK는 Firestore Security Rules를 우회하므로 이 서버 소유권 검사를 제거하면 안 됩니다.
-이름·전화·이메일·생년월일과 내부 ID/URL은 LLM 입력에서 제외합니다.
-
-결과는 원본 이력서를 덮어쓰지 않고 다음 경로에 별도 저장됩니다.
+## Firestore 저장 위치
 
 ```text
-cohorts/{cohortId}/resumes/{resumeId}/aiReviews/{reviewId}
+cohorts/{cohortId}/resumes/{resumeId}          원본 이력서. 공고 맞춤 첨삭은 이 문서를 바꾸지 않는다
+  └─ tailoredResumes/{tailoredId}              공고별 사본, 첨삭 진행 상태(reviewSession)
+       ├─ aiReviews/{requestId}                첨삭 결과
+       └─ aiApplications/{requestId}           적용 전 백업, 적용 후 해시
+cohorts/{cohortId}/resumes/matched_{...}       promote로 꺼낸 편집용 이력서
 ```
 
-현재 Firestore 규칙에는 `aiReviews` 클라이언트 직접 읽기 규칙이 없습니다. Flutter 연동 시에는
-백엔드 조회 API를 사용하거나, 팀 합의 후 본인 문서만 읽도록 규칙을 별도로 추가해야 합니다.
+`tailored_resume_id` 없이 요청하면(공고 없는 일반 첨삭) `aiReviews`·`aiApplications`가 원본 이력서 아래에 생긴다.
 
-로컬에서는 서비스 계정 JSON을 저장소 밖에 두고 현재 셸의
-`GOOGLE_APPLICATION_CREDENTIALS`에 경로를 지정한 뒤 `.env`의 `FIREBASE_PROJECT_ID`를 설정합니다.
-서비스 계정 JSON, Firebase/Pinecone/OpenAI 키는 Git 또는 Flutter에 넣지 않습니다.
+Admin SDK는 Firestore 규칙을 우회한다. 그래서 **본인·기수·소유권 검사를 서버 코드에서 빼면 안 된다.**
+`aiReviews`·`aiApplications`에는 클라이언트 직접 읽기 규칙을 두지 않는다(백업에 원문 개인정보가 있다).
 
-요청 예시:
+## 실행
 
-```bash
-curl -X POST http://127.0.0.1:8001/api/v1/resumes/reviews \
-  -H "Authorization: Bearer FIREBASE_ID_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"cohort_id":"cohort-id","resume_id":"resume-id","review_focus":"프로젝트 경험"}'
+레포 루트 `.env`에서 설정을 읽는다.
+
+```text
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_REASONING_EFFORT=medium
+FIREBASE_PROJECT_ID=skn34-3rd-2team
+MATCHING_JOB_STORE_PATH=         # 비우면 job_matching_bot/artifacts/job_store.sqlite
+CORS_ALLOW_ORIGIN_REGEX=http://(localhost|127\.0\.0\.1)(:\d+)?
 ```
+
+서비스 계정 JSON은 레포 밖에 두고 `GOOGLE_APPLICATION_CREDENTIALS`에 경로를 지정한다.
+
+**공고 원문 DB가 있어야 한다.** 레포에 올리지 않는 파일이라(375MB), 아래 스크립트가 Firebase Storage의
+팀 공유본이 새로 올라왔을 때만 받아 검증·교체한 뒤 통합 서버를 켠다.
+
+```powershell
+.\scripts\start-backend.ps1
+```
+
+직접 켤 때:
+
+```powershell
+python -m uvicorn app.integrated:app --app-dir cover_letter_rag --host 127.0.0.1 --port 8000
+```
+
+| 주소 | 내용 |
+|---|---|
+| `http://127.0.0.1:8000/docs` | 추천봇 API 문서 |
+| `http://127.0.0.1:8000/resume-review/docs` | 첨삭 API 문서 |
+
+통합 서버(`app/integrated.py`)는 네 모듈을 한 프로세스로 묶는다. 추천봇과 이 모듈이 둘 다
+`/api/v1/jobs/recommend`를 갖고 있고 스키마가 달라서, 이 모듈은 `/resume-review` 아래로 분리했다.
+
+```text
+/api/v1/student-chatbot/*   chatbot/        학생 챗봇
+/api/v1/study-notes/*       study_notes/    공부방 노트
+/resume-review/*            cover_letter_rag 첨삭 (이 모듈)
+/*                          job_matching_bot 추천·공고 찾기 챗봇
+```
+
+## 테스트
+
+```powershell
+pip install -e ./cover_letter_rag[dev]
+$env:PYTHONPATH = (Get-Location).Path     # 레포 루트. 공고 저장소 읽기가 job_matching_bot을 import한다
+cd cover_letter_rag
+pytest
+```
+
+`tests/`의 14개 파일(127개 테스트)은 가짜 Firebase·가짜 LLM·임시 SQLite로 돈다. API 키가 필요 없다.
+
+| 파일 | 검증 |
+|---|---|
+| `test_review_workflow.py`, `test_resume_review.py` | 첨삭 흐름, 버전 충돌, 중복 요청, 재첨삭 |
+| `test_resume_quality.py` | 수치·기술·역할·부정·상태 변경 보류, 겹치는 수정안 제거 |
+| `test_resume_apply.py` | 수정안 적용·되돌리기 |
+| `test_tailored_resumes.py` | 같은 공고로 여러 번 눌러도 사본 하나, 목록, 진행 상태 복원, 선택한 사본만 삭제 |
+| `test_matching_handoff.py` | 공고 원문 전체 읽기, 쓸 수 없는 공고 거부, 이미지뿐인 공고, 통합 서버 경로 |
+| `test_grounding.py`, `test_technology.py` | 인용 근거 검증, 기술명 별칭 |
+| 나머지 | 레거시 검색·추천·인덱싱, Pinecone·Chroma 어댑터 |
+
+실제 Firebase·OpenAI와의 통합 성공이나 첨삭 품질을 증명하는 테스트는 아니다. 품질 평가 기준은
+[docs/resume-review-quality.md](docs/resume-review-quality.md)의 사람 대조 표를 따른다.
+
+## 레거시 API (초기 RAG 실험)
+
+처음에는 이 모듈이 공고 인덱스를 직접 만들고 검색했다. 지금 앱은 쓰지 않지만 코드와 테스트는 남아 있다.
+
+| 경로 | 설명 |
+|---|---|
+| `POST /api/v1/jobs/search` | 이력서로 공고 Top-k 검색 |
+| `POST /api/v1/profiles/analyze` | 이력서 직접 인용이 있는 기술·경험 추출 |
+| `POST /api/v1/jobs/recommend` | 분석 → 검색 → 근거 포함 추천 |
+| `POST /api/v1/jobs/compare` | 공고 요구사항과 이력서 근거 비교 |
+| `POST /api/v1/reviews` | 이력서·공고·문항·초안으로 자기소개서 첨삭 |
+
+인덱싱은 요청 중에 하지 않고 따로 실행한다.
+
+```powershell
+cd cover_letter_rag
+python -m scripts.index_jobs                               # data/jobs 정적 샘플 → 청킹 → 임베딩 → 저장
+```
+
+크롤링 JSONL은 `scripts/`의 JSONL 인덱싱 스크립트로 넣는다. `--validate-only`를 붙이면 중복 제거·품질 분류·청킹까지만 하고 비용이 들지 않는다.
+
+- 같은 `job_id`를 다시 넣으면 기존 벡터를 지운 뒤 넣어 오래된 청크가 섞이지 않는다.
+- 기존 인덱스의 차원·metric이 다르면 멈춘다.
+- `VECTOR_STORE_PROVIDER=chroma`로 바꾸면 비용 없이 로컬 Chroma(`chroma_db/`)로 시험할 수 있다.
+- `data/jobs/`의 샘플 공고는 채용 사이트 API 응답 형식을 검증하려고 만든 가짜 데이터다.
+
+## 파일
+
+| 파일 | 역할 |
+|---|---|
+| `app/integrated.py` | 통합 서버 진입점 |
+| `app/main.py` | 첨삭 FastAPI 앱, 예외 → 상태 코드 변환 |
+| `app/review_workflow.py` | 첨삭 오케스트레이션, 버전 해시, 연락처 가림, 중복 요청 처리 |
+| `app/resume_review.py` | 필드 추출, 생성기, 사후 근거 검증 |
+| `app/resume_apply.py` | 적용·되돌리기 트랜잭션 |
+| `app/tailored_resumes.py` | 공고별 이력서 사본 |
+| `app/matching_handoff.py` | 공고 원문 SQLite 읽기 |
+| `app/firebase_gateway.py` | Firebase 인증, 이력서·사본 읽기·쓰기 |
+| `app/prompts.py`, `app/models.py` | 프롬프트, 요청·응답·구조화 출력 스키마 |
+| `app/service.py`, `app/vector_store.py`, `app/crawled_jobs.py` | 레거시 검색·추천·첨삭, Pinecone/Chroma 어댑터, 크롤링 JSONL 정리 |
+| `docs/` | 통합·첨삭 계약·적용 API·품질 기준 문서 |
+
+## 알려진 한계
+
+- 의미가 미묘하게 바뀌는 환각까지 모두 잡지는 못한다. 규칙은 보수적인 문자열 비교라 오탐·누락이 있다. 최종 판단은 학생이 원문과 수정안을 비교해서 한다.
+- 추천봇 API 쪽에는 아직 Firebase 인증이 없다. 통합 서버를 그대로 공개 배포하면 안 된다.
+- 서버가 처리 중에 꺼지면 `processing` 상태가 남는다. 자동으로 만료·재실행하지 않는다.

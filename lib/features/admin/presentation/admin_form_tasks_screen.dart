@@ -17,53 +17,6 @@ import '../../../core/theme/app_space.dart';
 class AdminFormTasksScreen extends ConsumerWidget {
   const AdminFormTasksScreen({super.key});
 
-  Future<void> _deleteTask(
-    BuildContext context,
-    WidgetRef ref,
-    FormTaskModel task,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('설문 삭제'),
-        content: Text(
-          '「${task.title}」 설문을 삭제하시겠습니까?\n'
-          '연결된 제출 응답도 함께 삭제되며 되돌릴 수 없습니다.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    final cohortId = ref.read(effectiveCohortIdProvider);
-    if (cohortId == null) return;
-    try {
-      await ref.read(lmsRepositoryProvider).deleteFormTask(cohortId, task.id);
-      ref.invalidate(allFormTasksAdminProvider);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('설문을 삭제했습니다.')),
-        );
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('설문을 삭제하지 못했습니다: $error')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tasks = ref.watch(allFormTasksAdminProvider);
@@ -173,7 +126,11 @@ class AdminFormTasksScreen extends ConsumerWidget {
                             ],
                             IconButton(
                               tooltip: '설문 삭제',
-                              onPressed: () => _deleteTask(context, ref, task),
+                              onPressed: () => _confirmDeleteFormTask(
+                                context,
+                                ref,
+                                task,
+                              ),
                               icon: Icon(
                                 Icons.delete_outline,
                                 color: AppColors.error,
@@ -485,6 +442,16 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                     context.push(RoutePaths.adminFormTaskEditPath(taskId)),
                 icon: const Icon(Icons.edit_outlined),
               ),
+              IconButton(
+                tooltip: '삭제',
+                onPressed: () => _confirmDeleteFormTask(
+                  context,
+                  ref,
+                  task,
+                  popOnSuccess: true,
+                ),
+                icon: Icon(Icons.delete_outline, color: AppColors.error),
+              ),
             ],
           ),
           body: Align(
@@ -551,8 +518,11 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
                           ),
                           SizedBox(height: AppSpace.s(8)),
                           Text(
-                            'Google Apps Script에 아래 값을 넣고, '
-                            '폼 제출 트리거를 설정하면 LMS에 자동 반영됩니다.',
+                            'LMS에서 코드를 복사해 스크립트 편집기에 붙인 뒤, '
+                            'WEBHOOK_SECRET만 Firebase Secret과 같게 바꾸고 '
+                            '트리거를 "설문지에서 · 양식 제출 시"로 하나 등록하세요. '
+                            'Apps Script의 "배포"는 필요 없습니다. '
+                            '구글폼 설정에서 이메일 주소 수집을 켜야 학생이 매칭됩니다.',
                             style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
@@ -681,14 +651,27 @@ class AdminFormTaskDetailScreen extends ConsumerWidget {
 
   String _appsScriptSnippet(String? cohortId, String taskId) {
     return '''
+/**
+ * Google Forms → PLAYDATA LMS Webhook
+ * 트리거: onFormSubmit / 설문지에서 / 양식 제출 시 (하나만)
+ * 구글폼 설정 → 응답 → 이메일 주소 수집: 확인됨
+ * Apps Script "배포"는 하지 않는다.
+ */
+
 const WEBHOOK_URL = '$webhookUrl';
 const WEBHOOK_SECRET = 'YOUR_SECRET_HERE'; // Firebase Secret과 동일하게!
 const COHORT_ID = '${cohortId ?? 'cohort_34'}';
 const TASK_ID = '$taskId';
 
 function onFormSubmit(e) {
-  const answers = collectAnswers(e);
-  const email = extractEmail(e) || '';
+  const response = resolveResponse(e);
+  if (!response) {
+    console.error('폼 응답을 찾지 못했습니다. 폼을 먼저 제출하세요.');
+    return;
+  }
+
+  const answers = collectAnswers(response);
+  const email = extractEmail(response) || '';
   if (!email && !answers['이름']) {
     console.warn('이메일/이름 없음 — 이메일 수집을 켜거나 이름 문항을 확인하세요.');
     return;
@@ -698,7 +681,7 @@ function onFormSubmit(e) {
     return;
   }
 
-  const response = UrlFetchApp.fetch(WEBHOOK_URL, {
+  const res = UrlFetchApp.fetch(WEBHOOK_URL, {
     method: 'post',
     contentType: 'application/json',
     headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
@@ -706,17 +689,28 @@ function onFormSubmit(e) {
       cohortId: COHORT_ID,
       taskId: TASK_ID,
       email: String(email).trim().toLowerCase(),
-      responseId: e.response.getId(),
+      responseId: response.getId(),
       answers: answers,
     }),
     muteHttpExceptions: true,
   });
-  console.log('Webhook', response.getResponseCode(), response.getContentText());
+
+  const code = res.getResponseCode();
+  console.log('Webhook', code, res.getContentText(), 'email:', email);
+  if (code !== 200) {
+    console.error('LMS 연동 실패:', code, res.getContentText());
+  }
 }
 
-function collectAnswers(e) {
+function resolveResponse(e) {
+  if (e && e.response) return e.response;
+  const responses = FormApp.getActiveForm().getResponses();
+  return responses.length ? responses[responses.length - 1] : null;
+}
+
+function collectAnswers(response) {
   const answers = {};
-  const items = e.response.getItemResponses();
+  const items = response.getItemResponses();
   for (var i = 0; i < items.length; i++) {
     const title = items[i].getItem().getTitle();
     const resp = items[i].getResponse();
@@ -725,10 +719,10 @@ function collectAnswers(e) {
   return answers;
 }
 
-function extractEmail(e) {
-  const respondent = e.response.getRespondentEmail();
+function extractEmail(response) {
+  const respondent = response.getRespondentEmail();
   if (respondent) return respondent;
-  const items = e.response.getItemResponses();
+  const items = response.getItemResponses();
   for (var i = 0; i < items.length; i++) {
     const title = items[i].getItem().getTitle();
     if (title.includes('이메일') || title.toLowerCase().includes('email')) {
@@ -738,6 +732,52 @@ function extractEmail(e) {
   return null;
 }
 ''';
+  }
+}
+
+Future<void> _confirmDeleteFormTask(
+  BuildContext context,
+  WidgetRef ref,
+  FormTaskModel task, {
+  bool popOnSuccess = false,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('설문 삭제'),
+      content: Text(
+        '「${task.title}」 설문과 제출 기록을 삭제할까요? 이 작업은 되돌릴 수 없습니다.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          child: const Text('삭제'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  final cohortId = ref.read(effectiveCohortIdProvider);
+  if (cohortId == null) return;
+
+  try {
+    await ref.read(lmsRepositoryProvider).deleteFormTask(cohortId, task.id);
+    if (!context.mounted) return;
+    if (popOnSuccess) context.go(RoutePaths.adminFormTasks);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('「${task.title}」 설문을 삭제했습니다.')),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('삭제 실패: $e')),
+    );
   }
 }
 

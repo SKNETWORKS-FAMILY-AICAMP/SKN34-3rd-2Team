@@ -73,12 +73,6 @@ Supervisor 전용 평가는 Pinecone과 embedding을 초기화하지 않으며, 
 .\playdata_venv\Scripts\python.exe -m chatbot_lab.evaluate_supervisor
 ```
 
-운영 챗봇 프롬프트(`chatbot.student_chatbot`의 reconcile) 기준으로 돌리고 관리자 LLMOps 화면에 요약을 올리려면 플래그를 명시한다. 질문 원문은 올리지 않는다. 운영 Sol은 기본 실행에 포함되지 않는다.
-
-```powershell
-.\playdata_venv\Scripts\python.exe -m chatbot_lab.evaluate_supervisor --production --publish
-```
-
 결과는 기본적으로 `chatbot_lab/eval_result.json`에 생성된다. 사례를 늘릴 때는
 `eval_cases.json`에 기대 route, namespace, student scope를 추가한다.
 

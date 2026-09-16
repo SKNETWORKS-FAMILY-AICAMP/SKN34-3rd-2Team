@@ -295,12 +295,14 @@ Webhook URL:
 
 ### 4. Google Apps Script 연결
 
-1. 구글폼 → ⋮ → **스크립트 편집기**
-2. `scripts/google-form-webhook.gs` 내용 붙여넣기
-3. `WEBHOOK_SECRET`, `COHORT_ID`, `TASK_ID` 수정
-4. **트리거** → `onFormSubmit` → **폼 제출 시**
+1. 구글폼 → 설정 → 응답 → **이메일 주소 수집: 확인됨**
+2. 구글폼 → ⋮ → **스크립트 편집기** (시트가 아니라 폼에서 연다)
+3. LMS 설문 상세의 **Apps Script 코드 복사**를 붙여넣는다 (`WEBHOOK_URL`·`COHORT_ID`·`TASK_ID`가 채워져 있다)
+4. `WEBHOOK_SECRET`만 Firebase Secret 값으로 바꾼다
+5. 왼쪽 시계(트리거) → `onFormSubmit` / **설문지에서** / **양식 제출 시** 를 **하나만** 등록
+6. Apps Script의 **배포**는 하지 않는다. 편집기에서 `onFormSubmit`을 직접 실행하면 최신 응답으로 테스트된다
 
-> 구글폼에 **이메일 수집**을 켜거나, "이메일" 질문을 추가해야 학생 매칭이 됩니다.
+> 학생이 LMS에 등록한 `personalEmail`(Gmail)로 로그인해서 제출해야 매칭됩니다.
 
 </details>
 
