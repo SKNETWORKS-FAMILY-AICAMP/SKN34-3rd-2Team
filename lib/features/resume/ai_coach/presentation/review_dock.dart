@@ -186,14 +186,8 @@ class ReviewDockHostState extends State<ReviewDockHost> {
       _status = status;
     });
     _syncClock();
-    if (!status.busy && wasBusy && _minimized) {
-      _notice(
-        status.failed
-            ? '${status.title} 중 문제가 생겼어요. 창을 열어 확인해 주세요.'
-            : '${status.title}이 끝났어요.',
-        openAction: true,
-      );
-    }
+    // 끝났을 때 스낵바를 따로 띄우지 않는다. 내려둔 막대가 이미 같은 자리에서 "완료 · 결과를 확인해
+    // 주세요 · 열기"를 보여 주는데, 기본 스낵바(검정)가 그 위에 겹쳐 두 겹으로 보였다.
   }
 
   /// 내려둔 막대의 경과 시간을 1초마다 새로 그린다. 창이 펼쳐져 있으면 멈춘다.
@@ -209,7 +203,7 @@ class ReviewDockHostState extends State<ReviewDockHost> {
     }
   }
 
-  void _notice(String text, {bool openAction = false}) {
+  void _notice(String text) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
     messenger
@@ -217,16 +211,8 @@ class ReviewDockHostState extends State<ReviewDockHost> {
       ..showSnackBar(
         SnackBar(
           content: Text(text),
-          // 단추가 달린 스낵바는 Flutter가 기본으로 누를 때까지 남겨 둔다.
-          // 안내일 뿐이니 조금 더 보여 주고 저절로 닫는다.
           persist: false,
-          duration: Duration(seconds: openAction ? 7 : 4),
-          action: openAction
-              ? SnackBarAction(
-                  label: '열기',
-                  onPressed: () => _setMinimized(false),
-                )
-              : null,
+          duration: const Duration(seconds: 4),
         ),
       );
   }
