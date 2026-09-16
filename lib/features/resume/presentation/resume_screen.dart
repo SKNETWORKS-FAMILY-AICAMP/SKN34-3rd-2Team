@@ -312,7 +312,10 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ),
-          for (final resume in resumes)
+          // 맞춤 사본은 공고별 첨삭 결과라 기본 이력서가 될 수 없다. 후보에서 뺀다.
+          for (final resume in resumes.where(
+            (r) => r.sourceTailoredResumeId.isEmpty,
+          ))
             SimpleDialogOption(
               onPressed: () => Navigator.pop(dialogContext, resume.id),
               child: Column(
@@ -369,9 +372,24 @@ class _ResumeBodyState extends ConsumerState<_ResumeBody> {
             resumeId: id,
           );
     }
-    if (context.mounted) {
+    if (!context.mounted) return;
+    if (choice == createNew) {
+      // 새로 만든 이력서는 비어 있으니 바로 작성 화면으로 보낸다.
       context.go(RoutePaths.resumeEditPath(id));
+      return;
     }
+    // 있는 이력서를 고른 경우는 이 화면에서 기본 이력서만 바뀐다. 편집 화면으로 보내면
+    // 바꾸기만 하려던 사용자가 목록으로 다시 돌아와야 했다.
+    final picked = resumes.where((r) => r.id == id).firstOrNull;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          picked == null
+              ? '기본 이력서를 바꿨습니다.'
+              : "기본 이력서를 '${picked.title}'(으)로 바꿨습니다.",
+        ),
+      ),
+    );
   }
 }
 
@@ -1066,7 +1084,13 @@ class _TailoredResumeListState extends ConsumerState<_TailoredResumeList> {
       }
     } finally {
       client.close();
-      if (mounted) setState(() => _future = _load());
+      // 화살표 몸통은 대입식의 값을 그대로 돌려준다. _load()가 Future라 setState가 Future를
+      // 돌려받아 거절했고, 삭제는 성공했는데 "삭제하지 못했습니다"가 떴다. 블록으로 감싼다.
+      if (mounted) {
+        setState(() {
+          _future = _load();
+        });
+      }
     }
   }
 
@@ -1110,11 +1134,21 @@ class _TailoredResumeListState extends ConsumerState<_TailoredResumeList> {
         widget.baseResume.id,
         tailoredId,
       );
-      if (mounted) setState(() => _future = _load());
-    } catch (_) {
+      // 화살표 몸통은 대입식의 값을 그대로 돌려준다. _load()가 Future라 setState가 Future를
+      // 돌려받아 거절했고, 삭제는 성공했는데 "삭제하지 못했습니다"가 떴다. 블록으로 감싼다.
+      if (mounted) {
+        setState(() {
+          _future = _load();
+        });
+      }
+    } catch (error) {
+      // 실패 원인을 삼키면 권한·서버 오류를 구분할 수 없다. 문구 뒤에 그대로 붙인다.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('맞춤 이력서를 삭제하지 못했습니다. 다시 시도해 주세요.')),
+          SnackBar(
+            content: Text('맞춤 이력서를 삭제하지 못했습니다. 다시 시도해 주세요.\n$error'),
+            duration: const Duration(seconds: 8),
+          ),
         );
       }
     } finally {

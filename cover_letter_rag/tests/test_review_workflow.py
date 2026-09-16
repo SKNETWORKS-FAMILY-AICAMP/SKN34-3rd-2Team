@@ -104,6 +104,62 @@ def test_gap_audit_allows_questions_but_never_rewrites_resume():
     assert [question.topic for question in audited.questions] == ['scope']
 
 
+def test_gap_audit_carries_forward_unanswered_questions():
+    """누락 점검도 남은 질문에 새 번호를 물려줘야 한다.
+
+    첨삭마다 question_id를 새로 매기므로, 이어받지 않으면 화면에 떠 있는 질문의 번호를 서버가
+    모르게 된다. 그러면 앱이 그 질문을 죽은 것으로 보고 답을 보내지 않고 넘겨, 사용자가 친 답이
+    입력칸에 남은 채 다음 질문만 쌓였다(2026-09-16 앱).
+    """
+    calls = []
+
+    def generate(data):
+        calls.append(data)
+        if len(calls) == 1:
+            return ResumeReviewGeneration(
+                summary='첫 검토',
+                section_reviews=[],
+                questions=[ReviewQuestion(
+                    field_path='projects[0].description',
+                    topic='scope',
+                    question='본인이 직접 담당한 API 범위는 어디까지인가요?',
+                    reason='담당 범위가 아직 확인되지 않았습니다.',
+                    priority=1,
+                )],
+            )
+        # 누락 점검은 새 질문만 낸다. 앞서 띄운 질문은 서버가 이어받아야 한다.
+        return ResumeReviewGeneration(summary='누락 점검', section_reviews=[])
+
+    service = ResumeReviewService(
+        Settings(openai_api_key='test'), FakeFirebase(), generate,
+    )
+    first = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1', resume_id='resume-1', request_id='carry-initial',
+        ),
+    )
+    assert len(first.questions) == 1
+
+    audited = service.review(
+        'valid-token',
+        FirestoreResumeReviewRequest(
+            cohort_id='cohort-1',
+            resume_id='resume-1',
+            request_id='carry-gap-audit',
+            previous_review_id=first.review_id,
+            expected_input_hash=first.input_hash,
+            review_phase='gap_audit',
+        ),
+    )
+
+    carried = [q for q in audited.questions if q.topic == 'scope']
+    assert len(carried) == 1, '남은 질문이 누락 점검 응답에서 사라졌다'
+    # 번호는 이 첨삭 것으로 새로 매겨진다. 빈 번호로 나가면 앱이 답을 보낼 수 없다.
+    assert carried[0].question_id
+    assert carried[0].question_id != first.questions[0].question_id
+
+
 def test_gap_audit_requires_previous_review_and_no_answers():
     service = ResumeReviewService(
         Settings(openai_api_key='test'), FakeFirebase(), generation,
@@ -853,3 +909,27 @@ def test_self_introduction_may_point_to_a_named_project_without_being_withheld()
         status='improved', suggested_revision='사내 규정 질의응답 챗봇에서 정답률을 62%에서 81%로 높인 경험으로, 생성형 AI로 불편을 해결하는 개발자입니다.')])
     withhold_moved_sentences(generation, {'selfIntroduction.intro.body'}, mentioned, fields)
     assert generation.sentence_reviews[0].suggested_revision
+
+
+def test_answer_revision_drops_superseded_vague_sentence():
+    # 모델이 "'여러 방법을 시도해 해결했습니다'를 구체화했다"고 적고도 그 문장을 그대로 두어,
+    # "제가 직접 만들었습니다" 뒤에 "팀원들과 여러 방법을 시도해"가 붙어 앞뒤가 어긋났다(2026-09-16 앱).
+    from app.resume_review import _drop_superseded_vague_sentence
+
+    original = ('LMS 챗봇을 만들때 공지를 물어봤는데 규정 문서가 검색되는 문제가 있었습니다. '
+                '팀원들과 여러 방법을 시도해서 해결했습니다.')
+    revision = ('LMS 챗봇을 만들 때 공지를 물어보면 규정 문서가 검색되는 문제가 있었습니다. '
+                '문서를 종류별 네임스페이스로 나눠 다시 적재하고 질문 분류 라우터를 제가 직접 만들었습니다. '
+                '팀원들과 여러 방법을 시도해서 해결했습니다. '
+                '평가 질문 40개로 확인했더니 맞는 문서를 가져온 질문이 25개에서 36개로 늘었습니다.')
+
+    repaired = _drop_superseded_vague_sentence(original, revision)
+    assert '여러 방법을 시도' not in repaired
+    assert '제가 직접 만들었습니다' in repaired
+    assert '25개에서 36개로' in repaired
+
+    # 원문을 그대로 돌려준 수정안에서 문장을 빼면 고치지도 않은 사실이 사라진다.
+    assert _drop_superseded_vague_sentence(original, original) == original
+    # 답변으로 새로 들어온 문장이면 막연해 보여도 남긴다.
+    added = '원문입니다. 여러 방법을 시도했습니다. 새 사실을 적었습니다.'
+    assert '여러 방법' in _drop_superseded_vague_sentence('원문입니다. 다른 문장입니다.', added)

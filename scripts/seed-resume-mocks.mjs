@@ -15,6 +15,7 @@
  *   node scripts/seed-resume-mocks.mjs            # 5건 생성/갱신
  *   node scripts/seed-resume-mocks.mjs --clear    # mock-* 문서만 삭제
  *   node scripts/seed-resume-mocks.mjs --only backend_entry,frontend_entry
+ *   node scripts/seed-resume-mocks.mjs --data demo_review_resume.json   # 첨삭 시연용 이력서
  */
 
 import { readFileSync } from "node:fs";
@@ -47,21 +48,22 @@ const MOCK_ID_PREFIX = "mock-";
 const here = dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
-  const args = { clear: false, only: null };
+  const args = { clear: false, only: null, data: "resume_mocks.json" };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--clear") args.clear = true;
     else if (argv[i] === "--only") args.only = (argv[i + 1] ?? "").split(",").filter(Boolean);
+    else if (argv[i] === "--data") args.data = argv[i + 1] ?? args.data;
   }
   return args;
 }
 
-function loadPersonas(only) {
-  const raw = JSON.parse(readFileSync(join(here, "resume_mocks.json"), "utf-8"));
+function loadPersonas(only, data) {
+  const raw = JSON.parse(readFileSync(join(here, data), "utf-8"));
   const entries = Object.entries(raw.personas);
   if (!only) return entries;
   const unknown = only.filter((key) => !raw.personas[key]);
   if (unknown.length > 0) {
-    throw new Error(`resume_mocks.json 에 없는 키: ${unknown.join(", ")}`);
+    throw new Error(`${data} 에 없는 키: ${unknown.join(", ")}`);
   }
   return entries.filter(([key]) => only.includes(key));
 }
@@ -125,7 +127,7 @@ async function main() {
     return;
   }
 
-  const personas = loadPersonas(args.only);
+  const personas = loadPersonas(args.only, args.data);
   for (const [key, persona] of personas) {
     const content = structuredClone(persona.content);
     // 이력서 이름·이메일은 계정 것으로. 가상 인물 데이터가 남의 이름으로 남지 않게 한다.
@@ -134,7 +136,12 @@ async function main() {
 
     const id = `${MOCK_ID_PREFIX}${key}`;
     const ref = doc(resumesRef, id);
-    const existing = await getDoc(ref);
+    // 읽기 규칙이 resource.data.userId를 보므로 아직 없는 문서를 읽으면 permission-denied가 난다.
+    // 그때는 새 문서로 보고 만든다(만들기 규칙은 request.resource의 userId만 본다).
+    const existing = await getDoc(ref).catch((e) => {
+      if (e.code === "permission-denied") return { exists: () => false };
+      throw e;
+    });
     await setDoc(ref, {
       userId: uid,
       title: persona.title,
