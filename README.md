@@ -45,12 +45,18 @@
 
 ## 1. 팀 소개
 
-| 이름 | GitHub |
-| --- | --- |
-| 김기호 | [kyo-135](https://github.com/kyo-135) |
-| 김대호 | [jjhok6389](https://github.com/jjhok6389) |
-| 문성호 | [MoonSungHo](https://github.com/MoonSungHo-D) |
-| 최성욱 | [Overlay1010](https://github.com/Overlay1010) |
+<p align="center">
+  <img src="assets/readme_image/team_photo.png" alt="팀 소개 이미지" width="540">
+</p>
+
+| 팀명 |
+| :---: |
+| `팀명을 입력해주세요` |
+
+| 김기호 | 김대호 | 문성호 | 최성욱 |
+| :---: | :---: | :---: | :---: |
+| <img src="assets/readme_image/team_kim_kiho.png" alt="김기호 프로필 이미지" width="120"> | <img src="assets/readme_image/team_kim_daeho.png" alt="김대호 프로필 이미지 (구준표)" width="120"> | <img src="assets/readme_image/team_moon_sungho.png" alt="문성호 프로필 이미지" width="120"> | <img src="assets/readme_image/team_choi_sungwook.png" alt="최성욱 프로필 이미지" width="120"> |
+| [kyo-135](https://github.com/kyo-135) | [jjhok6389](https://github.com/jjhok6389) | [MoonSungHo](https://github.com/MoonSungHo-D) | [Overlay1010](https://github.com/Overlay1010) |
 
 ---
 
@@ -58,7 +64,7 @@
 
 | 담당자 | 담당 영역 |
 |---|---|
-| 김기호 | 학생 LMS 챗봇, 정책·공지·프로젝트 레퍼런스 RAG |
+| 김기호 | 학생 LMS 챗봇, 정책·공지·프로젝트 레퍼런스 RAG, Firebase 연동 RAG, README 작성 |
 | 김대호 | 채용공고 추천·검색, 공부방 노트, 통합 백엔드·LLMOps |
 | 문성호 | 앱 공통 테마·UI, AI 코치 화면 및 사용자 경험 |
 | 최성욱 | 이력서 첨삭 워크플로우, 온보딩, 테스트·문서화 |
