@@ -45,7 +45,7 @@
 
 ## 1. 팀 소개
 
-| 이름 | GitHub |
+| &nbsp;&nbsp;&nbsp;이&#8288;름&nbsp;&nbsp;&nbsp; | GitHub |
 | --- | --- |
 | 김기호 | [kyo-135](https://github.com/kyo-135) |
 | 김대호 | [jjhok6389](https://github.com/jjhok6389) |
@@ -125,7 +125,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 그 밖의 폴더:
 
-| 폴더 | 내용 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;폴&#8288;더&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 내용 |
 |---|---|
 | [vectordb/](vectordb/README.md) | 학생 챗봇용 정책·FAQ·프로젝트 레퍼런스 수집·전처리·적재 |
 | [chatbot_lab/](chatbot_lab/README.md) | 학생 챗봇 분류 개선·안전성 실험(운영 코드와 분리, 포트 8002) |
@@ -139,7 +139,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### 과제 필수 (LLM / RAG)
 
-| ID | 요구사항 | 구현 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ID&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 요구사항 | 구현 |
 | --- | --- | --- |
 | RAG-01 | 내외부 문서 수집 및 가공 | `vectordb/` Notion·PDF·CSV·MD·XLSX, 공고 크롤링 |
 | RAG-02 | 문서를 벡터로 임베딩해 Vector DB에 저장·검색 | Pinecone, `text-embedding-3-small`, 1536차원 |
@@ -151,7 +151,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### LXP (학습 경험)
 
-| ID | 요구사항 | 역할 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ID&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 요구사항 | 역할 |
 | --- | --- | --- |
 | LXP-01 | 정책·공지·프로젝트 레퍼런스 질의 | 학생 챗봇 FAB, 기수 범위 검색 |
 | LXP-02 | 본인 출결·마일리지·이력 등 실데이터 조회 | Firebase student scopes, 진행 중 출석 예상치 |
@@ -161,7 +161,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### LMS 운영 (LXP의 기반)
 
-| ID | 요구사항 | 역할 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ID&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 요구사항 | 역할 |
 | --- | --- | --- |
 | LMS-01 | 폐쇄형 계정, 역할별 홈, 온보딩 | 전체 |
 | LMS-02 | 기수 CRUD, 학생·강사 계정, 퇴소/복학 | 관리자 |
@@ -213,7 +213,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ![전체 시스템 아키텍처](assets/readme_image/system_architecture_transparent.png)
 
-| 계층 | 구성·책임 | 연결 방식 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;계&#8288;층&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 구성·책임 | 연결 방식 |
 |---|---|---|
 | 클라이언트 | Flutter·Riverpod·go_router. 학생·강사·관리자 셸, LMS·공부방·AI 취업 코치 화면 | Firebase SDK·HTTPS callable, FastAPI HTTP(JSON·NDJSON·SSE) |
 | 관리형 클라우드 | Firebase Auth 인증, Firestore 기수별 운영 데이터, Storage 첨부·공유 DB, Cloud Functions Gen2 | 학생 역할·기수·소유권은 Security Rules와 서버 권한 검사로 제한 |
@@ -227,7 +227,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ![데이터 갱신 및 운영 흐름](assets/readme_image/data_update_operational_flow_transparent.png)
 
-| 흐름 | 갱신 과정 | 운영상 구분 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;흐&#8288;름&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 갱신 과정 | 운영상 구분 |
 |---|---|---|
 | 학생 지식 갱신 | 정책 파일·Notion과 프로젝트 CSV는 Python 적재 CLI → 정규화·청킹·임베딩 → `student` 인덱스. 공지 생성·수정·삭제는 `syncNoticeVector` 트리거 → upsert/delete | 공지는 문서별 변경 반영, 정책은 현재 전체 재임베딩, 프로젝트 삭제분 정리는 미지원 |
 | 채용 데이터 야간 수집 | 등록된 야간 작업(매일 23:00) → 수집·JSONL·SQLite → 공고 벡터 증분 동기화 → Storage 공유본 `job_store_share.sqlite.gz` 갱신 | 실행 PC와 작업 스케줄러가 켜져 있어야 수집 가능 |
@@ -308,7 +308,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### Pinecone 원본 & 벡터 데이터 & 저장소
 
-| 구분 | 노드 | 주요 속성·메타데이터 | 비고 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;구&#8288;분&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 노드 | 주요 속성·메타데이터 | 비고 |
 |---|---|---|---|
 | 원본 | Policy / FAQ 문서 | 정책·FAQ·훈련 가이드 원문 | 정규화 → 분류 → 청킹 → 임베딩 후 `student/policy`에 적재 |
 | 원본 | Firestore 공지 | `cohorts/{cohortId}/notices/{noticeId}` | Cloud Functions로 `student/notice`에 증분 동기화 |
@@ -343,14 +343,14 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### 벡터 인덱스
 
-| 인덱스 / namespace | 문서 | 청킹 | 메타데이터 필터 |
+| &nbsp;&nbsp;&nbsp;인&#8288;덱&#8288;스&nbsp;/&nbsp;namespace&nbsp;&nbsp;&nbsp; | 문서 | 청킹 | 메타데이터 필터 |
 |---|---|---|---|
 | `student` / `policy` | 훈련 정책·FAQ·가이드(md·csv·pdf·Notion) | 제목 단위 → 500자·40자 겹침, FAQ는 문답 단위 | — |
 | `student` / `notice` | 기수 공지 | 500자·40자 겹침 | `cohort` = 학생 기수 (서버가 고정) |
 | `student` /<br>`project_reference` | 전 기수 단위·최종 프로젝트 | 프로젝트 1건 = 문서 1건 | `cohort`, `project_round` |
 | `job-posting` | 채용공고의 **요건 구간**(주요업무·자격요건·우대사항) | 안 함(중앙값 약 500자) | `status=OPEN`, 지역, 고용형태, 연차 |
 
-| 인덱스 / namespace | 적재 | 쓰는 기능 |
+| &nbsp;&nbsp;&nbsp;인&#8288;덱&#8288;스&nbsp;/&nbsp;namespace&nbsp;&nbsp;&nbsp; | 적재 | 쓰는 기능 |
 |---|---|---|
 | `student` / `policy` | [정책 적재 스크립트](vectordb/policy_ingestion.py) | ① 학생 챗봇 |
 | `student` / `notice` | Functions 트리거, 공지 저장 즉시 | ① 학생 챗봇 |
@@ -370,7 +370,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### RAG 성능 가이드 대응
 
-| 가이드 | 적용 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;가&#8288;이&#8288;드&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 적용 |
 |---|---|
 | 요청마다 인덱싱하지 않기 | 적재는 별도 CLI·야간 배치·Functions 트리거에서만 |
 | 변경분만 증분 인덱싱 | 공고는 내용 지문(`embed_hash`)이 바뀐 것만 임베딩(09-13: 대상 23,627건 중 2,415건만). 공지는 작성·수정·삭제된 공지만 트리거로 반영 |
@@ -441,7 +441,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 ## 14. 기술 스택
 
-| 영역 | 기술 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;영&#8288;역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 기술 |
 |---|---|
 | LLM·임베딩 | ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white) ![gpt-5.6-sol](https://img.shields.io/badge/gpt--5.6--sol-412991?style=for-the-badge) ![gpt-5.6-luna](https://img.shields.io/badge/gpt--5.6--luna-412991?style=for-the-badge) ![gpt-4o-mini](https://img.shields.io/badge/gpt--4o--mini-412991?style=for-the-badge) ![text-embedding-3-small](https://img.shields.io/badge/text--embedding--3--small-412991?style=for-the-badge) |
 | LLM 프레임워크 | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langgraph&logoColor=white) ![LangSmith (선택)](https://img.shields.io/badge/LangSmith%20(%EC%84%A0%ED%83%9D)-1C3C3C?style=for-the-badge) |
@@ -604,7 +604,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 ## 20. 협업 방식
 
-| 항목 | 규칙 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;항&#8288;목&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 규칙 |
 |---|---|
 | 브랜치 | `main` 배포용(직접 푸시 금지), `develop` 통합, 기능마다 `feature/*` |
 | 커밋 메시지 | `<종류> S32-XX) 설명` — Jira 이슈 키를 붙인다 (예: `fix S32-13) 커리어 코치 대화 진입 개선`) |
