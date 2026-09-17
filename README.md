@@ -67,9 +67,7 @@
 
 ## 3. 프로젝트 소개
 
-### 프로젝트 명
-
-**PLAYDATA LXP** — PLAYDATA All-in-One LMS를 학습 경험 플랫폼으로 확장
+### **PLAYDATA LXP** — PLAYDATA All-in-One LMS를 학습 경험 플랫폼으로 확장
 
 기존 부트캠프 LMS는 관리자·강사 중심의 **운영 시스템**이다. 출결, 좌석, 제출 승인, 공지, 마일리지, 평가를 기수(`cohort`) 단위로 닫아 관리한다.
 
@@ -90,7 +88,7 @@
 
 <img src="assets/readme_image/interview.png" alt="사용자·관리자·강사 편의성 인터뷰" width="800">
 
-### LMS/LXP 비교
+### LMS -> LXP
 
 ![기존 LMS의 한계(노랑·오렌지)와 LXP로 바꾸는 이유(파랑) 비교 표](assets/readme_image/lms_lxp_comparison.svg)
 
@@ -135,26 +133,38 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ## 7. 요구사항 명세서
 
-단위 프로젝트 가이드의 필수 요구사항과 PLAYDATA LXP의 구현 범위를 함께 정리했다. 검증 기준은 산출물 확인 및 테스트 시나리오에 사용한다.
+### 과제 필수 (LLM / RAG)
 
-| ID | 구분 | 요구사항 | 구현 범위·검증 기준 | 관련 산출물 |
-|---|---|---|---|---|
-| REQ-01 | 과제 필수 | 내외부 문서 수집·전처리 | 정책·FAQ·Notion·공지·프로젝트 CSV·공개 채용공고를 수집하고 정규화·중복 제거·청킹 과정을 기록 | [벡터 데이터 문서](vectordb/README.md), [공고 전처리](job_matching_bot/docs/data_preprocessing.md) |
-| REQ-02 | 과제 필수 | 벡터 DB 저장·검색 | OpenAI 임베딩과 Pinecone 연동, 원문 및 고유 ID·기수·차수 메타데이터 보존 | [vectordb/](vectordb/README.md) |
-| REQ-03 | 과제 필수 | 프롬프트 템플릿 설계 | One-shot·Few-shot 예시와 입력 변수·출력 스키마·근거 제한 규칙 명시 | [프롬프트 템플릿](#13-프롬프트-템플릿) |
-| REQ-04 | 과제 필수 | LLM 선정·LangChain 연동 | 기능별 모델 설정, ChatPromptTemplate·구조화 출력·LangGraph로 검색과 생성 연결 | [학생 챗봇](chatbot/README.md), [추천봇](job_matching_bot/README.md) |
-| REQ-05 | 과제 필수 | RAG 질의응답·환각 방지 | 검색된 문서와 허용된 실데이터만 사용, 근거가 없으면 확인 불가 안내, 추천·첨삭 인용은 원문 대조 | [chatbot/](chatbot/README.md), [cover_letter_rag/](cover_letter_rag/README.md) |
-| REQ-06 | 과제 필수 | 테스트·성능 개선 | 분류·복합 질문·후속 질문·인젝션·보호 데이터 접근 및 추천·첨삭 검증 결과와 미통과 원인 기록 | [테스트 질문](chatbot/student_chatbot_test_question.md), [실행 결과](chatbot/student_chatbot_test_result.md), [추천 평가](job_matching_bot/docs/test_report.md) |
-| REQ-07 | 과제 필수 | 필수 산출물 관리 | 전처리 문서·아키텍처·RAG 코드·테스트 계획과 결과를 GitHub 저장소에서 확인 가능하게 관리 | [필수 산출물 위치](#17-필수-산출물-위치) |
-| REQ-08 | 프로젝트 확장 | 학생 인증·데이터 격리 | Firebase ID 토큰으로 활성 학생 확인, 본인 UID·소속 기수를 서버에서 결정, 민감 키 제거 | [학생 챗봇 API·조회 범위](chatbot/README.md) |
-| REQ-09 | 프로젝트 확장 | 복합 질문 라우팅 | supervisor가 요청을 tasks로 분해하고 학생 데이터·정책/공지·프로젝트 중 필요한 분기만 수행 | [동작 구조](chatbot/README.md#동작-구조) |
-| REQ-10 | 프로젝트 확장 | 출석·장려금 안내 | 서버 계산값으로 단위기간 출석률 안내, 진행 중 예상값과 확정값 구분, 지급 확정으로 표현하지 않음 | [출석 계산](chatbot/README.md#4-단위기간-출석-계산--llm에-계산을-맡기지-않는다) |
-| REQ-11 | 프로젝트 확장 | 대화·스트리밍 UX | 같은 thread의 후속 질문 맥락 유지, NDJSON 답변 스트리밍, 새 대화·FAQ·Markdown 표시 | [학생 챗봇](chatbot/README.md) |
-| REQ-12 | 프로젝트 확장 | 취업 코치 | 이력서 기반 공고 추천·조건 검색, 선택 공고 기준 첨삭·적용·되돌리기 | [추천·검색](job_matching_bot/README.md), [첨삭](cover_letter_rag/README.md) |
-| REQ-13 | 프로젝트 확장 | 학습 노트 | 기수 GitHub 자료에서 학습 노트·복습 문항 생성, 개인 Firestore에 저장 | [study_notes/](study_notes/README.md) |
-| REQ-14 | 성능·운영 | 인덱싱 분리·검색 최적화 | 요청 밖에서 적재, 공지·공고 변경분 동기화, 기수·차수 필터, top-k·문맥 길이 제한, 객체 재사용·스트리밍·병목 기록 | [RAG 구성](#12-rag-구성), [운영 구조](#9-시스템-아키텍처) |
+| ID | 요구사항 | 구현 |
+| --- | --- | --- |
+| RAG-01 | 내외부 문서 수집 및 가공 | `vectordb/` Notion·PDF·CSV·MD·XLSX, 공고 크롤링 |
+| RAG-02 | 문서를 벡터로 임베딩해 Vector DB에 저장·검색 | Pinecone, `text-embedding-3-small`, 1536차원 |
+| RAG-03 | LangChain으로 Vector DB와 LLM 연동 | LangGraph Supervisor + 결정론적 라우팅 가드레일 + ChatOpenAI |
+| RAG-04 | 환각 방지 — 검색된 데이터 안에서만 답변 | 근거 청크 제한, 프롬프트 인젝션 방어, 차단 토픽 |
+| RAG-05 | One-shot / Few-shot 프롬프트 | Supervisor·노트·추천 프롬프트 템플릿 |
+| RAG-06 | 인덱싱과 런타임 분리 | 질문마다 `from_documents()` 재적재 금지 |
+| RAG-07 | 문서 변경 시 증분 인덱싱 | 정책 state 파일, 공지 `syncNoticeVector` |
 
-정책은 현재 전체 재임베딩 방식이며, 추천·공고 찾기 API의 공개 배포 전 인증과 대화 기록 영속화는 향후 개선 대상이다. 모든 성능 가이드를 이미 완료한 것으로 간주하지 않는다.
+### LXP (학습 경험)
+
+| ID | 요구사항 | 역할 |
+| --- | --- | --- |
+| LXP-01 | 정책·공지·프로젝트 레퍼런스 질의 | 학생 챗봇 FAB, 기수 범위 검색 |
+| LXP-02 | 본인 출결·마일리지·이력 등 실데이터 조회 | Firebase student scopes, 진행 중 출석 예상치 |
+| LXP-03 | GitHub 수업 자료 → Markdown 노트 + 복습 문제 | 공부방 |
+| LXP-04 | 이력서 기반 채용공고 추천·첨삭 | Job Coach |
+| LXP-05 | 커리큘럼 기반 주간 YouTube 추천 | 대시보드·학습실 |
+
+### LMS 운영 (LXP의 기반)
+
+| ID | 요구사항 | 역할 |
+| --- | --- | --- |
+| LMS-01 | 폐쇄형 계정, 역할별 홈, 온보딩 | 전체 |
+| LMS-02 | 기수 CRUD, 학생·강사 계정, 퇴소/복학 | 관리자 |
+| LMS-03 | 출석·자리 확인·좌석 배치 Publish | 관리자 / 강사 |
+| LMS-04 | 기록실·이력서·마일리지 구매 승인 | 관리자 |
+| LMS-05 | AI 문항 생성, 평가 게시·채점 | 강사 |
+| LMS-06 | 이력서 11섹션, 기록 5유형, 평가 응시 | 학생 |
 
 ---
 
@@ -164,7 +174,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### 일정표
 
-계획 기간: **2026.09.01~2026.09.17**. 아래는 WBS 이미지의 계획 일정이며, 시작·종료가 같은 작업은 단일 일정(마일스톤)이다. 실제 완료 기록이나 테스트 실행일과는 구분한다.
+계획 기간: **2026.09.01~2026.09.17**
 
 | 영역 | 이슈 ID | 작업 | 시작일 | 종료일 |
 |---|---|---|---|---|
@@ -209,8 +219,6 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 인덱싱과 실시간 서비스를 분리한다. 문서 로딩·청킹·임베딩은 적재 스크립트·야간 배치·Functions 트리거에서 처리하며, 사용자 요청은 이미 만든 인덱스 검색과 답변 생성에 집중한다. Python AI 모듈은 폴더로 분리하되 통합 서버의 공통 연결을 재사용한다.
 
-API 키·서비스 계정은 서버 환경에만 두며 앱에 포함하지 않는다. 학생 챗봇은 Firebase ID 토큰으로 활성 학생·본인 UID·기수를 확인하고, 공지 필터와 개인 데이터 조회 범위를 클라이언트 입력에 맡기지 않는다. 추천·공고 찾기 API의 인증은 공개 배포 전 보강 대상이다.
-
 ### 데이터 갱신 및 운영 흐름
 
 ![데이터 갱신 및 운영 흐름](assets/readme_image/data_update_operational_flow.png)
@@ -233,7 +241,8 @@ API 키·서비스 계정은 서버 환경에만 두며 앱에 포함하지 않�
 
 ![Firestore ERD](assets/readme_image/firestore_erd.png)
 
-아래 표는 위 ERD의 노드와 주요 필드를 정리한 것이다. 경로 약어는 `C = cohorts/{cohortId}`, `U = users/{uid}`, `A = C/assessments/{assessmentId}`, `F = C/formTasks/{taskId}`, `R = C/resumes/{resumeId}`, `T = R/tailoredResumes/{tailoredId}`를 뜻한다. 문서 ID와 다른 노드에 대한 참조도 함께 표기했다.
+### Firebase/Firestore 노드 & 필드
+경로 약어: `C = cohorts/{cohortId}`, `U = users/{uid}`, `A = C/assessments/{assessmentId}`, `F = C/formTasks/{taskId}`, `R = C/resumes/{resumeId}`, `T = R/tailoredResumes/{tailoredId}`
 
 | 영역 | 노드 / 경로 | 주요 속성·메타데이터 | 비고 |
 |---|---|---|---|
@@ -293,7 +302,7 @@ API 키·서비스 계정은 서버 환경에만 두며 앱에 포함하지 않�
 
 ![Pinecone ERD](assets/readme_image/pinecone_erd.png)
 
-아래 표는 위 ERD의 데이터 원본, 벡터 저장소, 조회 노드를 정리한 것이다. `student`와 `job-posting`은 서로 다른 인덱스·계정으로 분리되며, API 키 항목은 비밀값이 아닌 환경 변수 이름이다.
+### Pinecone 원본 & 벡터 데이터 & 저장소
 
 | 구분 | 노드 | 주요 속성·메타데이터 | 비고 |
 |---|---|---|---|
@@ -549,7 +558,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 | OT PDF 텍스트가 "교교교"처럼 깨짐 | PowerPoint형 PDF의 글꼴 매핑 오류 | PDF를 이미지 기준으로 LLM 추출, 반복 한글 감지 시 실패 처리 | 정책 원문 적재 |
 | 챗봇 "이거 말고"에 같은 공고를 다시 보여 줌 | 서버가 보여 준 공고를 모름 | 앱이 본 공고를 보내고 서버가 빼고 다음을 줌 | 끝까지 넘겨 볼 수 있음 |
 | 학생 LMS 챗봇이 질문에 맞지 않는 프로젝트 레퍼런스를 검색 | page_content에 기수·차수가 없어 유사도 검색이 식별 정보를 충분히 반영하지 못함 | 본문에 기수·프로젝트 차수를 명시하고 메타데이터에도 보존 | 검색 문맥에서 기수·차수 확인 가능 |
-| 학생 챗봇 답변 생성이 느림 | SelfQueryRetriever의 LLM 메타데이터 해석과 답 생성이 주요 병목 | 기수·차수를 규칙으로 추출해 필터 적용, 정책·공지 ThreadPoolExecutor 병렬 검색, 답변 길이 제한 | 검색용 LLM 호출·순차 대기·출력량 감소. 첨부 문서에 개선 시간 수치는 없음 |
+| 학생 챗봇 답변 생성이 느림 | SelfQueryRetriever의 LLM 메타데이터 해석과 답 생성이 주요 병목 | 기수·차수를 규칙으로 추출해 필터 적용, 정책·공지 ThreadPoolExecutor 병렬 검색, 답변 길이 제한 | 각 질문을 2회 테스트한 중앙값이 프로젝트 레퍼런스 질문은 16.92초 -> 7.42초로 약 56%, 정책+공지 질문은 15.55초 -> 11.83초 약 24% 개선 |
 
 학생 챗봇의 두 항목은 업로드한 트러블슈팅 기록을 반영했다. 추천봇의 전체 목록은 [test_report.md 4장](job_matching_bot/docs/test_report.md#4-트러블슈팅)에 있다.
 
@@ -594,8 +603,8 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 ```text
 SKN34-3rd-2Team/
 ├── chatbot/            # ① 학생 LMS 챗봇 (LangGraph)
-├── vectordb/           #    학생 챗봇용 문서 수집·전처리·Pinecone 적재
-├── job_matching_bot/   # ②③ 채용공고 수집·정제·인덱싱, 추천 API, 공고 찾기 챗봇, 평가 도구
+├── vectordb/           # ② 학생 챗봇용 문서 수집·전처리·Pinecone 적재
+├── job_matching_bot/   # ③ 채용공고 수집·정제·인덱싱, 추천 API, 공고 찾기 챗봇, 평가 도구
 ├── cover_letter_rag/   # ④ 공고 맞춤 이력서 첨삭, 통합 서버 진입점(app/integrated.py)
 ├── study_notes/        #    공부방 AI 수업 노트
 ├── chatbot_lab/        #    학생 챗봇 개선 실험 (운영과 분리)
