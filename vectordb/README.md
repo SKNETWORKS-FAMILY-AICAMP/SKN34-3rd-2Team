@@ -259,9 +259,3 @@ firebase deploy --only functions:syncNoticeVector
 
 실행하면 생기는 `policy_chunks.jsonl`, `project_reference_documents.jsonl`, `policy_ingestion_errors.jsonl`,
 `.policy_ingestion_state.json`, `.policy_notion_cache.json`은 결과물이다.
-
-## 알려진 한계
-
-- `policy`는 실행할 때마다 모든 청크를 다시 임베딩한다. `content_hash`를 계산해 두지만 바뀌지 않은 청크를 건너뛰는 데는 아직 쓰지 않는다.
-- `doc_id`가 유형별 순번이라, 원본 순서가 바뀌면 같은 ID에 다른 청크가 덮어써진다. 결과는 맞지만 ID로 원본을 추적하기 어렵다.
-- 이 폴더에는 단위 테스트가 없다. 결과는 `--dry-run`으로 만든 JSONL을 읽어서 확인한다.

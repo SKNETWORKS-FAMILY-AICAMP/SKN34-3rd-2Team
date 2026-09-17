@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="assets/readme_image/playdata_logo_inline.svg" alt="PLAYDATA" width="191" height="36" align="top"> LXP · AI 취업·학습 코치
+# <sup><img src="assets/readme_image/playdata_logo_transparent.png" alt="PLAYDATA" width="191" align="middle"></sup> LXP · AI 취업·학습 코치
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.12+-white?style=for-the-badge&logo=flutter&logoColor=white&labelColor=0175C2&color=42A5F5)](https://flutter.dev)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Functions-111?style=for-the-badge&logo=firebase&logoColor=111&labelColor=FFCA28&color=FFA000)](https://firebase.google.com)
@@ -83,6 +83,10 @@
 ---
 
 ## 4. 프로젝트 필요성 (배경)
+
+### LMS/LXP 비교
+
+<img src="assets/readme_image/lms_lxp_overview.png" alt="관리 중심 LMS에서 개인화 학습 경험 중심 LXP로 전환" width="900">
 
 ### 실제 사용자 인터뷰
 
@@ -170,7 +174,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ## 8. WBS
 
-![WBS](assets/readme_image/WBS.png)
+![WBS](assets/readme_image/WBS_transparent.png)
 
 ### 일정표
 
@@ -207,7 +211,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### 전체 시스템 아키텍처
 
-![전체 시스템 아키텍처](assets/readme_image/system_architecture.png)
+![전체 시스템 아키텍처](assets/readme_image/system_architecture_transparent.png)
 
 | 계층 | 구성·책임 | 연결 방식 |
 |---|---|---|
@@ -221,7 +225,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### 데이터 갱신 및 운영 흐름
 
-![데이터 갱신 및 운영 흐름](assets/readme_image/data_update_operational_flow.png)
+![데이터 갱신 및 운영 흐름](assets/readme_image/data_update_operational_flow_transparent.png)
 
 | 흐름 | 갱신 과정 | 운영상 구분 |
 |---|---|---|
@@ -239,7 +243,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### Firebase/Firestore ERD
 
-![Firestore ERD](assets/readme_image/firestore_erd.png)
+![Firestore ERD](assets/readme_image/firestore_erd_transparent.png)
 
 ### Firebase/Firestore 노드 & 필드
 경로 약어: `C = cohorts/{cohortId}`, `U = users/{uid}`, `A = C/assessments/{assessmentId}`, `F = C/formTasks/{taskId}`, `R = C/resumes/{resumeId}`, `T = R/tailoredResumes/{tailoredId}`
@@ -300,7 +304,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### Pinecone ERD
 
-![Pinecone ERD](assets/readme_image/pinecone_erd.png)
+![Pinecone ERD](assets/readme_image/pinecone_erd_transparent.png)
 
 ### Pinecone 원본 & 벡터 데이터 & 저장소
 
@@ -339,12 +343,19 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### 벡터 인덱스
 
-| 인덱스 / namespace | 문서 | 청킹 | 메타데이터 필터 | 적재 | 쓰는 기능 |
-|---|---|---|---|---|---|
-| `student` / `policy` | 훈련 정책·FAQ·가이드(md·csv·pdf·Notion) | 제목 단위 → 500자·40자 겹침, FAQ는 문답 단위 | — | `vectordb/policy_ingestion.py` | ① |
-| `student` / `notice` | 기수 공지 | 500자·40자 겹침 | `cohort` = 학생 기수 (서버가 고정) | Functions 트리거, 공지 저장 즉시 | ① |
-| `student` / `project_reference` | 전 기수 단위·최종 프로젝트 | 프로젝트 1건 = 문서 1건 | `cohort`, `project_round` | `vectordb/project_reference_ingestion.py` | ① |
-| `job-posting` | 채용공고의 **요건 구간**(주요업무·자격요건·우대사항) | 안 함(중앙값 약 500자) | `status=OPEN`, 지역, 고용형태, 연차 | `job_matching_bot/sync.py` 야간 증분 | ②③ |
+| 인덱스 / namespace | 문서 | 청킹 | 메타데이터 필터 |
+|---|---|---|---|
+| `student` / `policy` | 훈련 정책·FAQ·가이드(md·csv·pdf·Notion) | 제목 단위 → 500자·40자 겹침, FAQ는 문답 단위 | — |
+| `student` / `notice` | 기수 공지 | 500자·40자 겹침 | `cohort` = 학생 기수 (서버가 고정) |
+| `student` /<br>`project_reference` | 전 기수 단위·최종 프로젝트 | 프로젝트 1건 = 문서 1건 | `cohort`, `project_round` |
+| `job-posting` | 채용공고의 **요건 구간**(주요업무·자격요건·우대사항) | 안 함(중앙값 약 500자) | `status=OPEN`, 지역, 고용형태, 연차 |
+
+| 인덱스 / namespace | 적재 | 쓰는 기능 |
+|---|---|---|
+| `student` / `policy` | [정책 적재 스크립트](vectordb/policy_ingestion.py) | ① 학생 챗봇 |
+| `student` / `notice` | Functions 트리거, 공지 저장 즉시 | ① 학생 챗봇 |
+| `student` /<br>`project_reference` | [프로젝트 적재 스크립트](vectordb/project_reference_ingestion.py) | ① 학생 챗봇 |
+| `job-posting` | [공고 증분 동기화](job_matching_bot/sync.py), 야간 증분 | ② 추천 · ③ 공고 챗봇 |
 
 임베딩은 모두 OpenAI `text-embedding-3-small`(1536차원, cosine)이다.
 
@@ -391,18 +402,33 @@ PROFILE_PROMPT = ChatPromptTemplate.from_messages([
 chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, method="json_schema")
 ```
 
-| 기능 | 프롬프트 (파일) | 입력 변수 | 출력 | 예시 방식 |
-|---|---|---|---|---|
-| ① 학생 챗봇 분류 | `SUPERVISOR_PROMPT` ([chatbot/student_chatbot.py](chatbot/student_chatbot.py)) | 최근 대화 8개 | `route`, `namespaces`, `student_scopes`, `query`, `tasks` | **One-shot** — "34기 최종 프로젝트가 무엇인가요?" → `project_reference`, 차수 `final`. "최종 프로젝트"를 LMS 밖 질문으로 막지 않게 하는 예시 |
-| ① 학생 챗봇 답변 | `ANSWER_PROMPT` (같은 파일) | `history`, `context`, `question` | 답변 문장(스트리밍) | Zero-shot 규칙 — 근거 없으면 추측 금지, 내부 용어 금지, 해요체 |
-| ② 추천 질의문 | `PROFILE_PROMPT` ([job_matching_bot/api/prompts.py](job_matching_bot/api/prompts.py)) | `resume_text` | 위 코드 참고 | **One-shot** — 이력서 "경험" 문체를 공고 "요구" 문체로 바꾸는 예 한 줄 |
-| ② 추천 재정렬 | `RERANK_PROMPT` (같은 파일) | `resume_text`, `jobs` | `job_core` → `resume_core` → `overlap` → `fit`, `reasons[인용 짝]`, `concerns` | **Few-shot** — 좋은 근거 짝 1개와 **근거가 아닌 짝** 1개("간호사 경력" ↔ "경력 2년 이상"), 적합도 높음·보통·낮음 예 7개. 출력 칸 순서로 "공고 핵심 → 이력서 주력 → 겹침"을 먼저 쓰고 판정하게 한다 |
-| ③ 공고 챗봇 라우터 | `CHAT_PROMPT` (같은 파일) | `previous`(직전 조건), `message` | `intent`, `topic`, 조건 필터, `job_refs`, `show_more` … | **Few-shot** — 갈래별 예문, "2번 자세히" → `[2]`, "3년차" → 번호 아님, "판교" → `분당구`, "돈 다루는 일" → 공고 문체 질의문 |
-| ③ 공고 챗봇 답변 | `ADVICE_PROMPT`, `JOB_ASK_PROMPT`, `JOB_COMPARE_SYSTEM` | 조건·공고 집계표 / 공고 원문·이력서 / 질문 | 답변, 이어서 물을 문장 3개 | 규칙 + 형식 예 — "429건 중 Java를 적은 곳이 106건(25%)"처럼 표의 숫자만 쓰게 한다 |
-| ④ 이력서 첨삭 | `RESUME_REVIEW_PROMPT` ([cover_letter_rag/app/prompts.py](cover_letter_rag/app/prompts.py)) | 이력서 원문, 확인된 답변, 이번 턴 답변, 공고, 프로젝트 기간, 첨삭 범위·초점 | `sentence_reviews`, `diagnostics`, `star_checks`, `questions` | **Few-shot** — 허용되는 표현 교정("진행 하였습니다" → "진행했습니다")과 **금지되는 변경**("개발 중" → "완료", "팀원이" → "제가"), 지원동기 권장 문장 구조 |
-| 정책 문서 분류 | `CLASSIFICATION_PROMPT` ([vectordb/policy_ingestion.py](vectordb/policy_ingestion.py)) | `<untrusted_document>` 안의 문서 | 18개 유형 enum + 이유 | Zero-shot. 실패하면 키워드 규칙으로 대체 |
-| 공부방 노트 | `NOTE_PROMPT` ([study_notes/pipeline.py](study_notes/pipeline.py)) | 범위, 학습자 수준, 수업 자료 | 노트 + 복습 문제 Markdown | Zero-shot + 목차 틀 고정 |
-| 성취도평가 출제 | [functions/src/ai/assessmentPrompt.ts](functions/src/ai/assessmentPrompt.ts) (LangChain 아님) | 커리큘럼 행, 문항 수 | 문항 JSON | **One-shot** — JSON 형식 예 한 줄 |
+| 기능 | 프롬프트 (파일) | 입력 → 출력 |
+|---|---|---|
+| ① 학생 챗봇<br>분류 | `SUPERVISOR_PROMPT`<br>([학생 챗봇 코드](chatbot/student_chatbot.py)) | **입력:** 최근 대화 8개 <br>**출력:** `route`, `namespaces`, `student_scopes`, `query`, `tasks` |
+| ① 학생 챗봇<br>답변 | `ANSWER_PROMPT`<br>(같은 파일) | **입력:** `history`, `context`, `question` <br>**출력:** 답변 문장(스트리밍) |
+| ② 추천<br>질의문 | `PROFILE_PROMPT`<br>([채용 프롬프트 코드](job_matching_bot/api/prompts.py)) | **입력:** `resume_text` <br>**출력:** 위 코드 참고 |
+| ② 추천<br>재정렬 | `RERANK_PROMPT`<br>(같은 파일) | **입력:** `resume_text`, `jobs` <br>**출력:** `job_core` → `resume_core` → `overlap` → `fit`, `reasons[인용 짝]`, `concerns` |
+| ③ 공고 챗봇<br>라우터 | `CHAT_PROMPT`<br>(같은 파일) | **입력:** `previous`(직전 조건), `message` <br>**출력:** `intent`, `topic`, 조건 필터, `job_refs`, `show_more` … |
+| ③ 공고 챗봇<br>답변 | `ADVICE_PROMPT`, `JOB_ASK_PROMPT`, `JOB_COMPARE_SYSTEM` | **입력:** 조건·공고 집계표 / 공고 원문·이력서 / 질문 <br>**출력:** 답변, 이어서 물을 문장 3개 |
+| ④ 이력서<br>첨삭 | `RESUME_REVIEW_PROMPT`<br>([첨삭 프롬프트 코드](cover_letter_rag/app/prompts.py)) | **입력:** 이력서 원문, 확인된 답변, 이번 턴 답변, 공고, 프로젝트 기간, 첨삭 범위·초점 <br>**출력:** `sentence_reviews`, `diagnostics`, `star_checks`, `questions` |
+| 정책 문서<br>분류 | `CLASSIFICATION_PROMPT`<br>([정책 적재 코드](vectordb/policy_ingestion.py)) | **입력:** `<untrusted_document>` 안의 문서 <br>**출력:** 18개 유형 enum + 이유 |
+| 공부방<br>노트 | `NOTE_PROMPT`<br>([노트 생성 코드](study_notes/pipeline.py)) | **입력:** 범위, 학습자 수준, 수업 자료 <br>**출력:** 노트 + 복습 문제 Markdown |
+| 성취도평가<br>출제 | [평가 출제 코드](functions/src/ai/assessmentPrompt.ts)<br>(LangChain 아님) | **입력:** 커리큘럼 행, 문항 수 <br>**출력:** 문항 JSON |
+
+### 프롬프트 예시 방식
+
+| 기능 | 예시 방식 |
+|---|---|
+| ① 학생 챗봇<br>분류 | **One-shot** — "34기 최종 프로젝트가 무엇인가요?" → `project_reference`, 차수 `final`. "최종 프로젝트"를 LMS 밖 질문으로 막지 않게 하는 예시 |
+| ① 학생 챗봇<br>답변 | Zero-shot 규칙 — 근거 없으면 추측 금지, 내부 용어 금지, 해요체 |
+| ② 추천<br>질의문 | **One-shot** — 이력서 "경험" 문체를 공고 "요구" 문체로 바꾸는 예 한 줄 |
+| ② 추천<br>재정렬 | **Few-shot** — 좋은 근거 짝 1개와 **근거가 아닌 짝** 1개("간호사 경력" ↔ "경력 2년 이상"), 적합도 높음·보통·낮음 예 7개. 출력 칸 순서로 "공고 핵심 → 이력서 주력 → 겹침"을 먼저 쓰고 판정하게 한다 |
+| ③ 공고 챗봇<br>라우터 | **Few-shot** — 갈래별 예문, "2번 자세히" → `[2]`, "3년차" → 번호 아님, "판교" → `분당구`, "돈 다루는 일" → 공고 문체 질의문 |
+| ③ 공고 챗봇<br>답변 | 규칙 + 형식 예 — "429건 중 Java를 적은 곳이 106건(25%)"처럼 표의 숫자만 쓰게 한다 |
+| ④ 이력서<br>첨삭 | **Few-shot** — 허용되는 표현 교정("진행 하였습니다" → "진행했습니다")과 **금지되는 변경**("개발 중" → "완료", "팀원이" → "제가"), 지원동기 권장 문장 구조 |
+| 정책 문서<br>분류 | Zero-shot. 실패하면 키워드 규칙으로 대체 |
+| 공부방<br>노트 | Zero-shot + 목차 틀 고정 |
+| 성취도평가<br>출제 | **One-shot** — JSON 형식 예 한 줄 |
 
 모든 프롬프트에 공통으로 넣은 규칙:
 
