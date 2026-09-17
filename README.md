@@ -46,7 +46,7 @@
 ## 1. 팀 소개
 
 | &nbsp;&nbsp;&nbsp;이&#8288;름&nbsp;&nbsp;&nbsp; | GitHub |
-| --- | --- |
+|:---:|---|
 | 김기호 | [kyo-135](https://github.com/kyo-135) |
 | 김대호 | [jjhok6389](https://github.com/jjhok6389) |
 | 문성호 | [MoonSungHo](https://github.com/MoonSungHo-D) |
@@ -57,7 +57,7 @@
 ## 2. 역할 분담
 
 | 담당자 | 담당 영역 |
-|---|---|
+|:---:|---|
 | 김기호 | 학생 LMS 챗봇, 정책·공지·프로젝트 레퍼런스 RAG |
 | 김대호 | 공부방 노트, 통합 백엔드·LLMOps |
 | 문성호 | 앱 공통 테마·UI, AI 코치 화면 및 사용자 경험 |
@@ -103,7 +103,7 @@
 ## 5. 프로젝트 목표
 
 | 과제 목표 | 이 프로젝트에서 |
-|---|---|
+|:---:|---|
 | 환각을 막고 원하는 데이터 안에서만 답하는 RAG 질의응답 | 학생 챗봇은 정책·공지·프로젝트 문서와 본인 LMS 데이터만 근거로 답하고 범위 밖 질문은 거절한다. 추천·첨삭은 인용이 원문에 **글자 그대로** 있는지 서버가 검사해 없으면 버린다 |
 | 문서를 임베딩해 벡터 DB에 저장·검색 | 채용공고 2.3만 건, 훈련 정책·FAQ, 기수 공지, 전 기수 프로젝트를 Pinecone에 적재 |
 | LangChain으로 벡터 DB와 LLM 연동 | `ChatPromptTemplate` + 구조화 출력, `OpenAIEmbeddings`, LangGraph 라우팅 그래프 |
@@ -115,7 +115,7 @@
 AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마다 README가 따로 있다.**
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 무엇을 | 근거 데이터 | 코드 · 문서 |
-|---|---|---|---|
+|:---:|---|---|---|
 | **① 학생 LMS 챗봇** | "지각 3번이면 결석인가요?", "28기 최종 프로젝트 뭐 있었어요?", "이번 달 출석률 80% 넘었나요?" | 정책·FAQ, 기수 공지, 전 기수 프로젝트(Pinecone) + 본인 LMS 데이터(Firestore) | [chatbot/](chatbot/README.md) |
 | **② 맞춤 채용공고 추천** | 이력서를 읽고 맞는 공고 6건을 적합도·근거 인용·우려와 함께 | 채용공고(Pinecone + SQLite) | [job_matching_bot/](job_matching_bot/README.md) |
 | **③ 공고 찾기 챗봇** | "서울 백엔드 신입", "이거 말고 다른 거" 같은 대화로 공고 검색 | 채용공고(SQLite 조건 검색 + Pinecone 뜻 검색) | [job_matching_bot/docs/chatbot.md](job_matching_bot/docs/chatbot.md) |
@@ -126,7 +126,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 그 밖의 폴더:
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;폴&#8288;더&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 내용 |
-|---|---|
+|:---:|---|
 | [vectordb/](vectordb/README.md) | 학생 챗봇용 정책·FAQ·프로젝트 레퍼런스 수집·전처리·적재 |
 | [chatbot_lab/](chatbot_lab/README.md) | 학생 챗봇 분류 개선·안전성 실험(운영 코드와 분리, 포트 8002) |
 | [onboarding/](onboarding/README.md) | 사용자 안내서 PDF·시연 영상 자동 제작 |
@@ -140,7 +140,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### 과제 필수 (LLM / RAG)
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ID&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 요구사항 | 구현 |
-| --- | --- | --- |
+|:---:|---|---|
 | RAG-01 | 내외부 문서 수집 및 가공 | `vectordb/` Notion·PDF·CSV·MD·XLSX, 공고 크롤링 |
 | RAG-02 | 문서를 벡터로 임베딩해 Vector DB에 저장·검색 | Pinecone, `text-embedding-3-small`, 1536차원 |
 | RAG-03 | LangChain으로 Vector DB와 LLM 연동 | LangGraph Supervisor + 결정론적 라우팅 가드레일 + ChatOpenAI |
@@ -152,7 +152,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### LXP (학습 경험)
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ID&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 요구사항 | 역할 |
-| --- | --- | --- |
+|:---:|---|---|
 | LXP-01 | 정책·공지·프로젝트 레퍼런스 질의 | 학생 챗봇 FAB, 기수 범위 검색 |
 | LXP-02 | 본인 출결·마일리지·이력 등 실데이터 조회 | Firebase student scopes, 진행 중 출석 예상치 |
 | LXP-03 | GitHub 수업 자료 → Markdown 노트 + 복습 문제 | 공부방 |
@@ -162,7 +162,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### LMS 운영 (LXP의 기반)
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ID&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 요구사항 | 역할 |
-| --- | --- | --- |
+|:---:|---|---|
 | LMS-01 | 폐쇄형 계정, 역할별 홈, 온보딩 | 전체 |
 | LMS-02 | 기수 CRUD, 학생·강사 계정, 퇴소/복학 | 관리자 |
 | LMS-03 | 출석·자리 확인·좌석 배치 Publish | 관리자 / 강사 |
@@ -181,7 +181,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 계획 기간: **2026.09.01~2026.09.17**
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;영&#8288;역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 이슈 ID | 작업 | 시작일 | 종료일 |
-|---|---|---|---|---|
+|:---:|---|---|---|---|
 | 채용 데이터·RAG | S32-1 | 이력서·채용공고 RAG 검색 | 2026.09.06 | 2026.09.15 |
 | 채용 데이터·RAG | S32-3 | 채용공고 수집 및 파이프라인 | 2026.09.03 | 2026.09.14 |
 | 채용 데이터·RAG | S32-4 | 채용공고 정기 동기화 스케줄러 | 2026.09.06 | 2026.09.14 |
@@ -214,7 +214,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ![전체 시스템 아키텍처](assets/readme_image/system_architecture_transparent.png)
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;계&#8288;층&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 구성·책임 | 연결 방식 |
-|---|---|---|
+|:---:|---|---|
 | 클라이언트 | Flutter·Riverpod·go_router. 학생·강사·관리자 셸, LMS·공부방·AI 취업 코치 화면 | Firebase SDK·HTTPS callable, FastAPI HTTP(JSON·NDJSON·SSE) |
 | 관리형 클라우드 | Firebase Auth 인증, Firestore 기수별 운영 데이터, Storage 첨부·공유 DB, Cloud Functions Gen2 | 학생 역할·기수·소유권은 Security Rules와 서버 권한 검사로 제한 |
 | 통합 AI 서버 | `cover_letter_rag/app/integrated.py`가 학생 챗봇·학습 노트·추천/공고 대화·이력서 첨삭을 한 Uvicorn 프로세스(:8000)로 제공 | Firebase Admin SDK, OpenAI, Pinecone·SQLite 연결 및 서비스 객체 재사용 |
@@ -228,7 +228,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ![데이터 갱신 및 운영 흐름](assets/readme_image/data_update_operational_flow_transparent.png)
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;흐&#8288;름&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 갱신 과정 | 운영상 구분 |
-|---|---|---|
+|:---:|---|---|
 | 학생 지식 갱신 | 정책 파일·Notion과 프로젝트 CSV는 Python 적재 CLI → 정규화·청킹·임베딩 → `student` 인덱스. 공지 생성·수정·삭제는 `syncNoticeVector` 트리거 → upsert/delete | 공지는 문서별 변경 반영, 정책은 현재 전체 재임베딩, 프로젝트 삭제분 정리는 미지원 |
 | 채용 데이터 야간 수집 | 등록된 야간 작업(매일 23:00) → 수집·JSONL·SQLite → 공고 벡터 증분 동기화 → Storage 공유본 `job_store_share.sqlite.gz` 갱신 | 실행 PC와 작업 스케줄러가 켜져 있어야 수집 가능 |
 | 서버 시작 | `scripts/start-backend.ps1` → 새 공유본 다운로드·검증 → 로컬 SQLite 교체 → Uvicorn 시작 | 원문 DB와 검색 인덱스 갱신을 사용자 요청 밖에서 수행 |
@@ -249,7 +249,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 경로 약어: `C = cohorts/{cohortId}`, `U = users/{uid}`, `A = C/assessments/{assessmentId}`, `F = C/formTasks/{taskId}`, `R = C/resumes/{resumeId}`, `T = R/tailoredResumes/{tailoredId}`
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;영&#8288;역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 노드 / 경로 | 주요 속성·메타데이터 | 비고 |
-|---|---|---|---|
+|:---:|---|---|---|
 | 사용자·기수 | Firebase Auth | `uid`, `email`, `disabled` | `uid`로 `users`와 연결하는 인증 계정 |
 | 사용자·기수 | `cohorts` | `cohortId`, `name`, `status`, `startDate`, `endDate`, `isActive` | 한 기수에 여러 사용자 연결 |
 | 사용자·기수 | `users` | `uid`, `cohortId`, `role`, `displayName`, `mileageBalance` | `cohortId`로 소속 기수 참조 |
@@ -309,7 +309,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### Pinecone 원본 & 벡터 데이터 & 저장소
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;구&#8288;분&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 노드 | 주요 속성·메타데이터 | 비고 |
-|---|---|---|---|
+|:---:|---|---|---|
 | 원본 | Policy / FAQ 문서 | 정책·FAQ·훈련 가이드 원문 | 정규화 → 분류 → 청킹 → 임베딩 후 `student/policy`에 적재 |
 | 원본 | Firestore 공지 | `cohorts/{cohortId}/notices/{noticeId}` | Cloud Functions로 `student/notice`에 증분 동기화 |
 | 원본 | Project Reference CSV | 기수, 프로젝트 차수, GitHub 주소 | CSV 한 행을 문서 하나·벡터 하나로 적재 |
@@ -327,7 +327,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ## 11. 데이터 수집 및 전처리
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;데&#8288;이&#8288;터&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 출처 · 규모 | 전처리 | 문서 |
-|---|---|---|---|
+|:---:|---|---|---|
 | 채용공고 | 국내 채용 사이트 공개 페이지. 저장소 38,226건, 벡터 23,627건 (2026-09-13) | 유효성 검사 → 중복 제거 → 최신 레코드 → 필드 정규화 → 요건 구간 분리 → 전공·자격증 추출 → 품질·상태 판정 → 지문 대조 → 임베딩 | [data_preprocessing.md](job_matching_bot/docs/data_preprocessing.md), [crawling/README.md](job_matching_bot/crawling/README.md) |
 | 훈련 정책·FAQ | 플레이데이터 안내 문서 md 5·csv 2·OT pdf 1, Notion 5페이지 | 잡음(개인 후기) 제거 → 정규화 → 제목 단위 분리 → LLM 유형 분류 → 청킹. OT PDF는 이미지 기준 LLM 추출 | [vectordb/](vectordb/README.md#1-정책faq-policy) |
 | 전 기수 프로젝트 | 프로젝트 레퍼런스 공유 CSV | 빈 행 제외 → 차수·팀·GitHub 주소 정규화 → 프로젝트당 문서 1건 | [vectordb/](vectordb/README.md#2-전-기수-프로젝트-레퍼런스-project_reference) |
@@ -344,14 +344,14 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### 벡터 인덱스
 
 | &nbsp;&nbsp;&nbsp;인&#8288;덱&#8288;스&nbsp;/&nbsp;namespace&nbsp;&nbsp;&nbsp; | 문서 | 청킹 | 메타데이터 필터 |
-|---|---|---|---|
+|:---:|---|---|---|
 | `student` / `policy` | 훈련 정책·FAQ·가이드(md·csv·pdf·Notion) | 제목 단위 → 500자·40자 겹침, FAQ는 문답 단위 | — |
 | `student` / `notice` | 기수 공지 | 500자·40자 겹침 | `cohort` = 학생 기수 (서버가 고정) |
 | `student` /<br>`project_reference` | 전 기수 단위·최종 프로젝트 | 프로젝트 1건 = 문서 1건 | `cohort`, `project_round` |
 | `job-posting` | 채용공고의 **요건 구간**(주요업무·자격요건·우대사항) | 안 함(중앙값 약 500자) | `status=OPEN`, 지역, 고용형태, 연차 |
 
 | &nbsp;&nbsp;&nbsp;인&#8288;덱&#8288;스&nbsp;/&nbsp;namespace&nbsp;&nbsp;&nbsp; | 적재 | 쓰는 기능 |
-|---|---|---|
+|:---:|---|---|
 | `student` / `policy` | [정책 적재 스크립트](vectordb/policy_ingestion.py) | ① 학생 챗봇 |
 | `student` / `notice` | Functions 트리거, 공지 저장 즉시 | ① 학생 챗봇 |
 | `student` /<br>`project_reference` | [프로젝트 적재 스크립트](vectordb/project_reference_ingestion.py) | ① 학생 챗봇 |
@@ -362,7 +362,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### 요청 흐름
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 흐름 |
-|---|---|
+|:---:|---|
 | ① 학생 챗봇 | LLM 분류(정책·공지·프로젝트·본인 데이터·거절) → 필요한 학생 데이터 조회 → 정책·공지 병렬 검색 → 필요 시 프로젝트 검색 → 출석률은 서버가 계산 → 근거로 답 생성(스트리밍) |
 | ② 추천 | LLM이 이력서를 공고 자격요건 문체로 바꿔 씀 → 벡터 검색 25건 → **규칙 하드 필터**(연차·학력·지역·고용형태·전공·자격증) → 마감 확인 → 기술 겹침으로 다시 세우기 → LLM 재정렬 12건 병렬 → **인용 원문 대조** |
 | ③ 공고 찾기 챗봇 | LLM 라우터가 말을 조건으로 바꿈 → SQLite 조건 조회 또는 벡터 검색 → 목록 답 문장은 LLM이 아니라 **실제 조회 건수로 조립** |
@@ -371,7 +371,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### RAG 성능 가이드 대응
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;가&#8288;이&#8288;드&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 적용 |
-|---|---|
+|:---:|---|
 | 요청마다 인덱싱하지 않기 | 적재는 별도 CLI·야간 배치·Functions 트리거에서만 |
 | 변경분만 증분 인덱싱 | 공고는 내용 지문(`embed_hash`)이 바뀐 것만 임베딩(09-13: 대상 23,627건 중 2,415건만). 공지는 작성·수정·삭제된 공지만 트리거로 반영 |
 | 문서 고유 ID | 공고 `<출처>-<공고번호>`, 정책 `{유형}_{순번}`, 공지 `{기수}_{순번}`, 프로젝트 `{기수}_{차수}_{순번}` |
@@ -402,33 +402,33 @@ PROFILE_PROMPT = ChatPromptTemplate.from_messages([
 chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, method="json_schema")
 ```
 
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 프롬프트 (파일) | 입력 → 출력 |
-|---|---|---|
-| ① 학생 챗봇<br>분류 | `SUPERVISOR_PROMPT`<br>([학생 챗봇 코드](chatbot/student_chatbot.py)) | **입력:** 최근 대화 8개 <br>**출력:** `route`, `namespaces`, `student_scopes`, `query`, `tasks` |
-| ① 학생 챗봇<br>답변 | `ANSWER_PROMPT`<br>(같은 파일) | **입력:** `history`, `context`, `question` <br>**출력:** 답변 문장(스트리밍) |
-| ② 추천<br>질의문 | `PROFILE_PROMPT`<br>([채용 프롬프트 코드](job_matching_bot/api/prompts.py)) | **입력:** `resume_text` <br>**출력:** 위 코드 참고 |
-| ② 추천<br>재정렬 | `RERANK_PROMPT`<br>(같은 파일) | **입력:** `resume_text`, `jobs` <br>**출력:** `job_core` → `resume_core` → `overlap` → `fit`, `reasons[인용 짝]`, `concerns` |
-| ③ 공고 챗봇<br>라우터 | `CHAT_PROMPT`<br>(같은 파일) | **입력:** `previous`(직전 조건), `message` <br>**출력:** `intent`, `topic`, 조건 필터, `job_refs`, `show_more` … |
-| ③ 공고 챗봇<br>답변 | `ADVICE_PROMPT`, `JOB_ASK_PROMPT`, `JOB_COMPARE_SYSTEM` | **입력:** 조건·공고 집계표 / 공고 원문·이력서 / 질문 <br>**출력:** 답변, 이어서 물을 문장 3개 |
-| ④ 이력서<br>첨삭 | `RESUME_REVIEW_PROMPT`<br>([첨삭 프롬프트 코드](cover_letter_rag/app/prompts.py)) | **입력:** 이력서 원문, 확인된 답변, 이번 턴 답변, 공고, 프로젝트 기간, 첨삭 범위·초점 <br>**출력:** `sentence_reviews`, `diagnostics`, `star_checks`, `questions` |
-| 정책 문서<br>분류 | `CLASSIFICATION_PROMPT`<br>([정책 적재 코드](vectordb/policy_ingestion.py)) | **입력:** `<untrusted_document>` 안의 문서 <br>**출력:** 18개 유형 enum + 이유 |
-| 공부방<br>노트 | `NOTE_PROMPT`<br>([노트 생성 코드](study_notes/pipeline.py)) | **입력:** 범위, 학습자 수준, 수업 자료 <br>**출력:** 노트 + 복습 문제 Markdown |
-| 성취도평가<br>출제 | [평가 출제 코드](functions/src/ai/assessmentPrompt.ts)<br>(LangChain 아님) | **입력:** 커리큘럼 행, 문항 수 <br>**출력:** 문항 JSON |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 프롬프트 (파일) | 입력 → 출력 |
+|:---:|---|---|
+| ① 학생 챗봇 분류 | `SUPERVISOR_PROMPT`<br>([학생 챗봇 코드](chatbot/student_chatbot.py)) | **입력:** 최근 대화 8개 <br>**출력:** `route`, `namespaces`, `student_scopes`, `query`, `tasks` |
+| ① 학생 챗봇 답변 | `ANSWER_PROMPT`<br>(같은 파일) | **입력:** `history`, `context`, `question` <br>**출력:** 답변 문장(스트리밍) |
+| ② 추천 질의문 | `PROFILE_PROMPT`<br>([채용 프롬프트 코드](job_matching_bot/api/prompts.py)) | **입력:** `resume_text` <br>**출력:** 위 코드 참고 |
+| ② 추천 재정렬 | `RERANK_PROMPT`<br>(같은 파일) | **입력:** `resume_text`, `jobs` <br>**출력:** `job_core` → `resume_core` → `overlap` → `fit`, `reasons[인용 짝]`, `concerns` |
+| ③ 공고 챗봇 라우터 | `CHAT_PROMPT`<br>(같은 파일) | **입력:** `previous`(직전 조건), `message` <br>**출력:** `intent`, `topic`, 조건 필터, `job_refs`, `show_more` … |
+| ③ 공고 챗봇 답변 | `ADVICE_PROMPT`, `JOB_ASK_PROMPT`, `JOB_COMPARE_SYSTEM` | **입력:** 조건·공고 집계표 / 공고 원문·이력서 / 질문 <br>**출력:** 답변, 이어서 물을 문장 3개 |
+| ④ 이력서 첨삭 | `RESUME_REVIEW_PROMPT`<br>([첨삭 프롬프트 코드](cover_letter_rag/app/prompts.py)) | **입력:** 이력서 원문, 확인된 답변, 이번 턴 답변, 공고, 프로젝트 기간, 첨삭 범위·초점 <br>**출력:** `sentence_reviews`, `diagnostics`, `star_checks`, `questions` |
+| 정책 문서 분류 | `CLASSIFICATION_PROMPT`<br>([정책 적재 코드](vectordb/policy_ingestion.py)) | **입력:** `<untrusted_document>` 안의 문서 <br>**출력:** 18개 유형 enum + 이유 |
+| 공부방 노트 | `NOTE_PROMPT`<br>([노트 생성 코드](study_notes/pipeline.py)) | **입력:** 범위, 학습자 수준, 수업 자료 <br>**출력:** 노트 + 복습 문제 Markdown |
+| 성취도평가 출제 | [평가 출제 코드](functions/src/ai/assessmentPrompt.ts)<br>(LangChain 아님) | **입력:** 커리큘럼 행, 문항 수 <br>**출력:** 문항 JSON |
 
 ### 프롬프트 예시 방식
 
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 예시 방식 |
-|---|---|
-| ① 학생 챗봇<br>분류 | **One-shot** — "34기 최종 프로젝트가 무엇인가요?" → `project_reference`, 차수 `final`. "최종 프로젝트"를 LMS 밖 질문으로 막지 않게 하는 예시 |
-| ① 학생 챗봇<br>답변 | Zero-shot 규칙 — 근거 없으면 추측 금지, 내부 용어 금지, 해요체 |
-| ② 추천<br>질의문 | **One-shot** — 이력서 "경험" 문체를 공고 "요구" 문체로 바꾸는 예 한 줄 |
-| ② 추천<br>재정렬 | **Few-shot** — 좋은 근거 짝 1개와 **근거가 아닌 짝** 1개("간호사 경력" ↔ "경력 2년 이상"), 적합도 높음·보통·낮음 예 7개. 출력 칸 순서로 "공고 핵심 → 이력서 주력 → 겹침"을 먼저 쓰고 판정하게 한다 |
-| ③ 공고 챗봇<br>라우터 | **Few-shot** — 갈래별 예문, "2번 자세히" → `[2]`, "3년차" → 번호 아님, "판교" → `분당구`, "돈 다루는 일" → 공고 문체 질의문 |
-| ③ 공고 챗봇<br>답변 | 규칙 + 형식 예 — "429건 중 Java를 적은 곳이 106건(25%)"처럼 표의 숫자만 쓰게 한다 |
-| ④ 이력서<br>첨삭 | **Few-shot** — 허용되는 표현 교정("진행 하였습니다" → "진행했습니다")과 **금지되는 변경**("개발 중" → "완료", "팀원이" → "제가"), 지원동기 권장 문장 구조 |
-| 정책 문서<br>분류 | Zero-shot. 실패하면 키워드 규칙으로 대체 |
-| 공부방<br>노트 | Zero-shot + 목차 틀 고정 |
-| 성취도평가<br>출제 | **One-shot** — JSON 형식 예 한 줄 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 예시 방식 |
+|:---:|---|
+| ① 학생 챗봇 분류 | **One-shot** — "34기 최종 프로젝트가 무엇인가요?" → `project_reference`, 차수 `final`. "최종 프로젝트"를 LMS 밖 질문으로 막지 않게 하는 예시 |
+| ① 학생 챗봇 답변 | Zero-shot 규칙 — 근거 없으면 추측 금지, 내부 용어 금지, 해요체 |
+| ② 추천 질의문 | **One-shot** — 이력서 "경험" 문체를 공고 "요구" 문체로 바꾸는 예 한 줄 |
+| ② 추천 재정렬 | **Few-shot** — 좋은 근거 짝 1개와 **근거가 아닌 짝** 1개("간호사 경력" ↔ "경력 2년 이상"), 적합도 높음·보통·낮음 예 7개. 출력 칸 순서로 "공고 핵심 → 이력서 주력 → 겹침"을 먼저 쓰고 판정하게 한다 |
+| ③ 공고 챗봇 라우터 | **Few-shot** — 갈래별 예문, "2번 자세히" → `[2]`, "3년차" → 번호 아님, "판교" → `분당구`, "돈 다루는 일" → 공고 문체 질의문 |
+| ③ 공고 챗봇 답변 | 규칙 + 형식 예 — "429건 중 Java를 적은 곳이 106건(25%)"처럼 표의 숫자만 쓰게 한다 |
+| ④ 이력서 첨삭 | **Few-shot** — 허용되는 표현 교정("진행 하였습니다" → "진행했습니다")과 **금지되는 변경**("개발 중" → "완료", "팀원이" → "제가"), 지원동기 권장 문장 구조 |
+| 정책 문서 분류 | Zero-shot. 실패하면 키워드 규칙으로 대체 |
+| 공부방 노트 | Zero-shot + 목차 틀 고정 |
+| 성취도평가 출제 | **One-shot** — JSON 형식 예 한 줄 |
 
 모든 프롬프트에 공통으로 넣은 규칙:
 
@@ -442,7 +442,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 ## 14. 기술 스택
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;영&#8288;역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 기술 |
-|---|---|
+|:---:|---|
 | LLM·임베딩 | ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white) ![gpt-5.6-sol](https://img.shields.io/badge/gpt--5.6--sol-412991?style=for-the-badge) ![gpt-5.6-luna](https://img.shields.io/badge/gpt--5.6--luna-412991?style=for-the-badge) ![gpt-4o-mini](https://img.shields.io/badge/gpt--4o--mini-412991?style=for-the-badge) ![text-embedding-3-small](https://img.shields.io/badge/text--embedding--3--small-412991?style=for-the-badge) |
 | LLM 프레임워크 | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langgraph&logoColor=white) ![LangSmith (선택)](https://img.shields.io/badge/LangSmith%20(%EC%84%A0%ED%83%9D)-1C3C3C?style=for-the-badge) |
 | 벡터 DB | ![Pinecone](https://img.shields.io/badge/Pinecone-000000?style=for-the-badge) ![Chroma (로컬 테스트)](https://img.shields.io/badge/Chroma%20(%EB%A1%9C%EC%BB%AC%20%ED%85%8C%EC%8A%A4%ED%8A%B8)-E05B38?style=for-the-badge) |
@@ -457,7 +457,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 ## 15. 테스트 계획 및 결과
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;대&#8288;상&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 방법 | 결과 | 문서 |
-|---|---|---|---|
+|:---:|---|---|---|
 | 추천봇 단위 테스트 | unittest, 외부 호출 없음 | **646/646 통과** (2026-09-13) | [test_report.md](job_matching_bot/docs/test_report.md) 3장 ① |
 | 추천 규칙 결함 검사 | 신입에게 경력 공고, 희망 지역·고용형태 밖, 원문에 없는 인용 등 8종 자동 검사 | 이력서 10종·공고 56건 **결함 0** | [test_report.md](job_matching_bot/docs/test_report.md) 3장 ② |
 | 추천 품질 사람 채점 | 모델 등급을 가리고 사람이 채점, 프롬프트 수정 때 보지 않은 평가 전용 이력서 사용 | 사용자에게 보이는 상위 6건 오추천 **7.7%(2/26)**, "높음"·"보통" 정확도 91~92% | [test_report.md](job_matching_bot/docs/test_report.md) 3장 ③ |
@@ -484,7 +484,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 `ST = student_tools`, `PN = policy_notice_retrieve`, `PR = project_retrieve`, `A = answer`를 뜻한다.
 
 | 분류 | 사례·턴 | 대표 입력 | 기대 경로·검증 기준 |
-|---|---|---|---|
+|:---:|---|---|---|
 | 학생 데이터 + 정책/공지 | 5·5 | 내 출석률이 장려금 출석 정책을 충족하는지 알려줘 | ST → PN → A, 본인 계산값과 규정 비교, 지급 확정 금지 |
 | 학생 데이터 + 프로젝트 | 5·5 | 내 이력서 기술과 유사한 26기 최종 프로젝트 GitHub 링크를 알려줘 | ST → PR → A, 본인 데이터와 기수·차수별 문서 근거 사용 |
 | 정책/공지 + 프로젝트 | 5·5 | 최종 프로젝트 제출 정책과 28기 최종 프로젝트 GitHub 사례를 함께 알려줘 | PN → PR → A, 불필요한 개인 데이터 범위 선택 금지 |
@@ -504,7 +504,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 자동 검사: `job_matching_bot/evaluation/recommend_check.py` · 결과: [test_report.md](job_matching_bot/docs/test_report.md) 3장 ②③
 
 | # | 입력 이력서 · 조건 | 기대 결과 | 결과 (2026년) |
-|---|---|---|---|
+|:---:|---|---|---|
 | 1 | 경력 0년 신입 이력서 | 경력자 채용 공고가 나오지 않음 | ✅ 결함 0 (09-13) |
 | 2 | 희망 지역 서울 | 서울 또는 전국 근무 공고만 | ✅ 결함 0 (09-13) |
 | 3 | 희망 고용형태 정규직 | 계약직 공고가 나오지 않음 | ✅ 결함 0 (09-13) |
@@ -520,7 +520,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 평가 케이스: [job_matching_bot/fixtures/chat_cases.json](job_matching_bot/fixtures/chat_cases.json) · 결과: [test_report.md](job_matching_bot/docs/test_report.md) 3장 ④
 
 | # | 사용자 입력 (여러 줄은 이어진 대화) | 기대 결과 |
-|---|---|---|
+|:---:|---|---|
 | 1 | 서울 백엔드 신입 찾아줘 | 검색 · 직무 백엔드 · 지역 서울 · 경력 신입 |
 | 2 | 백엔드 공고 보여줘 → 서울만 | 앞 조건(백엔드)을 유지한 채 서울로 좁힘 |
 | 3 | 서울 백엔드 찾아줘 → 아니 디자이너 쪽 | 직무만 디자이너로 바꾸고 서울은 유지 |
@@ -542,7 +542,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 테스트: [cover_letter_rag/tests/test_resume_quality.py](cover_letter_rag/tests/test_resume_quality.py) 외 — 가짜 LLM에 아래 수정안을 넣었을 때 **서버 검증**이 어떻게 처리하는지 본다.
 
 | # | 이력서 원문 | 모델이 낸 수정안 | 기대 결과 | 결과 |
-|---|---|---|---|---|
+|:---:|---|---|---|---|
 | 1 | 개발을 진행 하였습니다. | 개발을 진행했습니다. | 표현 교정(`formatting`)으로 적용 가능 | ✅ |
 | 2 | 오류가 발생됬습니다. | 오류가 발생했습니다. | 맞춤법 교정으로 적용 가능 | ✅ |
 | 3 | 개발했습니다. | (수정 없음) | `unchanged`, 억지 질문 만들지 않음 | ✅ |
@@ -562,7 +562,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 ## 17. 필수 산출물 위치
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;산&#8288;출&#8288;물&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 위치 |
-|---|---|
+|:---:|---|
 | 수집된 데이터 및 데이터 전처리 문서 | [job_matching_bot/docs/data_preprocessing.md](job_matching_bot/docs/data_preprocessing.md), [vectordb/README.md](vectordb/README.md), `vectordb/data/` |
 | 시스템 아키텍처 | 이 문서의 [9. 시스템 아키텍처](#9-시스템-아키텍처), [job_matching_bot/docs/architecture.md](job_matching_bot/docs/architecture.md), [chatbot/README.md](chatbot/README.md#동작-구조) |
 | RAG 기반 LLM과 벡터 DB 연동 코드 | [chatbot/](chatbot), [vectordb/](vectordb), [job_matching_bot/](job_matching_bot), [cover_letter_rag/](cover_letter_rag) |
@@ -576,7 +576,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 ## 18. 트러블슈팅
 
 | 문제 | 원인 | 해결 | 결과 |
-|---|---|---|---|
+|:---:|---|---|---|
 | 모든 공고의 검색 유사도가 0.37~0.50에 뭉침 | 임베딩 텍스트 앞의 분류 경로 줄이 공고를 서로 비슷하게 만듦 | 요건 구간만 임베딩 | 검색이 공고를 구분 |
 | 적합도가 전부 "보통" | 메타데이터 원문을 300자로 잘라 자격요건이 빠짐 | 1,200자로 늘림 | 높음·보통·낮음이 갈림 |
 | 신입 이력서에 경력 7년 공고가 3위 | 조건을 임베딩 유사도에 맡김 | 규칙 하드 필터를 LLM 앞에 둠 | 조건은 규칙으로, LLM은 그 안에서만 |
@@ -605,7 +605,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 ## 20. 협업 방식
 
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;항&#8288;목&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 규칙 |
-|---|---|
+|:---:|---|
 | 브랜치 | `main` 배포용(직접 푸시 금지), `develop` 통합, 기능마다 `feature/*` |
 | 커밋 메시지 | `<종류> S32-XX) 설명` — Jira 이슈 키를 붙인다 (예: `fix S32-13) 커리어 코치 대화 진입 개선`) |
 | 이슈 관리 | Jira `S32-XX` |
@@ -616,7 +616,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 ## 21. 회고
 
 | &nbsp;&nbsp;&nbsp;이&#8288;름&nbsp;&nbsp;&nbsp; | 회고 |
-| --- | --- |
+|:---:|---|
 | 김기호 |  |
 | 김대호 |  |
 | 문성호 |  |
