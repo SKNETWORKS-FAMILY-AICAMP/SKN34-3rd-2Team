@@ -48,15 +48,18 @@
 <p align="center">
   <img src="assets/readme_image/team_photo.png" alt="팀 소개 이미지" width="540">
 </p>
-
+<div align="center">
+  
 | 팀명 |
 | :---: |
-| `팀명을 입력해주세요` |
+| `그냥 남자` |
 
 | 김기호 | 김대호 | 문성호 | 최성욱 |
 | :---: | :---: | :---: | :---: |
 | <img src="assets/readme_image/team_kim_kiho.png" alt="김기호 프로필 이미지" width="120"> | <img src="assets/readme_image/team_kim_daeho.png" alt="김대호 프로필 이미지 (구준표)" width="120"> | <img src="assets/readme_image/team_moon_sungho.png" alt="문성호 프로필 이미지" width="120"> | <img src="assets/readme_image/team_choi_sungwook.png" alt="최성욱 프로필 이미지" width="120"> |
 | [kyo-135](https://github.com/kyo-135) | [jjhok6389](https://github.com/jjhok6389) | [MoonSungHo](https://github.com/MoonSungHo-D) | [Overlay1010](https://github.com/Overlay1010) |
+
+</div>
 
 ---
 
