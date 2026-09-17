@@ -114,7 +114,7 @@
 
 AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마다 README가 따로 있다.**
 
-| 기능 | 무엇을 | 근거 데이터 | 코드 · 문서 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 무엇을 | 근거 데이터 | 코드 · 문서 |
 |---|---|---|---|
 | **① 학생 LMS 챗봇** | "지각 3번이면 결석인가요?", "28기 최종 프로젝트 뭐 있었어요?", "이번 달 출석률 80% 넘었나요?" | 정책·FAQ, 기수 공지, 전 기수 프로젝트(Pinecone) + 본인 LMS 데이터(Firestore) | [chatbot/](chatbot/README.md) |
 | **② 맞춤 채용공고 추천** | 이력서를 읽고 맞는 공고 6건을 적합도·근거 인용·우려와 함께 | 채용공고(Pinecone + SQLite) | [job_matching_bot/](job_matching_bot/README.md) |
@@ -180,7 +180,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 계획 기간: **2026.09.01~2026.09.17**
 
-| 영역 | 이슈 ID | 작업 | 시작일 | 종료일 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;영&#8288;역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 이슈 ID | 작업 | 시작일 | 종료일 |
 |---|---|---|---|---|
 | 채용 데이터·RAG | S32-1 | 이력서·채용공고 RAG 검색 | 2026.09.06 | 2026.09.15 |
 | 채용 데이터·RAG | S32-3 | 채용공고 수집 및 파이프라인 | 2026.09.03 | 2026.09.14 |
@@ -248,7 +248,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 ### Firebase/Firestore 노드 & 필드
 경로 약어: `C = cohorts/{cohortId}`, `U = users/{uid}`, `A = C/assessments/{assessmentId}`, `F = C/formTasks/{taskId}`, `R = C/resumes/{resumeId}`, `T = R/tailoredResumes/{tailoredId}`
 
-| 영역 | 노드 / 경로 | 주요 속성·메타데이터 | 비고 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;영&#8288;역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 노드 / 경로 | 주요 속성·메타데이터 | 비고 |
 |---|---|---|---|
 | 사용자·기수 | Firebase Auth | `uid`, `email`, `disabled` | `uid`로 `users`와 연결하는 인증 계정 |
 | 사용자·기수 | `cohorts` | `cohortId`, `name`, `status`, `startDate`, `endDate`, `isActive` | 한 기수에 여러 사용자 연결 |
@@ -326,7 +326,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ## 11. 데이터 수집 및 전처리
 
-| 데이터 | 출처 · 규모 | 전처리 | 문서 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;데&#8288;이&#8288;터&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 출처 · 규모 | 전처리 | 문서 |
 |---|---|---|---|
 | 채용공고 | 국내 채용 사이트 공개 페이지. 저장소 38,226건, 벡터 23,627건 (2026-09-13) | 유효성 검사 → 중복 제거 → 최신 레코드 → 필드 정규화 → 요건 구간 분리 → 전공·자격증 추출 → 품질·상태 판정 → 지문 대조 → 임베딩 | [data_preprocessing.md](job_matching_bot/docs/data_preprocessing.md), [crawling/README.md](job_matching_bot/crawling/README.md) |
 | 훈련 정책·FAQ | 플레이데이터 안내 문서 md 5·csv 2·OT pdf 1, Notion 5페이지 | 잡음(개인 후기) 제거 → 정규화 → 제목 단위 분리 → LLM 유형 분류 → 청킹. OT PDF는 이미지 기준 LLM 추출 | [vectordb/](vectordb/README.md#1-정책faq-policy) |
@@ -361,7 +361,7 @@ AI 기능 네 가지와 이를 담은 LMS 앱으로 이루어진다. **기능마
 
 ### 요청 흐름
 
-| 기능 | 흐름 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 흐름 |
 |---|---|
 | ① 학생 챗봇 | LLM 분류(정책·공지·프로젝트·본인 데이터·거절) → 필요한 학생 데이터 조회 → 정책·공지 병렬 검색 → 필요 시 프로젝트 검색 → 출석률은 서버가 계산 → 근거로 답 생성(스트리밍) |
 | ② 추천 | LLM이 이력서를 공고 자격요건 문체로 바꿔 씀 → 벡터 검색 25건 → **규칙 하드 필터**(연차·학력·지역·고용형태·전공·자격증) → 마감 확인 → 기술 겹침으로 다시 세우기 → LLM 재정렬 12건 병렬 → **인용 원문 대조** |
@@ -402,7 +402,7 @@ PROFILE_PROMPT = ChatPromptTemplate.from_messages([
 chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, method="json_schema")
 ```
 
-| 기능 | 프롬프트 (파일) | 입력 → 출력 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 프롬프트 (파일) | 입력 → 출력 |
 |---|---|---|
 | ① 학생 챗봇<br>분류 | `SUPERVISOR_PROMPT`<br>([학생 챗봇 코드](chatbot/student_chatbot.py)) | **입력:** 최근 대화 8개 <br>**출력:** `route`, `namespaces`, `student_scopes`, `query`, `tasks` |
 | ① 학생 챗봇<br>답변 | `ANSWER_PROMPT`<br>(같은 파일) | **입력:** `history`, `context`, `question` <br>**출력:** 답변 문장(스트리밍) |
@@ -417,7 +417,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 ### 프롬프트 예시 방식
 
-| 기능 | 예시 방식 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;기&#8288;능&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 예시 방식 |
 |---|---|
 | ① 학생 챗봇<br>분류 | **One-shot** — "34기 최종 프로젝트가 무엇인가요?" → `project_reference`, 차수 `final`. "최종 프로젝트"를 LMS 밖 질문으로 막지 않게 하는 예시 |
 | ① 학생 챗봇<br>답변 | Zero-shot 규칙 — 근거 없으면 추측 금지, 내부 용어 금지, 해요체 |
@@ -456,7 +456,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 ## 15. 테스트 계획 및 결과
 
-| 대상 | 방법 | 결과 | 문서 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;대&#8288;상&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 방법 | 결과 | 문서 |
 |---|---|---|---|
 | 추천봇 단위 테스트 | unittest, 외부 호출 없음 | **646/646 통과** (2026-09-13) | [test_report.md](job_matching_bot/docs/test_report.md) 3장 ① |
 | 추천 규칙 결함 검사 | 신입에게 경력 공고, 희망 지역·고용형태 밖, 원문에 없는 인용 등 8종 자동 검사 | 이력서 10종·공고 56건 **결함 0** | [test_report.md](job_matching_bot/docs/test_report.md) 3장 ② |
@@ -561,7 +561,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 ## 17. 필수 산출물 위치
 
-| 산출물 | 위치 |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;산&#8288;출&#8288;물&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 위치 |
 |---|---|
 | 수집된 데이터 및 데이터 전처리 문서 | [job_matching_bot/docs/data_preprocessing.md](job_matching_bot/docs/data_preprocessing.md), [vectordb/README.md](vectordb/README.md), `vectordb/data/` |
 | 시스템 아키텍처 | 이 문서의 [9. 시스템 아키텍처](#9-시스템-아키텍처), [job_matching_bot/docs/architecture.md](job_matching_bot/docs/architecture.md), [chatbot/README.md](chatbot/README.md#동작-구조) |
@@ -615,7 +615,7 @@ chain = PROFILE_PROMPT | model.with_structured_output(schemas.ResumeProfileOut, 
 
 ## 21. 회고
 
-| 이름 | 회고 |
+| &nbsp;&nbsp;&nbsp;이&#8288;름&nbsp;&nbsp;&nbsp; | 회고 |
 | --- | --- |
 | 김기호 |  |
 | 김대호 |  |
