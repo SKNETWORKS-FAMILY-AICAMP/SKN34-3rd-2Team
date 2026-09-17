@@ -49,7 +49,6 @@
   <img src="assets/readme_image/team_photo.png" alt="팀 소개 이미지" width="540">
 </p>
 <div align="center">
-
 | 팀명 |
 | :---: |
 | `그냥 남자` |
